@@ -1,0 +1,9 @@
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@pitch/*": ["packages/*/src/*"],
+      "@pitch/shared/*": ["packages/shared/src/*"]
+    }
+  }
+}

@@ -1,0 +1,25 @@
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+echo "📋 Validating commit message..."
+
+# Run commitlint to validate the commit message
+pnpm exec commitlint --edit "$1"
+
+if [ $? -eq 0 ]; then
+  echo "✅ Commit message is valid!"
+else
+  echo "❌ Commit message validation failed!"
+  echo ""
+  echo "📖 Please follow the conventional commit format:"
+  echo "   type(scope): description"
+  echo ""
+  echo "Examples:"
+  echo "   feat(web): add user authentication"
+  echo "   fix(api): resolve database connection issue"
+  echo "   docs: update API documentation"
+  echo ""
+  echo "Available types: feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert"
+  echo "Available scopes: web, api, shared, config, deps, docker, docs, ci, release"
+  exit 1
+fi

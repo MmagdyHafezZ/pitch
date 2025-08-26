@@ -1,0 +1,125 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: pitch-postgres-local
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-pitch_local}
+      POSTGRES_USER: ${POSTGRES_USER:-pitch_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pitch_dev_password_change_me}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data_local:/var/lib/postgresql/data
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d
+    networks:
+      - pitch-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pitch_user -d pitch_local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # MongoDB Database
+  mongodb:
+    image: mongo:7-jammy
+    container_name: pitch-mongodb-local
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER:-pitch_user}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:-pitch_dev_password_change_me}
+      MONGO_INITDB_DATABASE: ${MONGO_DB:-pitch_local}
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data_local:/data/db
+      - ./docker/mongodb/init:/docker-entrypoint-initdb.d
+    networks:
+      - pitch-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: pitch-redis-local
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data_local:/data
+    networks:
+      - pitch-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    command: redis-server --appendonly yes
+
+  # API Service
+  api:
+    build:
+      context: .
+      dockerfile: ./apps/api/Dockerfile
+    container_name: pitch-api-local
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://${POSTGRES_USER:-pitch_user}:${POSTGRES_PASSWORD:-pitch_dev_password_change_me}@postgres:5432/${POSTGRES_DB:-pitch_local}
+      MONGODB_URI: mongodb://${MONGO_USER:-pitch_user}:${MONGO_PASSWORD:-pitch_dev_password_change_me}@mongodb:27017/${MONGO_DB:-pitch_local}
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET:-local-dev-secret-key-change-me}
+      PORT: 3001
+    ports:
+      - "3001:3001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./apps/api:/app/apps/api
+      - /app/apps/api/node_modules
+      - /app/apps/api/dist
+    networks:
+      - pitch-network
+    command: sh -c "cd apps/api && pnpm exec prisma migrate deploy && pnpm exec prisma generate && node dist/main.js"
+    restart: unless-stopped
+
+  # Web Service
+  web:
+    build:
+      context: .
+      dockerfile: ./apps/web/Dockerfile
+    container_name: pitch-web-local
+    environment:
+      NODE_ENV: development
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3001}
+      NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3000}
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-local-dev-secret-key-change-me}
+      NEXT_TELEMETRY_DISABLED: 1
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+    volumes:
+      - ./apps/web:/app/apps/web
+      - /app/apps/web/node_modules
+      - /app/apps/web/.next
+    networks:
+      - pitch-network
+    restart: unless-stopped
+
+volumes:
+  postgres_data_local:
+  mongodb_data_local:
+  redis_data_local:
+
+networks:
+  pitch-network:
+    driver: bridge
