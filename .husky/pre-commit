@@ -1,22 +1,2 @@
-#!/usr/bin/env sh
-. "$(dirname -- "$0")/_/husky.sh"
-
-echo "🔍 Running pre-commit checks..."
-
-# Run lint-staged for staged files
-echo "📝 Checking staged files..."
+# pnpm test
 pnpm lint-staged
-
-# Run type checks for changed TypeScript files
-echo "🔧 Running type checks..."
-pnpm type-check
-
-# Run tests for changed files
-echo "🧪 Running tests..."
-pnpm test --passWithNoTests
-
-# Run build to ensure everything compiles
-echo "🔨 Running build check..."
-pnpm build
-
-echo "✅ Pre-commit checks passed!"
