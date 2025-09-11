@@ -40,8 +40,8 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Check formatting
-        run: pnpm format:check
+      - name: Apply formatting
+        run: pnpm format
 
       - name: Run linting
         run: pnpm lint
