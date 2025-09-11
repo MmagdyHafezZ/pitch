@@ -71,4 +71,4 @@ async function bootstrap() {
     `📘 Swagger UI at ${baseUrl}/${process.env.SWAGGER_PATH ?? 'docs'}`,
   );
 }
-bootstrap();
+void bootstrap();
