@@ -1,98 +1,313 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# PITCH API
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+The backend for the PITCH business management platform built with NestJS microservices architecture, Prisma ORM, and RabbitMQ message queues.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+## Architecture Overview
 
-## Description
+The API follows a microservices architecture with an API Gateway pattern:
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+- **API Gateway** - Routes requests and handles JWT authentication (`src/gateway/`)
+- **User Microservice** - User management with PostgreSQL (`src/microservices/user/`)
+- **Business Microservice** - Business logic with MongoDB (`src/microservices/business/`)
+- **Authentication System** - JWT-based auth with access and refresh tokens
 
-## Project setup
+## Tech Stack
 
-```bash
-$ pnpm install
+- **NestJS** - Progressive Node.js framework with TypeScript
+- **Prisma** - Next-generation ORM for database operations
+- **RabbitMQ** - Message queue for inter-service communication
+- **PostgreSQL** - Primary database for user data
+- **MongoDB** - Database for business data and docs
+- **Redis** - Caching and session management
+- **JWT** - Authentication tokens (access + refresh)
+- **Docker** - Containerization for development databases
+
+## Getting Started
+
+### Prerequisites
+
+- Node.js 18+
+- pnpm (package manager)
+- Docker & Docker Compose (for databases)
+
+### Development Setup
+
+1. **Start database services:**
+
+   ```bash
+   # From project root
+   docker-compose -f docker-compose.local.yml up -d postgres mongodb redis rabbitmq
+   ```
+
+2. **Set up environment:**
+
+   ```bash
+   # Copy environment template
+   cp .env.example .env
+
+   # Update .env with your configuration
+   ```
+
+3. **Run database migrations:**
+
+   ```bash
+   # User microservice (PostgreSQL)
+   cd src/microservices/user
+   npx prisma migrate dev
+   npx prisma generate
+
+   # Business microservice (MongoDB)
+   cd ../business
+   npx prisma db push
+   npx prisma generate
+   ```
+
+4. **Start development server:**
+
+   ```bash
+   # From project root (recommended)
+   pnpm dev
+
+   # Or API only
+   pnpm --filter api dev
+   ```
+
+5. **Open the application:**
+   - API Gateway: [http://localhost:8001](http://localhost:8001)
+   - API docs: [http://localhost:8001/docs](http://localhost:8001/docs)
+
+## Project Structure
+
+```
+apps/api/
+├── src/
+│   ├── gateway/                    # API Gateway
+│   │   ├── controllers/            # Gateway controllers
+│   │   ├── guards/                # JWT authentication guards
+│   │   ├── interceptors/          # Request/response interceptors
+│   │   └── decorators/            # Custom decorators
+│   ├── microservices/             # Microservices
+│   │   ├── user/                  # User microservice (PostgreSQL)
+│   │   │   ├── prisma/            # Database schema & migrations
+│   │   │   ├── user.controller.ts # Message pattern handlers
+│   │   │   ├── user.service.ts    # Business logic
+│   │   │   └── user-prisma.service.ts # Database service
+│   │   └── business/              # Business microservice (MongoDB)
+│   │       ├── prisma/            # Database schema
+│   │       ├── business.controller.ts
+│   │       ├── business.service.ts
+│   │       └── business-prisma.service.ts
+│   ├── common/                    # Shared modules
+│   │   ├── filters/               # Exception filters
+│   │   ├── helpers/               # Utility functions
+│   │   └── interfaces/            # Type definitions
+│   ├── app.module.ts              # Root application module
+│   └── main.ts                   # Application entry point
+├── docs/                         # API docs
+├── docker-compose.rabbitmq.yml   # RabbitMQ configuration
+└── package.json
 ```
 
-## Compile and run the project
+## Features
 
-```bash
-# development
-$ pnpm run start
+### Authentication System
 
-# watch mode
-$ pnpm run start:dev
+- **JWT-based authentication** with access and refresh tokens
+- **API Gateway pattern** - centralized auth validation
+- **User claims forwarding** - microservices receive authenticated user context
+- **Role-based access control** with admin/user roles
 
-# production mode
-$ pnpm run start:prod
+### Microservices Communication
+
+- **RabbitMQ message patterns** for inter-service communication
+- **Request/response pattern** for synchronous operations
+- **Event-driven architecture** for asynchronous operations
+- **Service isolation** with separate databases per domain
+
+### Database Management
+
+- **Multi-database approach** - PostgreSQL for users, MongoDB for business data
+- **Prisma ORM** for type-safe database operations
+- **Database migrations** and schema management
+- **Connection pooling** and performance optimization
+
+## API Endpoints
+
+### Authentication
+
+```
+POST /api/v1/auth/register    # User registration
+POST /api/v1/auth/login       # User login
+POST /api/v1/auth/refresh     # Refresh access token
+POST /api/v1/auth/logout      # User logout
+GET  /api/v1/auth/me         # Get current user
 ```
 
-## Run tests
+### Users
+
+```
+GET    /api/v1/users          # List users (admin only)
+GET    /api/v1/users/:id      # Get user by ID
+PUT    /api/v1/users/:id      # Update user
+DELETE /api/v1/users/:id      # Delete user (admin only)
+```
+
+### Business
+
+```
+GET    /api/v1/businesses     # List user's businesses
+POST   /api/v1/businesses     # Create business
+GET    /api/v1/businesses/:id # Get business details
+PUT    /api/v1/businesses/:id # Update business
+DELETE /api/v1/businesses/:id # Delete business
+```
+
+## Development Commands
 
 ```bash
-# unit tests
-$ pnpm run test
+# Development
+pnpm dev                    # Start development server
+pnpm build                  # Build for production
+pnpm start                  # Start production server
 
-# e2e tests
-$ pnpm run test:e2e
+# Database
+pnpm migrate:user          # Run user service migrations
+pnpm migrate:business      # Push business service schema
+pnpm db:seed              # Seed development data
 
-# test coverage
-$ pnpm run test:cov
+# Testing
+pnpm test                  # Run unit tests
+pnpm test:e2e             # Run integration tests
+pnpm test:cov             # Run tests with coverage
+
+# Linting
+pnpm lint                  # Run ESLint
+pnpm lint:fix             # Fix linting issues
+```
+
+## Environment Variables
+
+Create `.env` file in the API directory:
+
+```env
+# Application
+NODE_ENV=development
+PORT=8001
+
+# Database URLs
+DATABASE_URL="postgresql://username:password@localhost:5432/pitch_dev"
+MONGODB_URL="mongodb://localhost:27017/pitch_business"
+REDIS_URL="redis://localhost:6379"
+
+# RabbitMQ
+RABBITMQ_URL="amqp://admin:admin123@localhost:5672"
+
+# JWT Configuration
+JWT_SECRET="your-super-secure-secret-key-minimum-32-characters"
+JWT_ACCESS_EXPIRATION="15m"
+JWT_REFRESH_EXPIRATION="7d"
+```
+
+## Microservices Communication
+
+### Message Patterns
+
+Services communicate using RabbitMQ message patterns:
+
+```typescript
+// Gateway sends request to microservice
+const users = await this.userService.send('get_users', { userClaims });
+
+// Microservice handles the pattern
+@MessagePattern('get_users')
+async getUsers(@Payload() data: MessageWithUserClaims) {
+  this.logger.log(`Getting users - Requested by: ${data.userClaims.email}`);
+  return await this.userService.findAll();
+}
+```
+
+### Authentication Flow
+
+1. Client sends request with JWT token to API Gateway
+2. Gateway validates token and extracts user claims
+3. User claims are forwarded to relevant microservice
+4. Microservice processes request with user context
+5. Response is returned through the gateway
+
+## Testing
+
+### Unit Tests
+
+```bash
+# Run all tests
+pnpm test
+
+# Run specific service tests
+pnpm test user.service.spec.ts
+
+# Watch mode
+pnpm test:watch
+```
+
+### Integration Tests
+
+```bash
+# Run E2E tests
+pnpm test:e2e
+
+# Test specific endpoints
+pnpm test:e2e --grep "auth"
 ```
 
 ## Deployment
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
-
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+### Docker Build
 
 ```bash
-$ pnpm install -g @nestjs/mau
-$ mau deploy
+# Build API image
+docker build -f apps/api/Dockerfile -t pitch-api:latest .
+
+# Run with production compose
+docker-compose -f docker-compose.prod.yml up -d
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+### Production Environment
 
-## Resources
+```env
+NODE_ENV=production
+PORT=8001
+DATABASE_URL="postgresql://prod-user:prod-pass@prod-host:5432/pitch_prod"
+JWT_SECRET="production-secret-key-64-characters-minimum"
+RABBITMQ_URL="amqp://prod-user:prod-pass@rabbitmq-host:5672"
+```
 
-Check out a few resources that may come in handy when working with NestJS:
+## Monitoring
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+### Health Checks
 
-## Support
+```bash
+# Check API health
+curl http://localhost:8001/health
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+# Check individual services
+curl http://localhost:8001/health/database
+curl http://localhost:8001/health/rabbitmq
+```
 
-## Stay in touch
+### Logging
 
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+The API uses structured logging with user context:
 
-## License
+```typescript
+this.logger.log(
+  `User operation - Action: ${action}, User: ${userClaims.email}`,
+);
+```
 
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+## Learn More
+
+- [Development Guide](./docs/development.md) - Detailed development setup and patterns
+- [Database Guide](./docs/database.md) - Database schema and management
+- [Deployment Guide](./docs/deployment.md) - Production deployment instructions
+- [NestJS docs](https://docs.nestjs.com) - Framework docs
+- [Prisma docs](https://www.prisma.io/docs) - ORM docs
