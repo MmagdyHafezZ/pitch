@@ -1,4 +1,4 @@
-version: '3.8'
+version: "3.8"
 
 services:
   # PostgreSQL Database
@@ -7,7 +7,7 @@ services:
     container_name: pitch-postgres-staging
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-pitch_staging}
-      POSTGRES_USER: ${POSTGRES_USER:-pitch_user}
+      POSTGRES_USER: ${POSTGRES_USER:-admin}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     ports:
       - "5432:5432"
@@ -17,7 +17,7 @@ services:
     networks:
       - pitch-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-pitch_user} -d ${POSTGRES_DB:-pitch_staging}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-admin} -d ${POSTGRES_DB:-pitch_staging}"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -34,7 +34,7 @@ services:
     image: mongo:7-jammy
     container_name: pitch-mongodb-staging
     environment:
-      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER:-pitch_user}
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER:-admin}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD}
       MONGO_INITDB_DATABASE: ${MONGO_DB:-pitch_staging}
     ports:
@@ -90,8 +90,8 @@ services:
     container_name: pitch-api-staging
     environment:
       NODE_ENV: staging
-      DATABASE_URL: postgresql://${POSTGRES_USER:-pitch_user}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-pitch_staging}
-      MONGODB_URI: mongodb://${MONGO_USER:-pitch_user}:${MONGO_PASSWORD}@mongodb:27017/${MONGO_DB:-pitch_staging}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-admin}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-pitch_staging}
+      MONGODB_URI: mongodb://${MONGO_USER:-admin}:${MONGO_PASSWORD}@mongodb:27017/${MONGO_DB:-pitch_staging}
       REDIS_URL: redis://redis:6379
       JWT_SECRET: ${JWT_SECRET}
       PORT: 3001
