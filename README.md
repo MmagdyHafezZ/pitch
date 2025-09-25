@@ -247,12 +247,6 @@ Client → API Gateway → User Microservice (PostgreSQL)
 - **[API Endpoints](./apps/api/docs/development.md#api-endpoints)** - Available
   endpoints
 
-### Deployment
-
-- **[Frontend Deployment](./apps/web/docs/deployment.md)** - Vercel, Docker
-  deployment
-- **[Backend Deployment](./apps/api/docs/deployment.md)** - Production
-  deployment
 
 ## Contributing
 
