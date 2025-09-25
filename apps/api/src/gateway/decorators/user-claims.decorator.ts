@@ -7,7 +7,10 @@ export interface UserClaims {
 }
 
 export const UserClaims = createParamDecorator(
-  (data: keyof UserClaims | undefined, ctx: ExecutionContext): UserClaims | any => {
+  (
+    data: keyof UserClaims | undefined,
+    ctx: ExecutionContext,
+  ): UserClaims | any => {
     const request = ctx.switchToHttp().getRequest();
     const user = request.user;
 

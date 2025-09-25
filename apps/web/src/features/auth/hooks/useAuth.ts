@@ -1,12 +1,12 @@
-import { useEffect } from 'react';
-import { useAuthStore } from '../stores/auth.store';
+import { useEffect } from 'react'
+import { useAuthStore } from '../stores/auth.store'
 import {
   useLoginMutation,
   useRegisterMutation,
   useLogoutMutation,
   useMeQuery,
-} from '../services/auth.service';
-import { LoginCredentials, RegisterCredentials } from '../types/auth.types';
+} from '../services/auth.service'
+import { LoginCredentials, RegisterCredentials } from '../types/auth.types'
 
 export const useAuth = () => {
   const {
@@ -22,85 +22,89 @@ export const useAuth = () => {
     setToken,
     logout: logoutStore,
     initializeAuth,
-  } = useAuthStore();
+  } = useAuthStore()
 
   // TanStack Query mutations
-  const loginMutation = useLoginMutation();
-  const registerMutation = useRegisterMutation();
-  const logoutMutation = useLogoutMutation();
+  const loginMutation = useLoginMutation()
+  const registerMutation = useRegisterMutation()
+  const logoutMutation = useLogoutMutation()
 
   // Query for user data (only when authenticated)
-  const meQuery = useMeQuery(isAuthenticated);
+  const meQuery = useMeQuery(isAuthenticated)
 
   // Initialize auth on mount
   useEffect(() => {
-    initializeAuth();
-  }, [initializeAuth]);
+    initializeAuth()
+  }, [initializeAuth])
 
   // Sync user data from query to store
   useEffect(() => {
     if (meQuery.data && !user) {
-      setUser(meQuery.data);
+      setUser(meQuery.data)
     }
-  }, [meQuery.data, user, setUser]);
+  }, [meQuery.data, user, setUser])
 
   const login = async (credentials: LoginCredentials) => {
     try {
-      clearError();
-      setLoading(true);
+      clearError()
+      setLoading(true)
 
-      const result = await loginMutation.mutateAsync(credentials);
+      const result = await loginMutation.mutateAsync(credentials)
 
-      setUser(result.user);
-      setToken(result.token);
+      setUser(result.user)
+      setToken(result.token)
 
-      return result;
+      return result
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Login failed';
-      setError(message);
-      throw error;
+      const message = error instanceof Error ? error.message : 'Login failed'
+      setError(message)
+      throw error
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  };
+  }
 
   const register = async (credentials: RegisterCredentials) => {
     try {
-      clearError();
-      setLoading(true);
+      clearError()
+      setLoading(true)
 
-      const result = await registerMutation.mutateAsync(credentials);
+      const result = await registerMutation.mutateAsync(credentials)
 
-      setUser(result.user);
-      setToken(result.token);
+      setUser(result.user)
+      setToken(result.token)
 
-      return result;
+      return result
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Registration failed';
-      setError(message);
-      throw error;
+      const message = error instanceof Error ? error.message : 'Registration failed'
+      setError(message)
+      throw error
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  };
+  }
 
   const logout = async () => {
     try {
-      await logoutMutation.mutateAsync();
+      await logoutMutation.mutateAsync()
     } catch (error) {
       // Log error but don't prevent logout
-      console.error('Logout error:', error);
+      console.error('Logout error:', error)
     } finally {
-      logoutStore();
+      logoutStore()
     }
-  };
+  }
 
   return {
     // State
     user,
     token,
     isAuthenticated,
-    isLoading: isLoading || loginMutation.isPending || registerMutation.isPending || logoutMutation.isPending,
+    isLoading:
+      isLoading ||
+      loginMutation.isPending ||
+      registerMutation.isPending ||
+      logoutMutation.isPending,
     error: error || loginMutation.error?.message || registerMutation.error?.message,
 
     // Actions
@@ -118,5 +122,5 @@ export const useAuth = () => {
     // Reset functions
     resetLogin: loginMutation.reset,
     resetRegister: registerMutation.reset,
-  };
-};
+  }
+}

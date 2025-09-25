@@ -1,15 +1,15 @@
-import type { Metadata } from "next";
-import { Providers, ColorSchemeScript } from "@/lib/providers";
+import type { Metadata } from 'next'
+import { Providers, ColorSchemeScript } from '@/lib/providers'
 
 export const metadata: Metadata = {
-  title: "PITCH - Your Business Platform",
-  description: "A modern business management platform",
-};
+  title: 'PITCH - Your Business Platform',
+  description: 'A modern business management platform',
+}
 
 export default function RootLayout({
   children,
 }: Readonly<{
-  children: React.ReactNode;
+  children: React.ReactNode
 }>) {
   return (
     <html lang="en">
@@ -17,10 +17,8 @@ export default function RootLayout({
         <ColorSchemeScript />
       </head>
       <body>
-        <Providers>
-          {children}
-        </Providers>
+        <Providers>{children}</Providers>
       </body>
     </html>
-  );
+  )
 }

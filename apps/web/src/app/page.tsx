@@ -1,30 +1,30 @@
-'use client';
+'use client'
 
-import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { Container, Title, Text, Button, Stack, Center, Loader } from '@mantine/core';
-import { useAuth } from '@/features/auth';
+import { useEffect } from 'react'
+import { useRouter } from 'next/navigation'
+import { Container, Title, Text, Button, Stack, Center, Loader } from '@mantine/core'
+import { useAuth } from '@/features/auth'
 
 export default function Home() {
-  const { isAuthenticated, user, isLoading, logout } = useAuth();
-  const router = useRouter();
+  const { isAuthenticated, user, isLoading, logout } = useAuth()
+  const router = useRouter()
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
-      router.push('/auth/login');
+      router.push('/auth/login')
     }
-  }, [isAuthenticated, isLoading, router]);
+  }, [isAuthenticated, isLoading, router])
 
   if (isLoading) {
     return (
       <Center h="100vh">
         <Loader size="lg" />
       </Center>
-    );
+    )
   }
 
   if (!isAuthenticated) {
-    return null; // Will redirect
+    return null // Will redirect
   }
 
   return (
@@ -39,16 +39,14 @@ export default function Home() {
         </Text>
 
         <Text ta="center">
-          This is your business management dashboard. The platform is ready for you to start building your business features.
+          This is your business management dashboard. The platform is ready for you to start
+          building your business features.
         </Text>
 
-        <Button
-          onClick={() => logout()}
-          variant="light"
-        >
+        <Button onClick={() => logout()} variant="light">
           Logout
         </Button>
       </Stack>
     </Container>
-  );
+  )
 }

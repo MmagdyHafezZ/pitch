@@ -1,11 +1,11 @@
 // Components
-export { AuthPage } from './components/AuthPage';
-export { LoginForm } from './components/LoginForm';
-export { RegisterForm } from './components/RegisterForm';
+export { AuthPage } from './components/AuthPage'
+export { LoginForm } from './components/LoginForm'
+export { RegisterForm } from './components/RegisterForm'
 
 // Hooks
-export { useAuth } from './hooks/useAuth';
-export { useLoginForm, useRegisterForm } from './hooks/useAuthForm';
+export { useAuth } from './hooks/useAuth'
+export { useLoginForm, useRegisterForm } from './hooks/useAuthForm'
 
 // Services
 export {
@@ -15,10 +15,10 @@ export {
   useMeQuery,
   useRefreshTokenMutation,
   authKeys,
-} from './services/auth.service';
+} from './services/auth.service'
 
 // Store
-export { useAuthStore } from './stores/auth.store';
+export { useAuthStore } from './stores/auth.store'
 
 // Types
 export type {
@@ -28,4 +28,4 @@ export type {
   LoginCredentials,
   RegisterCredentials,
   AuthResponse,
-} from './types/auth.types';
+} from './types/auth.types'

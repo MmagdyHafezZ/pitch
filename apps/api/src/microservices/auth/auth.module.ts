@@ -16,12 +16,7 @@ import { LocalStrategy } from './strategies/local.strategy';
     }),
   ],
   controllers: [AuthController],
-  providers: [
-    AuthService,
-    AuthPrismaService,
-    JwtStrategy,
-    LocalStrategy,
-  ],
+  providers: [AuthService, AuthPrismaService, JwtStrategy, LocalStrategy],
   exports: [
     AuthService,
     AuthPrismaService,

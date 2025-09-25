@@ -1,6 +1,6 @@
-'use client';
+'use client'
 
-import { useState } from 'react';
+import { useState } from 'react'
 import {
   Paper,
   TextInput,
@@ -12,19 +12,19 @@ import {
   Container,
   Alert,
   Stack,
-} from '@mantine/core';
-import { IconAlertCircle } from '@tabler/icons-react';
-import { useLoginForm } from '../hooks/useAuthForm';
-import { notifications } from '@mantine/notifications';
+} from '@mantine/core'
+import { IconAlertCircle } from '@tabler/icons-react'
+import { useLoginForm } from '../hooks/useAuthForm'
+import { notifications } from '@mantine/notifications'
 
 interface LoginFormProps {
-  onSwitchToRegister?: () => void;
-  onSuccess?: () => void;
+  onSwitchToRegister?: () => void
+  onSuccess?: () => void
 }
 
 export function LoginForm({ onSwitchToRegister, onSuccess }: LoginFormProps) {
-  const [showError, setShowError] = useState(false);
-  const [errorMessage, setErrorMessage] = useState('');
+  const [showError, setShowError] = useState(false)
+  const [errorMessage, setErrorMessage] = useState('')
 
   const { form, handleSubmit, isLoading } = useLoginForm({
     onSuccess: () => {
@@ -32,14 +32,14 @@ export function LoginForm({ onSwitchToRegister, onSuccess }: LoginFormProps) {
         title: 'Welcome back!',
         message: 'You have been successfully logged in.',
         color: 'green',
-      });
-      onSuccess?.();
+      })
+      onSuccess?.()
     },
     onError: (error) => {
-      setErrorMessage(error);
-      setShowError(true);
+      setErrorMessage(error)
+      setShowError(true)
     },
-  });
+  })
 
   return (
     <Container size={420} my={40}>
@@ -83,25 +83,14 @@ export function LoginForm({ onSwitchToRegister, onSuccess }: LoginFormProps) {
               error={form.errors.password}
             />
 
-            <Button
-              type="submit"
-              fullWidth
-              mt="xl"
-              loading={isLoading}
-              disabled={isLoading}
-            >
+            <Button type="submit" fullWidth mt="xl" loading={isLoading} disabled={isLoading}>
               Sign in
             </Button>
 
             {onSwitchToRegister && (
               <Text c="dimmed" size="sm" ta="center" mt="md">
                 Don&apos;t have an account yet?{' '}
-                <Anchor
-                  size="sm"
-                  component="button"
-                  type="button"
-                  onClick={onSwitchToRegister}
-                >
+                <Anchor size="sm" component="button" type="button" onClick={onSwitchToRegister}>
                   Create account
                 </Anchor>
               </Text>
@@ -110,5 +99,5 @@ export function LoginForm({ onSwitchToRegister, onSuccess }: LoginFormProps) {
         </form>
       </Paper>
     </Container>
-  );
+  )
 }

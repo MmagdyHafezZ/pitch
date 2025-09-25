@@ -1,8 +1,19 @@
-import { Injectable, ConflictException, UnauthorizedException, NotFoundException, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  ConflictException,
+  UnauthorizedException,
+  NotFoundException,
+  Logger,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { AuthPrismaService } from './auth-prisma.service';
-import { RegisterDto, LoginDto, AuthResponseDto, UserResponseDto } from './dto/auth.dto';
+import {
+  RegisterDto,
+  LoginDto,
+  AuthResponseDto,
+  UserResponseDto,
+} from './dto/auth.dto';
 import { User } from './prisma/generated/client';
 
 @Injectable()
@@ -95,7 +106,9 @@ export class AuthService {
     }
   }
 
-  async refreshToken(refreshToken: string): Promise<{ token: string; refreshToken: string }> {
+  async refreshToken(
+    refreshToken: string,
+  ): Promise<{ token: string; refreshToken: string }> {
     try {
       // Verify refresh token
       this.jwtService.verify(refreshToken, {
@@ -179,7 +192,7 @@ export class AuthService {
         where: { email },
       });
 
-      if (user && await bcrypt.compare(password, user.password)) {
+      if (user && (await bcrypt.compare(password, user.password))) {
         return user;
       }
 
@@ -190,7 +203,9 @@ export class AuthService {
     }
   }
 
-  private async generateTokens(user: User): Promise<{ accessToken: string; refreshToken: string }> {
+  private async generateTokens(
+    user: User,
+  ): Promise<{ accessToken: string; refreshToken: string }> {
     const payload = {
       sub: user.id,
       email: user.email,
@@ -241,7 +256,10 @@ export class AuthService {
         },
       });
     } catch (error) {
-      this.logger.error(`Failed to cleanup expired tokens for user: ${userId}`, error.stack);
+      this.logger.error(
+        `Failed to cleanup expired tokens for user: ${userId}`,
+        error.stack,
+      );
     }
   }
 

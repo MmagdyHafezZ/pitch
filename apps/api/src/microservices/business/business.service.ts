@@ -1,6 +1,10 @@
 import { Injectable, NotFoundException, Inject } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
-import { CreateBusinessDto, UpdateBusinessDto, Business } from '../../common/interfaces/business.interface';
+import {
+  CreateBusinessDto,
+  UpdateBusinessDto,
+  Business,
+} from '../../common/interfaces/business.interface';
 import { BusinessPrismaService } from './business-prisma.service';
 import { USER_SERVICE_PATTERNS } from '../../common/interfaces/message-patterns.interface';
 import { firstValueFrom } from 'rxjs';
@@ -28,10 +32,12 @@ export class BusinessService {
 
   async findOneWithUser(id: string): Promise<Business & { user?: any }> {
     const business = await this.findOne(id);
-    
+
     try {
       const user = await firstValueFrom(
-        this.userService.send(USER_SERVICE_PATTERNS.GET_USER, { id: business.userId })
+        this.userService.send(USER_SERVICE_PATTERNS.GET_USER, {
+          id: business.userId,
+        }),
       );
       return { ...business, user };
     } catch (error) {
@@ -44,10 +50,14 @@ export class BusinessService {
     // Validate that user exists before creating business
     try {
       await firstValueFrom(
-        this.userService.send(USER_SERVICE_PATTERNS.GET_USER, { id: createBusinessDto.userId })
+        this.userService.send(USER_SERVICE_PATTERNS.GET_USER, {
+          id: createBusinessDto.userId,
+        }),
       );
     } catch (error) {
-      throw new NotFoundException(`User with ID ${createBusinessDto.userId} not found`);
+      throw new NotFoundException(
+        `User with ID ${createBusinessDto.userId} not found`,
+      );
     }
 
     return this.prisma.business.create({
@@ -55,7 +65,10 @@ export class BusinessService {
     });
   }
 
-  async update(id: string, updateBusinessDto: UpdateBusinessDto): Promise<Business> {
+  async update(
+    id: string,
+    updateBusinessDto: UpdateBusinessDto,
+  ): Promise<Business> {
     try {
       return await this.prisma.business.update({
         where: { id },
