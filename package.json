@@ -10,6 +10,7 @@
   ],
   "scripts": {
     "dev": "turbo run dev --parallel",
+    "prisma:generate": "turbo run db:migrate:all --filter=api",
     "dev:api": "turbo run dev --filter=api",
     "dev:web": "turbo run dev --filter=web",
     "build": "turbo run build",
