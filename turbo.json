@@ -6,8 +6,8 @@
       "persistent": true
     },
     "build": {
-      "dependsOn": ["^build"],
-      "outputs": ["dist/**", ".next/**"]
+      "dependsOn": ["^build", "db:generate:all"],
+      "outputs": ["dist/**", ".next/**", "build/**"]
     },
     "lint": {
       "outputs": []
@@ -16,20 +16,54 @@
       "outputs": []
     },
     "test": {
+      "dependsOn": ["db:generate:all"],
       "outputs": []
     },
     "test:watch": {
       "cache": false,
-      "persistent": true
+      "persistent": true,
+      "dependsOn": ["db:generate:all"]
     },
     "type-check": {
-      "dependsOn": ["^build"],
+      "dependsOn": ["^build", "db:generate:all"],
       "outputs": []
     },
     "format": {
       "outputs": []
     },
     "format:check": {
+      "outputs": []
+    },
+    "db:generate:all": {
+      "cache": false,
+      "outputs": ["**/prisma/generated/**"]
+    },
+    "db:migrate:all": {
+      "cache": false,
+      "outputs": []
+    },
+    "db:generate:user": {
+      "cache": false,
+      "outputs": ["src/microservices/user/prisma/generated/**"]
+    },
+    "db:generate:business": {
+      "cache": false,
+      "outputs": ["src/microservices/business/prisma/generated/**"]
+    },
+    "db:generate:auth": {
+      "cache": false,
+      "outputs": ["src/microservices/auth/prisma/generated/**"]
+    },
+    "db:migrate:user": {
+      "cache": false,
+      "outputs": []
+    },
+    "db:migrate:business": {
+      "cache": false,
+      "outputs": []
+    },
+    "db:migrate:auth": {
+      "cache": false,
       "outputs": []
     }
   }

@@ -13,8 +13,7 @@ RUN corepack enable pnpm
 COPY pnpm-workspace.yaml ./
 COPY package.json pnpm-lock.yaml ./
 COPY apps/api/package.json ./apps/api/
-COPY packages/shared/package.json ./packages/shared/
-COPY packages/eslint-config/package.json ./packages/eslint-config/
+COPY packages/*/package.json ./packages/
 
 # Install dependencies
 RUN pnpm install --frozen-lockfile
@@ -35,8 +34,8 @@ COPY --from=deps /app/apps/api/node_modules ./apps/api/node_modules
 # Copy source code
 COPY . .
 
-# Generate Prisma client
-RUN cd apps/api && pnpm exec prisma generate
+# Generate Prisma clients for all microservices
+RUN cd apps/api && pnpm run db:generate:all
 
 # Build the application
 RUN cd apps/api && pnpm build
@@ -56,13 +55,13 @@ RUN adduser --system --uid 1001 nestjs
 COPY --from=builder --chown=nestjs:nodejs /app/apps/api/dist ./apps/api/dist
 COPY --from=builder --chown=nestjs:nodejs /app/apps/api/node_modules ./apps/api/node_modules
 COPY --from=builder --chown=nestjs:nodejs /app/apps/api/package.json ./apps/api/
-COPY --from=builder --chown=nestjs:nodejs /app/apps/api/prisma ./apps/api/prisma
+COPY --from=builder --chown=nestjs:nodejs /app/apps/api/src/microservices/*/prisma/generated ./apps/api/src/microservices/
 COPY --from=builder --chown=nestjs:nodejs /app/node_modules ./node_modules
 COPY --from=builder --chown=nestjs:nodejs /app/package.json ./
 
 USER nestjs
 
-EXPOSE 3001
+EXPOSE 8001
 
 WORKDIR /app/apps/api
 

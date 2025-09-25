@@ -14,6 +14,7 @@
     "dev:api": "turbo run dev --filter=api",
     "dev:web": "turbo run dev --filter=web",
     "build": "turbo run build",
+    "secrets:allow": "python3 scripts/secrets_allow.py",
     "lint": "turbo run lint",
     "test": "turbo run test",
     "type-check": "turbo run type-check",

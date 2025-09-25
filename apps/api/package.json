@@ -25,12 +25,15 @@
     "db:migrate:user": "cd src/microservices/user && prisma migrate dev --schema=./prisma/schema.prisma",
     "db:generate:business": "cd src/microservices/business && prisma generate --schema=./prisma/schema.prisma",
     "db:migrate:business": "cd src/microservices/business && prisma migrate dev --schema=./prisma/schema.prisma",
-    "db:generate:all": "npm run db:generate:user && npm run db:generate:business",
-    "db:migrate:all": "npm run db:migrate:user && npm run db:migrate:business",
-    "db:migrate-deploy:all": "npm run db:migrate:user -- --create-only && npm run db:migrate:business -- --create-only && prisma migrate deploy --schema=./src/microservices/user/prisma/schema.prisma && prisma migrate deploy --schema=./src/microservices/business/prisma/schema.prisma",
+    "db:generate:auth": "cd src/microservices/auth && prisma generate --schema=./prisma/schema.prisma",
+    "db:migrate:auth": "cd src/microservices/auth && prisma migrate dev --schema=./prisma/schema.prisma",
+    "db:generate:all": "pnpm run db:generate:user && pnpm run db:generate:business && pnpm run db:generate:auth",
+    "db:migrate:all": "pnpm run db:migrate:user && pnpm run db:migrate:business && pnpm run db:migrate:auth",
+    "db:migrate-deploy:all": "pnpm run db:migrate:user -- --create-only && pnpm run db:migrate:business -- --create-only && pnpm run db:migrate:auth -- --create-only && prisma migrate deploy --schema=./src/microservices/user/prisma/schema.prisma && prisma migrate deploy --schema=./src/microservices/business/prisma/schema.prisma && prisma migrate deploy --schema=./src/microservices/auth/prisma/schema.prisma",
     "db:studio:user": "cd src/microservices/user && prisma studio --schema=./prisma/schema.prisma",
     "db:studio:business": "cd src/microservices/business && prisma studio --schema=./prisma/schema.prisma",
-    "db:studio:all": "npm run db:studio:user && npm run db:studio:business"
+    "db:studio:auth": "cd src/microservices/auth && prisma studio --schema=./prisma/schema.prisma",
+    "db:studio:all": "pnpm run db:studio:user && pnpm run db:studio:business && pnpm run db:studio:auth"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",

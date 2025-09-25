@@ -13,8 +13,7 @@ RUN corepack enable pnpm
 COPY pnpm-workspace.yaml ./
 COPY package.json pnpm-lock.yaml ./
 COPY apps/web/package.json ./apps/web/
-COPY packages/shared/package.json ./packages/shared/
-COPY packages/eslint-config/package.json ./packages/eslint-config/
+COPY packages/*/package.json ./packages/
 
 # Install dependencies
 RUN pnpm install --frozen-lockfile
@@ -33,8 +32,7 @@ COPY --from=deps /app/apps/web/node_modules ./apps/web/node_modules
 # Copy source code
 COPY . .
 
-# Generate Prisma client if needed
-RUN cd apps/web && pnpm exec prisma generate || true
+# No Prisma needed for web frontend
 
 # Disable Next.js telemetry
 ENV NEXT_TELEMETRY_DISABLED=1
