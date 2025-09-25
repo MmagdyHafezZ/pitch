@@ -1,11 +1,18 @@
+import 'dotenv/config';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { Logger, ValidationPipe, VersioningType } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import { Transport, MicroserviceOptions } from '@nestjs/microservices';
 import helmet from 'helmet';
 import compression from 'compression';
 import morgan from 'morgan';
-
+import { MicroserviceExceptionFilter } from './common/filters/microservice-exception.filter';
+import {
+  MICROSERVICES_CONFIG,
+  getRabbitMQUrl,
+  getQueueOptions,
+} from './config/microservices.config';
 async function bootstrap() {
   // Buffer logs until the logger is fully initialized
   const app = await NestFactory.create(AppModule, { bufferLogs: true });
@@ -27,7 +34,7 @@ async function bootstrap() {
   // API prefix & versioning
   app.setGlobalPrefix('api');
   app.enableVersioning({
-    type: VersioningType.URI, // e.g. /v1/users
+    type: VersioningType.URI,
     defaultVersion: '1',
   });
 
@@ -41,6 +48,9 @@ async function bootstrap() {
       validationError: { target: false }, // don't expose original objects in errors
     }),
   );
+
+  // Global exception filter for microservices
+  app.useGlobalFilters(new MicroserviceExceptionFilter());
 
   // Swagger / OpenAPI setup
   const config = new DocumentBuilder()
@@ -59,10 +69,27 @@ async function bootstrap() {
     customSiteTitle: process.env.SWAGGER_SITE_TITLE ?? 'API Docs',
   });
 
+  // Connect microservices for message pattern handling
+  MICROSERVICES_CONFIG.forEach(({ queue }) => {
+    const microserviceOptions: MicroserviceOptions = {
+      transport: Transport.RMQ,
+      options: {
+        urls: [getRabbitMQUrl()],
+        queue,
+        queueOptions: getQueueOptions(),
+      },
+    };
+    app.connectMicroservice(microserviceOptions);
+    logger.log(`🔗 Connected microservice queue: ${queue}`);
+  });
+
+  // Start all microservices
+  await app.startAllMicroservices();
+  logger.log('🚀 All microservices started');
+
   // Graceful shutdown (SIGTERM/SIGINT)
   app.enableShutdownHooks();
-
-  const port = parseInt(process.env.PORT ?? '3030', 10);
+  const port = parseInt(process.env.PORT ?? '8001', 10);
   await app.listen(port);
 
   const baseUrl = await app.getUrl();
