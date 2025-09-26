@@ -8,6 +8,7 @@ import {
 import { RpcException } from '@nestjs/microservices';
 import { AuthController } from '../auth.controller';
 import { AuthService } from '../auth.service';
+import type { MockedClass } from '../../../../test/utils/test-helpers';
 
 // Mock factories for testing
 const mockUserFactory = {
@@ -53,31 +54,29 @@ const mockAuthFactory = {
 
 describe('AuthController', () => {
   let controller: AuthController;
-  let authService: jest.Mocked<AuthService>;
+  let authService: MockedClass<AuthService>;
 
   beforeEach(async () => {
-    const mockAuthService = {
+    authService = {
       register: jest.fn(),
       login: jest.fn(),
       refreshToken: jest.fn(),
       logout: jest.fn(),
       getUser: jest.fn(),
       validateUser: jest.fn(),
-    };
+    } as MockedClass<AuthService>;
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [AuthController],
       providers: [
         {
           provide: AuthService,
-          useValue: mockAuthService,
+          useValue: authService as unknown as AuthService,
         },
       ],
     }).compile();
 
     controller = module.get<AuthController>(AuthController);
-    authService = module.get(AuthService);
-
     jest.clearAllMocks();
   });
 

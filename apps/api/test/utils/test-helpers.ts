@@ -145,3 +145,9 @@ export const createRpcError = (status: number, message: string) => {
   (error as unknown as { status: number }).status = status;
   return error;
 };
+
+export type MockedClass<T extends object> = {
+  [K in keyof T]: T[K] extends (this: any, ...args: infer A) => infer R
+    ? jest.Mock<R, A>
+    : T[K];
+};

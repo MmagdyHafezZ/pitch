@@ -1,6 +1,9 @@
 import { BusinessController } from '../business.controller';
 import type { BusinessService } from '../business.service';
+import type { Business } from '../../../common/interfaces/business.interface';
+import type { MessageWithUserClaims } from '../../../common/interfaces/user-claims.interface';
 import { toRpcException } from '../../../common/helpers/exceptions';
+import type { MockedClass } from '../../../../test/utils/test-helpers';
 
 jest.mock('../../../common/helpers/exceptions', () => ({
   toRpcException: jest.fn((error: unknown) => error),
@@ -15,17 +18,27 @@ describe('BusinessController', () => {
       create: jest.fn(),
       update: jest.fn(),
       remove: jest.fn(),
-    }) as unknown as jest.Mocked<BusinessService>;
+    }) as MockedClass<BusinessService>;
 
-  const basePayload = {
+  const createController = (service: MockedClass<BusinessService>) =>
+    new BusinessController(service as unknown as BusinessService);
+
+  const basePayload: MessageWithUserClaims = {
     userClaims: {
       id: 'user-1',
       email: 'user@example.com',
       name: 'Test User',
     },
-  } as const;
+  };
 
-  const business = { id: 'biz-1', name: 'Acme Inc.' } as const;
+  const business: Business = {
+    id: 'biz-1',
+    name: 'Acme Inc.',
+    description: 'A business',
+    userId: 'user-1',
+    createdAt: new Date('2024-01-01T00:00:00.000Z'),
+    updatedAt: new Date('2024-01-01T00:00:00.000Z'),
+  };
 
   const toRpcExceptionMock = jest.mocked(toRpcException);
 
@@ -36,21 +49,21 @@ describe('BusinessController', () => {
 
   it('returns all businesses', async () => {
     const service = createServiceMock();
-    service.findAll.mockResolvedValue([business] as any);
-    const controller = new BusinessController(service);
+    service.findAll.mockResolvedValue([business]);
+    const controller = createController(service);
 
-    await expect(controller.getBusinesses(basePayload as any)).resolves.toEqual(
-      [business],
-    );
+    await expect(controller.getBusinesses(basePayload)).resolves.toEqual([
+      business,
+    ]);
   });
 
   it('returns a single business by id', async () => {
     const service = createServiceMock();
-    service.findOne.mockResolvedValue(business as any);
-    const controller = new BusinessController(service);
+    service.findOne.mockResolvedValue(business);
+    const controller = createController(service);
 
     await expect(
-      controller.getBusiness({ id: 'biz-1', ...basePayload } as any),
+      controller.getBusiness({ id: 'biz-1', ...basePayload }),
     ).resolves.toEqual(business);
 
     expect(service.findOne).toHaveBeenCalledWith('biz-1');
@@ -59,25 +72,25 @@ describe('BusinessController', () => {
   it('returns a business with user information', async () => {
     const detailedBusiness = { ...business, user: { id: 'user-1' } };
     const service = createServiceMock();
-    service.findOneWithUser.mockResolvedValue(detailedBusiness as any);
-    const controller = new BusinessController(service);
+    service.findOneWithUser.mockResolvedValue(detailedBusiness);
+    const controller = createController(service);
 
     await expect(
-      controller.getBusinessWithUser({ id: 'biz-1', ...basePayload } as any),
+      controller.getBusinessWithUser({ id: 'biz-1', ...basePayload }),
     ).resolves.toEqual(detailedBusiness);
   });
 
   it('creates a business after removing user claims', async () => {
     const service = createServiceMock();
-    service.create.mockResolvedValue(business as any);
-    const controller = new BusinessController(service);
+    service.create.mockResolvedValue(business);
+    const controller = createController(service);
 
-    const payload = {
+    const payload: Parameters<BusinessController['createBusiness']>[0] = {
       id: 'biz-1',
       name: 'New Biz',
       userId: 'user-1',
       ...basePayload,
-    } as any;
+    };
 
     await expect(controller.createBusiness(payload)).resolves.toEqual(business);
     expect(service.create).toHaveBeenCalledWith({
@@ -89,14 +102,14 @@ describe('BusinessController', () => {
 
   it('updates a business', async () => {
     const service = createServiceMock();
-    service.update.mockResolvedValue(business as any);
-    const controller = new BusinessController(service);
+    service.update.mockResolvedValue(business);
+    const controller = createController(service);
 
-    const payload = {
+    const payload: Parameters<BusinessController['updateBusiness']>[0] = {
       id: 'biz-1',
       name: 'Updated',
       ...basePayload,
-    } as any;
+    };
 
     await expect(controller.updateBusiness(payload)).resolves.toEqual(business);
     expect(service.update).toHaveBeenCalledWith('biz-1', { name: 'Updated' });
@@ -104,11 +117,11 @@ describe('BusinessController', () => {
 
   it('deletes a business', async () => {
     const service = createServiceMock();
-    service.remove.mockResolvedValue({ message: 'ok' } as any);
-    const controller = new BusinessController(service);
+    service.remove.mockResolvedValue({ message: 'ok' });
+    const controller = createController(service);
 
     await expect(
-      controller.deleteBusiness({ id: 'biz-1', ...basePayload } as any),
+      controller.deleteBusiness({ id: 'biz-1', ...basePayload }),
     ).resolves.toEqual({ message: 'ok' });
 
     expect(service.remove).toHaveBeenCalledWith('biz-1');
@@ -120,9 +133,9 @@ describe('BusinessController', () => {
     const service = createServiceMock();
     service.findAll.mockRejectedValue(error);
     toRpcExceptionMock.mockReturnValueOnce(rpcError);
-    const controller = new BusinessController(service);
+    const controller = createController(service);
 
-    await expect(controller.getBusinesses(basePayload as any)).rejects.toThrow(
+    await expect(controller.getBusinesses(basePayload)).rejects.toThrow(
       rpcError,
     );
     expect(toRpcExceptionMock).toHaveBeenCalledWith(error);
@@ -134,10 +147,10 @@ describe('BusinessController', () => {
     const service = createServiceMock();
     service.findOne.mockRejectedValue(error);
     toRpcExceptionMock.mockReturnValueOnce(rpcError);
-    const controller = new BusinessController(service);
+    const controller = createController(service);
 
     await expect(
-      controller.getBusiness({ id: 'biz-1', ...basePayload } as any),
+      controller.getBusiness({ id: 'biz-1', ...basePayload }),
     ).rejects.toThrow(rpcError);
   });
 
@@ -147,10 +160,10 @@ describe('BusinessController', () => {
     const service = createServiceMock();
     service.update.mockRejectedValue(error);
     toRpcExceptionMock.mockReturnValueOnce(rpcError);
-    const controller = new BusinessController(service);
+    const controller = createController(service);
 
     await expect(
-      controller.updateBusiness({ id: 'biz-1', ...basePayload } as any),
+      controller.updateBusiness({ id: 'biz-1', ...basePayload }),
     ).rejects.toThrow(rpcError);
   });
 
@@ -160,10 +173,10 @@ describe('BusinessController', () => {
     const service = createServiceMock();
     service.findOneWithUser.mockRejectedValue(error);
     toRpcExceptionMock.mockReturnValueOnce(rpcError);
-    const controller = new BusinessController(service);
+    const controller = createController(service);
 
     await expect(
-      controller.getBusinessWithUser({ id: 'biz-1', ...basePayload } as any),
+      controller.getBusinessWithUser({ id: 'biz-1', ...basePayload }),
     ).rejects.toThrow(rpcError);
   });
 
@@ -173,14 +186,14 @@ describe('BusinessController', () => {
     const service = createServiceMock();
     service.create.mockRejectedValue(error);
     toRpcExceptionMock.mockReturnValueOnce(rpcError);
-    const controller = new BusinessController(service);
+    const controller = createController(service);
 
     await expect(
       controller.createBusiness({
         name: 'Biz',
         userId: 'user-1',
         ...basePayload,
-      } as any),
+      }),
     ).rejects.toThrow(rpcError);
   });
 
@@ -190,10 +203,10 @@ describe('BusinessController', () => {
     const service = createServiceMock();
     service.remove.mockRejectedValue(error);
     toRpcExceptionMock.mockReturnValueOnce(rpcError);
-    const controller = new BusinessController(service);
+    const controller = createController(service);
 
     await expect(
-      controller.deleteBusiness({ id: 'biz-1', ...basePayload } as any),
+      controller.deleteBusiness({ id: 'biz-1', ...basePayload }),
     ).rejects.toThrow(rpcError);
   });
 });

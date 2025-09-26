@@ -78,15 +78,16 @@ describe('MicroserviceConfigService', () => {
     const connectMicroservice = jest.fn().mockImplementationOnce(() => {
       throw new Error('connection failed');
     });
+    const startAllMicroservices = jest.fn();
     const app = {
       connectMicroservice,
-      startAllMicroservices: jest.fn(),
+      startAllMicroservices,
     } as unknown as INestApplication;
 
     await expect(service.connectAllMicroservices(app)).rejects.toThrow(
       'connection failed',
     );
-    expect(app.startAllMicroservices).not.toHaveBeenCalled();
+    expect(startAllMicroservices).not.toHaveBeenCalled();
   });
 
   it('returns client configurations for gateway module', () => {
