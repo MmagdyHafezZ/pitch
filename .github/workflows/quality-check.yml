@@ -28,6 +28,9 @@ jobs:
           node-version: "20.x"
           cache: "pnpm"
 
+      - name: Enable pnpm via corepack
+        run: corepack enable pnpm
+
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
@@ -43,18 +46,22 @@ jobs:
         run: pnpm run --filter=api db:generate:all
         continue-on-error: true
 
-      - name: Apply formatting
-        run: pnpm format
+      - name: Verify formatting
+        id: format
+        run: pnpm format:check
 
       - name: Run linting
+        id: lint
         run: pnpm lint
         env:
           PITCH_ENFORCE_TESTS: "true"
 
       - name: Run type checking
+        id: typecheck
         run: pnpm type-check
 
       - name: Run tests
+        id: tests
         run: pnpm test:ci
         env:
           CI: true
@@ -71,7 +78,21 @@ jobs:
           retention-days: 14
 
       - name: Build applications
+        id: build
         run: pnpm build
+
+      - name: Publish quality summary
+        if: always()
+        run: |
+          echo "## Code Quality Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- Formatting: **${{ steps.format.outcome }}**" >> $GITHUB_STEP_SUMMARY
+          echo "- Linting: **${{ steps.lint.outcome }}**" >> $GITHUB_STEP_SUMMARY
+          echo "- Type Check: **${{ steps.typecheck.outcome }}**" >> $GITHUB_STEP_SUMMARY
+          echo "- Tests: **${{ steps.tests.outcome }}**" >> $GITHUB_STEP_SUMMARY
+          echo "- Build: **${{ steps.build.outcome }}**" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo ":information_source: Detailed logs and coverage reports are available in the workflow artifacts." >> $GITHUB_STEP_SUMMARY
 
       - name: Check commit message (on push)
         if: github.event_name == 'push'

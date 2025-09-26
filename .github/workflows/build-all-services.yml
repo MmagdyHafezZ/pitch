@@ -221,9 +221,22 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    continue-on-error: ${{ matrix.allow_failure == 'true' }}
     strategy:
       matrix:
-        service: [api, web]
+        include:
+          - service: api
+            allow_failure: "false"
+            is_quality: "false"
+            lint_filter: api
+          - service: web
+            allow_failure: "false"
+            is_quality: "false"
+            lint_filter: web
+          - service: quality-report
+            allow_failure: "true"
+            is_quality: "true"
+            lint_filter: ""
       fail-fast: false
     steps:
       - name: Checkout code
@@ -234,6 +247,11 @@ jobs:
       - name: Check if service needs building
         id: changes
         run: |
+          if [[ "${{ matrix.is_quality }}" == "true" ]]; then
+            echo "needs_build=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
           # Check if this is a scheduled run, tag, or if service files changed
           if [[ "${{ github.event_name }}" == "schedule" ]] || [[ "${{ github.event_name }}" == "workflow_dispatch" ]] || [[ $GITHUB_REF == refs/tags/* ]]; then
             echo "needs_build=true" >> $GITHUB_OUTPUT
@@ -292,17 +310,69 @@ jobs:
         continue-on-error: true
 
       - name: Run linting for ${{ matrix.service }}
-        if: steps.changes.outputs.needs_build == 'true'
-        run: pnpm turbo run lint --filter=${{ matrix.service }}
+        if: steps.changes.outputs.needs_build == 'true' && matrix.is_quality != 'true'
+        run: pnpm turbo run lint --filter=${{ matrix.lint_filter }}
 
       - name: Run type checking for ${{ matrix.service }}
-        if: steps.changes.outputs.needs_build == 'true'
-        run: pnpm turbo run type-check --filter=${{ matrix.service }}
+        if: steps.changes.outputs.needs_build == 'true' && matrix.is_quality != 'true'
+        run: pnpm turbo run type-check --filter=${{ matrix.lint_filter }}
 
       - name: Run tests for ${{ matrix.service }}
-        if: steps.changes.outputs.needs_build == 'true'
-        run: pnpm turbo run test --filter=${{ matrix.service }}
-        continue-on-error: true
+        if: steps.changes.outputs.needs_build == 'true' && matrix.is_quality != 'true'
+        run: pnpm turbo run test --filter=${{ matrix.lint_filter }}
+
+      - name: Repository code quality checks
+        if: matrix.is_quality == 'true'
+        id: repo-quality
+        env:
+          CI: true
+        run: |
+          set +e
+          pnpm format:check > quality-format.log 2>&1
+          FORMAT_EXIT=$?
+          pnpm lint > quality-lint.log 2>&1
+          LINT_EXIT=$?
+          pnpm type-check > quality-typecheck.log 2>&1
+          TYPE_EXIT=$?
+          pnpm test:ci > quality-tests.log 2>&1
+          TEST_EXIT=$?
+          pnpm build > quality-build.log 2>&1
+          BUILD_EXIT=$?
+
+          echo "format_exit=$FORMAT_EXIT" >> $GITHUB_OUTPUT
+          echo "lint_exit=$LINT_EXIT" >> $GITHUB_OUTPUT
+          echo "type_exit=$TYPE_EXIT" >> $GITHUB_OUTPUT
+          echo "test_exit=$TEST_EXIT" >> $GITHUB_OUTPUT
+          echo "build_exit=$BUILD_EXIT" >> $GITHUB_OUTPUT
+
+          # Always succeed to allow report generation
+          exit 0
+
+      - name: Upload code quality logs
+        if: matrix.is_quality == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: code-quality-logs-${{ github.run_number }}
+          path: |
+            quality-format.log
+            quality-lint.log
+            quality-typecheck.log
+            quality-tests.log
+            quality-build.log
+          retention-days: 7
+
+      - name: Publish code quality report
+        if: always() && matrix.is_quality == 'true'
+        run: |
+          echo "## Repository Code Quality Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- Formatting: **$([[ '${{ steps.repo-quality.outputs.format_exit }}' == '0' ]] && echo Success || echo Failure)**" >> $GITHUB_STEP_SUMMARY
+          echo "- Linting: **$([[ '${{ steps.repo-quality.outputs.lint_exit }}' == '0' ]] && echo Success || echo Failure)**" >> $GITHUB_STEP_SUMMARY
+          echo "- Type Check: **$([[ '${{ steps.repo-quality.outputs.type_exit }}' == '0' ]] && echo Success || echo Failure)**" >> $GITHUB_STEP_SUMMARY
+          echo "- Tests: **$([[ '${{ steps.repo-quality.outputs.test_exit }}' == '0' ]] && echo Success || echo Failure)**" >> $GITHUB_STEP_SUMMARY
+          echo "- Build: **$([[ '${{ steps.repo-quality.outputs.build_exit }}' == '0' ]] && echo Success || echo Failure)**" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo ":page_facing_up: Detailed logs are available in the 'code-quality-logs-${{ github.run_number }}' artifact." >> $GITHUB_STEP_SUMMARY
 
   build-and-deploy:
     name: Build & Deploy - ${{ matrix.service }}
