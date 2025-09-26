@@ -4,6 +4,7 @@ import type { Business } from '../../../common/interfaces/business.interface';
 import type { MessageWithUserClaims } from '../../../common/interfaces/user-claims.interface';
 import { toRpcException } from '../../../common/helpers/exceptions';
 import type { MockedClass } from '../../../../test/utils/test-helpers';
+import { RpcException } from '@nestjs/microservices';
 
 jest.mock('../../../common/helpers/exceptions', () => ({
   toRpcException: jest.fn((error: unknown) => error),
@@ -70,7 +71,16 @@ describe('BusinessController', () => {
   });
 
   it('returns a business with user information', async () => {
-    const detailedBusiness = { ...business, user: { id: 'user-1' } };
+    const detailedBusiness = {
+      ...business,
+      user: {
+        id: 'user-1',
+        email: 'user@example.com',
+        name: 'Test User',
+        createdAt: '2024-01-01T00:00:00Z',
+        updatedAt: '2024-01-01T00:00:00Z',
+      },
+    };
     const service = createServiceMock();
     service.findOneWithUser.mockResolvedValue(detailedBusiness);
     const controller = createController(service);
@@ -86,16 +96,16 @@ describe('BusinessController', () => {
     const controller = createController(service);
 
     const payload: Parameters<BusinessController['createBusiness']>[0] = {
-      id: 'biz-1',
       name: 'New Biz',
+      description: 'A new business',
       userId: 'user-1',
       ...basePayload,
     };
 
     await expect(controller.createBusiness(payload)).resolves.toEqual(business);
     expect(service.create).toHaveBeenCalledWith({
-      id: 'biz-1',
       name: 'New Biz',
+      description: 'A new business',
       userId: 'user-1',
     });
   });
@@ -129,7 +139,7 @@ describe('BusinessController', () => {
 
   it('transforms service errors to RPC exceptions', async () => {
     const error = new Error('failure');
-    const rpcError = new Error('rpc');
+    const rpcError = new RpcException('rpc');
     const service = createServiceMock();
     service.findAll.mockRejectedValue(error);
     toRpcExceptionMock.mockReturnValueOnce(rpcError);
@@ -143,7 +153,7 @@ describe('BusinessController', () => {
 
   it('wraps errors when retrieving a single business', async () => {
     const error = new Error('failure');
-    const rpcError = new Error('rpc');
+    const rpcError = new RpcException('rpc');
     const service = createServiceMock();
     service.findOne.mockRejectedValue(error);
     toRpcExceptionMock.mockReturnValueOnce(rpcError);
@@ -156,7 +166,7 @@ describe('BusinessController', () => {
 
   it('wraps errors when updating a business', async () => {
     const error = new Error('failure');
-    const rpcError = new Error('rpc');
+    const rpcError = new RpcException('rpc');
     const service = createServiceMock();
     service.update.mockRejectedValue(error);
     toRpcExceptionMock.mockReturnValueOnce(rpcError);
@@ -169,7 +179,7 @@ describe('BusinessController', () => {
 
   it('wraps errors when retrieving a business with user info', async () => {
     const error = new Error('failure');
-    const rpcError = new Error('rpc');
+    const rpcError = new RpcException('rpc');
     const service = createServiceMock();
     service.findOneWithUser.mockRejectedValue(error);
     toRpcExceptionMock.mockReturnValueOnce(rpcError);
@@ -182,7 +192,7 @@ describe('BusinessController', () => {
 
   it('wraps errors when creating a business', async () => {
     const error = new Error('failure');
-    const rpcError = new Error('rpc');
+    const rpcError = new RpcException('rpc');
     const service = createServiceMock();
     service.create.mockRejectedValue(error);
     toRpcExceptionMock.mockReturnValueOnce(rpcError);
@@ -191,6 +201,7 @@ describe('BusinessController', () => {
     await expect(
       controller.createBusiness({
         name: 'Biz',
+        description: 'A business',
         userId: 'user-1',
         ...basePayload,
       }),
@@ -199,7 +210,7 @@ describe('BusinessController', () => {
 
   it('wraps errors when deleting a business', async () => {
     const error = new Error('failure');
-    const rpcError = new Error('rpc');
+    const rpcError = new RpcException('rpc');
     const service = createServiceMock();
     service.remove.mockRejectedValue(error);
     toRpcExceptionMock.mockReturnValueOnce(rpcError);

@@ -71,7 +71,9 @@ describe('LocalStrategy', () => {
     });
 
     it('should throw UnauthorizedException when user is undefined', async () => {
-      authService.validateUser.mockResolvedValue(undefined);
+      (authService.validateUser as jest.MockedFunction<any>).mockResolvedValue(
+        undefined,
+      );
 
       await expect(strategy.validate(email, password)).rejects.toThrow(
         new UnauthorizedException('Invalid credentials'),

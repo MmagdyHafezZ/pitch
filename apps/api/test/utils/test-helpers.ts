@@ -46,7 +46,7 @@ export const createMockPrismaService = () => ({
 /**
  * Creates a mock JWT service
  */
-export const createMockJwtService = (): Partial<JwtService> => ({
+export const createMockJwtService = () => ({
   sign: jest.fn().mockReturnValue('mock-token'),
   verify: jest
     .fn()
@@ -84,6 +84,7 @@ export const createMockExecutionContext = (
     switchToHttp: () => ({
       getRequest: () => request,
       getResponse: () => ({}),
+      getNext: jest.fn(),
     }),
     getHandler: jest.fn(),
     getClass: jest.fn(),

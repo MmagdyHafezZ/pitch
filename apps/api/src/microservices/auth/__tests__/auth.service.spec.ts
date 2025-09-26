@@ -8,6 +8,10 @@ import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { AuthService } from '../auth.service';
 import { AuthPrismaService } from '../auth-prisma.service';
+import {
+  createMockPrismaService,
+  createMockJwtService,
+} from '../../../../test/utils/test-helpers';
 // Mock factories for testing
 const mockUserFactory = {
   create: (overrides = {}) => ({
@@ -44,31 +48,19 @@ const mockAuthFactory = {
 };
 
 jest.mock('bcrypt');
-const mockedBcrypt = bcrypt as jest.Mocked<typeof bcrypt>;
+const mockedBcrypt = jest.mocked(bcrypt);
 
 describe('AuthService', () => {
   let service: AuthService;
-  let prismaService: jest.Mocked<AuthPrismaService>;
-  let jwtService: jest.Mocked<JwtService>;
+  let prismaService: ReturnType<typeof createMockPrismaService>;
+  let jwtService: ReturnType<typeof createMockJwtService> & {
+    sign: jest.MockedFunction<any>;
+    verify: jest.MockedFunction<any>;
+  };
 
   beforeEach(async () => {
-    const mockPrismaService = {
-      user: {
-        findUnique: jest.fn(),
-        create: jest.fn(),
-      },
-      refreshToken: {
-        findUnique: jest.fn(),
-        create: jest.fn(),
-        delete: jest.fn(),
-        deleteMany: jest.fn(),
-      },
-    };
-
-    const mockJwtService = {
-      sign: jest.fn(),
-      verify: jest.fn(),
-    };
+    const mockPrismaService = createMockPrismaService();
+    const mockJwtService = createMockJwtService();
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -98,7 +90,9 @@ describe('AuthService', () => {
 
     it('should successfully register a new user', async () => {
       prismaService.user.findUnique.mockResolvedValue(null);
-      mockedBcrypt.hash.mockResolvedValue('hashed-password');
+      (mockedBcrypt.hash as jest.MockedFunction<any>).mockResolvedValue(
+        'hashed-password',
+      );
       prismaService.user.create.mockResolvedValue(mockUser);
       jwtService.sign
         .mockReturnValueOnce('access-token')
@@ -149,7 +143,9 @@ describe('AuthService', () => {
 
     it('should handle database errors during registration', async () => {
       prismaService.user.findUnique.mockResolvedValue(null);
-      mockedBcrypt.hash.mockResolvedValue('hashed-password');
+      (mockedBcrypt.hash as jest.MockedFunction<any>).mockResolvedValue(
+        'hashed-password',
+      );
       prismaService.user.create.mockRejectedValue(new Error('Database error'));
 
       await expect(service.register(registerDto)).rejects.toThrow(
@@ -159,7 +155,9 @@ describe('AuthService', () => {
 
     it('should rethrow errors without stack information during registration', async () => {
       prismaService.user.findUnique.mockResolvedValue(null);
-      mockedBcrypt.hash.mockResolvedValue('hashed-password');
+      (mockedBcrypt.hash as jest.MockedFunction<any>).mockResolvedValue(
+        'hashed-password',
+      );
       const plainError = { message: 'Plain failure' } as unknown as Error;
       prismaService.user.create.mockRejectedValue(plainError);
 
@@ -176,7 +174,9 @@ describe('AuthService', () => {
 
     it('should successfully login with valid credentials', async () => {
       prismaService.user.findUnique.mockResolvedValue(mockUser);
-      mockedBcrypt.compare.mockResolvedValue(true);
+      (mockedBcrypt.compare as jest.MockedFunction<any>).mockResolvedValue(
+        true,
+      );
       jwtService.sign
         .mockReturnValueOnce('access-token')
         .mockReturnValueOnce('refresh-token');
@@ -236,7 +236,9 @@ describe('AuthService', () => {
 
     it('should throw UnauthorizedException if password is invalid', async () => {
       prismaService.user.findUnique.mockResolvedValue(mockUser);
-      mockedBcrypt.compare.mockResolvedValue(false);
+      (mockedBcrypt.compare as jest.MockedFunction<any>).mockResolvedValue(
+        false,
+      );
 
       await expect(service.login(loginDto)).rejects.toThrow(
         new UnauthorizedException('Invalid credentials'),
@@ -437,7 +439,9 @@ describe('AuthService', () => {
 
     it('should return user if credentials are valid', async () => {
       prismaService.user.findUnique.mockResolvedValue(mockUser);
-      mockedBcrypt.compare.mockResolvedValue(true);
+      (mockedBcrypt.compare as jest.MockedFunction<any>).mockResolvedValue(
+        true,
+      );
 
       const result = await service.validateUser(email, password);
 
@@ -462,7 +466,9 @@ describe('AuthService', () => {
 
     it('should return null if password is invalid', async () => {
       prismaService.user.findUnique.mockResolvedValue(mockUser);
-      mockedBcrypt.compare.mockResolvedValue(false);
+      (mockedBcrypt.compare as jest.MockedFunction<any>).mockResolvedValue(
+        false,
+      );
 
       const result = await service.validateUser(email, password);
 

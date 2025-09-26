@@ -28,9 +28,13 @@ describe('LocalAuthGuard', () => {
       .spyOn(prototype, 'handleRequest')
       .mockReturnValue({ id: 'user-1' } as any);
 
-    const result = guard.handleRequest(null, null, { id: 'user-1' } as any);
+    const result = guard.handleRequest(null, null, null, {
+      id: 'user-1',
+    } as any);
 
-    expect(handleRequestSpy).toHaveBeenCalledWith(null, null, { id: 'user-1' });
+    expect(handleRequestSpy).toHaveBeenCalledWith(null, null, null, {
+      id: 'user-1',
+    });
     expect(result).toEqual({ id: 'user-1' });
 
     handleRequestSpy.mockRestore();

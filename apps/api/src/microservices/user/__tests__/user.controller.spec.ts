@@ -1,6 +1,7 @@
 import { UserController } from '../user.controller';
 import type { UserService } from '../user.service';
 import { toRpcException } from '../../../common/helpers/exceptions';
+import { RpcException } from '@nestjs/microservices';
 
 jest.mock('../../../common/helpers/exceptions', () => ({
   toRpcException: jest.fn((error: unknown) => error),
@@ -102,7 +103,7 @@ describe('UserController', () => {
   it('transforms errors using toRpcException helper', async () => {
     const service = createServiceMock();
     const error = new Error('failure');
-    const rpcError = new Error('rpc');
+    const rpcError = new RpcException('rpc');
     service.findAll.mockRejectedValue(error);
     toRpcExceptionMock.mockReturnValueOnce(rpcError);
     const controller = new UserController(service);
@@ -116,7 +117,7 @@ describe('UserController', () => {
   it('wraps errors when retrieving a user', async () => {
     const service = createServiceMock();
     const error = new Error('failure');
-    const rpcError = new Error('rpc');
+    const rpcError = new RpcException('rpc');
     service.findOne.mockRejectedValue(error);
     toRpcExceptionMock.mockReturnValueOnce(rpcError);
     const controller = new UserController(service);
@@ -129,7 +130,7 @@ describe('UserController', () => {
   it('wraps errors when creating a user', async () => {
     const service = createServiceMock();
     const error = new Error('failure');
-    const rpcError = new Error('rpc');
+    const rpcError = new RpcException('rpc');
     service.create.mockRejectedValue(error);
     toRpcExceptionMock.mockReturnValueOnce(rpcError);
     const controller = new UserController(service);
@@ -147,7 +148,7 @@ describe('UserController', () => {
   it('wraps errors when updating a user', async () => {
     const service = createServiceMock();
     const error = new Error('failure');
-    const rpcError = new Error('rpc');
+    const rpcError = new RpcException('rpc');
     service.update.mockRejectedValue(error);
     toRpcExceptionMock.mockReturnValueOnce(rpcError);
     const controller = new UserController(service);
@@ -164,7 +165,7 @@ describe('UserController', () => {
   it('wraps errors when deleting a user', async () => {
     const service = createServiceMock();
     const error = new Error('failure');
-    const rpcError = new Error('rpc');
+    const rpcError = new RpcException('rpc');
     service.remove.mockRejectedValue(error);
     toRpcExceptionMock.mockReturnValueOnce(rpcError);
     const controller = new UserController(service);

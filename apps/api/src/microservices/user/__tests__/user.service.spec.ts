@@ -1,20 +1,10 @@
 import { NotFoundException } from '@nestjs/common';
 import { UserService } from '../user.service';
 import type { UserPrismaService } from '../user-prisma.service';
+import { createMockPrismaService } from '../../../../test/utils/test-helpers';
 
 describe('UserService', () => {
-  const prismaMock = (): jest.Mocked<UserPrismaService> =>
-    ({
-      user: {
-        findMany: jest.fn(),
-        findUnique: jest.fn(),
-        create: jest.fn(),
-        update: jest.fn(),
-        delete: jest.fn(),
-      },
-    }) as unknown as jest.Mocked<UserPrismaService>;
-
-  let prisma: jest.Mocked<UserPrismaService>;
+  let prisma: ReturnType<typeof createMockPrismaService>;
   let service: UserService;
 
   const user = {
@@ -27,8 +17,8 @@ describe('UserService', () => {
   };
 
   beforeEach(() => {
-    prisma = prismaMock();
-    service = new UserService(prisma);
+    prisma = createMockPrismaService();
+    service = new UserService(prisma as any);
   });
 
   it('returns all users', async () => {

@@ -67,7 +67,7 @@ describe('JwtStrategy', () => {
     });
 
     it('should throw UnauthorizedException when user is null', async () => {
-      authService.getUser.mockResolvedValue(null);
+      (authService.getUser as jest.MockedFunction<any>).mockResolvedValue(null);
 
       await expect(strategy.validate(mockPayload)).rejects.toThrow(
         UnauthorizedException,
@@ -77,7 +77,9 @@ describe('JwtStrategy', () => {
     });
 
     it('should throw UnauthorizedException when user is undefined', async () => {
-      authService.getUser.mockResolvedValue(undefined);
+      (authService.getUser as jest.MockedFunction<any>).mockResolvedValue(
+        undefined,
+      );
 
       await expect(strategy.validate(mockPayload)).rejects.toThrow(
         UnauthorizedException,

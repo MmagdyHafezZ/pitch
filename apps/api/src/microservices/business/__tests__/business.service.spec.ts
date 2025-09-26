@@ -4,30 +4,19 @@ import { firstValueFrom } from 'rxjs';
 import { BusinessService } from '../business.service';
 import type { BusinessPrismaService } from '../business-prisma.service';
 import { USER_SERVICE_PATTERNS } from '../../../common/interfaces/message-patterns.interface';
+import {
+  createMockPrismaService,
+  createMockClientProxy,
+} from '../../../../test/utils/test-helpers';
 
 jest.mock('rxjs', () => ({
   firstValueFrom: jest.fn(),
+  of: jest.fn((value) => ({ toPromise: () => Promise.resolve(value) })),
 }));
 
 describe('BusinessService', () => {
-  const prismaMock = (): jest.Mocked<BusinessPrismaService> =>
-    ({
-      business: {
-        findMany: jest.fn(),
-        findUnique: jest.fn(),
-        create: jest.fn(),
-        update: jest.fn(),
-        delete: jest.fn(),
-      },
-    }) as unknown as jest.Mocked<BusinessPrismaService>;
-
-  const clientMock = () =>
-    ({
-      send: jest.fn(),
-    }) as unknown as jest.Mocked<ClientProxy>;
-
-  let prisma: jest.Mocked<BusinessPrismaService>;
-  let userService: jest.Mocked<ClientProxy>;
+  let prisma: ReturnType<typeof createMockPrismaService>;
+  let userService: ReturnType<typeof createMockClientProxy>;
   let service: BusinessService;
   const mockFirstValueFrom = firstValueFrom as jest.MockedFunction<
     typeof firstValueFrom
@@ -42,9 +31,9 @@ describe('BusinessService', () => {
   };
 
   beforeEach(() => {
-    prisma = prismaMock();
-    userService = clientMock();
-    service = new BusinessService(prisma, userService);
+    prisma = createMockPrismaService();
+    userService = createMockClientProxy();
+    service = new BusinessService(prisma as any, userService as any);
     mockFirstValueFrom.mockReset();
   });
 
