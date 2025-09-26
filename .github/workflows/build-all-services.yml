@@ -480,6 +480,10 @@ jobs:
         if: steps.changes.outputs.needs_build == 'true'
         id: meta
         run: |
+          # Convert repository name to lowercase for Docker compatibility
+          REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          echo "REPO_LOWER=${REPO_LOWER}" >> $GITHUB_ENV
+
           if [[ $GITHUB_REF == refs/tags/* ]]; then
             IMAGE_TAG="${GITHUB_REF#refs/tags/}"
           elif [[ $GITHUB_REF == refs/heads/* ]]; then
@@ -508,8 +512,8 @@ jobs:
           file: apps/${{ matrix.service }}/Dockerfile
           push: true
           tags: |
-            ghcr.io/${{ github.repository }}/pitch-${{ matrix.service }}:${{ env.IMAGE_TAG }}
-            ghcr.io/${{ github.repository }}/pitch-${{ matrix.service }}:latest
+            ghcr.io/${{ env.REPO_LOWER }}/pitch-${{ matrix.service }}:${{ env.IMAGE_TAG }}
+            ghcr.io/${{ env.REPO_LOWER }}/pitch-${{ matrix.service }}:latest
           cache-from: type=gha,scope=${{ matrix.service }}
           cache-to: type=gha,mode=max,scope=${{ matrix.service }}
           platforms: linux/amd64
@@ -520,7 +524,7 @@ jobs:
         if: steps.changes.outputs.needs_build == 'true'
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: ghcr.io/${{ github.repository }}/pitch-${{ matrix.service }}:${{ env.IMAGE_TAG }}
+          image-ref: ghcr.io/${{ env.REPO_LOWER }}/pitch-${{ matrix.service }}:${{ env.IMAGE_TAG }}
           format: "sarif"
           output: "trivy-container-${{ matrix.service }}.sarif"
           severity: "UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL"
@@ -538,7 +542,7 @@ jobs:
             --format table \
             --severity UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL \
             --ignore-unfixed=false \
-            ghcr.io/${{ github.repository }}/pitch-${{ matrix.service }}:${{ env.IMAGE_TAG }} || true
+            ghcr.io/${{ env.REPO_LOWER }}/pitch-${{ matrix.service }}:${{ env.IMAGE_TAG }} || true
 
           echo ""
           echo "📋 SUMMARY BY SEVERITY:"
@@ -546,7 +550,7 @@ jobs:
             --format json \
             --severity UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL \
             --ignore-unfixed=false \
-            ghcr.io/${{ github.repository }}/pitch-${{ matrix.service }}:${{ env.IMAGE_TAG }} 2>/dev/null | \
+            ghcr.io/${{ env.REPO_LOWER }}/pitch-${{ matrix.service }}:${{ env.IMAGE_TAG }} 2>/dev/null | \
             jq -r '.Results[]?.Vulnerabilities[]? | .Severity' | sort | uniq -c | sort -nr || true
 
           echo ""
@@ -585,7 +589,7 @@ jobs:
         if: steps.changes.outputs.needs_build == 'true'
         uses: actions/attest-build-provenance@v1
         with:
-          subject-name: ghcr.io/${{ github.repository }}/pitch-${{ matrix.service }}
+          subject-name: ghcr.io/${{ env.REPO_LOWER }}/pitch-${{ matrix.service }}
           subject-digest: ${{ steps.build-push.outputs.digest }}
           push-to-registry: true
 
