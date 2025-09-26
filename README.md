@@ -247,7 +247,6 @@ Client → API Gateway → User Microservice (PostgreSQL)
 - **[API Endpoints](./apps/api/docs/development.md#api-endpoints)** - Available
   endpoints
 
-
 ## Contributing
 
 1. **Feature Development** - Use feature-based architecture

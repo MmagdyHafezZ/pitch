@@ -1,0 +1,56 @@
+sequenceDiagram
+    autonumber
+    participant User as 🧑 User
+    participant Gateway as 🌐 API Gateway
+    participant Identity as 👤 Identity Service
+    participant CRM as 🔗 CRM Connector
+    participant Scenario as 🎭 Scenario Generator
+    participant Orchestrator as 🕹 Simulation Orchestrator
+    participant AIChat as 🤖 Text Chat AI
+    participant Feedback as 📝 Feedback Engine
+    participant Analytics as 📊 Analytics
+    participant Media as 🎙 Media Service
+    participant RQ as 🟩 RabbitMQ (Events)
+
+    %% Login flow
+    User->>Gateway: Login request
+    Gateway->>Identity: Authenticate & fetch user/org/plan
+    Identity-->>Gateway: JWT + org context
+    Gateway-->>User: Authenticated session
+
+    %% CRM context
+    Gateway->>CRM: Fetch CRM contacts/opportunities
+    CRM-->>Gateway: CRM data
+    Gateway-->>User: CRM insights available
+
+    %% Scenario generation
+    User->>Gateway: Start training session
+    Gateway->>Scenario: Request scenario
+    Scenario-->>Gateway: Scenario template
+    Gateway->>Orchestrator: Create new session
+    Orchestrator-->>User: Session ready
+
+    %% Simulation multi-turn
+    loop Each user turn
+        User->>Gateway: Send message
+        Gateway->>Orchestrator: Forward message
+        Orchestrator->>AIChat: Generate AI response
+        AIChat-->>Orchestrator: Response
+        Orchestrator-->>User: AI reply
+    end
+
+    %% Simulation ends
+    Orchestrator-->>RQ: Emit simulation.completed
+
+    %% Feedback + Analytics
+    RQ-->>Feedback: simulation.completed
+    Feedback-->>RQ: feedback.ready
+    RQ-->>Analytics: simulation + feedback events
+    Feedback-->>User: Scorecard + suggestions
+    Analytics-->>User: Dashboard updated
+
+    %% Media ingestion (optional)
+    User->>Gateway: Upload real sales call
+    Gateway->>Media: Store file
+    Media-->>RQ: media.ingested
+    RQ-->>Analytics: Update stats with media reference
