@@ -6,6 +6,11 @@ import {
   Logger,
 } from '@nestjs/common';
 import { Observable } from 'rxjs';
+import type {
+  RequestWithUser,
+  RequestWithBody,
+  RequestWithUserClaims,
+} from '../../common/interfaces/request.interface';
 
 export interface UserClaims {
   id: string;
@@ -17,9 +22,11 @@ export interface UserClaims {
 export class UserClaimsInterceptor implements NestInterceptor {
   private readonly logger = new Logger(UserClaimsInterceptor.name);
 
-  intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
-    const req = context.switchToHttp().getRequest();
-    const user = req.user as UserClaims | undefined;
+  intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
+    const req = context
+      .switchToHttp()
+      .getRequest<RequestWithUser & RequestWithBody & RequestWithUserClaims>();
+    const user = req.user;
 
     if (user) {
       // Expose on request for local use

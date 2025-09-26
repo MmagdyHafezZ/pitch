@@ -48,13 +48,27 @@ jobs:
 
       - name: Run linting
         run: pnpm lint
+        env:
+          PITCH_ENFORCE_TESTS: "true"
 
       - name: Run type checking
         run: pnpm type-check
 
       - name: Run tests
-        run: pnpm test
-        continue-on-error: true
+        run: pnpm test:ci
+        env:
+          CI: true
+
+      - name: Upload coverage reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-reports-${{ github.run_number }}
+          path: |
+            apps/api/coverage
+            apps/web/coverage
+          if-no-files-found: ignore
+          retention-days: 14
 
       - name: Build applications
         run: pnpm build

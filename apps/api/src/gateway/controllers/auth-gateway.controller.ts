@@ -6,7 +6,6 @@ import {
   Inject,
   HttpException,
   HttpStatus,
-  UseGuards,
   Request,
   Logger,
 } from '@nestjs/common';
@@ -28,6 +27,7 @@ import {
   AuthResponseDto,
   UserResponseDto,
 } from '../../microservices/auth/dto/auth.dto';
+import type { ServiceError } from '../../common/interfaces/error.interface';
 
 @ApiTags('authentication')
 @Controller({ path: 'auth', version: '1' })
@@ -46,17 +46,19 @@ export class AuthGatewayController {
   })
   @ApiResponse({ status: 400, description: 'Invalid input data' })
   @ApiResponse({ status: 409, description: 'User already exists' })
-  async register(@Body() registerDto: RegisterDto) {
+  register(@Body() registerDto: RegisterDto) {
     this.logger.log(`Registration attempt for: ${registerDto.email}`);
 
     return this.authService.send('auth.register', registerDto).pipe(
       timeout(10000),
-      catchError((err) => {
-        const status = err?.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
-        const message = err?.message ?? 'Registration failed';
+      catchError((err: unknown) => {
+        const error = err as ServiceError;
+        const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
+        const message = error.message ?? 'Registration failed';
+        const stack = error.stack ?? JSON.stringify(err);
         this.logger.error(
           `Registration failed for ${registerDto.email}`,
-          err?.stack ?? JSON.stringify(err),
+          stack,
         );
         return throwError(() => new HttpException(message, status));
       }),
@@ -72,16 +74,18 @@ export class AuthGatewayController {
     type: AuthResponseDto,
   })
   @ApiResponse({ status: 401, description: 'Invalid credentials' })
-  async login(@Body() loginDto: LoginDto) {
+  login(@Body() loginDto: LoginDto) {
     this.logger.log(`Login attempt for: ${loginDto.email}`);
 
     return this.authService.send('auth.login', loginDto).pipe(
       timeout(10000),
-      catchError((error) => {
-        this.logger.error(`Login failed for ${loginDto.email}`, error.stack);
-        const status = error.status || HttpStatus.UNAUTHORIZED;
-        const message = error.message || 'Login failed';
-        throw new HttpException(message, status);
+      catchError((err: unknown) => {
+        const error = err as ServiceError;
+        const stack = error.stack ?? JSON.stringify(err);
+        this.logger.error(`Login failed for ${loginDto.email}`, stack);
+        const status = error.status ?? HttpStatus.UNAUTHORIZED;
+        const message = error.message ?? 'Login failed';
+        return throwError(() => new HttpException(message, status));
       }),
     );
   }
@@ -91,7 +95,7 @@ export class AuthGatewayController {
   @ApiOperation({ summary: 'Refresh access token' })
   @ApiResponse({ status: 200, description: 'Token refreshed successfully' })
   @ApiResponse({ status: 401, description: 'Invalid refresh token' })
-  async refresh(@Body() refreshTokenDto: RefreshTokenDto) {
+  refresh(@Body() refreshTokenDto: RefreshTokenDto) {
     this.logger.log('Token refresh attempt');
 
     return this.authService
@@ -100,11 +104,13 @@ export class AuthGatewayController {
       })
       .pipe(
         timeout(10000),
-        catchError((error) => {
-          this.logger.error('Token refresh failed', error.stack);
-          const status = error.status || HttpStatus.UNAUTHORIZED;
-          const message = error.message || 'Token refresh failed';
-          throw new HttpException(message, status);
+        catchError((err: unknown) => {
+          const error = err as ServiceError;
+          const stack = error.stack ?? JSON.stringify(err);
+          this.logger.error('Token refresh failed', stack);
+          const status = error.status ?? HttpStatus.UNAUTHORIZED;
+          const message = error.message ?? 'Token refresh failed';
+          return throwError(() => new HttpException(message, status));
         }),
       );
   }
@@ -114,7 +120,7 @@ export class AuthGatewayController {
   @ApiOperation({ summary: 'Logout user' })
   @ApiResponse({ status: 200, description: 'User logged out successfully' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  async logout(
+  logout(
     @CurrentUser('id') userId: string,
     @Body() body?: { refreshToken?: string },
   ) {
@@ -127,11 +133,13 @@ export class AuthGatewayController {
       })
       .pipe(
         timeout(10000),
-        catchError((error) => {
-          this.logger.error(`Logout failed for user: ${userId}`, error.stack);
-          const status = error.status || HttpStatus.INTERNAL_SERVER_ERROR;
-          const message = error.message || 'Logout failed';
-          throw new HttpException(message, status);
+        catchError((err: unknown) => {
+          const error = err as ServiceError;
+          const stack = error.stack ?? JSON.stringify(err);
+          this.logger.error(`Logout failed for user: ${userId}`, stack);
+          const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
+          const message = error.message ?? 'Logout failed';
+          return throwError(() => new HttpException(message, status));
         }),
       );
   }
@@ -146,19 +154,18 @@ export class AuthGatewayController {
   })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'User not found' })
-  async getProfile(@CurrentUser('id') userId: string) {
+  getProfile(@CurrentUser('id') userId: string) {
     this.logger.log(`Profile request for user: ${userId}`);
 
     return this.authService.send('auth.getUser', { userId }).pipe(
       timeout(10000),
-      catchError((error) => {
-        this.logger.error(
-          `Failed to get profile for user: ${userId}`,
-          error.stack,
-        );
-        const status = error.status || HttpStatus.INTERNAL_SERVER_ERROR;
-        const message = error.message || 'Failed to get user profile';
-        throw new HttpException(message, status);
+      catchError((err: unknown) => {
+        const error = err as ServiceError;
+        const stack = error.stack ?? JSON.stringify(err);
+        this.logger.error(`Failed to get profile for user: ${userId}`, stack);
+        const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
+        const message = error.message ?? 'Failed to get user profile';
+        return throwError(() => new HttpException(message, status));
       }),
     );
   }
@@ -172,7 +179,7 @@ export class AuthGatewayController {
     type: UserResponseDto,
   })
   @ApiResponse({ status: 401, description: 'Invalid token' })
-  async validateToken(@CurrentUser() user: UserResponseDto) {
+  validateToken(@CurrentUser() user: UserResponseDto) {
     this.logger.log(`Token validation for user: ${user.id}`);
     return user;
   }

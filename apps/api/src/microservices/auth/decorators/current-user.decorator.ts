@@ -1,14 +1,19 @@
 import { createParamDecorator, ExecutionContext } from '@nestjs/common';
 import { UserResponseDto } from '../dto/auth.dto';
+import type { RequestWithUser } from '../../../common/interfaces/request.interface';
 
-export const CurrentUser = createParamDecorator(
-  (
-    data: keyof UserResponseDto | undefined,
-    ctx: ExecutionContext,
-  ): UserResponseDto | any => {
-    const request = ctx.switchToHttp().getRequest();
-    const user = request.user;
+export const currentUserFactory = (
+  data: keyof UserResponseDto | undefined,
+  ctx: ExecutionContext,
+): UserResponseDto | string | undefined => {
+  const request = ctx.switchToHttp().getRequest<RequestWithUser>();
+  const user = request.user;
 
-    return data ? user?.[data] : user;
-  },
-);
+  if (data && user) {
+    const value = user[data];
+    return typeof value === 'string' ? value : undefined;
+  }
+  return user;
+};
+
+export const CurrentUser = createParamDecorator(currentUserFactory);

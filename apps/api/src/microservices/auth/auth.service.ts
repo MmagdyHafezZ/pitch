@@ -15,6 +15,7 @@ import {
   UserResponseDto,
 } from './dto/auth.dto';
 import { User } from './prisma/generated/client';
+import type { ServiceError } from '../../common/interfaces/error.interface';
 
 @Injectable()
 export class AuthService {
@@ -62,7 +63,9 @@ export class AuthService {
         user: this.sanitizeUser(user),
       };
     } catch (error) {
-      this.logger.error(`Registration failed for ${email}`, error.stack);
+      const err = error as ServiceError;
+      const stack = err.stack ?? JSON.stringify(error);
+      this.logger.error(`Registration failed for ${email}`, stack);
       throw error;
     }
   }
@@ -101,7 +104,9 @@ export class AuthService {
         user: this.sanitizeUser(user),
       };
     } catch (error) {
-      this.logger.error(`Login failed for ${email}`, error.stack);
+      const err = error as ServiceError;
+      const stack = err.stack ?? JSON.stringify(error);
+      this.logger.error(`Login failed for ${email}`, stack);
       throw error;
     }
   }
@@ -140,7 +145,9 @@ export class AuthService {
         refreshToken: tokens.refreshToken,
       };
     } catch (error) {
-      this.logger.error('Token refresh failed', error.stack);
+      const err = error as ServiceError;
+      const stack = err.stack ?? JSON.stringify(error);
+      this.logger.error('Token refresh failed', stack);
       throw new UnauthorizedException('Invalid refresh token');
     }
   }
@@ -164,7 +171,9 @@ export class AuthService {
 
       this.logger.log(`User logged out: ${userId}`);
     } catch (error) {
-      this.logger.error(`Logout failed for user: ${userId}`, error.stack);
+      const err = error as ServiceError;
+      const stack = err.stack ?? JSON.stringify(error);
+      this.logger.error(`Logout failed for user: ${userId}`, stack);
       throw error;
     }
   }
@@ -181,7 +190,9 @@ export class AuthService {
 
       return this.sanitizeUser(user);
     } catch (error) {
-      this.logger.error(`Failed to get user: ${userId}`, error.stack);
+      const err = error as ServiceError;
+      const stack = err.stack ?? JSON.stringify(error);
+      this.logger.error(`Failed to get user: ${userId}`, stack);
       throw error;
     }
   }
@@ -198,7 +209,9 @@ export class AuthService {
 
       return null;
     } catch (error) {
-      this.logger.error(`User validation failed for ${email}`, error.stack);
+      const err = error as ServiceError;
+      const stack = err.stack ?? JSON.stringify(error);
+      this.logger.error(`User validation failed for ${email}`, stack);
       return null;
     }
   }
@@ -256,15 +269,18 @@ export class AuthService {
         },
       });
     } catch (error) {
+      const err = error as ServiceError;
+      const stack = err.stack ?? JSON.stringify(error);
       this.logger.error(
         `Failed to cleanup expired tokens for user: ${userId}`,
-        error.stack,
+        stack,
       );
     }
   }
 
   private sanitizeUser(user: User): UserResponseDto {
-    const { password, ...sanitizedUser } = user;
+    const sanitizedUser = { ...user } as UserResponseDto;
+    delete (sanitizedUser as User).password;
     return sanitizedUser;
   }
 }

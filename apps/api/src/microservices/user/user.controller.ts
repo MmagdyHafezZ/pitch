@@ -49,7 +49,8 @@ export class UserController {
       this.logger.log(
         `Creating user - Requested by: ${data.userClaims.email} (${data.userClaims.id})`,
       );
-      const { userClaims, ...createUserDto } = data;
+      const createUserDto = { ...data };
+      delete createUserDto.userClaims;
       return await this.userService.create(createUserDto);
     } catch (error) {
       throw toRpcException(error);
@@ -69,7 +70,10 @@ export class UserController {
       this.logger.log(
         `Updating user ${data.id} - Requested by: ${data.userClaims.email} (${data.userClaims.id})`,
       );
-      const { id, userClaims, ...updateData } = data;
+      const { id } = data;
+      const updateData = { ...data };
+      delete updateData.userClaims;
+      delete updateData.id;
       return await this.userService.update(id, updateData);
     } catch (error) {
       throw toRpcException(error);

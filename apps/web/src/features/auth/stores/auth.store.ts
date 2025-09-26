@@ -3,6 +3,20 @@ import { persist, createJSONStorage } from 'zustand/middleware'
 import { AuthState, AuthActions, User } from '../types/auth.types'
 import { api } from '@/lib/client'
 
+export const isBrowser = () => typeof window !== 'undefined'
+
+export const persistAuthToken = (token: string, shouldPersist = isBrowser()) => {
+  if (shouldPersist) {
+    localStorage.setItem('authToken', token)
+  }
+}
+
+export const clearAuthToken = (shouldPersist = isBrowser()) => {
+  if (shouldPersist) {
+    localStorage.removeItem('authToken')
+  }
+}
+
 export interface AuthStore extends AuthState, AuthActions {}
 
 export const useAuthStore = create<AuthStore>()(
@@ -31,9 +45,7 @@ export const useAuthStore = create<AuthStore>()(
           })
 
           // Store token in localStorage for API requests
-          if (typeof window !== 'undefined') {
-            localStorage.setItem('authToken', response.token)
-          }
+          persistAuthToken(response.token)
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : 'Login failed'
           set({
@@ -62,9 +74,7 @@ export const useAuthStore = create<AuthStore>()(
           })
 
           // Store token in localStorage for API requests
-          if (typeof window !== 'undefined') {
-            localStorage.setItem('authToken', response.token)
-          }
+          persistAuthToken(response.token)
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : 'Registration failed'
           set({
@@ -88,9 +98,7 @@ export const useAuthStore = create<AuthStore>()(
         })
 
         // Remove token from localStorage
-        if (typeof window !== 'undefined') {
-          localStorage.removeItem('authToken')
-        }
+        clearAuthToken()
 
         // Optionally call logout endpoint
         api.auth.logout().catch(() => {
@@ -104,9 +112,7 @@ export const useAuthStore = create<AuthStore>()(
 
       setToken: (token: string) => {
         set({ token })
-        if (typeof window !== 'undefined') {
-          localStorage.setItem('authToken', token)
-        }
+        persistAuthToken(token)
       },
 
       setLoading: (loading: boolean) => {
@@ -122,7 +128,7 @@ export const useAuthStore = create<AuthStore>()(
       },
 
       initializeAuth: () => {
-        if (typeof window !== 'undefined') {
+        if (isBrowser()) {
           const token = localStorage.getItem('authToken')
           if (token) {
             set({ token })
@@ -134,7 +140,7 @@ export const useAuthStore = create<AuthStore>()(
               })
               .catch(() => {
                 // Token is invalid, remove it
-                localStorage.removeItem('authToken')
+                clearAuthToken()
                 set({ token: null, isAuthenticated: false })
               })
           }

@@ -9,6 +9,11 @@ import {
 import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import { IS_PUBLIC_KEY } from '../../microservices/auth/decorators/public.decorator';
+import type { ServiceError } from '../../common/interfaces/error.interface';
+import type {
+  RequestWithHeaders,
+  RequestWithUser,
+} from '../../common/interfaces/request.interface';
 
 export interface JwtPayload {
   sub: string;
@@ -25,17 +30,18 @@ export class GlobalJwtAuthGuard implements CanActivate {
   constructor(
     private readonly reflector: Reflector,
     private readonly jwtService: JwtService,
-    // ⛔️ remove Logger from constructor
   ) {}
 
-  async canActivate(context: ExecutionContext): Promise<boolean> {
+  canActivate(context: ExecutionContext): Promise<boolean> {
     const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
       context.getHandler(),
       context.getClass(),
     ]);
-    if (isPublic) return true;
+    if (isPublic) return Promise.resolve(true);
 
-    const req = context.switchToHttp().getRequest();
+    const req = context
+      .switchToHttp()
+      .getRequest<RequestWithHeaders & RequestWithUser>();
     const token = extractBearer(req.headers.authorization);
     if (!token) throw new UnauthorizedException('Access token is required');
 
@@ -47,12 +53,15 @@ export class GlobalJwtAuthGuard implements CanActivate {
       this.logger.log(
         `JWT validated for user: ${payload.email} (${payload.sub})`,
       );
-      return true;
-    } catch (e: any) {
-      this.logger.warn(`JWT validation failed: ${e?.message}`);
-      if (e?.name === 'TokenExpiredError')
+      return Promise.resolve(true);
+    } catch (error: unknown) {
+      const e = error as ServiceError & { name?: string };
+      this.logger.warn(
+        `JWT validation failed: ${e.message ?? 'Unknown error'}`,
+      );
+      if (e.name === 'TokenExpiredError')
         throw new UnauthorizedException('Access token has expired');
-      if (e?.name === 'JsonWebTokenError')
+      if (e.name === 'JsonWebTokenError')
         throw new UnauthorizedException('Invalid access token');
       throw new UnauthorizedException('Token validation failed');
     }

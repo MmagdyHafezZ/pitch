@@ -1,0 +1,109 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Build outputs
+dist/
+build/
+.next/
+out/
+**/dist/
+**/build/
+**/.next/
+**/out/
+
+# Generated files
+*.tsbuildinfo
+**/*.tsbuildinfo
+
+# Configuration files
+*.config.js
+*.config.ts
+commitlint.config.js
+prettier.config.js
+next.config.ts
+
+# Environment files
+.env*
+**/.env*
+
+# Package manager files
+pnpm-lock.yaml
+package-lock.json
+yarn.lock
+
+# Git and version control
+.git/
+.gitignore
+**/.git/
+**/.gitignore
+
+# Docker files
+Dockerfile*
+**/Dockerfile*
+.dockerignore
+**/.dockerignore
+docker-compose*.yml
+
+# CI/CD
+.github/
+.husky/
+**/.github/
+**/.husky/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+**/.vscode/
+**/.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+**/.DS_Store
+**/Thumbs.db
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+**/*.log
+
+# Coverage and testing
+coverage/
+.nyc_output/
+**/coverage/
+**/.nyc_output/
+
+# Cache directories
+.cache/
+.turbo/
+**/.cache/
+**/.turbo/
+
+# Documentation
+*.md
+**/*.md
+
+# License files
+LICENSE*
+**/LICENSE*
+
+# Secrets and security
+.secrets*
+**/.secrets*
+
+# TypeScript declaration files (generated)
+*.d.ts
+!src/**/*.d.ts
+!types/**/*.d.ts
+
+# Nest.js specific
+nest-cli.json
+**/nest-cli.json
+
+# Workspace files
+pnpm-workspace.yaml
+.tool-versions

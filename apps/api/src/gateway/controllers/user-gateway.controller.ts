@@ -20,7 +20,7 @@ import {
   ApiBearerAuth,
 } from '@nestjs/swagger';
 import { catchError, timeout } from 'rxjs/operators';
-import { throwError, of } from 'rxjs';
+import { throwError } from 'rxjs';
 import { USER_SERVICE_PATTERNS } from '../../common/interfaces/message-patterns.interface';
 import type {
   CreateUserDto,
@@ -29,6 +29,8 @@ import type {
 import { GlobalJwtAuthGuard } from '../guards/global-jwt-auth.guard';
 import { UserClaimsInterceptor } from '../interceptors/user-claims.interceptor';
 import { UserClaims } from '../decorators/user-claims.decorator';
+import type { UserClaims as UserClaimsType } from '../../common/interfaces/user-claims.interface';
+import type { ServiceError } from '../../common/interfaces/error.interface';
 
 @ApiTags('users')
 @Controller({ path: 'users', version: '1' })
@@ -41,18 +43,18 @@ export class UserGatewayController {
   @Get()
   @ApiOperation({ summary: 'Get all users' })
   @ApiResponse({ status: 200, description: 'Users retrieved successfully' })
-  async getUsers(@UserClaims() userClaims: any) {
+  getUsers(@UserClaims() userClaims: UserClaimsType) {
     return this.userService
       .send(USER_SERVICE_PATTERNS.GET_USERS, {
         userClaims,
       })
       .pipe(
         timeout(5000),
-        catchError((error) => {
-          throw new HttpException(
-            error.message || 'Failed to get users',
-            error.status || HttpStatus.INTERNAL_SERVER_ERROR,
-          );
+        catchError((err: unknown) => {
+          const error = err as ServiceError;
+          const message = error.message ?? 'Failed to get users';
+          const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
+          return throwError(() => new HttpException(message, status));
         }),
       );
   }
@@ -61,7 +63,10 @@ export class UserGatewayController {
   @ApiOperation({ summary: 'Get user by ID' })
   @ApiResponse({ status: 200, description: 'User retrieved successfully' })
   @ApiResponse({ status: 404, description: 'User not found' })
-  async getUserById(@Param('id') id: string, @UserClaims() userClaims: any) {
+  getUserById(
+    @Param('id') id: string,
+    @UserClaims() userClaims: UserClaimsType,
+  ) {
     return this.userService
       .send(USER_SERVICE_PATTERNS.GET_USER, {
         id,
@@ -69,11 +74,11 @@ export class UserGatewayController {
       })
       .pipe(
         timeout(5000),
-        catchError((error) => {
-          throw new HttpException(
-            error.message || 'Failed to get user',
-            error.status || HttpStatus.INTERNAL_SERVER_ERROR,
-          );
+        catchError((err: unknown) => {
+          const error = err as ServiceError;
+          const message = error.message ?? 'Failed to get user';
+          const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
+          return throwError(() => new HttpException(message, status));
         }),
       );
   }
@@ -82,9 +87,9 @@ export class UserGatewayController {
   @ApiOperation({ summary: 'Create new user' })
   @ApiResponse({ status: 201, description: 'User created successfully' })
   @ApiResponse({ status: 400, description: 'Invalid input data' })
-  async createUser(
+  createUser(
     @Body() createUserDto: CreateUserDto,
-    @UserClaims() userClaims: any,
+    @UserClaims() userClaims: UserClaimsType,
   ) {
     return this.userService
       .send(USER_SERVICE_PATTERNS.CREATE_USER, {
@@ -93,11 +98,11 @@ export class UserGatewayController {
       })
       .pipe(
         timeout(5000),
-        catchError((error) => {
-          throw new HttpException(
-            error.message || 'Failed to create user',
-            error.status || HttpStatus.INTERNAL_SERVER_ERROR,
-          );
+        catchError((err: unknown) => {
+          const error = err as ServiceError;
+          const message = error.message ?? 'Failed to create user';
+          const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
+          return throwError(() => new HttpException(message, status));
         }),
       );
   }
@@ -106,10 +111,10 @@ export class UserGatewayController {
   @ApiOperation({ summary: 'Update user' })
   @ApiResponse({ status: 200, description: 'User updated successfully' })
   @ApiResponse({ status: 404, description: 'User not found' })
-  async updateUser(
+  updateUser(
     @Param('id') id: string,
     @Body() updateUserDto: UpdateUserDto,
-    @UserClaims() userClaims: any,
+    @UserClaims() userClaims: UserClaimsType,
   ) {
     return this.userService
       .send(USER_SERVICE_PATTERNS.UPDATE_USER, {
@@ -119,11 +124,11 @@ export class UserGatewayController {
       })
       .pipe(
         timeout(5000),
-        catchError((error) => {
-          throw new HttpException(
-            error.message || 'Failed to update user',
-            error.status || HttpStatus.INTERNAL_SERVER_ERROR,
-          );
+        catchError((err: unknown) => {
+          const error = err as ServiceError;
+          const message = error.message ?? 'Failed to update user';
+          const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
+          return throwError(() => new HttpException(message, status));
         }),
       );
   }
@@ -132,7 +137,10 @@ export class UserGatewayController {
   @ApiOperation({ summary: 'Delete user' })
   @ApiResponse({ status: 200, description: 'User deleted successfully' })
   @ApiResponse({ status: 404, description: 'User not found' })
-  async deleteUser(@Param('id') id: string, @UserClaims() userClaims: any) {
+  deleteUser(
+    @Param('id') id: string,
+    @UserClaims() userClaims: UserClaimsType,
+  ) {
     return this.userService
       .send(USER_SERVICE_PATTERNS.DELETE_USER, {
         id,
@@ -140,11 +148,11 @@ export class UserGatewayController {
       })
       .pipe(
         timeout(5000),
-        catchError((error) => {
-          throw new HttpException(
-            error.message || 'Failed to delete user',
-            error.status || HttpStatus.INTERNAL_SERVER_ERROR,
-          );
+        catchError((err: unknown) => {
+          const error = err as ServiceError;
+          const message = error.message ?? 'Failed to delete user';
+          const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
+          return throwError(() => new HttpException(message, status));
         }),
       );
   }

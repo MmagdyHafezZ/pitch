@@ -3,10 +3,22 @@ import eslint from '@eslint/js';
 import eslintPluginPrettierRecommended from 'eslint-plugin-prettier/recommended';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
+import pitchPlugin from '../../packages/eslint-plugin-pitch/index.mjs';
 
 export default tseslint.config(
   {
-    ignores: ['eslint.config.mjs'],
+    ignores: [
+      'eslint.config.mjs',
+      'dist/**',
+      'node_modules/**',
+      'coverage/**',
+      '**/prisma/generated/**',
+      '**/prisma/migrations/**',
+      '**/*.d.ts',
+      '*.tsbuildinfo',
+      'test/**',
+      'build/**',
+    ],
   },
   eslint.configs.recommended,
   ...tseslint.configs.recommendedTypeChecked,
@@ -25,11 +37,34 @@ export default tseslint.config(
     },
   },
   {
+    plugins: {
+      pitch: pitchPlugin,
+    },
     rules: {
       '@typescript-eslint/no-explicit-any': 'off',
       '@typescript-eslint/no-floating-promises': 'warn',
       '@typescript-eslint/no-unsafe-argument': 'warn',
       '@typescript-eslint/no-unsafe-call': 'off',
+      'pitch/require-tests': [
+        'error',
+        {
+          ignore: [
+            'src/main.ts',
+            'src/config/**',
+            'src/common/**',
+            'src/gateway/**/*.ts',
+            'src/microservices/**/dto/**',
+            'src/microservices/**/decorators/**',
+            'src/microservices/**/interceptors/**',
+            'src/microservices/**/guards/**',
+            'src/microservices/**/filters/**',
+            'src/microservices/**/interfaces/**',
+            'src/microservices/**/prisma/**',
+            'src/microservices/**/strategies/**',
+            'src/microservices/**/entities/**',
+          ],
+        },
+      ],
     },
   },
 );

@@ -13,6 +13,8 @@ import {
   getRabbitMQUrl,
   getQueueOptions,
 } from './config/microservices.config';
+import { PrismaClientExceptionFilter } from './common/filters/prisma-exception.filter';
+
 async function bootstrap() {
   // Buffer logs until the logger is fully initialized
   const app = await NestFactory.create(AppModule, { bufferLogs: true });
@@ -50,7 +52,10 @@ async function bootstrap() {
   );
 
   // Global exception filter for microservices
-  app.useGlobalFilters(new MicroserviceExceptionFilter());
+  app.useGlobalFilters(
+    new MicroserviceExceptionFilter(),
+    new PrismaClientExceptionFilter(),
+  );
 
   // Swagger / OpenAPI setup
   const config = new DocumentBuilder()

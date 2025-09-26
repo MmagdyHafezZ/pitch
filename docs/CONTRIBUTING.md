@@ -19,11 +19,9 @@ Our project uses automated quality checks to ensure code consistency and prevent
 issues. These run automatically when you commit:
 
 1. **Pre-commit hooks** - Automatically run before each commit:
+   - Secrets scanning via `scripts/check-secrets.sh`
    - Code formatting with Prettier
-   - Linting with ESLint
-   - Type checking with TypeScript
-   - Tests for changed files
-   - Build verification
+   - Targeted Jest runs for staged TypeScript files (`jest --findRelatedTests`)
 
 2. **Commit message validation** - Ensures conventional commit format
 
@@ -31,6 +29,7 @@ issues. These run automatically when you commit:
 
 1. Make your changes
 2. Test your changes locally: `pnpm test`
+   - For CI parity, prefer `pnpm test:ci` before pushing
 3. Stage your files: `git add .`
 4. Commit with conventional format: `git commit -m "feat(web): add new feature"`
    - Or use interactive commit: `pnpm commit`
@@ -46,9 +45,24 @@ pnpm lint          # Run linting
 pnpm lint:fix      # Fix linting issues automatically
 pnpm type-check    # Run type checking
 pnpm test          # Run tests
+pnpm test:ci       # Run tests in CI mode with coverage thresholds
 pnpm build         # Build the project
 pnpm format        # Format code with Prettier
 ```
+
+### Testing Expectations
+
+- **Unit tests** accompany every new service, hook, component, or utility.
+- **Integration tests** cover new database queries, messaging flows, or API
+  boundaries.
+- **E2E tests** protect new user journeys when behaviour spans multiple
+  services.
+- Keep project-wide coverage at or above 80%
+  branches/functions/lines/statements.
+- Document intentional coverage gaps or follow-ups directly in the pull request
+  to unblock reviews.
+- Tackle entries listed in tests.allowlist.json when you touch those files and
+  remove them once tests exist.
 
 ## Documentation
 

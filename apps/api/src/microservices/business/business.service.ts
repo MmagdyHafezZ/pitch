@@ -8,12 +8,21 @@ import {
 import { BusinessPrismaService } from './business-prisma.service';
 import { USER_SERVICE_PATTERNS } from '../../common/interfaces/message-patterns.interface';
 import { firstValueFrom } from 'rxjs';
+import type { PrismaError } from '../../common/interfaces/error.interface';
+
+interface UserServiceResponse {
+  id: string;
+  email: string;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+}
 
 @Injectable()
 export class BusinessService {
   constructor(
-    private prisma: BusinessPrismaService,
-    @Inject('USER_SERVICE') private userService: ClientProxy,
+    private readonly prisma: BusinessPrismaService,
+    @Inject('USER_SERVICE') private readonly userService: ClientProxy,
   ) {}
 
   async findAll(): Promise<Business[]> {
@@ -30,39 +39,46 @@ export class BusinessService {
     return business;
   }
 
-  async findOneWithUser(id: string): Promise<Business & { user?: any }> {
+  async findOneWithUser(
+    id: string,
+  ): Promise<Business & { user?: UserServiceResponse }> {
     const business = await this.findOne(id);
 
     try {
-      const user = await firstValueFrom(
-        this.userService.send(USER_SERVICE_PATTERNS.GET_USER, {
-          id: business.userId,
-        }),
+      const userResponse = await firstValueFrom(
+        this.userService.send<UserServiceResponse>(
+          USER_SERVICE_PATTERNS.GET_USER,
+          {
+            id: business.userId,
+          },
+        ),
       );
-      return { ...business, user };
-    } catch (error) {
-      // Return business without user data if user service fails
+      return { ...business, user: userResponse };
+    } catch {
       return business;
     }
   }
 
   async create(createBusinessDto: CreateBusinessDto): Promise<Business> {
-    // Validate that user exists before creating business
     try {
       await firstValueFrom(
         this.userService.send(USER_SERVICE_PATTERNS.GET_USER, {
           id: createBusinessDto.userId,
         }),
       );
-    } catch (error) {
-      throw new NotFoundException(
-        `User with ID ${createBusinessDto.userId} not found`,
-      );
-    }
 
-    return this.prisma.business.create({
-      data: createBusinessDto,
-    });
+      return await this.prisma.business.create({
+        data: createBusinessDto,
+      });
+    } catch (error) {
+      const err = error as PrismaError;
+      if (err.code === 'P2002') {
+        throw new NotFoundException(
+          `User with ID ${createBusinessDto.userId} not found`,
+        );
+      }
+      throw error;
+    }
   }
 
   async update(
@@ -75,7 +91,8 @@ export class BusinessService {
         data: updateBusinessDto,
       });
     } catch (error) {
-      if (error.code === 'P2025') {
+      const err = error as PrismaError;
+      if (err.code === 'P2025') {
         throw new NotFoundException(`Business with ID ${id} not found`);
       }
       throw error;
@@ -89,7 +106,8 @@ export class BusinessService {
       });
       return { message: `Business with ID ${id} has been deleted` };
     } catch (error) {
-      if (error.code === 'P2025') {
+      const err = error as PrismaError;
+      if (err.code === 'P2025') {
         throw new NotFoundException(`Business with ID ${id} not found`);
       }
       throw error;

@@ -28,8 +28,17 @@
 - [ ] **Integration Tests:** Updated to verify interactions between components.
 - [ ] **E2E Tests:** Performed end-to-end testing in staging or development
       environment.
-- [ ] **Manual Testing:** The changes were manually tested and validated.
-- [ ] **No Regressions:** Verified that no existing functionality is broken.
+- [ ] **Coverage Guardrails:** Confirmed Jest coverage meets the global 80%
+      thresholds.
+- [ ] **Manual Testing:** The changes were manually tested and validated (if
+      applicable).
+
+### **PR Checklist**
+
+- [ ] Added tests that exercise the new behaviour
+- [ ] Considered integration/E2E coverage for user-facing flows
+- [ ] Verified local `pnpm test` (or `pnpm test:ci`) and lint hooks succeed
+- [ ] Ensured documentation and configuration updates reflect testing changes
 
 ### **Purpose:**
 

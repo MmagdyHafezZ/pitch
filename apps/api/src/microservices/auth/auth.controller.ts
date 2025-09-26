@@ -7,6 +7,7 @@ import {
   AuthResponseDto,
   UserResponseDto,
 } from './dto/auth.dto';
+import type { ServiceError } from '../../common/interfaces/error.interface';
 
 @Controller()
 export class AuthController {
@@ -22,19 +23,21 @@ export class AuthController {
     try {
       return await this.authService.register(registerDto);
     } catch (error) {
-      this.logger.error('Registration failed', error.stack);
+      const err = error as ServiceError;
+      const stack = err.stack ?? JSON.stringify(error);
+      this.logger.error('Registration failed', stack);
 
       // Convert HttpException to RpcException with proper status
-      if (error.status) {
+      if (err.status) {
         throw new RpcException({
-          statusCode: error.status,
-          message: error.message,
+          statusCode: err.status,
+          message: err.message ?? 'Registration failed',
         });
       }
 
       throw new RpcException({
         statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
-        message: error.message || 'Registration failed',
+        message: err.message ?? 'Registration failed',
       });
     }
   }
@@ -45,18 +48,20 @@ export class AuthController {
     try {
       return await this.authService.login(loginDto);
     } catch (error) {
-      this.logger.error('Login failed', error.stack);
+      const err = error as ServiceError;
+      const stack = err.stack ?? JSON.stringify(error);
+      this.logger.error('Login failed', stack);
 
-      if (error.status) {
+      if (err.status) {
         throw new RpcException({
-          statusCode: error.status,
-          message: error.message,
+          statusCode: err.status,
+          message: err.message ?? 'Login failed',
         });
       }
 
       throw new RpcException({
         statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
-        message: error.message || 'Login failed',
+        message: err.message ?? 'Login failed',
       });
     }
   }
@@ -69,7 +74,9 @@ export class AuthController {
     try {
       return await this.authService.refreshToken(payload.refreshToken);
     } catch (error) {
-      this.logger.error('Token refresh failed', error.stack);
+      const err = error as ServiceError;
+      const stack = err.stack ?? JSON.stringify(error);
+      this.logger.error('Token refresh failed', stack);
       throw error;
     }
   }
@@ -85,7 +92,9 @@ export class AuthController {
         payload.refreshToken,
       );
     } catch (error) {
-      this.logger.error('Logout failed', error.stack);
+      const err = error as ServiceError;
+      const stack = err.stack ?? JSON.stringify(error);
+      this.logger.error('Logout failed', stack);
       throw error;
     }
   }
@@ -98,7 +107,9 @@ export class AuthController {
     try {
       return await this.authService.getUser(payload.userId);
     } catch (error) {
-      this.logger.error('Get user failed', error.stack);
+      const err = error as ServiceError;
+      const stack = err.stack ?? JSON.stringify(error);
+      this.logger.error('Get user failed', stack);
       throw error;
     }
   }
@@ -115,7 +126,9 @@ export class AuthController {
       );
       return user ? this.authService.getUser(user.id) : null;
     } catch (error) {
-      this.logger.error('User validation failed', error.stack);
+      const err = error as ServiceError;
+      const stack = err.stack ?? JSON.stringify(error);
+      this.logger.error('User validation failed', stack);
       throw error;
     }
   }

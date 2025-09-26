@@ -29,6 +29,8 @@ import type {
 import { GlobalJwtAuthGuard } from '../guards/global-jwt-auth.guard';
 import { UserClaimsInterceptor } from '../interceptors/user-claims.interceptor';
 import { UserClaims } from '../decorators/user-claims.decorator';
+import type { UserClaims as UserClaimsType } from '../../common/interfaces/user-claims.interface';
+import type { ServiceError } from '../../common/interfaces/error.interface';
 
 @ApiTags('businesses')
 @Controller({ path: 'businesses', version: '1' })
@@ -46,18 +48,18 @@ export class BusinessGatewayController {
     status: 200,
     description: 'Businesses retrieved successfully',
   })
-  async getBusinesses(@UserClaims() userClaims: any) {
+  getBusinesses(@UserClaims() userClaims: UserClaimsType) {
     return this.businessService
       .send(BUSINESS_SERVICE_PATTERNS.GET_BUSINESSES, {
         userClaims,
       })
       .pipe(
         timeout(5000),
-        catchError((error) => {
-          throw new HttpException(
-            error.message || 'Failed to get businesses',
-            error.status || HttpStatus.INTERNAL_SERVER_ERROR,
-          );
+        catchError((err: unknown) => {
+          const error = err as ServiceError;
+          const message = error.message ?? 'Failed to get businesses';
+          const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
+          return throwError(() => new HttpException(message, status));
         }),
       );
   }
@@ -66,9 +68,9 @@ export class BusinessGatewayController {
   @ApiOperation({ summary: 'Get business by ID with user details' })
   @ApiResponse({ status: 200, description: 'Business retrieved successfully' })
   @ApiResponse({ status: 404, description: 'Business not found' })
-  async getBusinessById(
+  getBusinessById(
     @Param('id') id: string,
-    @UserClaims() userClaims: any,
+    @UserClaims() userClaims: UserClaimsType,
   ) {
     return this.businessService
       .send(BUSINESS_SERVICE_PATTERNS.GET_BUSINESS_WITH_USER, {
@@ -77,11 +79,11 @@ export class BusinessGatewayController {
       })
       .pipe(
         timeout(5000),
-        catchError((error) => {
-          throw new HttpException(
-            error.message || 'Failed to get business',
-            error.status || HttpStatus.INTERNAL_SERVER_ERROR,
-          );
+        catchError((err: unknown) => {
+          const error = err as ServiceError;
+          const message = error.message ?? 'Failed to get business';
+          const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
+          return throwError(() => new HttpException(message, status));
         }),
       );
   }
@@ -90,9 +92,9 @@ export class BusinessGatewayController {
   @ApiOperation({ summary: 'Create new business' })
   @ApiResponse({ status: 201, description: 'Business created successfully' })
   @ApiResponse({ status: 400, description: 'Invalid input data' })
-  async createBusiness(
+  createBusiness(
     @Body() createBusinessDto: CreateBusinessDto,
-    @UserClaims() userClaims: any,
+    @UserClaims() userClaims: UserClaimsType,
   ) {
     return this.businessService
       .send(BUSINESS_SERVICE_PATTERNS.CREATE_BUSINESS, {
@@ -101,11 +103,11 @@ export class BusinessGatewayController {
       })
       .pipe(
         timeout(5000),
-        catchError((error) => {
-          throw new HttpException(
-            error.message || 'Failed to create business',
-            error.status || HttpStatus.INTERNAL_SERVER_ERROR,
-          );
+        catchError((err: unknown) => {
+          const error = err as ServiceError;
+          const message = error.message ?? 'Failed to create business';
+          const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
+          return throwError(() => new HttpException(message, status));
         }),
       );
   }
@@ -114,10 +116,10 @@ export class BusinessGatewayController {
   @ApiOperation({ summary: 'Update business' })
   @ApiResponse({ status: 200, description: 'Business updated successfully' })
   @ApiResponse({ status: 404, description: 'Business not found' })
-  async updateBusiness(
+  updateBusiness(
     @Param('id') id: string,
     @Body() updateBusinessDto: UpdateBusinessDto,
-    @UserClaims() userClaims: any,
+    @UserClaims() userClaims: UserClaimsType,
   ) {
     return this.businessService
       .send(BUSINESS_SERVICE_PATTERNS.UPDATE_BUSINESS, {
@@ -127,11 +129,11 @@ export class BusinessGatewayController {
       })
       .pipe(
         timeout(5000),
-        catchError((error) => {
-          throw new HttpException(
-            error.message || 'Failed to update business',
-            error.status || HttpStatus.INTERNAL_SERVER_ERROR,
-          );
+        catchError((err: unknown) => {
+          const error = err as ServiceError;
+          const message = error.message ?? 'Failed to update business';
+          const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
+          return throwError(() => new HttpException(message, status));
         }),
       );
   }
@@ -140,7 +142,10 @@ export class BusinessGatewayController {
   @ApiOperation({ summary: 'Delete business' })
   @ApiResponse({ status: 200, description: 'Business deleted successfully' })
   @ApiResponse({ status: 404, description: 'Business not found' })
-  async deleteBusiness(@Param('id') id: string, @UserClaims() userClaims: any) {
+  deleteBusiness(
+    @Param('id') id: string,
+    @UserClaims() userClaims: UserClaimsType,
+  ) {
     return this.businessService
       .send(BUSINESS_SERVICE_PATTERNS.DELETE_BUSINESS, {
         id,
@@ -148,11 +153,11 @@ export class BusinessGatewayController {
       })
       .pipe(
         timeout(5000),
-        catchError((error) => {
-          throw new HttpException(
-            error.message || 'Failed to delete business',
-            error.status || HttpStatus.INTERNAL_SERVER_ERROR,
-          );
+        catchError((err: unknown) => {
+          const error = err as ServiceError;
+          const message = error.message ?? 'Failed to delete business';
+          const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
+          return throwError(() => new HttpException(message, status));
         }),
       );
   }

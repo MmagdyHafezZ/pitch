@@ -5,10 +5,11 @@ import {
   User,
 } from '../../common/interfaces/user.interface';
 import { UserPrismaService } from './user-prisma.service';
+import type { PrismaError } from '../../common/interfaces/error.interface';
 
 @Injectable()
 export class UserService {
-  constructor(private prisma: UserPrismaService) {}
+  constructor(private readonly prisma: UserPrismaService) {}
 
   async findAll(): Promise<User[]> {
     return this.prisma.user.findMany();
@@ -37,7 +38,8 @@ export class UserService {
         data: updateUserDto,
       });
     } catch (error) {
-      if (error.code === 'P2025') {
+      const err = error as PrismaError;
+      if (err.code === 'P2025') {
         throw new NotFoundException(`User with ID ${id} not found`);
       }
       throw error;
@@ -51,7 +53,8 @@ export class UserService {
       });
       return { message: `User with ID ${id} has been deleted` };
     } catch (error) {
-      if (error.code === 'P2025') {
+      const err = error as PrismaError;
+      if (err.code === 'P2025') {
         throw new NotFoundException(`User with ID ${id} not found`);
       }
       throw error;
