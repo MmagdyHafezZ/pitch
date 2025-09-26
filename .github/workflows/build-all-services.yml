@@ -3,7 +3,7 @@ name: Build All Services
 on:
   push:
     branches:
-      - "*"
+      - main
     tags:
       - "*"
     paths:
@@ -75,8 +75,6 @@ jobs:
           node-version: "20.x"
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
-        with:
-          version: 10.12.4
 
       - name: Cache pnpm store
         run: echo "PNPM_STORE_PATH=$(pnpm store path)" >> $GITHUB_ENV
@@ -281,8 +279,6 @@ jobs:
           node-version: "20.x"
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
-        with:
-          version: 10.12.4
 
       - name: Cache pnpm store
         run: echo "PNPM_STORE_PATH=$(pnpm store path)" >> $GITHUB_ENV
@@ -432,8 +428,6 @@ jobs:
       - name: Setup pnpm
         if: steps.changes.outputs.needs_build == 'true'
         uses: pnpm/action-setup@v4
-        with:
-          version: 10.12.4
 
       - name: Install dependencies
         if: steps.changes.outputs.needs_build == 'true'
