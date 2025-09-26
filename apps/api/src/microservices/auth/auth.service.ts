@@ -279,8 +279,7 @@ export class AuthService {
   }
 
   private sanitizeUser(user: User): UserResponseDto {
-    const sanitizedUser = { ...user } as UserResponseDto;
-    delete (sanitizedUser as User).password;
-    return sanitizedUser;
+    const { password: _password, ...safeUser } = user;
+    return safeUser as UserResponseDto;
   }
 }

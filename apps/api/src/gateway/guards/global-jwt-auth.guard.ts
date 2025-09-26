@@ -49,7 +49,14 @@ export class GlobalJwtAuthGuard implements CanActivate {
       const payload = this.jwtService.verify<JwtPayload>(token, {
         secret: process.env.JWT_SECRET || 'secret',
       });
-      req.user = { id: payload.sub, email: payload.email, name: payload.name };
+      req.user = {
+        id: payload.sub,
+        email: payload.email,
+        name: payload.name,
+        isActive: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
       this.logger.log(
         `JWT validated for user: ${payload.email} (${payload.sub})`,
       );

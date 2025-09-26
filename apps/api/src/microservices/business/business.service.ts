@@ -10,7 +10,7 @@ import { USER_SERVICE_PATTERNS } from '../../common/interfaces/message-patterns.
 import { firstValueFrom } from 'rxjs';
 import type { PrismaError } from '../../common/interfaces/error.interface';
 
-interface UserServiceResponse {
+export interface UserServiceResponse {
   id: string;
   email: string;
   name: string;

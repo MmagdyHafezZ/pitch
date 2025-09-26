@@ -65,8 +65,7 @@ export class BusinessController {
       this.logger.log(
         `Creating business - Requested by: ${data.userClaims.email} (${data.userClaims.id})`,
       );
-      const createBusinessDto = { ...data };
-      delete createBusinessDto.userClaims;
+      const { userClaims: _userClaims, ...createBusinessDto } = data;
       return await this.businessService.create(createBusinessDto);
     } catch (error) {
       throw toRpcException(error);
@@ -86,10 +85,7 @@ export class BusinessController {
       this.logger.log(
         `Updating business ${data.id} - Requested by: ${data.userClaims.email} (${data.userClaims.id})`,
       );
-      const { id } = data;
-      const updateData = { ...data };
-      delete updateData.userClaims;
-      delete updateData.id;
+      const { userClaims: _userClaims, id, ...updateData } = data;
       return await this.businessService.update(id, updateData);
     } catch (error) {
       throw toRpcException(error);

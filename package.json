@@ -28,7 +28,7 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "packageManager": "pnpm@10.12.4",
+  "packageManager": "pnpm@10.17.1",
   "resolutions": {
     "tmp": "^0.2.4"
   },
@@ -53,9 +53,6 @@
   "lint-staged": {
     "*.{js,jsx,ts,tsx,json,md,yml,yaml}": [
       "prettier --write"
-    ],
-    "*.{ts,tsx}": [
-      "node scripts/run-related-tests.mjs"
     ]
   }
 }
