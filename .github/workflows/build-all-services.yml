@@ -33,6 +33,7 @@ jobs:
     permissions:
       contents: read
       security-events: write
+      actions: read
     strategy:
       matrix:
         service: [api, web]
@@ -201,6 +202,7 @@ jobs:
         with:
           sarif_file: "trivy-fs-${{ matrix.service }}.sarif"
           category: trivy-fs-${{ matrix.service }}
+          wait-for-processing: true
 
       - name: Upload security reports as artifacts
         if: always() && steps.changes.outputs.needs_scan == 'true'
@@ -380,6 +382,7 @@ jobs:
       security-events: write
       id-token: write
       attestations: write
+      actions: read
     strategy:
       matrix:
         service: [api, web]
@@ -554,6 +557,7 @@ jobs:
         with:
           sarif_file: "trivy-container-${{ matrix.service }}.sarif"
           category: trivy-container-${{ matrix.service }}
+          wait-for-processing: true
 
       - name: Upload container security reports as artifacts
         if: always() && steps.changes.outputs.needs_build == 'true'
