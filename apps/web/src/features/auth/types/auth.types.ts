@@ -2,8 +2,9 @@ export interface User {
   id: string
   email: string
   name: string
-  createdAt: Date
-  updatedAt: Date
+  isActive: boolean
+  createdAt: string
+  updatedAt: string
 }
 
 export interface AuthState {

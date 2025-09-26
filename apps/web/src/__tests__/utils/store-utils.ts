@@ -1,6 +1,9 @@
 import { act } from '@testing-library/react'
 import { StateCreator } from 'zustand'
+import { createStore } from 'zustand/vanilla'
 import { useAuthStore } from '@/features/auth/stores/auth.store'
+import type { AuthState } from '@/features/auth/types/auth.types'
+import type { AuthStore } from '@/features/auth/stores/auth.store'
 
 /**
  * Helper to reset Zustand stores between tests
@@ -20,7 +23,7 @@ export const resetStores = () => {
 /**
  * Helper to create a mock auth state
  */
-export const createMockAuthState = (overrides = {}) => ({
+export const createMockAuthState = (overrides: Partial<AuthState> = {}): Partial<AuthStore> => ({
   user: {
     id: '1',
     email: 'test@example.com',
@@ -89,6 +92,5 @@ export const getAuthStoreState = () => {
  * This is useful for testing store logic in isolation
  */
 export const createTestStore = <T>(storeCreator: StateCreator<T>) => {
-  const { create } = require('zustand')
-  return create<T>(storeCreator)
+  return createStore(storeCreator)
 }

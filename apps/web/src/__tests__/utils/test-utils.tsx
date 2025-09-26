@@ -26,11 +26,6 @@ function TestProviders({ children, queryClient }: TestProvidersProps) {
         retry: false,
       },
     },
-    logger: {
-      log: () => {},
-      warn: () => {},
-      error: () => {},
-    },
   })
 
   const client = queryClient || defaultQueryClient
@@ -64,8 +59,8 @@ export * from '@testing-library/react'
 export { customRender as render, TestProviders }
 
 // Helper to create a mock QueryClient
-export const createTestQueryClient = () => {
-  return new QueryClient({
+export const createTestQueryClient = () =>
+  new QueryClient({
     defaultOptions: {
       queries: {
         retry: false,
@@ -76,13 +71,7 @@ export const createTestQueryClient = () => {
         retry: false,
       },
     },
-    logger: {
-      log: () => {},
-      warn: () => {},
-      error: () => {},
-    },
   })
-}
 
 // Helper to wait for async operations
 export const waitForAsync = () => new Promise((resolve) => setTimeout(resolve, 0))

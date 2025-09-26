@@ -9,11 +9,18 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001/a
 
 const flushPromises = () => new Promise((resolve) => setTimeout(resolve, 0))
 
-const localStorageMock = {
-  getItem: jest.fn(() => null),
-  setItem: jest.fn(),
-  removeItem: jest.fn(),
-  clear: jest.fn(),
+type LocalStorageMock = {
+  getItem: jest.Mock<string | null, [string]>
+  setItem: jest.Mock<void, [string, string]>
+  removeItem: jest.Mock<void, [string]>
+  clear: jest.Mock<void, []>
+}
+
+const localStorageMock: LocalStorageMock = {
+  getItem: jest.fn<string | null, [string]>(() => null),
+  setItem: jest.fn<void, [string, string]>(() => undefined),
+  removeItem: jest.fn<void, [string]>(() => undefined),
+  clear: jest.fn<void, []>(() => undefined),
 }
 
 Object.defineProperty(window, 'localStorage', {
