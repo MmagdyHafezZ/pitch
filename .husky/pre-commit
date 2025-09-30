@@ -1,0 +1,6 @@
+# Run detect-secrets to prevent committing secrets
+./scripts/check-secrets.sh
+
+# Run linting
+# pnpm test
+pnpm lint-staged

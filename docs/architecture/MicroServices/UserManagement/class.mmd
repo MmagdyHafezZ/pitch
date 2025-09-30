@@ -1,0 +1,114 @@
+%%{init: {'theme':'base', 'themeVariables': { 
+  'primaryColor':'#e3f2fd',
+  'primaryTextColor':'#1a237e',
+  'primaryBorderColor':'#1976d2',
+  'lineColor':'#42a5f5',
+  'secondaryColor':'#fff3e0',
+  'secondaryTextColor':'#e65100',
+  'secondaryBorderColor':'#fb8c00',
+  'tertiaryColor':'#f3e5f5',
+  'tertiaryTextColor':'#4a148c',
+  'tertiaryBorderColor':'#7b1fa2',
+  'noteBkgColor':'#fff9c4',
+  'noteTextColor':'#f57f17'
+}}}%%
+flowchart TB
+    %% Identity & Plans Microservice
+    subgraph IdentityPlans["Identity & Plans Microservice"]
+        
+        subgraph API["API Gateways"]
+            AuthGW[Auth Gateway]
+            UserGW[User Gateway]
+            OrgGW[Org Gateway]
+            MemberGW[Member Gateway]
+            PlanGW[Plan Gateway]
+            SubGW[Subscription Gateway]
+            QuotaGW[Quota Gateway]
+        end
+        
+        subgraph CTRL["Controllers"]
+            AuthCtrl[Auth Controller]
+            UserCtrl[User Controller]
+            OrgCtrl[Org Controller]
+            MemberCtrl[Member Controller]
+            PlanCtrl[Plan Controller]
+            SubCtrl[Subscription Controller]
+            QuotaCtrl[Quota Controller]
+        end
+        
+        subgraph SVC["Services"]
+            AuthSvc[Auth Service]
+            UserSvc[User Service]
+            OrgSvc[Org Service]
+            MemberSvc[Member Service]
+            PlanSvc[Plan Service]
+            SubSvc[Subscription Service]
+            QuotaSvc[Quota Service]
+        end
+        
+        subgraph REPO["Repositories"]
+            UserRepo[User Repository]
+            OrgRepo[Org Repository]
+            RoleRepo[Role Repository]
+            UserRoleRepo[UserRole Repository]
+            PlanRepo[Plan Repository]
+            SubRepo[Subscription Repository]
+            QuotaRepo[UsageRecord Repository]
+        end
+        
+        subgraph Table["Tables"]
+            UserTable[(User Table)]
+            OrgTable[(Org Table)]
+            RoleTable[(Role Table)]
+            UserRoleTable[(UserRole Table)]
+            PlanTable[(Plan Table)]
+            SubTable[(Subscription Table)]
+            QuotaTable[(UsageRecord Table)]
+        end
+    end
+    
+    %% External Event Bus
+    RabbitMQ[RabbitMQ Event Bus]
+    
+    %% Shared Cache Cluster
+    Redis[(Shared Redis Cluster)]
+    
+    %% Other Microservices
+    subgraph TrainingMS["Training  (Example)"]
+        TrainingSvc[Simulation/Training Service]
+    end
+
+    subgraph BillingMS["Billing (Example)"]
+        BillingSvc[Billing Service]
+    end
+
+    subgraph AnalyticsMS["Analytics (Example)"]
+        AnalyticsSvc[Analytics Service]
+    end
+    
+    %% Internal Flows
+    AuthGW --> AuthCtrl --> AuthSvc --> UserRepo --> UserTable
+    UserGW --> UserCtrl --> UserSvc --> UserRepo
+    OrgGW --> OrgCtrl --> OrgSvc --> OrgRepo --> OrgTable
+    MemberGW --> MemberCtrl --> MemberSvc --> UserRoleRepo --> UserRoleTable
+    MemberSvc --> RoleRepo --> RoleTable
+    PlanGW --> PlanCtrl --> PlanSvc --> PlanRepo --> PlanTable
+    SubGW --> SubCtrl --> SubSvc --> SubRepo --> SubTable
+    QuotaGW --> QuotaCtrl --> QuotaSvc --> QuotaRepo --> QuotaTable
+    
+    %% Redis Usage (namespaced keys per service)
+    AuthSvc -.->|identity:sessions| Redis
+    UserSvc -.->|identity:users| Redis
+    OrgSvc -.->|identity:orgs| Redis
+    QuotaSvc -.->|identity:quotas| Redis
+    TrainingSvc -.->|training:scenarios| Redis
+    BillingSvc -.->|billing:invoices| Redis
+    AnalyticsSvc -.->|analytics:metrics| Redis
+    
+    %% Event Publishing
+    IdentityPlans -.->|publishes: user.created, org.created, plan.changed, subscription.*, quota.exceeded| RabbitMQ
+    
+    %% Event Consumption
+    RabbitMQ -.->|user.created, org.created| TrainingMS
+    RabbitMQ -.->|subscription.started, subscription.renewed| BillingMS
+    RabbitMQ -.->|quota.exceeded, subscription.*| AnalyticsMS

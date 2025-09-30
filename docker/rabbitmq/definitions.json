@@ -1,0 +1,34 @@
+{
+  "users": [
+    {
+      "name": "admin",
+      "password": "admin123",
+      "tags": "administrator"
+    }
+  ],
+  "vhosts": [
+    {
+      "name": "pitch_local"
+    }
+  ],
+  "permissions": [
+    {
+      "user": "admin",
+      "vhost": "pitch_local",
+      "configure": ".*",
+      "write": ".*",
+      "read": ".*"
+    }
+  ],
+  "topic_permissions": [],
+  "parameters": [],
+  "global_parameters": [
+    {
+      "name": "cluster_name",
+      "value": "pitch-local"
+    }
+  ],
+  "policies": [],
+  "queues": [],
+  "bindings": []
+}

@@ -1,0 +1,120 @@
+%%{init: {"flowchart": {"curve": "monotoneX"}} }%%
+flowchart TB
+    %% GATEWAY %%
+    subgraph Gateway["🟦 API Gateway"]
+      direction TB
+      G["HTTP/gRPC Entry"]:::svc
+    end
+
+    %% MICROSERVICES GROUP %%
+    subgraph Microservices["🟦 Microservices"]
+      direction LR
+
+      %% Identity
+      subgraph Identity["Identity & Accounts"]
+        direction TB
+        I1["Users / Orgs / Roles"]:::svc
+        I2["Plans & Billing"]:::svc
+      end
+
+      %% CRM
+      subgraph CRM["CRM Connector"]
+        direction TB
+        C1["Salesforce/HubSpot API"]:::svc
+        C2["Client Persons\n(People Graph)"]:::svc
+      end
+
+      %% Simulation
+      subgraph Simulation["Simulation Core"]
+        direction TB
+        S1["Scenario Generator"]:::svc
+        S2["Simulation Orchestrator"]:::svc
+        S3["Text Chat AI"]:::svc
+        S4["Voice/Video Comms"]:::svc
+      end
+
+      %% Feedback
+      subgraph Feedback["Feedback & Analytics"]
+        direction TB
+        F1["Feedback Engine"]:::svc
+        F2["Analytics & Stats"]:::svc
+      end
+
+      %% Media
+      subgraph Media["Media & Ingestion"]
+        direction TB
+        M1["Upload Sales Calls"]:::svc
+        M2["STT/TTS/Video Recordings"]:::svc
+      end
+
+      %% Support
+      subgraph Support["Help & Cross-Team"]
+        direction TB
+        H1["Guide Tutorials"]:::svc
+        H2["Contact External Help"]:::svc
+        H3["Cross-Team Hub"]:::svc
+      end
+    end
+
+    %% RABBITMQ COMMUNICATION LAYER %%
+    subgraph Communication["🟩 RabbitMQ (Async Bus)"]
+      direction TB
+      RQ["RabbitMQ"]:::msg
+    end
+
+    %% DATABASES GROUP %%
+    subgraph Databases["🟧 Databases & Storage"]
+      direction LR
+      PG["Postgres + pgvector"]:::db
+      RS["Redis (Cache/Session)"]:::db
+      S3Store["S3/MinIO (Storage)"]:::db
+    end
+
+    %% FLOWS: Gateway dispatch -->
+    G --> I1
+    G --> I2
+    G --> C1
+    G --> C2
+    G --> S1
+    G --> S2
+    G --> S3
+    G --> S4
+    G --> F1
+    G --> F2
+    G --> M1
+    G --> H1
+    G --> H2
+    G --> H3
+
+    %% FLOWS: Microservices <-> RabbitMQ %%
+    S2 -- simulation.completed --> RQ
+    F1 -- feedback.ready --> RQ
+    C1 -- crm.sync.completed --> RQ
+    M1 -- media.ingested --> RQ
+    M2 -- recording.available --> RQ
+
+    RQ --> F1
+    RQ --> F2
+    RQ --> H3
+
+    %% FLOWS: Microservices to Databases %%
+    I1 --> PG
+    I2 --> PG
+    C1 --> PG
+    C2 --> PG
+    S1 --> PG
+    S2 --> RS
+    S3 --> PG
+    F1 --> PG
+    F2 --> PG
+    M1 --> S3Store
+    M2 --> S3Store
+
+    %% VISUAL STYLES %%
+    classDef svc fill:#fffff,stroke:#5a92be,stroke-width:2px;
+    classDef db fill:#fffff,stroke:#bec350,stroke-width:2px;
+    classDef msg fill:#fffff,stroke:#00796b,stroke-width:3px,stroke-dasharray: 8 4;
+
+    class G,I1,I2,C1,C2,S1,S2,S3,S4,F1,F2,M1,M2,H1,H2,H3 svc
+    class PG,RS,S3Store db
+    class RQ msg

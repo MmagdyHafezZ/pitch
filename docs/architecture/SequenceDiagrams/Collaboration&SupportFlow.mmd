@@ -1,0 +1,24 @@
+sequenceDiagram
+    autonumber
+    participant User as 🧑 User
+    participant Gateway as 🌐 API Gateway
+    participant Help as 🆘 Helpdesk
+    participant Hub as 👥 Cross-Team Hub
+    participant Draft as 📧 Message Drafting
+    participant Translate as 🌐 Translation
+
+    User->>Gateway: Request help
+    Gateway->>Help: Create support ticket
+    Help-->>User: Ticket reference
+
+    User->>Gateway: Post to cross-team hub
+    Gateway->>Hub: Save discussion thread
+    Hub-->>User: Thread visible to peers
+
+    User->>Gateway: Draft client email
+    Gateway->>Draft: Generate draft
+    Draft-->>User: Suggested draft
+
+    User->>Gateway: Request translation
+    Gateway->>Translate: Translate transcript
+    Translate-->>User: Localized version

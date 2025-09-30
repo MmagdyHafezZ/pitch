@@ -1,0 +1,5 @@
+flowchart TB
+    M1["Upload Sales Calls"] --> M2["STT/TTS Processing"]
+    M2 --> S3["S3/MinIO Storage"]
+
+    M2 -- "recording.available" --> S2["Simulation Orchestrator"]

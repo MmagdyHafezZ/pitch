@@ -1,0 +1,60 @@
+classDiagram
+class ChatController {
+  +stream(dto: ChatRequestDto): EventStream
+  +draftEmail(dto: DraftEmailDto): Draft
+  +translate(dto: TranslateDto): string
+}
+
+class LLMService {
+  +complete(prompt: Prompt, opts?): Stream|Text
+  +chooseModel(hint?): string
+}
+
+class PromptService {
+  +build(ctx: Context, msg: string, tools?: string[]): Prompt
+}
+
+class RetrievalService {
+  +search(orgId: string, query: string, k: number): DocChunk[]
+}
+
+class RedactionService {
+  +mask(text: string): {text: string, spans: Span[]}
+}
+
+class EvalService {
+  +evaluate(prompt: Prompt, output: string): EvalResult
+}
+
+class Message {
+  +id: string
+  +turnId: string
+  +content: string
+  +tokensIn: number
+  +tokensOut: number
+}
+
+class EmbeddingDoc {
+  +id: string
+  +orgId: string
+  +source: string
+  +title: string
+  +chunk: string
+}
+
+class Draft {
+  +id: string
+  +sessionId: string
+  +type: string
+  +content: string
+}
+
+ChatController --> LLMService
+ChatController --> PromptService
+ChatController --> RetrievalService
+ChatController --> RedactionService
+ChatController --> EvalService
+PromptService --> RetrievalService
+LLMService --> Message
+RetrievalService --> EmbeddingDoc
+ChatController --> Draft

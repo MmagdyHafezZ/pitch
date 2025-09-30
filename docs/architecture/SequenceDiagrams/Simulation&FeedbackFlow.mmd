@@ -1,0 +1,35 @@
+sequenceDiagram
+    autonumber
+    participant User as 🧑 User
+    participant Gateway as 🌐 API Gateway
+    participant CRM as 🔗 CRM Connector
+    participant Scenario as 🎭 Scenario Generator
+    participant Orchestrator as 🕹 Simulation Orchestrator
+    participant AIChat as 🤖 Text Chat AI
+    participant Voice as 🔊 Voice/Video Comms
+    participant Feedback as 📝 Feedback Engine
+    participant Analytics as 📊 Analytics
+    participant RQ as 🟩 RabbitMQ (Events)
+
+    User->>Gateway: Start training
+    Gateway->>CRM: Fetch CRM context
+    CRM-->>Gateway: CRM insights
+    Gateway->>Scenario: Generate scenario
+    Scenario-->>Gateway: Scenario template
+    Gateway->>Orchestrator: Create session
+
+    loop Multi-turn conversation
+        User->>Gateway: Speak/type
+        Gateway->>Orchestrator: Forward input
+        Orchestrator->>AIChat: Get AI response
+        AIChat-->>Orchestrator: Response
+        Orchestrator-->>Voice: Convert to speech (if needed)
+        Voice-->>User: Spoken response
+    end
+
+    Orchestrator-->>RQ: Emit simulation.completed
+    RQ-->>Feedback: simulation.completed
+    Feedback-->>RQ: feedback.ready
+    RQ-->>Analytics: Consume all events
+    Feedback-->>User: Personalized feedback
+    Analytics-->>User: Updated dashboard

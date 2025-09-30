@@ -1,0 +1,19 @@
+sequenceDiagram
+    autonumber
+    participant LMS as 🏫 LMS
+    participant LTI as 🎓 LTI Advantage
+    participant Identity as 👤 Identity Service
+    participant Billing as 💳 Billing & Plans
+    participant Guides as 📚 Guide Tutorials
+    participant Gateway as 🌐 API Gateway
+    participant User as 🧑 User
+
+    LMS->>LTI: LTI Launch (OIDC + JWT)
+    LTI->>Identity: Map LMS user → internal user
+    Identity-->>LTI: User + org context
+    LTI->>Billing: Verify plan & quota
+    Billing-->>LTI: OK (or upgrade required)
+    LTI-->>Gateway: Pass launch context
+    Gateway-->>Guides: Show onboarding/tutorial
+    Guides-->>User: Interactive guide shown
+    Gateway-->>User: User ready for simulation

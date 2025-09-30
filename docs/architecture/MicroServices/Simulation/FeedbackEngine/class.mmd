@@ -1,0 +1,72 @@
+classDiagram
+class FeedbackController {
+  +score(dto: ScoreRequestDto): Scorecard
+  +getScorecard(id: string): Scorecard
+  +report(dto: GenerateReportDto): Report
+}
+
+class RubricController {
+  +create(dto: RubricDto): Rubric
+  +get(id: string): Rubric
+  +update(id: string, dto: RubricDto): Rubric
+}
+
+class ScoringService {
+  +score(sessionId: string, rubricId?: string): Scorecard
+}
+
+class RubricService {
+  +create(dto: RubricDto): Rubric
+  +get(id: string): Rubric
+  +update(id: string, dto: RubricDto): Rubric
+}
+
+class CoachingService {
+  +generateTips(scorecardId: string): CoachTip[]
+}
+
+class BenchmarkService {
+  +aggregate(orgId: string): Benchmark
+}
+
+class ReportService {
+  +export(scorecardId: string, format: string): Report
+}
+
+class Rubric {
+  +id: string
+  +name: string
+  +version: int
+}
+
+class Criterion {
+  +id: string
+  +rubricId: string
+  +name: string
+  +weight: float
+}
+
+class Scorecard {
+  +id: string
+  +sessionId: string
+  +rubricId: string
+  +total: float
+}
+
+class ScoreItem {
+  +id: string
+  +scorecardId: string
+  +criterionId: string
+  +score: float
+  +rationale: string
+}
+
+FeedbackController --> ScoringService
+FeedbackController --> ReportService
+RubricController --> RubricService
+ScoringService --> RubricService
+ScoringService --> Scorecard
+Scorecard --> ScoreItem
+Rubric --> Criterion
+CoachingService --> Scorecard
+BenchmarkService --> Scorecard

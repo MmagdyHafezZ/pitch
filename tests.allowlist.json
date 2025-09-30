@@ -1,0 +1,5 @@
+{
+  "workspaces": {
+    "apps/api": ["src/microservices/auth/auth-prisma.service.ts", "src/microservices/business/business-prisma.service.ts", "src/microservices/user/user-prisma.service.ts"]
+  }
+}

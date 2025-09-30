@@ -1,0 +1,633 @@
+name: Build All Services
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "*"
+    paths:
+      - "apps/api/**"
+      - "apps/web/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "turbo.json"
+      - ".github/workflows/build-all-services.yml"
+  pull_request:
+    branches:
+      - main
+      - init-version-1
+  schedule:
+    - cron: "0 5 * * *"
+  workflow_dispatch:
+    inputs:
+      suffix:
+        description: Custom suffix for tag
+        required: false
+  repository_dispatch:
+
+jobs:
+  # security-scan:
+  #   name: Security Scan - ${{ matrix.service }}
+  #   runs-on: ubuntu-latest
+  #   permissions:
+  #     contents: read
+  #     security-events: write
+  #     actions: read
+  #   strategy:
+  #     matrix:
+  #       service: [api, web]
+  #     fail-fast: false
+  #   steps:
+  #     - name: Checkout code
+  #       uses: actions/checkout@v4
+  #       with:
+  #         fetch-depth: 0
+
+  #     - name: Check if service needs scanning
+  #       id: changes
+  #       run: |
+  #         # Check if this is a scheduled run, tag, or if service files changed
+  #         if [[ "${{ github.event_name }}" == "schedule" ]] || [[ "${{ github.event_name }}" == "workflow_dispatch" ]] || [[ $GITHUB_REF == refs/tags/* ]]; then
+  #           echo "needs_scan=true" >> $GITHUB_OUTPUT
+  #         else
+  #           # For push events, check what files changed
+  #           if [[ "${{ github.event_name }}" == "push" ]]; then
+  #             # Handle initial commit or when before SHA is null/zero
+  #             if [[ "${{ github.event.before }}" == "0000000000000000000000000000000000000000" ]] || [[ -z "${{ github.event.before }}" ]]; then
+  #               echo "needs_scan=true" >> $GITHUB_OUTPUT
+  #             else
+  #               # Check for changes in service-specific files
+  #               if git diff --name-only ${{ github.event.before }}..${{ github.sha }} | grep -E "(^apps/${{ matrix.service }}/|^package\.json|^pnpm-lock\.yaml|^turbo\.json|^\.github/workflows/)"; then
+  #                 echo "needs_scan=true" >> $GITHUB_OUTPUT
+  #               else
+  #                 echo "needs_scan=false" >> $GITHUB_OUTPUT
+  #               fi
+  #             fi
+  #           else
+  #             # For pull requests, always run
+  #             echo "needs_scan=true" >> $GITHUB_OUTPUT
+  #           fi
+  #         fi
+
+  #     - name: Setup Node.js
+  #       uses: actions/setup-node@v4
+  #       with:
+  #         node-version: "20.x"
+  #     - name: Setup pnpm
+  #       uses: pnpm/action-setup@v4
+
+  #     - name: Cache pnpm store
+  #       run: echo "PNPM_STORE_PATH=$(pnpm store path)" >> $GITHUB_ENV
+
+  #     - name: Restore pnpm store cache
+  #       uses: actions/cache@v4
+  #       with:
+  #         path: ${{ env.PNPM_STORE_PATH }}
+  #         key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+  #         restore-keys: |
+  #           ${{ runner.os }}-pnpm-store-
+
+  #     - name: Install dependencies
+  #       run: pnpm install --frozen-lockfile
+  #       env:
+  #         NODE_OPTIONS: "--max-old-space-size=4096"
+  #         HUSKY: 0
+  #       timeout-minutes: 15
+
+  #     - name: Run filesystem security scan
+  #       if: steps.changes.outputs.needs_scan == 'true'
+  #       uses: aquasecurity/trivy-action@master
+  #       with:
+  #         scan-type: "fs"
+  #         scan-ref: "apps/${{ matrix.service }}"
+  #         format: "sarif"
+  #         output: "trivy-fs-${{ matrix.service }}.sarif"
+  #         severity: "UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL"
+  #       continue-on-error: true
+
+  #     - name: Display filesystem security scan results
+  #       if: steps.changes.outputs.needs_scan == 'true'
+  #       run: |
+  #         echo "🔍 FILESYSTEM SECURITY SCAN RESULTS FOR ${{ matrix.service }}"
+  #         echo "================================================="
+
+  #         # Run Trivy again with table format for readable output (show ALL vulnerabilities)
+  #         echo "📊 DETAILED VULNERABILITY TABLE:"
+  #         docker run --rm -v "$PWD:/workspace" aquasec/trivy:latest fs \
+  #           --format table \
+  #           --severity UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL \
+  #           --ignore-unfixed=false \
+  #           /workspace/apps/${{ matrix.service }} || true
+
+  #         echo ""
+  #         echo "📋 SUMMARY BY SEVERITY:"
+  #         docker run --rm -v "$PWD:/workspace" aquasec/trivy:latest fs \
+  #           --format json \
+  #           --severity UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL \
+  #           --ignore-unfixed=false \
+  #           /workspace/apps/${{ matrix.service }} 2>/dev/null | \
+  #           jq -r '.Results[]?.Vulnerabilities[]? | .Severity' | sort | uniq -c | sort -nr || true
+
+  #         echo ""
+  #         echo "📄 Detailed SARIF report saved as trivy-fs-${{ matrix.service }}.sarif"
+  #       continue-on-error: true
+
+  #     - name: Run dependency security audit
+  #       if: steps.changes.outputs.needs_scan == 'true'
+  #       run: |
+  #         echo "🔍 DEPENDENCY SECURITY AUDIT FOR ${{ matrix.service }}"
+  #         echo "==============================================="
+
+  #         # Generate comprehensive JSON report for pnpm audit
+  #         echo "📊 VULNERABILITY SUMMARY (ALL SEVERITIES):"
+  #         echo "--- ALL DEPENDENCIES ---"
+  #         pnpm audit --json > pnpm-audit-${{ matrix.service }}-full.json || true
+  #         pnpm audit || true
+
+  #         echo ""
+  #         echo "--- PRODUCTION DEPENDENCIES ONLY ---"
+  #         pnpm audit --prod --json > pnpm-audit-${{ matrix.service }}.json || true
+  #         pnpm audit --prod || true
+
+  #         echo ""
+  #         echo "📄 Reports saved:"
+  #         echo "  - pnpm-audit-${{ matrix.service }}-full.json (all deps, all severities)"
+  #         echo "  - pnpm-audit-${{ matrix.service }}.json (prod deps, all severities)"
+  #       continue-on-error: true
+
+  #     - name: Run detect-secrets scan
+  #       if: steps.changes.outputs.needs_scan == 'true'
+  #       run: |
+  #         echo "🔍 SECRETS DETECTION SCAN"
+  #         echo "========================"
+
+  #         pip install git+https://github.com/IBM/detect-secrets.git@0.13.1+ibm.62.dss
+
+  #         # Run existing secrets check script
+  #         echo "🔎 Running secrets scan using existing configuration..."
+  #         ./scripts/check-secrets.sh
+
+  #         # Display baseline file if it exists
+  #         if [ -f ".secrets.baseline" ]; then
+  #           echo "📊 SECRETS BASELINE SUMMARY:"
+  #           echo "Total potential secrets in baseline: $(jq '.results | to_entries | length' .secrets.baseline)"
+
+  #           # Show files with potential secrets
+  #           echo "📁 Files with potential secrets:"
+  #           jq -r '.results | keys[]' .secrets.baseline | head -10
+
+  #           if [ "$(jq '.results | to_entries | length' .secrets.baseline)" -gt 10 ]; then
+  #             echo "... and more (check .secrets.baseline for full list)"
+  #           fi
+  #         else
+  #           echo "✅ No baseline secrets file found"
+  #         fi
+  #       continue-on-error: true
+
+  #     - name: Check if SARIF file exists
+  #       if: always() && steps.changes.outputs.needs_scan == 'true'
+  #       id: sarif-check
+  #       run: |
+  #         if [ -f "trivy-fs-${{ matrix.service }}.sarif" ]; then
+  #           echo "sarif_exists=true" >> $GITHUB_OUTPUT
+  #         else
+  #           echo "sarif_exists=false" >> $GITHUB_OUTPUT
+  #           echo "⚠️ SARIF file trivy-fs-${{ matrix.service }}.sarif not found"
+  #         fi
+
+  #     - name: Upload filesystem scan results
+  #       if: always() && steps.changes.outputs.needs_scan == 'true' && steps.sarif-check.outputs.sarif_exists == 'true'
+  #       uses: github/codeql-action/upload-sarif@v3
+  #       with:
+  #         sarif_file: "trivy-fs-${{ matrix.service }}.sarif"
+  #         category: trivy-fs-${{ matrix.service }}
+  #         wait-for-processing: true
+
+  #     - name: Upload security reports as artifacts
+  #       if: always() && steps.changes.outputs.needs_scan == 'true'
+  #       uses: actions/upload-artifact@v4
+  #       with:
+  #         name: security-reports-${{ matrix.service }}-${{ github.run_number }}
+  #         path: |
+  #           trivy-fs-${{ matrix.service }}.sarif
+  #           pnpm-audit-${{ matrix.service }}.json
+  #           pnpm-audit-${{ matrix.service }}-full.json
+  #           .secrets.baseline
+  #         retention-days: 30
+
+  lint-and-test:
+    name: Lint & Test - ${{ matrix.service }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    continue-on-error: ${{ matrix.allow_failure == 'true' }}
+    strategy:
+      matrix:
+        include:
+          - service: api
+            allow_failure: "false"
+            is_quality: "false"
+            lint_filter: api
+          - service: web
+            allow_failure: "false"
+            is_quality: "false"
+            lint_filter: web
+          - service: quality-report
+            allow_failure: "true"
+            is_quality: "true"
+            lint_filter: ""
+      fail-fast: false
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check if service needs building
+        id: changes
+        run: |
+          if [[ "${{ matrix.is_quality }}" == "true" ]]; then
+            echo "needs_build=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # Check if this is a scheduled run, tag, or if service files changed
+          if [[ "${{ github.event_name }}" == "schedule" ]] || [[ "${{ github.event_name }}" == "workflow_dispatch" ]] || [[ $GITHUB_REF == refs/tags/* ]]; then
+            echo "needs_build=true" >> $GITHUB_OUTPUT
+          else
+            # For push events, check what files changed
+            if [[ "${{ github.event_name }}" == "push" ]]; then
+              # Handle initial commit or when before SHA is null/zero
+              if [[ "${{ github.event.before }}" == "0000000000000000000000000000000000000000" ]] || [[ -z "${{ github.event.before }}" ]]; then
+                echo "needs_build=true" >> $GITHUB_OUTPUT
+              else
+                # Check for changes in service-specific files
+                if git diff --name-only ${{ github.event.before }}..${{ github.sha }} | grep -E "(^apps/${{ matrix.service }}/|^package\.json|^pnpm-lock\.yaml|^turbo\.json|^\.github/workflows/)"; then
+                  echo "needs_build=true" >> $GITHUB_OUTPUT
+                else
+                  echo "needs_build=false" >> $GITHUB_OUTPUT
+                fi
+              fi
+            else
+              # For pull requests, always run
+              echo "needs_build=true" >> $GITHUB_OUTPUT
+            fi
+          fi
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20.x"
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Cache pnpm store
+        run: echo "PNPM_STORE_PATH=$(pnpm store path)" >> $GITHUB_ENV
+
+      - name: Restore pnpm store cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.PNPM_STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+        env:
+          NODE_OPTIONS: "--max-old-space-size=4096"
+          HUSKY: 0
+        timeout-minutes: 15
+
+      - name: Run database setup for API
+        if: steps.changes.outputs.needs_build == 'true' && matrix.service == 'api'
+        run: |
+          # Generate Prisma clients for all microservices
+          pnpm run --filter=api db:generate:all
+        continue-on-error: true
+
+      - name: Run linting for ${{ matrix.service }}
+        if: steps.changes.outputs.needs_build == 'true' && matrix.is_quality != 'true'
+        run: pnpm turbo run lint --filter=${{ matrix.lint_filter }}
+
+      - name: Run type checking for ${{ matrix.service }}
+        if: steps.changes.outputs.needs_build == 'true' && matrix.is_quality != 'true'
+        run: pnpm turbo run type-check --filter=${{ matrix.lint_filter }}
+
+      - name: Run tests for ${{ matrix.service }}
+        if: steps.changes.outputs.needs_build == 'true' && matrix.is_quality != 'true'
+        run: pnpm turbo run test --filter=${{ matrix.lint_filter }}
+
+      - name: Repository code quality checks
+        if: matrix.is_quality == 'true'
+        id: repo-quality
+        env:
+          CI: true
+        run: |
+          set +e
+          pnpm format:check > quality-format.log 2>&1
+          FORMAT_EXIT=$?
+          pnpm lint > quality-lint.log 2>&1
+          LINT_EXIT=$?
+          pnpm type-check > quality-typecheck.log 2>&1
+          TYPE_EXIT=$?
+          pnpm test:ci > quality-tests.log 2>&1
+          TEST_EXIT=$?
+          pnpm build > quality-build.log 2>&1
+          BUILD_EXIT=$?
+
+          echo "format_exit=$FORMAT_EXIT" >> $GITHUB_OUTPUT
+          echo "lint_exit=$LINT_EXIT" >> $GITHUB_OUTPUT
+          echo "type_exit=$TYPE_EXIT" >> $GITHUB_OUTPUT
+          echo "test_exit=$TEST_EXIT" >> $GITHUB_OUTPUT
+          echo "build_exit=$BUILD_EXIT" >> $GITHUB_OUTPUT
+
+          # Always succeed to allow report generation
+          exit 0
+
+      - name: Upload code quality logs
+        if: matrix.is_quality == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: code-quality-logs-${{ github.run_number }}
+          path: |
+            quality-format.log
+            quality-lint.log
+            quality-typecheck.log
+            quality-tests.log
+            quality-build.log
+          retention-days: 7
+
+      - name: Publish code quality report
+        if: always() && matrix.is_quality == 'true'
+        run: |
+          echo "## Repository Code Quality Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- Formatting: **$([[ '${{ steps.repo-quality.outputs.format_exit }}' == '0' ]] && echo Success || echo Failure)**" >> $GITHUB_STEP_SUMMARY
+          echo "- Linting: **$([[ '${{ steps.repo-quality.outputs.lint_exit }}' == '0' ]] && echo Success || echo Failure)**" >> $GITHUB_STEP_SUMMARY
+          echo "- Type Check: **$([[ '${{ steps.repo-quality.outputs.type_exit }}' == '0' ]] && echo Success || echo Failure)**" >> $GITHUB_STEP_SUMMARY
+          echo "- Tests: **$([[ '${{ steps.repo-quality.outputs.test_exit }}' == '0' ]] && echo Success || echo Failure)**" >> $GITHUB_STEP_SUMMARY
+          echo "- Build: **$([[ '${{ steps.repo-quality.outputs.build_exit }}' == '0' ]] && echo Success || echo Failure)**" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo ":page_facing_up: Detailed logs are available in the 'code-quality-logs-${{ github.run_number }}' artifact." >> $GITHUB_STEP_SUMMARY
+
+  build-and-deploy:
+    name: Build & Deploy - ${{ matrix.service }}
+    runs-on: ubuntu-latest
+    # needs: [security-scan, lint-and-test]
+    needs: lint-and-test
+    permissions:
+      contents: read
+      packages: write
+      security-events: write
+      id-token: write
+      attestations: write
+      actions: read
+    strategy:
+      matrix:
+        service: [api, web]
+      fail-fast: false
+    outputs:
+      image-tag: ${{ steps.meta.outputs.image-tag }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check if service needs building
+        id: changes
+        run: |
+          # Check if this is a scheduled run, tag, or if service files changed
+          if [[ "${{ github.event_name }}" == "schedule" ]] || [[ "${{ github.event_name }}" == "workflow_dispatch" ]] || [[ $GITHUB_REF == refs/tags/* ]]; then
+            echo "needs_build=true" >> $GITHUB_OUTPUT
+          else
+            # For push events, check what files changed
+            if [[ "${{ github.event_name }}" == "push" ]]; then
+              # Handle initial commit or when before SHA is null/zero
+              if [[ "${{ github.event.before }}" == "0000000000000000000000000000000000000000" ]] || [[ -z "${{ github.event.before }}" ]]; then
+                echo "needs_build=true" >> $GITHUB_OUTPUT
+              else
+                # Check for changes in service-specific files
+                if git diff --name-only ${{ github.event.before }}..${{ github.sha }} | grep -E "(^apps/${{ matrix.service }}/|^package\.json|^pnpm-lock\.yaml|^turbo\.json|^\.github/workflows/)"; then
+                  echo "needs_build=true" >> $GITHUB_OUTPUT
+                else
+                  echo "needs_build=false" >> $GITHUB_OUTPUT
+                fi
+              fi
+            else
+              # For pull requests, always run
+              echo "needs_build=true" >> $GITHUB_OUTPUT
+            fi
+          fi
+
+      - name: Setup Node.js
+        if: steps.changes.outputs.needs_build == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20.x"
+
+      - name: Setup pnpm
+        if: steps.changes.outputs.needs_build == 'true'
+        uses: pnpm/action-setup@v4
+
+      - name: Cache pnpm store
+        if: steps.changes.outputs.needs_build == 'true'
+        run: echo "PNPM_STORE_PATH=$(pnpm store path)" >> $GITHUB_ENV
+
+      - name: Restore pnpm store cache
+        if: steps.changes.outputs.needs_build == 'true'
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.PNPM_STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install dependencies
+        if: steps.changes.outputs.needs_build == 'true'
+        run: pnpm install --frozen-lockfile
+        env:
+          NODE_OPTIONS: "--max-old-space-size=4096"
+          HUSKY: 0
+        timeout-minutes: 15
+
+      - name: Build service for production
+        if: steps.changes.outputs.needs_build == 'true'
+        run: |
+          # Generate Prisma clients if API service
+          if [ "${{ matrix.service }}" == "api" ]; then
+            pnpm run --filter=api db:generate:all
+          fi
+
+          # Build the service
+          pnpm turbo run build --filter=${{ matrix.service }}
+
+      - name: Set up Docker Buildx
+        if: steps.changes.outputs.needs_build == 'true'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        if: steps.changes.outputs.needs_build == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        if: steps.changes.outputs.needs_build == 'true'
+        id: meta
+        run: |
+          # Convert repository name to lowercase for Docker compatibility
+          REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          echo "REPO_LOWER=${REPO_LOWER}" >> $GITHUB_ENV
+
+          if [[ $GITHUB_REF == refs/tags/* ]]; then
+            IMAGE_TAG="${GITHUB_REF#refs/tags/}"
+          elif [[ $GITHUB_REF == refs/heads/* ]]; then
+            BRANCH_NAME=$(echo ${GITHUB_REF#refs/heads/} | sed 's/[^a-zA-Z0-9]/-/g' | tr '[:upper:]' '[:lower:]')
+            SHORT_SHA=$(git rev-parse --short HEAD)
+            IMAGE_TAG="${BRANCH_NAME}-${SHORT_SHA}"
+          else
+            SHORT_SHA=$(git rev-parse --short HEAD)
+            IMAGE_TAG="sha-${SHORT_SHA}"
+          fi
+
+          # Add custom suffix if provided
+          if [ -n "${{ github.event.inputs.suffix }}" ]; then
+            IMAGE_TAG="${IMAGE_TAG}-${{ github.event.inputs.suffix }}"
+          fi
+
+          echo "image-tag=${IMAGE_TAG}" >> $GITHUB_OUTPUT
+          echo "IMAGE_TAG=${IMAGE_TAG}" >> $GITHUB_ENV
+
+      - name: Build and push ${{ matrix.service }} image
+        if: steps.changes.outputs.needs_build == 'true'
+        uses: docker/build-push-action@v6
+        id: build-push
+        with:
+          context: .
+          file: apps/${{ matrix.service }}/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ env.REPO_LOWER }}/pitch-${{ matrix.service }}:${{ env.IMAGE_TAG }}
+            ghcr.io/${{ env.REPO_LOWER }}/pitch-${{ matrix.service }}:latest
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
+          platforms: linux/amd64
+          build-args: |
+            NODE_VERSION=20.x
+
+      - name: Run container security scan
+        if: steps.changes.outputs.needs_build == 'true'
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ghcr.io/${{ env.REPO_LOWER }}/pitch-${{ matrix.service }}:${{ env.IMAGE_TAG }}
+          format: "sarif"
+          output: "trivy-container-${{ matrix.service }}.sarif"
+          severity: "UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL"
+        continue-on-error: true
+
+      - name: Display container security scan results
+        if: steps.changes.outputs.needs_build == 'true'
+        run: |
+          echo "🔍 CONTAINER SECURITY SCAN RESULTS FOR ${{ matrix.service }}"
+          echo "===================================================="
+
+          # Run Trivy again with table format for readable output (show ALL vulnerabilities)
+          echo "📊 DETAILED VULNERABILITY TABLE:"
+          docker run --rm aquasec/trivy:latest image \
+            --format table \
+            --severity UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL \
+            --ignore-unfixed=false \
+            ghcr.io/${{ env.REPO_LOWER }}/pitch-${{ matrix.service }}:${{ env.IMAGE_TAG }} || true
+
+          echo ""
+          echo "📋 SUMMARY BY SEVERITY:"
+          docker run --rm aquasec/trivy:latest image \
+            --format json \
+            --severity UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL \
+            --ignore-unfixed=false \
+            ghcr.io/${{ env.REPO_LOWER }}/pitch-${{ matrix.service }}:${{ env.IMAGE_TAG }} 2>/dev/null | \
+            jq -r '.Results[]?.Vulnerabilities[]? | .Severity' | sort | uniq -c | sort -nr || true
+
+          echo ""
+          echo "📄 Detailed SARIF report saved as trivy-container-${{ matrix.service }}.sarif"
+        continue-on-error: true
+
+      - name: Check if container SARIF file exists
+        if: always() && steps.changes.outputs.needs_build == 'true'
+        id: container-sarif-check
+        run: |
+          if [ -f "trivy-container-${{ matrix.service }}.sarif" ]; then
+            echo "sarif_exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "sarif_exists=false" >> $GITHUB_OUTPUT
+            echo "⚠️ Container SARIF file trivy-container-${{ matrix.service }}.sarif not found"
+          fi
+
+      - name: Upload container scan results
+        if: always() && steps.changes.outputs.needs_build == 'true' && steps.container-sarif-check.outputs.sarif_exists == 'true'
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: "trivy-container-${{ matrix.service }}.sarif"
+          category: trivy-container-${{ matrix.service }}
+          wait-for-processing: true
+
+      - name: Upload container security reports as artifacts
+        if: always() && steps.changes.outputs.needs_build == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: container-security-reports-${{ matrix.service }}-${{ github.run_number }}
+          path: |
+            trivy-container-${{ matrix.service }}.sarif
+          retention-days: 30
+
+      - name: Generate attestation
+        if: steps.changes.outputs.needs_build == 'true'
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-name: ghcr.io/${{ env.REPO_LOWER }}/pitch-${{ matrix.service }}
+          subject-digest: ${{ steps.build-push.outputs.digest }}
+          push-to-registry: true
+
+      - name: Generate security summary
+        if: always() && steps.changes.outputs.needs_build == 'true'
+        run: |
+          echo "## Security Scan Summary for ${{ matrix.service }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Filesystem scan summary
+          if [ -f "trivy-fs-${{ matrix.service }}.sarif" ]; then
+            CRITICAL=$(jq '.runs[0].results[] | select(.level == "error" and (.ruleId | contains("CRITICAL")))' trivy-fs-${{ matrix.service }}.sarif 2>/dev/null | wc -l)
+            HIGH=$(jq '.runs[0].results[] | select(.level == "error" and (.ruleId | contains("HIGH")))' trivy-fs-${{ matrix.service }}.sarif 2>/dev/null | wc -l)
+            MEDIUM=$(jq '.runs[0].results[] | select(.level == "warning" and (.ruleId | contains("MEDIUM")))' trivy-fs-${{ matrix.service }}.sarif 2>/dev/null | wc -l)
+            echo "### Filesystem Scan Results" >> $GITHUB_STEP_SUMMARY
+            echo "- Critical: $CRITICAL" >> $GITHUB_STEP_SUMMARY
+            echo "- High: $HIGH" >> $GITHUB_STEP_SUMMARY
+            echo "- Medium: $MEDIUM" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          # Container scan summary
+          if [ -f "trivy-container-${{ matrix.service }}.sarif" ]; then
+            CRITICAL=$(jq '.runs[0].results[] | select(.level == "error" and (.ruleId | contains("CRITICAL")))' trivy-container-${{ matrix.service }}.sarif 2>/dev/null | wc -l)
+            HIGH=$(jq '.runs[0].results[] | select(.level == "error" and (.ruleId | contains("HIGH")))' trivy-container-${{ matrix.service }}.sarif 2>/dev/null | wc -l)
+            MEDIUM=$(jq '.runs[0].results[] | select(.level == "warning" and (.ruleId | contains("MEDIUM")))' trivy-container-${{ matrix.service }}.sarif 2>/dev/null | wc -l)
+            echo "### Container Scan Results" >> $GITHUB_STEP_SUMMARY
+            echo "- Critical: $CRITICAL" >> $GITHUB_STEP_SUMMARY
+            echo "- High: $HIGH" >> $GITHUB_STEP_SUMMARY
+            echo "- Medium: $MEDIUM" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          # Dependency audit summary
+          if [ -f "pnpm-audit-${{ matrix.service }}.json" ]; then
+            echo "### Dependency Audit Results" >> $GITHUB_STEP_SUMMARY
+            echo "- See artifact reports for detailed vulnerability information" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "📊 **View detailed reports in the workflow artifacts**" >> $GITHUB_STEP_SUMMARY
