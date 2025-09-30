@@ -1,0 +1,116 @@
+%%{init: {'theme':'base', 'themeVariables': { 
+  'primaryColor':'#e3f2fd',
+  'primaryTextColor':'#1a237e',
+  'primaryBorderColor':'#1976d2',
+  'lineColor':'#42a5f5',
+  'secondaryColor':'#fff3e0',
+  'secondaryTextColor':'#e65100',
+  'secondaryBorderColor':'#fb8c00',
+  'tertiaryColor':'#f3e5f5',
+  'tertiaryTextColor':'#4a148c',
+  'tertiaryBorderColor':'#7b1fa2',
+  'noteBkgColor':'#fff9c4',
+  'noteTextColor':'#f57f17'
+}}}%%
+flowchart TB
+    %% Gateways
+    subgraph API["API Gateways"]
+        SessGW[Session Gateway]
+        ChatGW[Chat Gateway]
+        CallGW[Call Gateway]
+        IngestGW[Ingestion Gateway]
+        FeedbackGW[Feedback Gateway]
+    end
+
+    %% Controllers
+    subgraph CTRL["Controllers"]
+        SessCtrl[Session Controller]
+        TurnCtrl[Turn Controller]
+        ChatCtrl[Chat Controller]
+        CallCtrl[Call Controller]
+        MediaCtrl[Media Controller]
+        IngestCtrl[Ingest Controller]
+        FeedbackCtrl[Feedback Controller]
+        RubricCtrl[Rubric Controller]
+    end
+
+    %% Services
+    subgraph SVC["Services"]
+        OrchestratorSvc[Orchestrator Service]
+        LLMSvc[LLM Service]
+        PromptSvc[Prompt Service]
+        RetrievalSvc[Retrieval Service]
+        WebRTCSvc[WebRTC Service]
+        STTSvc[STT Service]
+        TTSSvc[TTS Service]
+        RecordingSvc[Recording Service]
+        StorageSvc[Storage Service]
+        TranscribeSvc[Transcribe Service]
+        EnrichSvc[Enrichment Service]
+        FeedbackSvc[Feedback Service]
+        RubricSvc[Rubric Service]
+    end
+
+    %% Repositories
+    subgraph REPO["Repositories"]
+        SessionRepo[Session Repository]
+        TurnRepo[Turn Repository]
+        MessageRepo[Message Repository]
+        ToolRepo[ToolCall Repository]
+        ScenarioRepo[Scenario Repository]
+        PersonaRepo[Persona Repository]
+        CallRepo[Call Repository]
+        RecordingRepo[Recording Repository]
+        MediaRepo[Media Repository]
+        TranscriptRepo[Transcript Repository]
+        RubricsRepo[Rubric Repository]
+        ScoreRepo[Score Repository]
+    end
+
+    %% Databases
+    subgraph DB["Databases"]
+        Postgres[(Postgres DB)]
+        Mongo[(Mongo DB)]
+        PGVector[(pgvector Index)]
+        S3[(MinIO/S3 Storage)]
+    end
+
+    %% External
+    Redis[(Redis Cache)]
+    RabbitMQ[RabbitMQ Event Bus]
+    STTAPI[(Whisper/Azure STT API)]
+    TTSAPI[(ElevenLabs/Azure TTS API)]
+
+    %% Flows: Gateway -> Controller -> Service -> Repo -> DB
+    SessGW --> SessCtrl --> OrchestratorSvc --> SessionRepo --> Postgres
+    SessCtrl --> TurnCtrl
+    TurnCtrl --> OrchestratorSvc --> TurnRepo --> Postgres
+    OrchestratorSvc --> MessageRepo --> Postgres
+    OrchestratorSvc --> ToolRepo --> Postgres
+    OrchestratorSvc --> ScenarioRepo --> Postgres
+    OrchestratorSvc --> PersonaRepo --> Postgres
+
+    ChatGW --> ChatCtrl --> LLMSvc --> MessageRepo
+    LLMSvc --> RetrievalSvc --> PGVector
+    ChatCtrl --> PromptSvc
+
+    CallGW --> CallCtrl --> WebRTCSvc
+    CallCtrl --> RecordingSvc --> RecordingRepo --> Postgres
+    RecordingRepo --> MediaRepo --> Postgres
+    CallCtrl --> STTSvc --> STTAPI
+    CallCtrl --> TTSSvc --> TTSAPI
+    MediaCtrl --> StorageSvc --> S3
+
+    IngestGW --> IngestCtrl --> TranscribeSvc --> TranscriptRepo --> Mongo
+    IngestCtrl --> EnrichSvc --> TranscriptRepo
+    TranscriptRepo --> PGVector
+
+    FeedbackGW --> FeedbackCtrl --> FeedbackSvc --> ScoreRepo --> Postgres
+    FeedbackCtrl --> RubricSvc --> RubricsRepo --> Postgres
+    RubricCtrl --> RubricSvc
+
+    %% External links
+    OrchestratorSvc -.-> Redis
+    FeedbackSvc -.-> Redis
+    OrchestratorSvc -.->|publishes simulation.*| RabbitMQ
+    FeedbackSvc -.->|publishes feedback.ready| RabbitMQ
