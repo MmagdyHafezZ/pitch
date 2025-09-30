@@ -1,0 +1,229 @@
+%%{init: {'theme':'base', 'themeVariables': { 'primaryColor':'#e3f2fd','primaryTextColor':'#1a237e','primaryBorderColor':'#1976d2','lineColor':'#42a5f5','secondaryColor':'#fff3e0','secondaryTextColor':'#e65100','secondaryBorderColor':'#fb8c00','tertiaryColor':'#f3e5f5','tertiaryTextColor':'#4a148c','tertiaryBorderColor':'#7b1fa2','noteBkgColor':'#fff9c4','noteTextColor':'#f57f17'}}}%%
+classDiagram
+    class OrgGateway {
+        +createOrg(dto: CreateOrgDto) Promise~OrgDto~
+        +getOrg(id: string) Promise~OrgDto~
+        +updateOrg(id: string, dto: UpdateOrgDto) Promise~OrgDto~
+        +deleteOrg(id: string) Promise~void~
+        +listOrgs() Promise~OrgDto[]~
+    }
+
+    class MemberGateway {
+        +inviteMember(orgId: string, dto: InviteMemberDto) Promise~void~
+        +assignRole(orgId: string, userId: string, dto: AssignRoleDto) Promise~void~
+        +removeMember(orgId: string, userId: string) Promise~void~
+        +listMembers(orgId: string) Promise~MemberDto[]~
+    }
+
+    class OrgController {
+        -orgService: OrgService
+        +createOrg(dto: CreateOrgDto) OrgDto
+        +getOrg(id: string) OrgDto
+        +updateOrg(id: string, dto: UpdateOrgDto) OrgDto
+        +deleteOrg(id: string) void
+        +listOrgs() OrgDto[]
+    }
+
+    class MemberController {
+        -memberService: MemberService
+        +inviteMember(orgId: string, dto: InviteMemberDto) void
+        +assignRole(orgId: string, userId: string, dto: AssignRoleDto) void
+        +removeMember(orgId: string, userId: string) void
+        +listMembers(orgId: string) MemberDto[]
+    }
+
+    class OrgService {
+        -orgRepo: OrgRepository
+        -subscriptionService: SubscriptionService
+        -eventBus: RabbitMQ
+        -cache: Redis
+        +createOrg(dto: CreateOrgDto) Org
+        +getOrgById(id: string) Org
+        +updateOrg(id: string, dto: UpdateOrgDto) Org
+        +deleteOrg(id: string) void
+        +listOrgs() Org[]
+        +updateOrgPlan(orgId: string, planId: string) void
+    }
+
+    class MemberService {
+        -userRoleRepo: UserRoleRepository
+        -roleRepo: RoleRepository
+        -userService: UserService
+        -orgService: OrgService
+        -eventBus: RabbitMQ
+        +inviteMember(orgId: string, email: string, role: string) void
+        +assignRole(orgId: string, userId: string, role: string) void
+        +removeMember(orgId: string, userId: string) void
+        +listMembers(orgId: string) Member[]
+        +hasPermission(userId: string, orgId: string, permission: string) boolean
+    }
+
+    class UserService {
+        -userRepo: UserRepository
+        +getUserById(id: string) User
+        +getUserByEmail(email: string) User
+        +createUser(email: string) User
+    }
+
+    class SubscriptionService {
+        -subscriptionRepo: SubscriptionRepository
+        +getActiveSubscription(orgId: string) Subscription
+    }
+
+    class OrgRepository {
+        -db: OrgDB
+        +create(org: Org) Org
+        +findById(id: string) Org
+        +findAll() Org[]
+        +update(org: Org) Org
+        +delete(id: string) void
+    }
+
+    class UserRoleRepository {
+        -db: UserRoleDB
+        +create(userRole: UserRole) UserRole
+        +findByUserId(userId: string) UserRole[]
+        +findByOrgId(orgId: string) UserRole[]
+        +findByUserAndOrg(userId: string, orgId: string) UserRole
+        +update(userRole: UserRole) UserRole
+        +delete(id: string) void
+    }
+
+    class RoleRepository {
+        -db: RoleDB
+        +findAll() Role[]
+        +findById(id: string) Role
+        +findByName(name: string) Role
+    }
+
+    class UserRepository {
+        -db: UserDB
+        +create(user: User) User
+        +findById(id: string) User
+        +findByEmail(email: string) User
+    }
+
+    class Org {
+        +id: string
+        +name: string
+        +domain: string
+        +currentPlanId: string
+        +ownerId: string
+        +settings: JSON
+        +createdAt: Date
+        +updatedAt: Date
+    }
+
+    class Role {
+        +id: string
+        +name: string
+        +permissions: string[]
+        +description: string
+        +createdAt: Date
+    }
+
+    class UserRole {
+        +id: string
+        +userId: string
+        +orgId: string
+        +roleId: string
+        +createdAt: Date
+        +updatedAt: Date
+    }
+
+    class User {
+        +id: string
+        +email: string
+        +name: string
+    }
+
+    class OrgDB {
+        <<database>>
+    }
+
+    class UserRoleDB {
+        <<database>>
+    }
+
+    class RoleDB {
+        <<database>>
+    }
+
+    class UserDB {
+        <<database>>
+    }
+
+    class Redis {
+        <<cache>>
+    }
+
+    class RabbitMQ {
+        <<event bus>>
+    }
+
+    class OrgDto {
+        +id: string
+        +name: string
+        +domain: string
+        +currentPlanId: string
+    }
+
+    class MemberDto {
+        +userId: string
+        +email: string
+        +name: string
+        +role: string
+        +joinedAt: Date
+    }
+
+    class CreateOrgDto {
+        +name: string
+        +domain: string
+    }
+
+    class UpdateOrgDto {
+        +name: string
+        +domain: string
+    }
+
+    class InviteMemberDto {
+        +email: string
+        +role: string
+    }
+
+    class AssignRoleDto {
+        +role: string
+    }
+
+    OrgGateway --> OrgController
+    MemberGateway --> MemberController
+    OrgController --> OrgService
+    MemberController --> MemberService
+    OrgService --> OrgRepository
+    OrgService --> SubscriptionService
+    OrgService --> RabbitMQ : publishes events
+    OrgService --> Redis : caches orgs
+    MemberService --> UserRoleRepository
+    MemberService --> RoleRepository
+    MemberService --> UserService
+    MemberService --> OrgService
+    MemberService --> RabbitMQ : publishes events
+    UserService --> UserRepository
+    OrgRepository --> OrgDB
+    UserRoleRepository --> UserRoleDB
+    RoleRepository --> RoleDB
+    UserRepository --> UserDB
+    OrgRepository ..> Org : manages
+    UserRoleRepository ..> UserRole : manages
+    RoleRepository ..> Role : manages
+    UserRepository ..> User : manages
+    OrgController ..> OrgDto : returns
+    OrgController ..> CreateOrgDto : accepts
+    OrgController ..> UpdateOrgDto : accepts
+    MemberController ..> MemberDto : returns
+    MemberController ..> InviteMemberDto : accepts
+    MemberController ..> AssignRoleDto : accepts
+    UserRole --> User : references
+    UserRole --> Role : references
+    UserRole --> Org : belongs to
+    Org --> User : owned by

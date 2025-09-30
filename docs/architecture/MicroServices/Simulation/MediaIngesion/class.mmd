@@ -1,0 +1,67 @@
+classDiagram
+class IngestController {
+  +uploadInit(dto: UploadInitDto): UploadTicket
+  +uploadPart(dto: UploadPartDto): void
+  +uploadComplete(dto: CompleteUploadDto): MediaAsset
+  +startJob(dto: IngestRequestDto): IngestionJob
+  +getJob(id: string): IngestionJob
+}
+
+class TranscriptController {
+  +get(id: string): Transcript
+  +segments(id: string): Segment[]
+}
+
+class StorageService {
+  +getPresignedPut(key: string): string
+  +completeMultipart(params): void
+}
+
+class TranscribeService {
+  +run(assetId: string): {transcriptId: string}
+}
+
+class DiarizationService {
+  +assignSpeakers(transcriptId: string): void
+}
+
+class EnrichService {
+  +annotate(transcriptId: string): void
+}
+
+class IndexerService {
+  +indexTranscript(transcriptId: string, orgId: string): void
+}
+
+class IngestionJob {
+  +id: string
+  +assetId: string
+  +status: string
+  +error: string
+}
+
+class Transcript {
+  +id: string
+  +sessionId: string
+  +assetId: string
+  +language: string
+  +words: json
+}
+
+class Segment {
+  +id: string
+  +transcriptId: string
+  +speaker: string
+  +startSec: number
+  +endSec: number
+  +text: string
+}
+
+IngestController --> StorageService
+IngestController --> TranscribeService
+TranscribeService --> DiarizationService
+DiarizationService --> EnrichService
+EnrichService --> IndexerService
+IngestController --> IngestionJob
+TranscriptController --> Transcript
+TranscriptController --> Segment

@@ -1,0 +1,183 @@
+%%{init: {'theme':'base', 'themeVariables': { 'primaryColor':'#e3f2fd','primaryTextColor':'#1a237e','primaryBorderColor':'#1976d2','lineColor':'#42a5f5','secondaryColor':'#fff3e0','secondaryTextColor':'#e65100','secondaryBorderColor':'#fb8c00','tertiaryColor':'#f3e5f5','tertiaryTextColor':'#4a148c','tertiaryBorderColor':'#7b1fa2','noteBkgColor':'#fff9c4','noteTextColor':'#f57f17'}}}%%
+classDiagram
+    class PlanGateway {
+        +listPlans() Promise~PlanDto[]~
+        +getPlan(id: string) Promise~PlanDto~
+    }
+
+    class SubscriptionGateway {
+        +createSubscription(dto: CreateSubscriptionDto) Promise~SubscriptionDto~
+        +getSubscription(id: string) Promise~SubscriptionDto~
+        +updateSubscription(id: string, dto: UpdateSubscriptionDto) Promise~SubscriptionDto~
+        +cancelSubscription(id: string) Promise~void~
+    }
+
+    class PlanController {
+        -planService: PlanService
+        +listPlans() PlanDto[]
+        +getPlan(id: string) PlanDto
+    }
+
+    class SubscriptionController {
+        -subscriptionService: SubscriptionService
+        +createSubscription(dto: CreateSubscriptionDto) SubscriptionDto
+        +getSubscription(id: string) SubscriptionDto
+        +updateSubscription(id: string, dto: UpdateSubscriptionDto) SubscriptionDto
+        +cancelSubscription(id: string) void
+        +handleStripeWebhook(event: any) void
+    }
+
+    class PlanService {
+        -planRepo: PlanRepository
+        -cache: Redis
+        +listPlans() Plan[]
+        +getPlanById(id: string) Plan
+        +getPlanLimits(planId: string) PlanLimits
+    }
+
+    class SubscriptionService {
+        -subscriptionRepo: SubscriptionRepository
+        -planService: PlanService
+        -orgService: OrgService
+        -eventBus: RabbitMQ
+        -cache: Redis
+        +createSubscription(dto: CreateSubscriptionDto) Subscription
+        +updateSubscription(id: string, dto: UpdateSubscriptionDto) Subscription
+        +cancelSubscription(id: string) void
+        +getActiveSubscription(orgId: string) Subscription
+        +syncWithStripeWebhook(event: any) void
+    }
+
+    class OrgService {
+        -orgRepo: OrgRepository
+        +getOrgById(id: string) Org
+        +updateOrgPlan(orgId: string, planId: string) void
+    }
+
+    class PlanRepository {
+        -db: PlanDB
+        +findAll() Plan[]
+        +findById(id: string) Plan
+        +findByPriceId(priceId: string) Plan
+    }
+
+    class SubscriptionRepository {
+        -db: SubscriptionDB
+        +create(subscription: Subscription) Subscription
+        +findById(id: string) Subscription
+        +findByOrgId(orgId: string) Subscription
+        +update(subscription: Subscription) Subscription
+        +delete(id: string) void
+    }
+
+    class OrgRepository {
+        -db: OrgDB
+        +findById(id: string) Org
+        +update(org: Org) Org
+    }
+
+    class Plan {
+        +id: string
+        +name: string
+        +description: string
+        +priceId: string
+        +quota: JSON
+        +features: string[]
+        +price: number
+        +currency: string
+        +interval: string
+        +createdAt: Date
+        +updatedAt: Date
+    }
+
+    class Subscription {
+        +id: string
+        +orgId: string
+        +planId: string
+        +status: string
+        +stripeSubscriptionId: string
+        +currentPeriodStart: Date
+        +currentPeriodEnd: Date
+        +cancelAtPeriodEnd: boolean
+        +createdAt: Date
+        +updatedAt: Date
+    }
+
+    class Org {
+        +id: string
+        +name: string
+        +currentPlanId: string
+    }
+
+    class PlanDB {
+        <<database>>
+    }
+
+    class SubscriptionDB {
+        <<database>>
+    }
+
+    class OrgDB {
+        <<database>>
+    }
+
+    class Redis {
+        <<cache>>
+    }
+
+    class RabbitMQ {
+        <<event bus>>
+    }
+
+    class PlanDto {
+        +id: string
+        +name: string
+        +description: string
+        +price: number
+        +quota: JSON
+        +features: string[]
+    }
+
+    class SubscriptionDto {
+        +id: string
+        +orgId: string
+        +planId: string
+        +status: string
+        +currentPeriodEnd: Date
+    }
+
+    class CreateSubscriptionDto {
+        +orgId: string
+        +planId: string
+        +paymentMethod: string
+    }
+
+    class UpdateSubscriptionDto {
+        +planId: string
+        +status: string
+    }
+
+    PlanGateway --> PlanController
+    SubscriptionGateway --> SubscriptionController
+    PlanController --> PlanService
+    SubscriptionController --> SubscriptionService
+    PlanService --> PlanRepository
+    PlanService --> Redis : caches plans
+    SubscriptionService --> SubscriptionRepository
+    SubscriptionService --> PlanService
+    SubscriptionService --> OrgService
+    SubscriptionService --> RabbitMQ : publishes events
+    SubscriptionService --> Redis : caches subscriptions
+    OrgService --> OrgRepository
+    PlanRepository --> PlanDB
+    SubscriptionRepository --> SubscriptionDB
+    OrgRepository --> OrgDB
+    PlanRepository ..> Plan : manages
+    SubscriptionRepository ..> Subscription : manages
+    OrgRepository ..> Org : manages
+    PlanController ..> PlanDto : returns
+    SubscriptionController ..> SubscriptionDto : returns
+    SubscriptionController ..> CreateSubscriptionDto : accepts
+    SubscriptionController ..> UpdateSubscriptionDto : accepts
+    Subscription --> Plan : references
+    Subscription --> Org : belongs to

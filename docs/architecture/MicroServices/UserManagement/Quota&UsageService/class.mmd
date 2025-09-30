@@ -1,0 +1,116 @@
+%%{init: {'theme':'base', 'themeVariables': { 'primaryColor':'#e3f2fd','primaryTextColor':'#1a237e','primaryBorderColor':'#1976d2','lineColor':'#42a5f5','secondaryColor':'#fff3e0','secondaryTextColor':'#e65100','secondaryBorderColor':'#fb8c00','tertiaryColor':'#f3e5f5','tertiaryTextColor':'#4a148c','tertiaryBorderColor':'#7b1fa2','noteBkgColor':'#fff9c4','noteTextColor':'#f57f17'}}}%%
+classDiagram
+    class QuotaGateway {
+        +getUsage(orgId: string) Promise~UsageDto[]~
+        +trackUsage(request: TrackUsageRequest) Promise~void~
+        +checkQuota(orgId: string) Promise~QuotaStatusDto~
+    }
+
+    class QuotaController {
+        -quotaService: QuotaService
+        +getUsage(orgId: string) UsageDto[]
+        +trackUsage(request: TrackUsageRequest) void
+        +checkQuota(orgId: string) QuotaStatusDto
+    }
+
+    class QuotaService {
+        -usageRecordRepo: UsageRecordRepository
+        -subscriptionService: SubscriptionService
+        -eventBus: RabbitMQ
+        -cache: Redis
+        +trackUsage(orgId: string, eventType: string) void
+        +checkQuota(orgId: string) boolean
+        +resetMonthlyQuotas() void
+        +getUsageByOrg(orgId: string) UsageRecord[]
+    }
+
+    class SubscriptionService {
+        -subscriptionRepo: SubscriptionRepository
+        +getActiveSubscription(orgId: string) Subscription
+        +getPlanLimits(planId: string) PlanLimits
+    }
+
+    class UsageRecordRepository {
+        -db: UsageRecordDB
+        +findByOrgId(orgId: string) UsageRecord[]
+        +create(record: UsageRecord) UsageRecord
+        +updateCount(id: string, count: number) void
+        +resetMonthlyUsage(orgId: string) void
+    }
+
+    class SubscriptionRepository {
+        -db: SubscriptionDB
+        +findByOrgId(orgId: string) Subscription
+        +findById(id: string) Subscription
+        +update(subscription: Subscription) Subscription
+    }
+
+    class UsageRecord {
+        +id: string
+        +orgId: string
+        +eventType: string
+        +count: number
+        +monthYear: string
+        +createdAt: Date
+        +updatedAt: Date
+    }
+
+    class Subscription {
+        +id: string
+        +orgId: string
+        +planId: string
+        +status: string
+        +startDate: Date
+        +endDate: Date
+    }
+
+    class UsageRecordDB {
+        <<database>>
+    }
+
+    class SubscriptionDB {
+        <<database>>
+    }
+
+    class Redis {
+        <<cache>>
+    }
+
+    class RabbitMQ {
+        <<event bus>>
+    }
+
+    class UsageDto {
+        +orgId: string
+        +eventType: string
+        +count: number
+        +monthYear: string
+    }
+
+    class QuotaStatusDto {
+        +orgId: string
+        +isWithinQuota: boolean
+        +currentUsage: number
+        +limit: number
+        +percentage: number
+    }
+
+    class TrackUsageRequest {
+        +orgId: string
+        +eventType: string
+    }
+
+    QuotaGateway --> QuotaController
+    QuotaController --> QuotaService
+    QuotaService --> UsageRecordRepository
+    QuotaService --> SubscriptionService
+    QuotaService --> RabbitMQ : publishes events
+    QuotaService --> Redis : caches quota status
+    SubscriptionService --> SubscriptionRepository
+    UsageRecordRepository --> UsageRecordDB
+    SubscriptionRepository --> SubscriptionDB
+    UsageRecordRepository ..> UsageRecord : manages
+    SubscriptionRepository ..> Subscription : manages
+    QuotaController ..> UsageDto : returns
+    QuotaController ..> QuotaStatusDto : returns
+    QuotaController ..> TrackUsageRequest : accepts

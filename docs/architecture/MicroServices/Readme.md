@@ -1,29 +1,27 @@
 Quick mapping to your feature list
 
-Account Settings / User-plans → Identity & Plans
+- Account Settings / User-plans → Identity & Plans ~ Magdy
 
-Manage Dashboard / Statistics → Analytics
+- Manage Dashboard / Statistics → Analytics ~ Omar
 
-Text chat AI / Multi-turn → Orchestrator + Text Chat AI
+- Cross teams help / Contact external help / Guide Tutorial → Hub, Helpdesk,
+  Guides aka support ~ masroor
 
-Feedback person → Feedback Engine
+- Text chat AI / Multi-turn → Orchestrator + Text Chat AI -> Voice/Video
+  communication / Video recordings → Voice/Video + Media Ingestion ~ Magdy ->
+  feedback person → Feedback Engine ~ Magdy
 
-Voice/Video communication / Video recordings → Voice/Video + Media Ingestion
+- Scenario generator engine → Scenario Service ~ Abdelrahman
 
-Scenario generator engine → Scenario Service
+- CRM / Client Persons → CRM Connector + People Graph ~ Abdlerahman
 
-CRM / Client Persons → CRM Connector + People Graph
+- Email/Message drafting → Message Drafting ~ Aser
 
-Email/Message drafting → Message Drafting
+- Multi language support → Translation ~ Aser
 
-Multi language support → Translation
+- Upload real calls → Media Ingestion ~ Youssef
 
-Upload real calls → Media Ingestion
-
-Cross teams help / Contact external help / Guide Tutorial → Hub, Helpdesk,
-Guides
-
-LTI → LTI Advantage
+- LTI → LTI Advantage ~ Youssef
 
 Notes on Datastores (why Postgres vs Mongo)
 
