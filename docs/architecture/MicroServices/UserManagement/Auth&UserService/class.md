@@ -1,3 +1,4 @@
+```mermaid
 %%{init: {'theme':'base', 'themeVariables': { 'primaryColor':'#e3f2fd','primaryTextColor':'#1a237e','primaryBorderColor':'#1976d2','lineColor':'#42a5f5','secondaryColor':'#fff3e0','secondaryTextColor':'#e65100','secondaryBorderColor':'#fb8c00','tertiaryColor':'#f3e5f5','tertiaryTextColor':'#4a148c','tertiaryBorderColor':'#7b1fa2','noteBkgColor':'#fff9c4','noteTextColor':'#f57f17'}}}%% 
 classDiagram
     class AuthGateway {
@@ -226,3 +227,5 @@ classDiagram
     UserController ..> UpdateUserDto : accepts
     User "1" --> "many" Session : has
     User --> Org : belongs to
+
+```
