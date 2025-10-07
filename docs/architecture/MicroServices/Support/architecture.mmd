@@ -1,0 +1,57 @@
+%%{init: {'theme':'base', 'themeVariables': { 
+  'primaryColor':'#e3f2fd',
+  'primaryTextColor':'#1a237e',
+  'primaryBorderColor':'#1976d2',
+  'lineColor':'#42a5f5',
+  'secondaryColor':'#fff3e0',
+  'secondaryTextColor':'#e65100',
+  'secondaryBorderColor':'#fb8c00',
+  'tertiaryColor':'#f3e5f5',
+  'tertiaryTextColor':'#4a148c',
+  'tertiaryBorderColor':'#7b1fa2',
+  'noteBkgColor':'#fff9c4',
+  'noteTextColor':'#f57f17'
+}}}%%
+flowchart TB
+    %% Identity & Plans Microservice
+    subgraph IdentityPlans["Identity & Plans Microservice"]
+        
+        subgraph API["API Gateways"]
+            
+        end
+        
+        subgraph CTRL["Controllers"]
+            
+        end
+        
+        subgraph SVC["Services"]
+            
+        end
+        
+        subgraph REPO["Repositories"]
+            
+        end
+        
+        subgraph Table["Tables"]
+            
+        end
+    end
+    
+    %% External Event Bus
+    RabbitMQ[RabbitMQ Event Bus]
+    
+    %% Shared Cache Cluster
+    Redis[(Shared Redis Cluster)]
+    
+    %% Other Microservices
+    
+    
+    %% Internal Flows
+    
+    %% Redis Usage (namespaced keys per service)
+    
+    
+    %% Event Publishing
+    
+    %% Event Consumption
+    
