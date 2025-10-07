@@ -1,57 +1,53 @@
-%%{init: {'theme':'base', 'themeVariables': { 
-  'primaryColor':'#e3f2fd',
-  'primaryTextColor':'#1a237e',
-  'primaryBorderColor':'#1976d2',
-  'lineColor':'#42a5f5',
-  'secondaryColor':'#fff3e0',
-  'secondaryTextColor':'#e65100',
-  'secondaryBorderColor':'#fb8c00',
-  'tertiaryColor':'#f3e5f5',
-  'tertiaryTextColor':'#4a148c',
-  'tertiaryBorderColor':'#7b1fa2',
-  'noteBkgColor':'#fff9c4',
-  'noteTextColor':'#f57f17'
-}}}%%
-flowchart TB
-    %% Identity & Plans Microservice
-    subgraph IdentityPlans["Identity & Plans Microservice"]
-        
-        subgraph API["API Gateways"]
-            
-        end
-        
-        subgraph CTRL["Controllers"]
-            
-        end
-        
-        subgraph SVC["Services"]
-            
-        end
-        
-        subgraph REPO["Repositories"]
-            
-        end
-        
-        subgraph Table["Tables"]
-            
-        end
+flowchart LR
+    %% === GLOBAL STYLING ===
+    classDef base fill:#ffffff,stroke:#ddd,stroke-width:1px,color:#333,font-size:14px,font-family:Inter,Lucida Grande,Arial;
+    classDef lms fill:#E3F2FD,stroke:#2196F3,stroke-width:1px,color:#0D47A1;
+    classDef pitch fill:#FFF3E0,stroke:#FB8C00,stroke-width:1px,color:#E65100;
+    classDef idp fill:#F3E5F5,stroke:#8E24AA,stroke-width:1px,color:#4A148C;
+
+    %% === GROUPS ===
+    subgraph LMS["🏫 LMS (Learning Management System - LTI Platform)"]
+        direction TB
+        L1[Instructor adds PITCH LTI Tool]
+        L2[Student launches PITCH from Course Page]
+        L3[LTI Services: AGS, NRPS, Deep Linking]
     end
-    
-    %% External Event Bus
-    RabbitMQ[RabbitMQ Event Bus]
-    
-    %% Shared Cache Cluster
-    Redis[(Shared Redis Cluster)]
-    
-    %% Other Microservices
-    
-    
-    %% Internal Flows
-    
-    %% Redis Usage (namespaced keys per service)
-    
-    
-    %% Event Publishing
-    
-    %% Event Consumption
-    
+
+    subgraph PITCH["🤖 PITCH App (LTI Tool Provider)"]
+        direction TB
+        P1["Endpoint: /.well-known/jwks.json"]
+        P2["Endpoint: /oidc/init - OIDC Login"]
+        P3["Endpoint: /lti/launch - Launch Handler"]
+        P4[Session Service – Creates Pitch Session]
+        P5[AI Engine – Analyzes Pitch and Generates Feedback]
+        P6[Feedback Service – Stores Results]
+        P7[Grade Service – Sends Scores to LMS]
+        P8[Database – Users, Sessions, Grades]
+        P9[Frontend – Pitch Practice UI]
+    end
+
+    subgraph IDP["🔐 Identity Provider - OIDC / OAuth2"]
+        direction TB
+        I1[Issues ID Tokens and Access Tokens]
+    end
+
+    %% === CONNECTIONS ===
+    L1 -->|Admin configures tool| L3
+    L2 -->|User clicks Launch| P2
+    P2 -->|Redirect for Authentication| L2
+    L2 -->|LTI Launch JWT| P3
+    P3 -->|Validate JWT Signature| I1
+    P3 -->|Fetch LMS Info| L3
+    P3 -->|Create Session| P4
+    P4 -->|Run AI Feedback| P5
+    P5 -->|Store Feedback| P6
+    P6 -->|Update Grade| P7
+    P7 -->|Send Score to LMS via AGS| L3
+    P1 -->|Expose Public Key| L3
+    P9 -->|Student interacts via UI| P4
+
+    %% === STYLE MAPPING ===
+    class L1,L2,L3 lms;
+    class P1,P2,P3,P4,P5,P6,P7,P8,P9 pitch;
+    class I1 idp;
+    class LMS,PITCH,IDP base;
