@@ -1,57 +1,28 @@
-%%{init: {'theme':'base', 'themeVariables': { 
-  'primaryColor':'#e3f2fd',
-  'primaryTextColor':'#1a237e',
-  'primaryBorderColor':'#1976d2',
-  'lineColor':'#42a5f5',
-  'secondaryColor':'#fff3e0',
-  'secondaryTextColor':'#e65100',
-  'secondaryBorderColor':'#fb8c00',
-  'tertiaryColor':'#f3e5f5',
-  'tertiaryTextColor':'#4a148c',
-  'tertiaryBorderColor':'#7b1fa2',
-  'noteBkgColor':'#fff9c4',
-  'noteTextColor':'#f57f17'
-}}}%%
-flowchart TB
-    %% Identity & Plans Microservice
-    subgraph IdentityPlans["Identity & Plans Microservice"]
-        
-        subgraph API["API Gateways"]
-            
-        end
-        
-        subgraph CTRL["Controllers"]
-            
-        end
-        
-        subgraph SVC["Services"]
-            
-        end
-        
-        subgraph REPO["Repositories"]
-            
-        end
-        
-        subgraph Table["Tables"]
-            
-        end
+graph TD
+    %% Top-level UI and API
+    UI[Support UI]
+    API[API Gateway]
+    SUP[Support Microservice]
+
+    %% Subgraph for Support Modules
+    subgraph Support_Features
+        FAQ[FAQ]
+        Tutorials[Tutorials]
+        Docs[Documentation]
+        Contact[Contact Support]
+        ChatBot[AI Support Chat Bot]
+        Release[Release Notes]
+        Email[Email Request]
     end
-    
-    %% External Event Bus
-    RabbitMQ[RabbitMQ Event Bus]
-    
-    %% Shared Cache Cluster
-    Redis[(Shared Redis Cluster)]
-    
-    %% Other Microservices
-    
-    
-    %% Internal Flows
-    
-    %% Redis Usage (namespaced keys per service)
-    
-    
-    %% Event Publishing
-    
-    %% Event Consumption
-    
+
+    %% User interaction flow
+    UI -->|Support Requests| API
+    API --> SUP
+
+    %% Support microservice contains modules
+    SUP --> Support_Features
+
+    %% Interactions between modules
+    Contact --> ChatBot
+    ChatBot -->|Automated Response| Contact
+    Email -->|Send Meeting Request| TeamMember[Team Member Email]
