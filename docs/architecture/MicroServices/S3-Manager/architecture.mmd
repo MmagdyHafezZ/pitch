@@ -13,51 +13,45 @@
   'noteTextColor':'#f57f17'
 }}}%%
 flowchart TB
-    %% S3 Manager Microservice
-    subgraph S3Manager["S3 Manager Microservice"]
+    %% Identity & Plans Microservice
+    subgraph IdentityPlans["Identity & Plans Microservice"]
         
-        %% API Gateways
-        subgraph API["API Gateway"]
-            S3Gateway["S3 Gateway"]
+        subgraph API["API Gateways"]
+            
         end
         
-        %% Controllers
         subgraph CTRL["Controllers"]
-            BucketController["BucketController"]
-            FileController["FileController"]
+            
         end
         
-        %% Services
         subgraph SVC["Services"]
-            BucketService["BucketService"]
-            FileService["FileService"]
+            
         end
         
-        %% Repositories
-        subgraph REPO["Repositories (Optional)"]
-            S3Repository["S3Repository<br/>Wrapper for AWS SDK S3 calls"]
+        subgraph REPO["Repositories"]
+            
         end
         
-        %% Tables
         subgraph Table["Tables"]
-            None["No Tables<br/>All data stored directly in S3 buckets"]
+            
         end
     end
     
-    %% External Connections
-    EnvVars["Environment Variables<br/>AWS_REGION, S3_BUCKET_MAIN, S3_BUCKET_BACKUP"]
-    AWS["AWS S3<br/>(Buckets and Objects)"]
+    %% External Event Bus
+    RabbitMQ[RabbitMQ Event Bus]
+    
+    %% Shared Cache Cluster
+    Redis[(Shared Redis Cluster)]
+    
+    %% Other Microservices
+    
     
     %% Internal Flows
-    S3Gateway --> BucketController
-    S3Gateway --> FileController
     
-    BucketController --> BucketService
-    FileController --> FileService
+    %% Redis Usage (namespaced keys per service)
     
-    BucketService --> S3Repository
-    FileService --> S3Repository
     
-    S3Repository --> AWS
+    %% Event Publishing
     
-    S3Manager -.-> EnvVars
+    %% Event Consumption
+    
