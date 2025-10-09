@@ -1,28 +1,71 @@
 graph TD
-    %% Top-level UI and API
-    UI[Support UI]
-    API[API Gateway]
-    SUP[Support Microservice]
+    %% ===========================
+    %% ENTRY POINTS
+    %% ===========================
+    User[End User]
+    UI[Support Web UI / Dashboard]
+    API[API Gateway or Load Balancer]
 
-    %% Subgraph for Support Modules
-    subgraph Support_Features
-        FAQ[FAQ]
-        Tutorials[Tutorials]
-        Docs[Documentation]
-        Contact[Contact Support]
-        ChatBot[AI Support Chat Bot]
-        Release[Release Notes]
-        Email[Email Request]
+    %% ===========================
+    %% SUPPORT MICROSERVICE CORE
+    %% ===========================
+    subgraph Support_Microservice["Support Microservice - Masroor"]
+        direction TB
+
+        subgraph Core_Services["Core Service Layer"]
+            FAQ[FAQ Service]
+            Tutorials[Tutorials Service]
+            Docs[Documentation Service]
+            Contact[Contact Support Service]
+            ChatBot[AI Support Chat Bot]
+            Release[Release Notes Service]
+            Email[Email & Meeting Request Service]
+        end
+
+        subgraph Data_Layer["Data and Integration Layer"]
+            SupportDB[(Support Database)]
+            Logs[(Logging and Monitoring)]
+            Notification[Email or Notification Queue]
+            AIEngine[(AI Engine for Chat Bot)]
+        end
     end
 
-    %% User interaction flow
+    %% ===========================
+    %% INTERACTIONS
+    %% ===========================
+    User --> UI
     UI -->|Support Requests| API
-    API --> SUP
+    API -->|Route to| Support_Microservice
 
-    %% Support microservice contains modules
-    SUP --> Support_Features
-
-    %% Interactions between modules
+    %% Core Service Connections
     Contact --> ChatBot
-    ChatBot -->|Automated Response| Contact
-    Email -->|Send Meeting Request| TeamMember[Team Member Email]
+    ChatBot -->|AI Query| AIEngine
+    Email -->|Send Meeting Request| Notification
+    FAQ --> SupportDB
+    Tutorials --> SupportDB
+    Docs --> SupportDB
+    Release --> SupportDB
+    Contact --> Logs
+    ChatBot --> Logs
+    Email --> Logs
+
+    %% ===========================
+    %% INFRASTRUCTURE & SCALABILITY
+    %% ===========================
+    subgraph Infra["Infrastructure and Scalability Layer"]
+        direction TB
+        LB[Load Balancer]
+        Cache[(In-Memory Cache)]
+        Auth[Authentication and IAM Service]
+        Metrics[Monitoring and Metrics System]
+    end
+
+    API --> LB
+    Support_Microservice --> Cache
+    Support_Microservice --> Auth
+    Support_Microservice --> Metrics
+
+    %% ===========================
+    %% EXTERNAL COMMUNICATION
+    %% ===========================
+    Notification -->|Email API or SMTP| ExternalMail[External Mail Service]
