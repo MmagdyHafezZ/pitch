@@ -1,71 +1,124 @@
-graph TD
-    %% ===========================
-    %% ENTRY POINTS
-    %% ===========================
-    User[End User]
-    UI[Support Web UI / Dashboard]
-    API[API Gateway or Load Balancer]
+%%{init: {'theme':'base', 'themeVariables': { 
+  'primaryColor':'#e3f2fd',
+  'primaryTextColor':'#1a237e',
+  'primaryBorderColor':'#1976d2',
+  'lineColor':'#42a5f5',
+  'secondaryColor':'#fff3e0',
+  'secondaryTextColor':'#e65100',
+  'secondaryBorderColor':'#fb8c00',
+  'tertiaryColor':'#f3e5f5',
+  'tertiaryTextColor':'#4a148c',
+  'tertiaryBorderColor':'#7b1fa2',
+  'noteBkgColor':'#fff9c4',
+  'noteTextColor':'#f57f17'
+}}}%%
+flowchart TB
 
-    %% ===========================
-    %% SUPPORT MICROSERVICE CORE
-    %% ===========================
-    subgraph Support_Microservice["Support Microservice - Masroor"]
-        direction TB
+%% ===========================
+%% SUPPORT MICROSERVICE STRUCTURE
+%% ===========================
 
-        subgraph Core_Services["Core Service Layer"]
-            FAQ[FAQ Service]
-            Tutorials[Tutorials Service]
-            Docs[Documentation Service]
-            Contact[Contact Support Service]
-            ChatBot[AI Support Chat Bot]
-            Release[Release Notes Service]
-            Email[Email & Meeting Request Service]
-        end
+subgraph API["API Gateways"]
+    FAQGW["FAQ Gateway"]
+    DocsGW["Docs Gateway"]
+    ContactGW["Contact Support Gateway"]
+    ChatGW["AI Chat Bot Gateway"]
+    RelGW["Release Notes Gateway"]
+    EmailGW["Email Request Gateway"]
+end
 
-        subgraph Data_Layer["Data and Integration Layer"]
-            SupportDB[(Support Database)]
-            Logs[(Logging and Monitoring)]
-            Notification[Email or Notification Queue]
-            AIEngine[(AI Engine for Chat Bot)]
-        end
-    end
+subgraph CTRL["Controllers"]
+    FAQCtrl["FAQ Controller"]
+    DocsCtrl["Docs Controller"]
+    ContactCtrl["Contact Controller"]
+    ChatCtrl["ChatBot Controller"]
+    RelCtrl["Release Notes Controller"]
+    EmailCtrl["Email Controller"]
+end
 
-    %% ===========================
-    %% INTERACTIONS
-    %% ===========================
-    User --> UI
-    UI -->|Support Requests| API
-    API -->|Route to| Support_Microservice
+subgraph SVC["Services"]
+    FAQSvc["FAQ Service"]
+    DocsSvc["Docs Service"]
+    ContactSvc["Contact Support Service"]
+    ChatSvc["AI Support ChatBot Service"]
+    RelSvc["Release Notes Service"]
+    EmailSvc["Email / Meeting Request Service"]
+end
 
-    %% Core Service Connections
-    Contact --> ChatBot
-    ChatBot -->|AI Query| AIEngine
-    Email -->|Send Meeting Request| Notification
-    FAQ --> SupportDB
-    Tutorials --> SupportDB
-    Docs --> SupportDB
-    Release --> SupportDB
-    Contact --> Logs
-    ChatBot --> Logs
-    Email --> Logs
+subgraph REPO["Repositories"]
+    FAQRepo["FAQ Repository"]
+    DocsRepo["Documentation Repository"]
+    RelRepo["Release Notes Repository"]
+    EmailRepo["Email Log Repository"]
+    ChatRepo["ChatBot Logs Repository"]
+end
 
-    %% ===========================
-    %% INFRASTRUCTURE & SCALABILITY
-    %% ===========================
-    subgraph Infra["Infrastructure and Scalability Layer"]
-        direction TB
-        LB[Load Balancer]
-        Cache[(In-Memory Cache)]
-        Auth[Authentication and IAM Service]
-        Metrics[Monitoring and Metrics System]
-    end
+subgraph Table["Tables"]
+    FAQTable[("FAQ Table")]
+    DocsTable[("Documentation Table")]
+    RelTable[("Release Notes Table")]
+    EmailTable[("Email Log Table")]
+    ChatTable[("ChatBot Interaction Table")]
+end
 
-    API --> LB
-    Support_Microservice --> Cache
-    Support_Microservice --> Auth
-    Support_Microservice --> Metrics
+subgraph SupportMicroservice["Support Microservice (Masroor)"]
+    API
+    CTRL
+    SVC
+    REPO
+    Table
+end
 
-    %% ===========================
-    %% EXTERNAL COMMUNICATION
-    %% ===========================
-    Notification -->|Email API or SMTP| ExternalMail[External Mail Service]
+%% ===========================
+%% INTERNAL FLOWS
+%% ===========================
+
+%% Gateways to Controllers
+FAQGW --> FAQCtrl
+DocsGW --> DocsCtrl
+ContactGW --> ContactCtrl
+ChatGW --> ChatCtrl
+RelGW --> RelCtrl
+EmailGW --> EmailCtrl
+
+%% Controllers to Services
+FAQCtrl --> FAQSvc
+DocsCtrl --> DocsSvc
+ContactCtrl --> ContactSvc
+ChatCtrl --> ChatSvc
+RelCtrl --> RelSvc
+EmailCtrl --> EmailSvc
+
+%% Services to Repositories
+FAQSvc --> FAQRepo
+DocsSvc --> DocsRepo
+RelSvc --> RelRepo
+EmailSvc --> EmailRepo
+ChatSvc --> ChatRepo
+
+%% Repositories to Tables
+FAQRepo --> FAQTable
+DocsRepo --> DocsTable
+RelRepo --> RelTable
+EmailRepo --> EmailTable
+ChatRepo --> ChatTable
+
+%% ===========================
+%% CROSS-SERVICE INTERACTIONS
+%% ===========================
+ContactSvc --> ChatSvc
+ChatSvc -->|AI Engine Requests| AIEngine[(AI Engine)]
+EmailSvc -->|Send Meeting Request| NotificationQueue[(Notification Queue / SMTP Service)]
+
+%% ===========================
+%% SHARED INFRASTRUCTURE
+%% ===========================
+subgraph SharedInfra["Shared Infrastructure"]
+    Redis[(Redis Cache Cluster)]
+    RabbitMQ[(RabbitMQ Event Bus)]
+    Logger[(Centralized Logging)]
+end
+
+SupportMicroservice --> Redis
+SupportMicroservice --> RabbitMQ
+SupportMicroservice --> Logger
