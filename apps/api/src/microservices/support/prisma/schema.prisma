@@ -9,6 +9,28 @@ datasource db {
 }
 
 //// ======================================
+//// ENUMS
+//// ======================================
+
+enum EmailStatus {
+  SENT
+  FAILED
+  QUEUED
+}
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  CLOSED
+}
+
+enum TicketPriority {
+  LOW
+  NORMAL
+  HIGH
+}
+
+//// ======================================
 //// SUPPORT MICROSERVICE
 //// ======================================
 
@@ -68,30 +90,30 @@ model ChatBotInteraction {
 }
 
 model EmailLog {
-  id          String   @id @default(cuid())
+  id          String       @id @default(cuid())
   toEmail     String
   subject     String
   body        String
-  sentAt      DateTime @default(now())
-  status      String   @default("SENT") // SENT | FAILED | QUEUED
+  sentAt      DateTime     @default(now())
+  status      EmailStatus  @default(SENT)
   teamMember  String?
   meetingLink String?
-  createdAt   DateTime @default(now())
+  createdAt   DateTime     @default(now())
 
   @@index([toEmail])
   @@map("email_logs")
 }
 
 model SupportTicket {
-  id          String   @id @default(cuid())
+  id          String          @id @default(cuid())
   userId      String?
   subject     String
   message     String
-  status      String   @default("OPEN")     // OPEN | IN_PROGRESS | CLOSED
-  priority    String   @default("NORMAL")   // LOW | NORMAL | HIGH
+  status      TicketStatus    @default(OPEN)
+  priority    TicketPriority  @default(NORMAL)
   assignedTo  String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
 
   user User? @relation(fields: [userId], references: [id])
 
