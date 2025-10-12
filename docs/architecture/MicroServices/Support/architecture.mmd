@@ -13,45 +13,112 @@
   'noteTextColor':'#f57f17'
 }}}%%
 flowchart TB
-    %% Identity & Plans Microservice
-    subgraph IdentityPlans["Identity & Plans Microservice"]
-        
-        subgraph API["API Gateways"]
-            
-        end
-        
-        subgraph CTRL["Controllers"]
-            
-        end
-        
-        subgraph SVC["Services"]
-            
-        end
-        
-        subgraph REPO["Repositories"]
-            
-        end
-        
-        subgraph Table["Tables"]
-            
-        end
-    end
-    
-    %% External Event Bus
-    RabbitMQ[RabbitMQ Event Bus]
-    
-    %% Shared Cache Cluster
-    Redis[(Shared Redis Cluster)]
-    
-    %% Other Microservices
-    
-    
-    %% Internal Flows
-    
-    %% Redis Usage (namespaced keys per service)
-    
-    
-    %% Event Publishing
-    
-    %% Event Consumption
-    
+
+%% ===========================
+%% SUPPORT MICROSERVICE STRUCTURE
+%% ===========================
+
+subgraph API["API Gateways"]
+    FAQGW["FAQ Gateway"]
+    DocsGW["Docs Gateway"]
+    ContactGW["Contact Support Gateway"]
+    ChatGW["AI Chat Bot Gateway"]
+    RelGW["Release Notes Gateway"]
+    EmailGW["Email Request Gateway"]
+end
+
+subgraph CTRL["Controllers"]
+    FAQCtrl["FAQ Controller"]
+    DocsCtrl["Docs Controller"]
+    ContactCtrl["Contact Controller"]
+    ChatCtrl["ChatBot Controller"]
+    RelCtrl["Release Notes Controller"]
+    EmailCtrl["Email Controller"]
+end
+
+subgraph SVC["Services"]
+    FAQSvc["FAQ Service"]
+    DocsSvc["Docs Service"]
+    ContactSvc["Contact Support Service"]
+    ChatSvc["AI Support ChatBot Service"]
+    RelSvc["Release Notes Service"]
+    EmailSvc["Email / Meeting Request Service"]
+end
+
+subgraph REPO["Repositories"]
+    FAQRepo["FAQ Repository"]
+    DocsRepo["Documentation Repository"]
+    RelRepo["Release Notes Repository"]
+    EmailRepo["Email Log Repository"]
+    ChatRepo["ChatBot Logs Repository"]
+end
+
+subgraph Table["Tables"]
+    FAQTable[("FAQ Table")]
+    DocsTable[("Documentation Table")]
+    RelTable[("Release Notes Table")]
+    EmailTable[("Email Log Table")]
+    ChatTable[("ChatBot Interaction Table")]
+end
+
+subgraph SupportMicroservice["Support Microservice (Masroor)"]
+    API
+    CTRL
+    SVC
+    REPO
+    Table
+end
+
+%% ===========================
+%% INTERNAL FLOWS
+%% ===========================
+
+%% Gateways to Controllers
+FAQGW --> FAQCtrl
+DocsGW --> DocsCtrl
+ContactGW --> ContactCtrl
+ChatGW --> ChatCtrl
+RelGW --> RelCtrl
+EmailGW --> EmailCtrl
+
+%% Controllers to Services
+FAQCtrl --> FAQSvc
+DocsCtrl --> DocsSvc
+ContactCtrl --> ContactSvc
+ChatCtrl --> ChatSvc
+RelCtrl --> RelSvc
+EmailCtrl --> EmailSvc
+
+%% Services to Repositories
+FAQSvc --> FAQRepo
+DocsSvc --> DocsRepo
+RelSvc --> RelRepo
+EmailSvc --> EmailRepo
+ChatSvc --> ChatRepo
+
+%% Repositories to Tables
+FAQRepo --> FAQTable
+DocsRepo --> DocsTable
+RelRepo --> RelTable
+EmailRepo --> EmailTable
+ChatRepo --> ChatTable
+
+%% ===========================
+%% CROSS-SERVICE INTERACTIONS
+%% ===========================
+ContactSvc --> ChatSvc
+ChatSvc -->|AI Engine Requests| AIEngine[(AI Engine)]
+EmailSvc -->|Send Meeting Request| NotificationQueue[(Notification Queue / SMTP Service)]
+
+%% ===========================
+%% SHARED INFRASTRUCTURE
+%% ===========================
+subgraph SharedInfra["Shared Infrastructure"]
+    Redis[(Redis Cache Cluster)]
+    RabbitMQ[(RabbitMQ Event Bus)]
+    Logger[(Centralized Logging)]
+end
+
+SupportMicroservice --> Redis
+SupportMicroservice --> RabbitMQ
+SupportMicroservice --> Logger
