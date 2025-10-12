@@ -1,12 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import {
-  CreateSupportDto,
-  UpdateSupportDto,
-  Support,
-} from '../../common/interfaces/support.interface';
-import { SupportPrismaService } from './support-prisma.service';
-import type { PrismaError } from '../../common/interfaces/error.interface';
+import { Injectable } from '@nestjs/common';
 
 @Injectable()
-export class SupportService {
-}
+export class SupportService {}
