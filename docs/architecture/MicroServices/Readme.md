@@ -22,14 +22,3 @@ Quick mapping to your feature list
 - Upload real calls → Media Ingestion ~ Youssef
 
 - LTI → LTI Advantage ~ Youssef
-
-Notes on Datastores (why Postgres vs Mongo)
-
-Postgres: identities, plans, scorecards, scenarios, LTI keys—data with strong
-relations/transactions.
-
-MongoDB: CRM copies, transcripts, threads—flexible, large/variable documents.
-
-Redis: sessions, rate limits, in-progress sim state.
-
-pgvector (in Postgres): RAG embeddings to keep stack simple.

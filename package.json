@@ -5,7 +5,7 @@
   "main": "index.js",
   "private": true,
   "workspaces": [
-    "apps/*",
+    "apps/I*",
     "packages/*"
   ],
   "scripts": {
@@ -13,6 +13,8 @@
     "prisma:generate": "turbo run db:migrate:all --filter=api",
     "dev:api": "turbo run dev --filter=api",
     "dev:web": "turbo run dev --filter=web",
+    "db:migrate:all": "turbo run db:migrate:all",
+    "db:generate:all": "turbo run db:generate:all",
     "build": "turbo run build",
     "secrets:allow": "python3 scripts/secrets_allow.py",
     "lint": "turbo run lint",

@@ -18,15 +18,17 @@ import {
 } from '@nestjs/swagger';
 import { catchError, timeout } from 'rxjs/operators';
 import { throwError } from 'rxjs';
-import { Public } from '../../microservices/auth/decorators/public.decorator';
-import { CurrentUser } from '../../microservices/auth/decorators/current-user.decorator';
+import { Public } from '../../microservices/user/decorators/public.decorator';
+import { CurrentUser } from '../../microservices/user/decorators/current-user.decorator';
+import { AUTH_SERVICE_PATTERNS } from '../../common/interfaces/message-patterns.interface';
+import { getWhitelistedRoutes } from '../config/auth-whitelist.config';
 import {
   RegisterDto,
   LoginDto,
   RefreshTokenDto,
   AuthResponseDto,
   UserResponseDto,
-} from '../../microservices/auth/dto/auth.dto';
+} from '../../microservices/user/dto/auth.dto';
 import type { ServiceError } from '../../common/interfaces/error.interface';
 
 @ApiTags('authentication')
@@ -182,5 +184,111 @@ export class AuthGatewayController {
   validateToken(@CurrentUser() user: UserResponseDto) {
     this.logger.log(`Token validation for user: ${user.id}`);
     return user;
+  }
+
+  @Get('oauth/providers')
+  @Public()
+  @ApiOperation({
+    summary: 'Get available OAuth providers',
+    description: 'Returns list of configured OAuth providers for the frontend',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Available OAuth providers',
+    example: [
+      {
+        name: 'google',
+        displayName: 'Google',
+        icon: '🔍',
+        color: '#4285f4',
+        authUrl: '/auth/oauth/google',
+      },
+      {
+        name: 'github',
+        displayName: 'GitHub',
+        icon: '🐙',
+        color: '#333333',
+        authUrl: '/auth/oauth/github',
+      },
+    ],
+  })
+  getOAuthProviders() {
+    this.logger.log('Fetching OAuth providers');
+
+    return this.authService
+      .send(AUTH_SERVICE_PATTERNS.OAUTH_GET_PROVIDERS, {})
+      .pipe(
+        timeout(10000),
+        catchError((err: unknown) => {
+          const error = err as ServiceError;
+          const stack = error.stack ?? JSON.stringify(err);
+          this.logger.error('Failed to get OAuth providers', stack);
+          const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
+          const message = error.message ?? 'Failed to get OAuth providers';
+          return throwError(() => new HttpException(message, status));
+        }),
+      );
+  }
+
+  @Get('whitelist')
+  @Public()
+  @ApiOperation({
+    summary: 'Get auth whitelist configuration',
+    description:
+      'Returns list of routes that bypass authentication (for debugging)',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Auth whitelist configuration',
+  })
+  getAuthWhitelist() {
+    this.logger.log('Fetching auth whitelist configuration');
+    return {
+      routes: getWhitelistedRoutes(),
+      message: 'These routes bypass the global JWT auth guard',
+    };
+  }
+
+  @Post('check-email')
+  @Public()
+  @ApiOperation({
+    summary: 'Check if email exists and return associated OAuth provider',
+    description:
+      'Returns the OAuth provider associated with the email for redirect-based login',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Email check result',
+    example: {
+      exists: true,
+      provider: 'google',
+      requiresOAuth: true,
+      message: 'Please continue with Google to sign in',
+    },
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Email not found',
+    example: {
+      exists: false,
+      message: 'No account found with this email. Please sign up first.',
+    },
+  })
+  checkEmail(@Body() checkEmailDto: { email: string }) {
+    this.logger.log(`Checking email existence: ${checkEmailDto.email}`);
+
+    return this.authService
+      .send(AUTH_SERVICE_PATTERNS.CHECK_EMAIL, { email: checkEmailDto.email })
+      .pipe(
+        timeout(10000),
+        catchError((err: unknown) => {
+          const error = err as ServiceError;
+          const stack = error.stack ?? JSON.stringify(err);
+          this.logger.error('Email check failed', stack);
+          const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
+          const message = error.message ?? 'Email check failed';
+          return throwError(() => new HttpException(message, status));
+        }),
+      );
   }
 }

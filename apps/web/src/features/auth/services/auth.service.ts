@@ -76,3 +76,54 @@ export const useRefreshTokenMutation = () => {
     },
   })
 }
+
+// OAuth hooks
+export const useOAuthProvidersQuery = () => {
+  return useQuery({
+    queryKey: ['oauth', 'providers'],
+    queryFn: () => api.oauth.getProviders(),
+    staleTime: 1000 * 60 * 30, // 30 minutes
+    retry: 2,
+  })
+}
+
+export const useLinkedAccountsQuery = (enabled: boolean = false) => {
+  return useQuery({
+    queryKey: ['oauth', 'linked-accounts'],
+    queryFn: () => api.oauth.getLinkedAccounts(),
+    enabled,
+    staleTime: 1000 * 60 * 5, // 5 minutes
+  })
+}
+
+export const useUnlinkAccountMutation = () => {
+  const queryClient = useQueryClient()
+
+  return useMutation<{ message: string }, Error, string>({
+    mutationFn: (provider: string) => api.oauth.unlinkAccount(provider),
+    onSuccess: () => {
+      // Invalidate linked accounts query
+      queryClient.invalidateQueries({ queryKey: ['oauth', 'linked-accounts'] })
+    },
+    onError: (error) => {
+      console.error('Unlink account error:', error)
+    },
+  })
+}
+
+export const useOAuthRefreshTokenMutation = () => {
+  return useMutation<{ access_token: string; refresh_token: string }, Error, string>({
+    mutationFn: (refreshToken: string) => api.oauth.refreshToken(refreshToken),
+    onSuccess: (data) => {
+      // Store new tokens
+      localStorage.setItem('authToken', data.access_token)
+      localStorage.setItem('refreshToken', data.refresh_token)
+    },
+    onError: (error) => {
+      console.error('OAuth token refresh error:', error)
+      // Clear tokens on refresh failure
+      localStorage.removeItem('authToken')
+      localStorage.removeItem('refreshToken')
+    },
+  })
+}

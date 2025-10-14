@@ -1,6 +1,6 @@
 import { NotFoundException } from '@nestjs/common';
-import { UserService } from '../user.service';
-import type { UserPrismaService } from '../user-prisma.service';
+import { UserService } from '../services/user.service';
+import type { UserPrismaService } from '../prisma/user-prisma.service';
 import { createMockPrismaService } from '../../../../test/utils/test-helpers';
 
 describe('UserService', () => {
@@ -11,7 +11,8 @@ describe('UserService', () => {
     id: 'user-1',
     email: 'user@example.com',
     name: 'Test User',
-    password: 'hash',
+    avatar: null,
+    isActive: true,
     createdAt: new Date(),
     updatedAt: new Date(),
   };
@@ -42,7 +43,7 @@ describe('UserService', () => {
   });
 
   it('creates a new user', async () => {
-    const dto = { email: 'a', password: 'b', name: 'c' } as any;
+    const dto = { email: 'a', name: 'c' } as any;
     prisma.user.create.mockResolvedValue({ ...user, ...dto });
 
     await expect(service.create(dto)).resolves.toEqual({ ...user, ...dto });

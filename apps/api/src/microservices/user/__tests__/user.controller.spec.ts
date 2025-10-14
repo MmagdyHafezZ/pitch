@@ -1,5 +1,5 @@
-import { UserController } from '../user.controller';
-import type { UserService } from '../user.service';
+import { UserController } from '../controllers/user.controller';
+import type { UserService } from '../services/user.service';
 import { toRpcException } from '../../../common/helpers/exceptions';
 import { RpcException } from '@nestjs/microservices';
 
@@ -61,7 +61,6 @@ describe('UserController', () => {
 
     const payload = {
       email: 'user@example.com',
-      password: 'secret',
       name: 'User',
       ...basePayload,
     } as any;
@@ -69,7 +68,6 @@ describe('UserController', () => {
     await expect(controller.createUser(payload)).resolves.toEqual(user);
     expect(service.create).toHaveBeenCalledWith({
       email: 'user@example.com',
-      password: 'secret',
       name: 'User',
     });
   });
@@ -138,7 +136,6 @@ describe('UserController', () => {
     await expect(
       controller.createUser({
         email: 'user@example.com',
-        password: 'pwd',
         name: 'User',
         ...basePayload,
       } as any),

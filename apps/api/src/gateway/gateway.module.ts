@@ -2,7 +2,6 @@ import { Module } from '@nestjs/common';
 import { ClientsModule, Transport } from '@nestjs/microservices';
 import { JwtModule } from '@nestjs/jwt';
 import { UserGatewayController } from './controllers/user-gateway.controller';
-import { BusinessGatewayController } from './controllers/business-gateway.controller';
 import { AuthGatewayController } from './controllers/auth-gateway.controller';
 import { GlobalJwtAuthGuard } from './guards/global-jwt-auth.guard';
 import { UserClaimsInterceptor } from './interceptors/user-claims.interceptor';
@@ -31,11 +30,7 @@ import { APP_GUARD } from '@nestjs/core';
       })),
     ),
   ],
-  controllers: [
-    UserGatewayController,
-    BusinessGatewayController,
-    AuthGatewayController,
-  ],
+  controllers: [UserGatewayController, AuthGatewayController],
   providers: [
     { provide: APP_GUARD, useClass: GlobalJwtAuthGuard },
     UserClaimsInterceptor,

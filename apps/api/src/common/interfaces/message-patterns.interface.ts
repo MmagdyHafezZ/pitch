@@ -22,6 +22,8 @@ export const AUTH_SERVICE_PATTERNS = {
   REFRESH: 'auth.refresh',
   GET_USER: 'auth.getUser',
   VALIDATE_USER: 'auth.validateUser',
+  OAUTH_GET_PROVIDERS: 'auth.oauth.getProviders',
+  CHECK_EMAIL: 'auth.checkEmail',
 } as const;
 
 export type UserServicePattern =

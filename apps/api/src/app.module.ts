@@ -3,11 +3,9 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { GatewayModule } from './gateway/gateway.module';
 import { UserModule } from './microservices/user/user.module';
-import { BusinessModule } from './microservices/business/business.module';
-import { AuthModule } from './microservices/auth/auth.module';
 
 @Module({
-  imports: [GatewayModule, UserModule, BusinessModule, AuthModule],
+  imports: [GatewayModule, UserModule],
   controllers: [AppController],
   providers: [AppService],
 })

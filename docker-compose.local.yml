@@ -1,26 +1,6 @@
 version: "3.8"
 
 services:
-  # Auth Service PostgreSQL Database
-  postgres-auth:
-    image: postgres:16-alpine
-    container_name: pitch-postgres-auth-local
-    environment:
-      POSTGRES_DB: pitch_auth
-      POSTGRES_USER: ${POSTGRES_USER:-pitch_user}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pitch_admin}
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_auth_data_local:/var/lib/postgresql/data
-    networks:
-      - pitch-network
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U pitch_user -d pitch_auth"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
   # User Service PostgreSQL Database
   postgres-user:
     image: postgres:16-alpine
@@ -37,26 +17,6 @@ services:
       - pitch-network
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U pitch_user -d pitch_user"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  # Business Service PostgreSQL Database
-  postgres-business:
-    image: postgres:16-alpine
-    container_name: pitch-postgres-business-local
-    environment:
-      POSTGRES_DB: pitch_business
-      POSTGRES_USER: ${POSTGRES_USER:-pitch_user}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pitch_admin}
-    ports:
-      - "5434:5432"
-    volumes:
-      - postgres_business_data_local:/var/lib/postgresql/data
-    networks:
-      - pitch-network
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U pitch_user -d pitch_business"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -167,9 +127,7 @@ services:
   #   restart: unless-stopped
 
 volumes:
-  postgres_auth_data_local:
   postgres_user_data_local:
-  postgres_business_data_local:
   redis_data_local:
   rabbitmq_data_local:
 
