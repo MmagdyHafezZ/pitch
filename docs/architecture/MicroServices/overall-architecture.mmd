@@ -451,6 +451,9 @@ flowchart LR
     SupportMS -.-> SharedRedis
     SupportMS -.-> SharedRabbitMQ
     SupportMS -.-> Logger
+    UserManagementMS -.-> SharedRedis
+    UserManagementMS -.-> SharedRabbitMQ
+    UserManagementMS -.-> Logger
 
     %% Database and Storage Connections
     AnalyticsMS --> Postgres
@@ -461,6 +464,7 @@ flowchart LR
     SimulationMS --> Mongo
     SimulationMS --> S3
     SupportMS --> Postgres
+    UserManagementMS --> Postgres
 
     %% Event-Driven Communication
     SimulationMS -.->|simulation.* events| SharedRabbitMQ
