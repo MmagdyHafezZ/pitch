@@ -1,0 +1,21 @@
+{
+  "name": "microservices-architecture-compiler",
+  "version": "1.0.0",
+  "description": "Compiles individual microservice architecture diagrams into an overall architecture diagram",
+  "main": "compile-architecture.js",
+  "scripts": {
+    "compile": "node compile-architecture.js",
+    "compile:watch": "nodemon compile-architecture.js"
+  },
+  "keywords": [
+    "architecture",
+    "mermaid",
+    "microservices",
+    "documentation"
+  ],
+  "author": "PITCH Platform Team",
+  "license": "MIT",
+  "devDependencies": {
+    "nodemon": "^3.0.0"
+  }
+}

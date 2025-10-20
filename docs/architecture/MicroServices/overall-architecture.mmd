@@ -1,0 +1,445 @@
+%%{init: {'theme':'base', 'themeVariables': { 
+  'primaryColor':'#e3f2fd',
+  'primaryTextColor':'#1a237e',
+  'primaryBorderColor':'#1976d2',
+  'lineColor':'#42a5f5',
+  'secondaryColor':'#fff3e0',
+  'secondaryTextColor':'#e65100',
+  'secondaryBorderColor':'#fb8c00',
+  'tertiaryColor':'#f3e5f5',
+  'tertiaryTextColor':'#4a148c',
+  'tertiaryBorderColor':'#7b1fa2',
+  'noteBkgColor':'#fff9c4',
+  'noteTextColor':'#f57f17'
+}}}%%
+flowchart TB
+    %% Overall Microservices Architecture
+
+    subgraph PitchPlatform["PITCH Platform - Microservices Architecture"]
+
+        %% Analytics Microservice
+        subgraph AnalyticsMS["Analytics Microservice"]
+            %% Identity & Plans Microservice
+            subgraph IdentityPlans["Identity & Plans Microservice"]
+
+                subgraph AnalyticsAPI["API Gateways"]
+
+                end
+
+                subgraph AnalyticsCTRL["Controllers"]
+
+                end
+
+                subgraph AnalyticsSVC["Services"]
+
+                end
+
+                subgraph AnalyticsREPO["Repositories"]
+
+                end
+
+                subgraph AnalyticsTable["Tables"]
+
+                end
+            end
+
+            %% External Event Bus
+            AnalyticsRabbitMQ[RabbitMQ Event Bus]
+
+            %% Shared Cache Cluster
+            AnalyticsRedis[(Shared Redis Cluster)]
+
+            %% Other Microservices
+
+
+            %% Internal Flows
+            %% Updated for automated compilation
+
+            %% Redis Usage (namespaced keys per service)
+
+
+            %% Event Publishing
+
+            %% Event Consumption
+
+
+        end
+
+        %% LTI-Advantage Microservice
+        subgraph LTI-AdvantageMS["LTI-Advantage Microservice"]
+            %% Identity & Plans Microservice
+            subgraph IdentityPlans["Identity & Plans Microservice"]
+
+                subgraph LTI-AdvantageAPI["API Gateways"]
+
+                end
+
+                subgraph LTI-AdvantageCTRL["Controllers"]
+
+                end
+
+                subgraph LTI-AdvantageSVC["Services"]
+
+                end
+
+                subgraph LTI-AdvantageREPO["Repositories"]
+
+                end
+
+                subgraph LTI-AdvantageTable["Tables"]
+
+                end
+            end
+
+            %% External Event Bus
+            LTI-AdvantageRabbitMQ[RabbitMQ Event Bus]
+
+            %% Shared Cache Cluster
+            LTI-AdvantageRedis[(Shared Redis Cluster)]
+
+            %% Other Microservices
+
+
+            %% Internal Flows
+
+            %% Redis Usage (namespaced keys per service)
+
+
+            %% Event Publishing
+
+            %% Event Consumption
+
+
+        end
+
+        %% S3-Manager Microservice
+        subgraph S3-ManagerMS["S3-Manager Microservice"]
+            %% S3 Manager Microservice
+            subgraph S3Manager["S3 Manager Microservice"]
+
+                %% API Gateways
+                subgraph S3-ManagerAPI["API Gateway"]
+                    S3Gateway["S3 Gateway"]
+                end
+
+                %% Controllers
+                subgraph S3-ManagerCTRL["Controllers"]
+                    BucketController["BucketController"]
+                    FileController["FileController"]
+                end
+
+                %% Services
+                subgraph S3-ManagerSVC["Services"]
+                    BucketService["BucketService"]
+                    FileService["FileService"]
+                end
+
+                %% Repositories
+                subgraph S3-ManagerREPO["Repositories (Optional)"]
+                    S3Repository["S3Repository<br/>Wrapper for AWS SDK S3 calls"]
+                end
+
+                %% Tables
+                subgraph S3-ManagerTable["Tables"]
+                    None["No Tables<br/>All data stored directly in S3 buckets"]
+                end
+            end
+
+            %% External Connections
+            EnvVars["Environment Variables<br/>AWS_REGION, S3_BUCKET_MAIN, S3_BUCKET_BACKUP"]
+            AWS["AWS S3<br/>(Buckets and Objects)"]
+
+            %% Internal Flows
+            S3Gateway --> BucketController
+            S3Gateway --> FileController
+
+            BucketController --> BucketService
+            FileController --> FileService
+
+            BucketService --> S3Repository
+            FileService --> S3Repository
+
+            S3Repository --> AWS
+
+            S3Manager -.-> EnvVars
+
+        end
+
+        %% Simulation Microservice
+        subgraph SimulationMS["Simulation Microservice"]
+            %% Gateways
+            subgraph SimulationAPI["API Gateways"]
+                SessGW[Session Gateway]
+                ChatGW[Chat Gateway]
+                CallGW[Call Gateway]
+                IngestGW[Ingestion Gateway]
+                FeedbackGW[Feedback Gateway]
+            end
+
+            %% Controllers
+            subgraph SimulationCTRL["Controllers"]
+                SessCtrl[Session Controller]
+                TurnCtrl[Turn Controller]
+                ChatCtrl[Chat Controller]
+                CallCtrl[Call Controller]
+                MediaCtrl[Media Controller]
+                IngestCtrl[Ingest Controller]
+                FeedbackCtrl[Feedback Controller]
+                RubricCtrl[Rubric Controller]
+            end
+
+            %% Services
+            subgraph SimulationSVC["Services"]
+                OrchestratorSvc[Orchestrator Service]
+                LLMSvc[LLM Service]
+                PromptSvc[Prompt Service]
+                RetrievalSvc[Retrieval Service]
+                WebRTCSvc[WebRTC Service]
+                STTSvc[STT Service]
+                TTSSvc[TTS Service]
+                RecordingSvc[Recording Service]
+                StorageSvc[Storage Service]
+                TranscribeSvc[Transcribe Service]
+                EnrichSvc[Enrichment Service]
+                FeedbackSvc[Feedback Service]
+                RubricSvc[Rubric Service]
+            end
+
+            %% Repositories
+            subgraph SimulationREPO["Repositories"]
+                SessionRepo[Session Repository]
+                TurnRepo[Turn Repository]
+                MessageRepo[Message Repository]
+                ToolRepo[ToolCall Repository]
+                ScenarioRepo[Scenario Repository]
+                PersonaRepo[Persona Repository]
+                CallRepo[Call Repository]
+                RecordingRepo[Recording Repository]
+                MediaRepo[Media Repository]
+                TranscriptRepo[Transcript Repository]
+                RubricsRepo[Rubric Repository]
+                ScoreRepo[Score Repository]
+            end
+
+            %% Databases
+            subgraph SimulationDB["Databases"]
+                Postgres[(Postgres DB)]
+                Mongo[(Mongo DB)]
+                PGVector[(pgvector Index)]
+                S3[(MinIO/S3 Storage)]
+            end
+
+            %% External
+            SimulationRedis[(Redis Cache)]
+            SimulationRabbitMQ[RabbitMQ Event Bus]
+            STTAPI[(Whisper/Azure STT API)]
+            TTSAPI[(ElevenLabs/Azure TTS API)]
+
+            %% Flows: Gateway -> Controller -> Service -> Repo -> DB
+            SessGW --> SessCtrl --> OrchestratorSvc --> SessionRepo --> Postgres
+            SessCtrl --> TurnCtrl
+            TurnCtrl --> OrchestratorSvc --> TurnRepo --> Postgres
+            OrchestratorSvc --> MessageRepo --> Postgres
+            OrchestratorSvc --> ToolRepo --> Postgres
+            OrchestratorSvc --> ScenarioRepo --> Postgres
+            OrchestratorSvc --> PersonaRepo --> Postgres
+
+            ChatGW --> ChatCtrl --> LLMSvc --> MessageRepo
+            LLMSvc --> RetrievalSvc --> PGVector
+            ChatCtrl --> PromptSvc
+
+            CallGW --> CallCtrl --> WebRTCSvc
+            CallCtrl --> RecordingSvc --> RecordingRepo --> Postgres
+            RecordingRepo --> MediaRepo --> Postgres
+            CallCtrl --> STTSvc --> STTAPI
+            CallCtrl --> TTSSvc --> TTSAPI
+            MediaCtrl --> StorageSvc --> S3
+
+            IngestGW --> IngestCtrl --> TranscribeSvc --> TranscriptRepo --> Mongo
+            IngestCtrl --> EnrichSvc --> TranscriptRepo
+            TranscriptRepo --> PGVector
+
+            FeedbackGW --> FeedbackCtrl --> FeedbackSvc --> ScoreRepo --> Postgres
+            FeedbackCtrl --> RubricSvc --> RubricsRepo --> Postgres
+            RubricCtrl --> RubricSvc
+
+            %% External links
+            OrchestratorSvc -.-> Redis
+            FeedbackSvc -.-> Redis
+            OrchestratorSvc -.->|publishes simulation.*| RabbitMQ
+            FeedbackSvc -.->|publishes feedback.ready| RabbitMQ
+
+        end
+
+        %% Support Microservice
+        subgraph SupportMS["Support Microservice"]
+
+        %% ===========================
+        %% SUPPORT MICROSERVICE STRUCTURE
+        %% ===========================
+
+        subgraph SupportAPI["API Gateways"]
+            FAQGW["FAQ Gateway"]
+            DocsGW["Docs Gateway"]
+            ContactGW["Contact Support Gateway"]
+            ChatGW["AI Chat Bot Gateway"]
+            RelGW["Release Notes Gateway"]
+            EmailGW["Email Request Gateway"]
+        end
+
+        subgraph SupportCTRL["Controllers"]
+            FAQCtrl["FAQ Controller"]
+            DocsCtrl["Docs Controller"]
+            ContactCtrl["Contact Controller"]
+            ChatCtrl["ChatBot Controller"]
+            RelCtrl["Release Notes Controller"]
+            EmailCtrl["Email Controller"]
+        end
+
+        subgraph SupportSVC["Services"]
+            FAQSvc["FAQ Service"]
+            DocsSvc["Docs Service"]
+            ContactSvc["Contact Support Service"]
+            ChatSvc["AI Support ChatBot Service"]
+            RelSvc["Release Notes Service"]
+            EmailSvc["Email / Meeting Request Service"]
+        end
+
+        subgraph SupportREPO["Repositories"]
+            FAQRepo["FAQ Repository"]
+            DocsRepo["Documentation Repository"]
+            RelRepo["Release Notes Repository"]
+            EmailRepo["Email Log Repository"]
+            ChatRepo["ChatBot Logs Repository"]
+        end
+
+        subgraph SupportTable["Tables"]
+            FAQTable[("FAQ Table")]
+            DocsTable[("Documentation Table")]
+            RelTable[("Release Notes Table")]
+            EmailTable[("Email Log Table")]
+            ChatTable[("ChatBot Interaction Table")]
+        end
+
+        subgraph SupportMicroservice["Support Microservice (Masroor)"]
+            API
+            CTRL
+            SVC
+            REPO
+            Table
+        end
+
+        %% ===========================
+        %% INTERNAL FLOWS
+        %% ===========================
+
+        %% Gateways to Controllers
+        FAQGW --> FAQCtrl
+        DocsGW --> DocsCtrl
+        ContactGW --> ContactCtrl
+        ChatGW --> ChatCtrl
+        RelGW --> RelCtrl
+        EmailGW --> EmailCtrl
+
+        %% Controllers to Services
+        FAQCtrl --> FAQSvc
+        DocsCtrl --> DocsSvc
+        ContactCtrl --> ContactSvc
+        ChatCtrl --> ChatSvc
+        RelCtrl --> RelSvc
+        EmailCtrl --> EmailSvc
+
+        %% Services to Repositories
+        FAQSvc --> FAQRepo
+        DocsSvc --> DocsRepo
+        RelSvc --> RelRepo
+        EmailSvc --> EmailRepo
+        ChatSvc --> ChatRepo
+
+        %% Repositories to Tables
+        FAQRepo --> FAQTable
+        DocsRepo --> DocsTable
+        RelRepo --> RelTable
+        EmailRepo --> EmailTable
+        ChatRepo --> ChatTable
+
+        %% ===========================
+        %% CROSS-SERVICE INTERACTIONS
+        %% ===========================
+        ContactSvc --> ChatSvc
+        ChatSvc -->|AI Engine Requests| AIEngine[(AI Engine)]
+        EmailSvc -->|Send Meeting Request| NotificationQueue[(Notification Queue / SMTP Service)]
+
+        %% ===========================
+        %% SHARED INFRASTRUCTURE
+        %% ===========================
+        subgraph SharedInfra["Shared Infrastructure"]
+            SupportRedis[(Redis Cache Cluster)]
+            SupportRabbitMQ[(RabbitMQ Event Bus)]
+            Logger[(Centralized Logging)]
+        end
+
+        SupportMicroservice --> Redis
+        SupportMicroservice --> RabbitMQ
+        SupportMicroservice --> Logger
+
+        end
+
+    end
+
+    %% Shared Infrastructure
+    subgraph SharedInfra["Shared Infrastructure"]
+        Redis[(Redis Cache Cluster)]
+        RabbitMQ[(RabbitMQ Event Bus)]
+        Postgres[(PostgreSQL Database)]
+        Mongo[(MongoDB Database)]
+        S3[(S3 Storage)]
+        Logger[(Centralized Logging)]
+    end
+
+    %% External Services
+    subgraph External["External Services"]
+        LTI[LTI Platform]
+        STTAPI[(Speech-to-Text API)]
+        TTSAPI[(Text-to-Speech API)]
+        LLMAPI[(LLM API)]
+    end
+
+    %% Shared Infrastructure Connections
+    AnalyticsMS -.-> Redis
+    AnalyticsMS -.-> RabbitMQ
+    AnalyticsMS -.-> Logger
+    LTI-AdvantageMS -.-> Redis
+    LTI-AdvantageMS -.-> RabbitMQ
+    LTI-AdvantageMS -.-> Logger
+    S3-ManagerMS -.-> Redis
+    S3-ManagerMS -.-> RabbitMQ
+    S3-ManagerMS -.-> Logger
+    SimulationMS -.-> Redis
+    SimulationMS -.-> RabbitMQ
+    SimulationMS -.-> Logger
+    SupportMS -.-> Redis
+    SupportMS -.-> RabbitMQ
+    SupportMS -.-> Logger
+
+    %% Database and Storage Connections
+    AnalyticsMS --> Postgres
+    AnalyticsMS --> Mongo
+    LTI-AdvantageMS --> External
+    S3-ManagerMS --> S3
+    SimulationMS --> Postgres
+    SimulationMS --> Mongo
+    SimulationMS --> S3
+    SupportMS --> Postgres
+
+    %% Event-Driven Communication
+    SimulationMS -.->|simulation.* events| RabbitMQ
+    SupportMS -.->|support.* events| RabbitMQ
+    UserManagementMS -.->|user.* events| RabbitMQ
+    AnalyticsMS -.->|analytics.* events| RabbitMQ
+
+    %% External API Connections
+    SimulationMS -.-> STTAPI
+    SimulationMS -.-> TTSAPI
+    SimulationMS -.-> LLMAPI
+    LTI-AdvantageMS -.-> LTI
