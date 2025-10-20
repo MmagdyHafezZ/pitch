@@ -12,46 +12,93 @@
   'noteBkgColor':'#fff9c4',
   'noteTextColor':'#f57f17'
 }}}%%
+    
 flowchart TB
-    %% Identity & Plans Microservice
-    subgraph IdentityPlans["Identity & Plans Microservice"]
-        
-        subgraph API["API Gateways"]
-            
-        end
-        
-        subgraph CTRL["Controllers"]
-            
-        end
-        
-        subgraph SVC["Services"]
-            
-        end
-        
-        subgraph REPO["Repositories"]
-            
-        end
-        
-        subgraph Table["Tables"]
-            
-        end
+  subgraph Analytics["Analytics Microservice"]
+    direction TB
+
+    subgraph API["API Gateways"]
+      G1[Managers API]
+      G2[Users API]
+      G3[Ingest/Webhooks API]
     end
-    
-    %% External Event Bus
-    RabbitMQ[RabbitMQ Event Bus]
-    
-    %% Shared Cache Cluster
-    Redis[(Shared Redis Cluster)]
-    
-    %% Other Microservices
-    
-    
-    %% Internal Flows
-    
-    %% Redis Usage (namespaced keys per service)
-    
-    
-    %% Event Publishing
-    
-    %% Event Consumption
-    
+
+    subgraph CTRL["Controllers"]
+      C1[ManagerMetricsController]
+      C2[LeaderboardController]
+      C3[TokenController]
+      C4[UserMetricsController]
+      C5[IngestController]
+    end
+
+    subgraph SVC["Services"]
+      S1[Aggregation Service\nsessions, usage, scores]
+      S2[Leaderboard Service]
+      S3[Token Monitor Service\nmodel key expiry/usage]
+      S4[Sessionization Service]
+      S5[Usage Service\ntokens, costs]
+    end
+
+    subgraph REPO["Repositories"]
+      R1[Metrics Repository]
+      R2[Leaderboard Repository]
+      R3[Token Repository]
+      R4[Session Repository]
+      R5[Directory Repository\norg/team/user mirror]
+    end
+
+    subgraph TBL["Tables"]
+      T1[dim_org]
+      T2[dim_team]
+      T3[dim_user]
+      T4[fact_session]
+      T5[fact_ai_usage]
+      T6[fact_scores]
+      T7[agg_daily_scope]
+      T8[agg_leaderboard]
+      T9[model_keys]
+    end
+  end
+
+  %% Shared Infra (declare each on its own line)
+  MQ[[RabbitMQ Event Bus]]
+  REDIS[(Shared Redis Cluster)]
+
+  %% Flows
+  G1-->C1
+  G1-->C2
+  G1-->C3
+  G2-->C4
+  G3-->C5
+
+  C1-->S1
+  C2-->S2
+  C3-->S3
+  C4-->S1
+  C5-->S4
+  C5-->S5
+
+  S1-->R1
+  S2-->R2
+  S3-->R3
+  S4-->R4
+  S5-->R1
+
+  R1-->T7
+  R2-->T8
+  R3-->T9
+  R4-->T4
+  R5-->T1
+  R5-->T2
+  R5-->T3
+  S5-->T5
+  S1-->T6
+
+  %% Caching & Events
+  S1---REDIS
+  S2---REDIS
+  S3---REDIS
+
+  MQ-->S4
+  MQ-->S5
+  S1-->MQ
