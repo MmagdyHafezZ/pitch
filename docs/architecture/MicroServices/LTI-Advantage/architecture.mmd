@@ -13,45 +13,53 @@
   'noteTextColor':'#f57f17'
 }}}%%
 flowchart TB
-    %% Identity & Plans Microservice
-    subgraph IdentityPlans["Identity & Plans Microservice"]
+    %% LTI Advantage Microservice
+    subgraph LTIAdvantage["LTI Advantage Microservice"]
         
-        subgraph API["API Gateways"]
-            
+        %% API Gateways
+        subgraph API["API Gateway"]
+            LTIGateway["LTI Gateway"]
         end
         
+        %% Controllers
         subgraph CTRL["Controllers"]
-            
+            OidcController["OidcController"]
+            LaunchController["LaunchController"]
+            GradeController["GradeController"]
+            DeepLinkController["DeepLinkController"]
         end
         
+        %% Services
         subgraph SVC["Services"]
-            
+            TokenValidationService["TokenValidationService"]
+            LaunchService["LaunchService"]
+            GradeService["GradeService"]
+            NrpsService["NrpsService"]
+            DeepLinkService["DeepLinkService"]
         end
         
-        subgraph REPO["Repositories"]
-            
-        end
-        
-        subgraph Table["Tables"]
-            
-        end
     end
     
-    %% External Event Bus
-    RabbitMQ[RabbitMQ Event Bus]
-    
-    %% Shared Cache Cluster
-    Redis[(Shared Redis Cluster)]
-    
-    %% Other Microservices
-    
+    %% External Connections
+    LMS["Learning Management System (LTI Platform)"]
+    OIDCProvider["OIDC Provider"]
+    Redis["Redis Cache"]
     
     %% Internal Flows
+    LTIGateway --> OidcController
+    LTIGateway --> LaunchController
+    LTIGateway --> GradeController
+    LTIGateway --> DeepLinkController
     
-    %% Redis Usage (namespaced keys per service)
+    OidcController --> TokenValidationService
+    LaunchController --> TokenValidationService
+    LaunchController --> LaunchService
+    GradeController --> GradeService
+    DeepLinkController --> DeepLinkService
     
-    
-    %% Event Publishing
-    
-    %% Event Consumption
-    
+    LaunchService --> NrpsService
+    LaunchService --> Redis
+    TokenValidationService --> OIDCProvider
+    GradeService --> LMS
+    NrpsService --> LMS
+    DeepLinkService --> LMS

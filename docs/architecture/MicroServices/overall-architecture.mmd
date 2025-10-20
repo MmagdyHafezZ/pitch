@@ -67,48 +67,56 @@ flowchart TB
 
         %% LTI-Advantage Microservice
         subgraph LTI-AdvantageMS["LTI-Advantage Microservice"]
-            %% Identity & Plans Microservice
-            subgraph IdentityPlans["Identity & Plans Microservice"]
+            %% LTI Advantage Microservice
+            subgraph LTIAdvantage["LTI Advantage Microservice"]
 
-                subgraph LTI-AdvantageAPI["API Gateways"]
-
+                %% API Gateways
+                subgraph LTI-AdvantageAPI["API Gateway"]
+                    LTIGateway["LTI Gateway"]
                 end
 
+                %% Controllers
                 subgraph LTI-AdvantageCTRL["Controllers"]
-
+                    OidcController["OidcController"]
+                    LaunchController["LaunchController"]
+                    GradeController["GradeController"]
+                    DeepLinkController["DeepLinkController"]
                 end
 
+                %% Services
                 subgraph LTI-AdvantageSVC["Services"]
-
+                    TokenValidationService["TokenValidationService"]
+                    LaunchService["LaunchService"]
+                    GradeService["GradeService"]
+                    NrpsService["NrpsService"]
+                    DeepLinkService["DeepLinkService"]
                 end
 
-                subgraph LTI-AdvantageREPO["Repositories"]
-
-                end
-
-                subgraph LTI-AdvantageTable["Tables"]
-
-                end
             end
 
-            %% External Event Bus
-            LTI-AdvantageRabbitMQ[RabbitMQ Event Bus]
-
-            %% Shared Cache Cluster
-            LTI-AdvantageRedis[(Shared Redis Cluster)]
-
-            %% Other Microservices
-
+            %% External Connections
+            LMS["Learning Management System (LTI Platform)"]
+            OIDCProvider["OIDC Provider"]
+            LTI-AdvantageRedis["Redis Cache"]
 
             %% Internal Flows
+            LTIGateway --> OidcController
+            LTIGateway --> LaunchController
+            LTIGateway --> GradeController
+            LTIGateway --> DeepLinkController
 
-            %% Redis Usage (namespaced keys per service)
+            OidcController --> TokenValidationService
+            LaunchController --> TokenValidationService
+            LaunchController --> LaunchService
+            GradeController --> GradeService
+            DeepLinkController --> DeepLinkService
 
-
-            %% Event Publishing
-
-            %% Event Consumption
-
+            LaunchService --> NrpsService
+            LaunchService --> Redis
+            TokenValidationService --> OIDCProvider
+            GradeService --> LMS
+            NrpsService --> LMS
+            DeepLinkService --> LMS
 
         end
 
