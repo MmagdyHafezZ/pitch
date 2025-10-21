@@ -105,7 +105,6 @@ sequenceDiagram
 
     Note over GW,DB: RabbitMQ handles async events like email delivery confirmations or chatbot analytics updates
 
----
 
 ## 🔄 Data Flow Summary
 
