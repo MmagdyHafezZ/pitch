@@ -33,6 +33,15 @@ The Support Microservice follows a **layered microservice architecture**, adheri
 - **Tables** – Underlying database schema representations.
 - **Shared Infrastructure** – Redis cache, RabbitMQ event bus, centralized logging.
 
+
+### Sequence Diagrams:
+- AI CHAT
+- Email Notifications
+- FAQ Management
+- Ticket Creation
+- Release Notes
+
+
 ---
 ## 🔄 Data Flow Summary
 

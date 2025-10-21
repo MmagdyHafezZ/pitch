@@ -1,0 +1,28 @@
+# FAQ Management Flow
+
+This sequence diagram illustrates how users and admins interact with the Support Microservice to view and manage FAQs.
+
+```mermaid
+sequenceDiagram
+    participant C as Client (Web UI)
+    participant API as API Gateway
+    participant SVC as Support Microservice
+    participant DB as PostgreSQL
+    participant AUTH as User Management Service
+
+    C->>API: GET /support/faq?category=general
+    API->>SVC: Forward Request (Authenticated)
+    SVC->>DB: Query FAQ by category
+    DB-->>SVC: Return FAQ List
+    SVC-->>API: Return FAQ JSON
+    API-->>C: Render FAQ List
+
+    Note over C,DB: Admin Use Case (CRUD)
+    C->>API: POST /support/faq (New FAQ)
+    API->>AUTH: Verify Role (Admin)
+    AUTH-->>API: OK
+    API->>SVC: Create FAQ
+    SVC->>DB: Insert New FAQ Entry
+    DB-->>SVC: Success
+    SVC-->>API: Response 201 Created
+    API-->>C: Display “FAQ Added Successfully”

@@ -1,0 +1,32 @@
+
+---
+
+## 🎫 3️⃣ sequence-diagram_Ticket_Creation.md
+
+```markdown
+# Manual Support Ticket Creation Flow
+
+This diagram covers how a user manually submits a support ticket and how the microservice manages its lifecycle.
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant C as Web Client
+    participant API as API Gateway
+    participant SVC as Support Microservice
+    participant AUTH as User Management
+    participant DB as PostgreSQL
+    participant EMAIL as Email Service
+
+    U->>C: Submit Support Form (Subject + Message)
+    C->>API: POST /support/tickets
+    API->>AUTH: Validate User JWT
+    AUTH-->>API: User Validated
+    API->>SVC: Forward Ticket Request
+    SVC->>DB: Insert SupportTicket (status=OPEN)
+    DB-->>SVC: Ticket Created
+    SVC->>EMAIL: Notify Support Team (New Ticket)
+    EMAIL-->>SVC: Email Sent (status=SENT)
+    SVC->>DB: Update EmailLog
+    SVC-->>API: Response 201 (Ticket Created)
+    API-->>C: Confirmation to User

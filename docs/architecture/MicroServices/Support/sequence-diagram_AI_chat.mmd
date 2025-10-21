@@ -1,0 +1,40 @@
+
+---
+
+## 💬 2️⃣ sequence-diagram_AI_Chat_Support.md
+
+```markdown
+# AI Chat Support Flow
+
+This diagram shows how the AI Chatbot interacts with users, logs chat messages, and escalates unresolved issues.
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant C as Client (Web App)
+    participant API as API Gateway
+    participant SVC as Support Microservice
+    participant AI as ChatBot Engine
+    participant DB as PostgreSQL
+    participant TICKET as Ticket Service (Internal)
+
+    U->>C: Open Chat Window
+    C->>API: POST /support/chat/start
+    API->>SVC: Create Chat Session
+    SVC->>DB: Insert Chat Record
+    DB-->>SVC: Chat ID Returned
+    SVC-->>API: Response (Chat Session Started)
+    API-->>C: Chat Window Ready
+
+    U->>C: “I can’t access simulation”
+    C->>API: POST /support/chat/message
+    API->>SVC: Forward Message
+    SVC->>AI: Send Message to NLP Engine
+    AI-->>SVC: AI Response + Confidence Score
+    SVC->>DB: Save ChatMessage (user + assistant)
+    alt Confidence < 0.5
+        SVC->>TICKET: Create Support Ticket (Escalation)
+        TICKET-->>SVC: Ticket ID Returned
+    end
+    SVC-->>API: Return Chat Response
+    API-->>C: Display AI or Escalation Message
