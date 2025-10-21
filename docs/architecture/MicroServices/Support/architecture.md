@@ -104,42 +104,4 @@ sequenceDiagram
     GW-->>U: Return Final Response (JSON / 200 OK)
 
     Note over GW,DB: RabbitMQ handles async events like email delivery confirmations or chatbot analytics updates
-
-
-## 🔄 Data Flow Summary
-
-User interacts through the Support UI → routed via API Gateway.
-
-Controllers handle input validation and mapping.
-
-Services apply business logic (AI query, DB fetch, or email trigger).
-
-Repositories read/write to the appropriate database tables.
-
-Redis caches popular FAQs and tutorials.
-
-RabbitMQ handles async tasks like notifications and logging.
-
-Email Request Service integrates with SMTP / Mail APIs to schedule meetings.
-
-## 🧠 Scalability & Reliability
-
-Horizontally scalable service pods.
-
-Shared caching (Redis) for low-latency reads.
-
-Async message bus for high availability (RabbitMQ).
-
-Centralized monitoring and logging.
-
-Graceful fallbacks when AI endpoints fail.
-
-## 🧰 Future Enhancements
-
-Integration with Slack / MS Teams for instant meeting scheduling.
-
-Personalized FAQ recommendations using ML.
-
-Multi-language support for global teams.
-
-API usage analytics dashboards.
+---
