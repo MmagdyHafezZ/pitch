@@ -42,7 +42,12 @@ The Support Microservice follows a **layered microservice architecture**, adheri
 - Release Notes
 
 
-Full Structure:
+## Support Microservice — End-to-End Sequence Flow
+
+This sequence diagram illustrates the full interaction flow within the **Support Microservice (Masroor)**, showing how a user request traverses through the architecture layers — from the API Gateway down to the repository layer and shared infrastructure.
+
+It also demonstrates asynchronous communication with the **AI Engine**, **Notification Queue**, and shared services like **Redis**, **RabbitMQ**, and **Centralized Logging**.
+
 ```mermaid
 sequenceDiagram
     autonumber
@@ -100,7 +105,7 @@ sequenceDiagram
     GW-->>U: Return Final Response (JSON / 200 OK)
 
     Note over GW,DB: RabbitMQ handles async events like email delivery confirmations or chatbot analytics updates
-    ```
+
 
 ---
 ## 🔄 Data Flow Summary
