@@ -104,4 +104,5 @@ sequenceDiagram
     GW-->>U: Return Final Response (JSON / 200 OK)
 
     Note over GW,DB: RabbitMQ handles async events like email delivery confirmations or chatbot analytics updates
+    
 ---
