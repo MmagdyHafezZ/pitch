@@ -1,14 +1,3 @@
-
----
-
-## 💬 2️⃣ sequence-diagram_AI_Chat_Support.md
-
-```markdown
-# AI Chat Support Flow
-
-This diagram shows how the AI Chatbot interacts with users, logs chat messages, and escalates unresolved issues.
-
-```mermaid
 sequenceDiagram
     participant U as User
     participant C as Client (Web App)
@@ -26,7 +15,7 @@ sequenceDiagram
     SVC-->>API: Response (Chat Session Started)
     API-->>C: Chat Window Ready
 
-    U->>C: “I can’t access simulation”
+    U->>C: "I can’t access simulation"
     C->>API: POST /support/chat/message
     API->>SVC: Forward Message
     SVC->>AI: Send Message to NLP Engine

@@ -1,30 +1,21 @@
-
----
-
-## 📧 4️⃣ sequence-diagram_Email_Notification.md
-
-```markdown
-# Email Notification & Meeting Request Flow
-
-This sequence diagram shows how admins can send meeting invites or notifications to users.
-
-```mermaid
 sequenceDiagram
-    participant ADMIN as Admin
-    participant C as Dashboard Client
+    participant U as User
+    participant C as Web Client
     participant API as API Gateway
     participant SVC as Support Microservice
-    participant EMAIL as Email Service (SES/SMTP)
+    participant AUTH as User Management
     participant DB as PostgreSQL
-    participant USER as User
+    participant EMAIL as Email Service
 
-    ADMIN->>C: Send Meeting Request (User, Subject, Link)
-    C->>API: POST /support/email/send
-    API->>SVC: Forward Request
-    SVC->>EMAIL: Send Email via SES
-    EMAIL-->>SVC: Response (SENT)
-    SVC->>DB: Insert EmailLog(status=SENT)
-    DB-->>SVC: OK
-    SVC-->>API: Response 200 OK
-    API-->>C: Display “Email Sent”
-    EMAIL-->>USER: User Receives Meeting Invite
+    U->>C: Submit Support Form (Subject + Message)
+    C->>API: POST /support/tickets
+    API->>AUTH: Validate User JWT
+    AUTH-->>API: User Validated
+    API->>SVC: Forward Ticket Request
+    SVC->>DB: Insert SupportTicket (status=OPEN)
+    DB-->>SVC: Ticket Created
+    SVC->>EMAIL: Notify Support Team (New Ticket)
+    EMAIL-->>SVC: Email Sent (status=SENT)
+    SVC->>DB: Update EmailLog
+    SVC-->>API: Response 201 (Ticket Created)
+    API-->>C: Confirmation to User
