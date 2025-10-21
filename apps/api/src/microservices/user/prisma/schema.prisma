@@ -8,28 +8,49 @@ datasource db {
   url      = env("USER_DATABASE_URL")
 }
 
+enum Role {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  CANCELED
+}
+
+enum BillingInterval {
+  MONTH
+  YEAR
+}
+
 enum AuthProvider {
   GOOGLE
-  GITHUB
-  LINKEDIN
   MICROSOFT
-  DISCORD
+  IBM
+}
+
+enum PlanLevel {
+  FREE
+  PRO
+  TEAM
+  ENTERPRISE
 }
 
 model User {
   id        String   @id @default(cuid())
   email     String   @unique
   name      String
-  avatar    String?
-  isActive  Boolean  @default(true)
+  avatar    String?                 // URL to avatar image
+  isActive  Boolean  @default(true) // Is the account active, i.e. allowed to operate
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  lastSeen DateTime?
 
-  // Refresh tokens
+  // Relations
   refreshTokens RefreshToken[]
-
-  // OAuth accounts
   oauthAccounts OAuthAccount[]
+  memberships    TeamMembership[]
 
   @@map("users")
 }
@@ -65,4 +86,100 @@ model RefreshToken {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("refresh_tokens")
+}
+
+model Team {
+  id              String        @id @default(cuid())
+  name            String
+  slug            String        @unique // URL-safe unique handle for a team
+  isActive        Boolean       @default(true)
+  availableTokens Int           @default(0) // total tokens available to team in current period
+  usedTokens      Int           @default(0) // total tokens used by team in current period
+  billingEmail    String?
+  billingAddress  Json?
+  metadata        Json?       // User preferences etc.
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  deletedAt       DateTime?
+
+  // Relations
+  memberships     TeamMembership[]
+  tokenHistories  TokenHistory[]
+  subscriptions   Subscription[]
+
+  @@map("teams")
+}
+
+model TokenHistory {
+  id              String       @id @default(cuid())
+  availableTokens Int          @default(0) // available tokens in a certain period
+  usedTokens      Int          @default(0) // used tokens in a certain period
+  teamId          String
+  date            DateTime    @default(now())
+
+  // Relations
+  team Team @relation(fields: [teamId], references: [id])
+}
+
+model TeamMembership {
+  // One Owner per team should be enforced in application logic
+  id              String   @id @default(cuid())
+  userId          String
+  teamId          String
+  role            Role  @default(MEMBER)
+  tokenLimit      Int    @default(0) // allowed # of tokens used per user in team
+  isActive        Boolean  @default(true)
+  invitedAt       DateTime @default(now()) // when the user was invited
+  acceptedAt      DateTime? // When user accepted invite
+  invitedbyUserId String?
+
+  user            User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  team            Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, teamId])
+  @@index([teamId])
+  @@index([userId, role])
+  @@map("memberships")
+}
+
+model Plan {
+  // plans are constant
+  id           String          @id @default(cuid())
+  name         String
+  description  String?
+  planLevel    PlanLevel       @default(FREE)
+  interval     BillingInterval @default(MONTH)
+  maxTokens    Int             @default(0) // the number of allowed tokens in the plan
+  limits       Json?           // usage limits
+  isActive     Boolean         @default(true) // can anyone subscribe to this plan
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  // Relations
+  subscriptions Subscription[]
+
+  @@map("plans")
+}
+
+model Subscription {
+  // changes based on team owner
+  id                    String             @id @default(cuid())
+  teamId                String
+  planId                String
+  status                SubscriptionStatus @default(ACTIVE) // the status of the subscription
+  currentPeriodStart    DateTime
+  currentPeriodEnd      DateTime
+  cancelAtPeriodEnd     Boolean            @default(false)
+  metadata              Json?
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+  canceledAt            DateTime?           // when the subscription was canceled
+
+  // Relations
+  team                  Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  plan                  Plan @relation(fields: [planId], references: [id])
+
+  @@index([teamId, status])
+  @@index([planId])
+  @@map("subscriptions")
 }
