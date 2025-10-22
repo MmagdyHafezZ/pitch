@@ -1,0 +1,47 @@
+sequenceDiagram
+    autonumber
+    actor C as Client
+    participant TG as Team Gateway
+    participant TC as Team Controller
+    participant TS as Team Service
+    participant TMR as TeamMembership Repo
+    participant UR as User Repo
+    participant DB as Database
+
+    C->>TG: GET /teams/{teamId}/members?page=1&pageSize=25&role=&active=
+    TG->>TC: forward
+    TC->>TS: listMembers(teamId, requestedBy, filters, paging)
+
+    %% AuthZ: requester must belong to team
+    TS->>TMR: getMembership(requestedBy, teamId)
+    TMR->>DB: SELECT team_memberships WHERE userId=? AND teamId=?
+    DB-->>TMR: membership?
+    TMR-->>TS: membership?
+    alt not a member
+        TS-->>TC: 403 forbidden
+        TC-->>TG: 403
+        TG-->>C: 403
+    else authorized
+        %% Total count for pagination
+        TS->>TMR: count(teamId, filters)
+        TMR->>DB: SELECT COUNT(*) FROM team_memberships WHERE teamId=? [AND role=?] [AND isActive=?]
+        DB-->>TMR: total
+        TMR-->>TS: total
+
+        %% Page of memberships
+        TS->>TMR: findPage(teamId, filters, orderBy:"role, userId", page, pageSize)
+        TMR->>DB: SELECT * FROM team_memberships WHERE teamId=? [AND role=?] [AND isActive=?] ORDER BY role,userId LIMIT ? OFFSET ?
+        DB-->>TMR: memberships[]
+        TMR-->>TS: memberships[]
+
+        %% Hydrate user profiles
+        TS->>UR: getUsersByIds(memberships.userId[])
+        UR->>DB: SELECT id,email,name,avatar,isActive FROM users WHERE id IN (...)
+        DB-->>UR: users[]
+        UR-->>TS: users[]
+
+        %% Merge and return
+        TS-->>TC: 200 {items:[{user, role, isActive, acceptedAt}], total, page, pageSize}
+        TC-->>TG: 200
+        TG-->>C: members page
+    end

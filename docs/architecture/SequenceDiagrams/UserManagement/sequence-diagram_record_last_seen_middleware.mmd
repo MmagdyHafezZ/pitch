@@ -1,0 +1,37 @@
+sequenceDiagram
+    autonumber
+    participant C as Client
+    participant AG as API Gateway
+    participant AM as Auth Middleware
+    participant US as User Service
+    participant UR as User Repo
+    participant DS as Downstream Service
+    participant DB as Database
+
+    C->>AG: Any authenticated request (e.g., GET /teams/{teamId}/members)
+    AG->>AM: verify JWT, extract userId
+    alt JWT invalid
+        AM-->>AG: 401 Unauthorized
+        AG-->>C: 401
+    else valid
+        %% Throttle updates to reduce writes
+        AM->>US: maybeUpdateLastSeen(userId, now)
+        US->>UR: getLastSeen(userId)
+        UR->>DB: SELECT lastSeen FROM users WHERE id=?
+        DB-->>UR: lastSeen
+        UR-->>US: lastSeen
+
+        alt stale or null (e.g., >5 min)
+            US->>UR: updateLastSeen(userId, now)
+            UR->>DB: UPDATE users SET lastSeen=? WHERE id=?
+            DB-->>UR: ok
+            UR-->>US: ok
+        else fresh
+            US-->>AM: skip update
+        end
+
+        %% Continue to target service
+        AM-->>DS: forward request with user context
+        DS-->>AG: response
+        AG-->>C: 200 OK
+    end

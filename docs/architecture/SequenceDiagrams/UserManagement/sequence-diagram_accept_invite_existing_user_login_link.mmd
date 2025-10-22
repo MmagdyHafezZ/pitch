@@ -1,0 +1,88 @@
+sequenceDiagram
+    autonumber
+    actor Invitee as Invitee Client
+    participant AG as Auth Gateway
+    participant AC as Auth Controller
+    participant AS as Auth Service
+    participant ITR as InviteToken Repo
+    participant UR as User Repo
+    participant TMR as TeamMembership Repo
+    participant RTR as RefreshToken Repo
+    participant DB as Database
+
+    %% 0) Open invite (existing user path)
+    Invitee->>AG: GET /invites/{token}
+    AG->>AS: validateInvite(token)
+    AS->>ITR: findByToken(token)
+    ITR->>DB: SELECT invite_tokens WHERE token=?
+    DB-->>ITR: invite{teamId,email,role,status,expiresAt,userId?}
+    ITR-->>AS: invite
+    AS-->>AG: 200 {teamId,email,role,status}
+    AG-->>Invitee: show "Login to accept"
+
+    %% 1) Authenticate existing user
+    Invitee->>AG: POST /auth/login {email,password}
+    AG->>AC: forward
+    AC->>AS: validateCredentials(email,password)
+    AS->>UR: getUserByEmail(email)
+    UR->>DB: SELECT users WHERE email=?
+    DB-->>UR: user{id,email,isActive}
+    UR-->>AS: user
+    AS-->>AC: ok (accessJWT)
+    AC->>RTR: createRefreshToken(userId)
+    RTR->>DB: INSERT refresh_tokens(...)
+    DB-->>RTR: ok
+    RTR-->>AC: refreshToken
+    AC-->>Invitee: {accessJWT, refreshToken}
+
+    %% 2) Accept invite as existing user
+    Invitee->>AG: POST /invites/{token}/accept
+    AG->>AS: acceptInviteExistingUser(token, authUserId)
+
+    %% Guards
+    AS->>ITR: get(token)
+    ITR->>DB: SELECT invite_tokens
+    DB-->>ITR: invite
+    ITR-->>AS: invite
+    alt invalid | expired | not PENDING
+        AS-->>AG: 400/410/409 error
+    else valid
+        AS->>UR: getUserById(authUserId)
+        UR->>DB: SELECT users WHERE id=?
+        DB-->>UR: user
+        UR-->>AS: user
+
+        %% Email must match invite or invite has bound userId
+        alt invite.userId set AND invite.userId != authUserId
+            AS-->>AG: 403 invite for another user
+        else email mismatch (invite.email != user.email)
+            AS-->>AG: 403 email mismatch
+        else ok
+            %% Already a member?
+            AS->>TMR: find(authUserId, invite.teamId)
+            TMR->>DB: SELECT team_memberships WHERE userId=? AND teamId=?
+            DB-->>TMR: membership?
+            TMR-->>AS: membership?
+
+            alt membership exists
+                %% Idempotent accept: just mark token accepted if pending
+                AS->>ITR: update(invite.id,{status:"ACCEPTED", userId:authUserId, acceptedAt:now()})
+                ITR->>DB: UPDATE invite_tokens ...
+                DB-->>ITR: ok
+                ITR-->>AS: ok
+                AS-->>AG: 200 {status:"already_member"}
+            else create membership
+                AS->>TMR: create({userId:authUserId, teamId:invite.teamId, role:invite.role, isActive:true, invitedAt, acceptedAt:now()})
+                TMR->>DB: INSERT team_memberships(...)
+                DB-->>TMR: membership{id}
+                TMR-->>AS: membership
+
+                AS->>ITR: update(invite.id,{status:"ACCEPTED", userId:authUserId, acceptedAt:now()})
+                ITR->>DB: UPDATE invite_tokens ...
+                DB-->>ITR: ok
+                ITR-->>AS: ok
+
+                AS-->>AG: 200 {status:"joined", teamId:invite.teamId, role:invite.role}
+            end
+        end
+    end

@@ -1,0 +1,45 @@
+sequenceDiagram
+    autonumber
+    actor Admin as Admin Client
+    participant TG as Team Gateway
+    participant TC as Team Controller
+    participant TS as Team Service
+    participant TR as Team Repo
+    participant TMR as TeamMembership Repo
+    participant UR as User Repo
+    participant DB as Database
+
+    Admin->>TG: POST /teams {name, slug}
+    TG->>TC: forward request
+    TC->>TS: createTeam(name, slug, createdBy)
+
+    TS->>UR: getUserById(createdBy)
+    UR->>DB: SELECT users WHERE id=?
+    DB-->>UR: user
+    UR-->>TS: user
+
+    TS->>TS: authorizeAppAdmin(user)  %% only deploy-admins can create teams
+    alt not authorized
+        TS-->>TC: 403 forbidden
+        TC-->>TG: 403
+        TG-->>Admin: 403 not authorized
+    else authorized
+        TS->>TR: ensureSlugUnique(slug)
+        TR->>DB: SELECT teams WHERE slug=?
+        DB-->>TR: none
+        TR-->>TS: ok
+
+        TS->>TR: insertTeam({name, slug, isActive:true})
+        TR->>DB: INSERT INTO teams(...)
+        DB-->>TR: team{id}
+        TR-->>TS: team{id}
+
+        TS->>TMR: insertTeamMembership({userId:createdBy, teamId:team.id, role:OWNER, isActive:true, invitedAt:now(), acceptedAt:now()})
+        TMR->>DB: INSERT INTO team_memberships(...)
+        DB-->>TMR: membership{id}
+        TMR-->>TS: membership
+
+        TS-->>TC: 201 {teamId:team.id, ownerUserId:createdBy}
+        TC-->>TG: 201
+        TG-->>Admin: 201 Created
+    end
