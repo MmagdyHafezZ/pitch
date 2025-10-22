@@ -26,7 +26,7 @@ services:
     image: redis:7-alpine
     container_name: pitch-redis-local
     ports:
-      - "6379:6379"
+      - "6380:6380"
     volumes:
       - redis_data_local:/data
     networks:
@@ -40,7 +40,7 @@ services:
 
   # RabbitMQ Message Broker
   rabbitmq:
-    image: rabbitmq:3.13-management-alpine
+    image: rabbitmq:3.13-alpine
     container_name: pitch-rabbitmq-local
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-admin}
@@ -49,10 +49,9 @@ services:
     ports:
       - "5672:5672" # AMQP port
       - "15672:15672" # Management UI port
+      - "15692:15692" # Prometheus metrics port
     volumes:
       - rabbitmq_data_local:/var/lib/rabbitmq
-      - ./docker/rabbitmq/definitions.json:/etc/rabbitmq/definitions.json:ro
-      - ./docker/rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
       - ./docker/rabbitmq/enabled_plugins:/etc/rabbitmq/enabled_plugins:ro
     networks:
       - pitch-network
@@ -75,7 +74,7 @@ services:
   #     DATABASE_URL: postgresql://${POSTGRES_USER:-pitch_user}:${POSTGRES_PASSWORD:-pitch_admin}@postgres-auth:5432/pitch_auth
   #     USER_DATABASE_URL: postgresql://${POSTGRES_USER:-pitch_user}:${POSTGRES_PASSWORD:-pitch_admin}@postgres-user:5432/pitch_user
   #     BUSINESS_DATABASE_URL: postgresql://${POSTGRES_USER:-pitch_user}:${POSTGRES_PASSWORD:-pitch_admin}@postgres-business:5432/pitch_business
-  #     REDIS_URL: redis://redis:6379
+  #     REDIS_URL: redis://redis:6380
   #     RABBITMQ_URL: amqp://${RABBITMQ_USER:-pitch_admin}:${RABBITMQ_PASSWORD:-pitch_admin}@rabbitmq:5672/${RABBITMQ_VHOST:-pitch_local}
   #     JWT_SECRET: ${JWT_SECRET:-local-dev-secret-key-change-me}
   #     JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-local-dev-refresh-secret-key-change-me}

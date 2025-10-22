@@ -62,7 +62,7 @@ services:
     image: redis:7-alpine
     container_name: pitch-redis-staging
     ports:
-      - "6379:6379"
+      - "6380:6380"
     volumes:
       - redis_data_staging:/data
     networks:
@@ -92,7 +92,7 @@ services:
       NODE_ENV: staging
       DATABASE_URL: postgresql://${POSTGRES_USER:-admin}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-pitch_staging}
       MONGODB_URI: mongodb://${MONGO_USER:-admin}:${MONGO_PASSWORD}@mongodb:27017/${MONGO_DB:-pitch_staging}
-      REDIS_URL: redis://redis:6379
+      REDIS_URL: redis://redis:6380
       JWT_SECRET: ${JWT_SECRET}
       PORT: 3001
       LOG_LEVEL: ${LOG_LEVEL:-info}
