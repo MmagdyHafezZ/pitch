@@ -53,9 +53,9 @@ export default function AuthCallbackPage() {
           icon: <IconCheck size={16} />,
         })
 
-        // Redirect to dashboard after a brief delay
+        // Redirect to home after a brief delay
         setTimeout(() => {
-          router.push('/dashboard')
+          router.push('/home')
         }, 2000)
       } catch (error) {
         console.error('Auth callback error:', error)
@@ -104,7 +104,7 @@ export default function AuthCallbackPage() {
                 Authentication Successful!
               </Text>
               <Text size="sm" c="dimmed" ta="center">
-                You are being redirected to your dashboard...
+                You are being redirected to your home...
               </Text>
             </>
           )}

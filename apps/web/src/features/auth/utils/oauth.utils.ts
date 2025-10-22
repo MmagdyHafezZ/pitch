@@ -83,7 +83,7 @@ export function redirectToOAuthProvider(baseUrl: string, provider: string): void
 /**
  * Handles OAuth callback success
  */
-export function handleOAuthSuccess(tokens: OAuthTokens, redirectUrl: string = '/dashboard'): void {
+export function handleOAuthSuccess(tokens: OAuthTokens, redirectUrl: string = '/home'): void {
   storeOAuthTokens(tokens)
 
   // Use Next.js router if available, otherwise fallback to window.location

@@ -1,5 +1,7 @@
 import type { Metadata } from 'next'
-import { Providers, ColorSchemeScript } from '@/lib/providers'
+import '@mantine/core/styles.css'
+import { ColorSchemeScript, mantineHtmlProps } from '@mantine/core'
+import { Providers } from '@/lib/providers'
 
 export const metadata: Metadata = {
   title: 'PITCH - Your Business Platform',
@@ -12,7 +14,7 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" {...mantineHtmlProps}>
       <head>
         <ColorSchemeScript />
       </head>

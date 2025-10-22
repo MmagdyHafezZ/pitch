@@ -186,7 +186,7 @@ export function LoginForm({ onSwitchToRegister }: LoginFormProps) {
           Welcome back
         </Title>
         <Text c="gray.6" size="sm">
-          Sign in to access your assessment dashboard
+          Sign in to access your assessment home
         </Text>
       </Box>
 
