@@ -10,7 +10,7 @@
 //     super({
 //       clientID: process.env.GITHUB_CLIENT_ID,
 //       clientSecret: process.env.GITHUB_CLIENT_SECRET,
-//       callbackURL: process.env.GITHUB_CALLBACK_URL || 'http://localhost:8001/api/v1/auth/oauth/github/callback',
+//       callbackURL: process.env.GITHUB_CALLBACK_URL || 'http://localhost:8000/api/v1/auth/oauth/github/callback',
 //       scope: ['user:email'],
 //     });
 //   }

@@ -29,8 +29,14 @@ async function bootstrap() {
 
   // CORS
   app.enableCors({
-    origin: true, // or provide an array/domain pattern
+    origin: [
+      'http://localhost:3000',
+      'http://localhost:3001',
+      process.env.FRONTEND_URL || 'http://localhost:3000',
+    ],
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
   });
 
   // API prefix & versioning
@@ -94,8 +100,8 @@ async function bootstrap() {
 
   // Graceful shutdown (SIGTERM/SIGINT)
   app.enableShutdownHooks();
-  const port = parseInt(process.env.PORT ?? '8001', 10);
-  await app.listen(port);
+  const port = parseInt(process.env.PORT ?? '8000', 10);
+  await app.listen(port, '0.0.0.0');
 
   const baseUrl = await app.getUrl();
   logger.log(`🚀 Server running at ${baseUrl}`);

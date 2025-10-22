@@ -10,7 +10,7 @@
 //     super({
 //       clientID: process.env.DISCORD_CLIENT_ID,
 //       clientSecret: process.env.DISCORD_CLIENT_SECRET,
-//       callbackURL: process.env.DISCORD_CALLBACK_URL || 'http://localhost:8001/api/v1/auth/oauth/discord/callback',
+//       callbackURL: process.env.DISCORD_CALLBACK_URL || 'http://localhost:8000/api/v1/auth/oauth/discord/callback',
 //       scope: ['identify', 'email'],
 //     });
 //   }

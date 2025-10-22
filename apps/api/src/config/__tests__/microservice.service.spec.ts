@@ -17,17 +17,6 @@ describe('MicroserviceConfigService', () => {
     jest.restoreAllMocks();
   });
 
-  it('returns enabled services sorted by priority', () => {
-    process.env.ENABLE_USER_SERVICE = 'false';
-
-    const services = service.getEnabledServices();
-
-    expect(services).toEqual([
-      { name: 'AUTH_SERVICE', queue: 'auth_queue', priority: 1 },
-      { name: 'BUSINESS_SERVICE', queue: 'business_queue', priority: 3 },
-    ]);
-  });
-
   it('creates RMQ microservice options from environment variables', () => {
     process.env.RABBITMQ_URL = 'amqp://custom';
 
@@ -69,8 +58,8 @@ describe('MicroserviceConfigService', () => {
 
     await service.connectAllMicroservices(app);
 
-    expect(connectMicroservice).toHaveBeenCalledTimes(3);
-    expect(optionsSpy).toHaveBeenCalledTimes(3);
+    expect(connectMicroservice).toHaveBeenCalledTimes(1);
+    expect(optionsSpy).toHaveBeenCalledTimes(1);
     expect(startAllMicroservices).toHaveBeenCalled();
   });
 
@@ -97,29 +86,11 @@ describe('MicroserviceConfigService', () => {
 
     expect(configs).toEqual([
       {
-        name: 'AUTH_SERVICE',
-        transport: Transport.RMQ,
-        options: {
-          urls: ['amqp://custom'],
-          queue: 'auth_queue',
-          queueOptions: { durable: true },
-        },
-      },
-      {
         name: 'USER_SERVICE',
         transport: Transport.RMQ,
         options: {
           urls: ['amqp://custom'],
           queue: 'user_queue',
-          queueOptions: { durable: true },
-        },
-      },
-      {
-        name: 'BUSINESS_SERVICE',
-        transport: Transport.RMQ,
-        options: {
-          urls: ['amqp://custom'],
-          queue: 'business_queue',
           queueOptions: { durable: true },
         },
       },

@@ -10,7 +10,7 @@
 //     super({
 //       clientID: process.env.LINKEDIN_CLIENT_ID,
 //       clientSecret: process.env.LINKEDIN_CLIENT_SECRET,
-//       callbackURL: process.env.LINKEDIN_CALLBACK_URL || 'http://localhost:8001/api/v1/auth/oauth/linkedin/callback',
+//       callbackURL: process.env.LINKEDIN_CALLBACK_URL || 'http://localhost:8000/api/v1/auth/oauth/linkedin/callback',
 //       scope: ['r_emailaddress', 'r_liteprofile'],
 //     });
 //   }

@@ -82,7 +82,7 @@ async function bootstrap() {
   await app.startAllMicroservices();
   logger.log('🚀 All microservices started');
   app.enableShutdownHooks();
-  const port = parseInt(process.env.PORT ?? '8001', 10);
+  const port = parseInt(process.env.PORT ?? '8000', 10);
   await app.listen(port);
   const baseUrl = await app.getUrl();
   logger.log(`🚀 Server running at ${baseUrl}`);

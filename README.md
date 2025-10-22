@@ -74,8 +74,8 @@ This is a Turborepo monorepo containing:
 ### Access Points
 
 - **Frontend:** [http://localhost:3000](http://localhost:3000)
-- **API Gateway:** [http://localhost:8001](http://localhost:8001)
-- **API docs:** [http://localhost:8001/docs](http://localhost:8001/docs)
+- **API Gateway:** [http://localhost:8000](http://localhost:8000)
+- **API docs:** [http://localhost:8000/docs](http://localhost:8000/docs)
 
 ## Tech Stack
 
@@ -116,13 +116,13 @@ Each app requires its own environment configuration:
 
 ```bash
 # Frontend (.env.local in apps/web)
-NEXT_PUBLIC_API_URL=http://localhost:8001
+NEXT_PUBLIC_API_URL=http://localhost:8000
 NEXTAUTH_SECRET=your-secret-here
 NEXTAUTH_URL=http://localhost:3000
 
 # Backend (.env in apps/api)
 NODE_ENV=development
-PORT=8001
+PORT=8000
 DATABASE_URL="postgresql://username:password@localhost:5432/pitch_dev"
 MONGODB_URL="mongodb://localhost:27017/pitch_business"
 REDIS_URL="redis://localhost:6379"

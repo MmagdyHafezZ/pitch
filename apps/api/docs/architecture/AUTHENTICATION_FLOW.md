@@ -263,17 +263,17 @@ export class GatewayModule {}
 
 ```bash
 # 1. Register a user
-curl -X POST http://localhost:8001/api/v1/auth/register \
+curl -X POST http://localhost:8000/api/v1/auth/register \
   -H "Content-Type: application/json" \
   -d '{"email":"test@example.com","password":"password123","name":"Test User"}'
 
 # 2. Login and get token
-curl -X POST http://localhost:8001/api/v1/auth/login \
+curl -X POST http://localhost:8000/api/v1/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email":"test@example.com","password":"password123"}'
 
 # 3. Use token for protected requests
-curl -X GET http://localhost:8001/api/v1/users \
+curl -X GET http://localhost:8000/api/v1/users \
   -H "Authorization: Bearer YOUR_TOKEN_HERE"
 ```
 

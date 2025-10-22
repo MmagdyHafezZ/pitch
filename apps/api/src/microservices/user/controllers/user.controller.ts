@@ -1,10 +1,7 @@
 import { Controller, ValidationPipe, UsePipes, Logger } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
 import { UserService } from '../services/user.service';
-import {
-  USER_SERVICE_PATTERNS,
-  AUTH_SERVICE_PATTERNS,
-} from '../../../common/interfaces/message-patterns.interface';
+import { USER_SERVICE_PATTERNS } from '../../../common/interfaces/message-patterns.interface';
 import { OAuthProviderFactory } from '../factories/oauth-provider.factory';
 import * as userInterface from '../../../common/interfaces/user.interface';
 import * as userClaimsInterface from '../../../common/interfaces/user-claims.interface';
@@ -97,7 +94,7 @@ export class UserController {
     }
   }
 
-  @MessagePattern(AUTH_SERVICE_PATTERNS.OAUTH_GET_PROVIDERS)
+  @MessagePattern(USER_SERVICE_PATTERNS.OAUTH_GET_PROVIDERS)
   async getOAuthProviders() {
     try {
       this.logger.log('Getting OAuth providers');
@@ -108,7 +105,7 @@ export class UserController {
     }
   }
 
-  @MessagePattern(AUTH_SERVICE_PATTERNS.CHECK_EMAIL)
+  @MessagePattern(USER_SERVICE_PATTERNS.CHECK_EMAIL)
   async checkEmail(@Payload() data: { email: string }) {
     try {
       this.logger.log(`Checking email: ${data.email}`);

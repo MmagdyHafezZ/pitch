@@ -35,7 +35,7 @@ pnpm dev
 pnpm dev
 ```
 
-The API Gateway will be available at `http://localhost:8001`.
+The API Gateway will be available at `http://localhost:8000`.
 
 ### Project Structure
 
@@ -128,7 +128,7 @@ JWT_REFRESH_EXPIRATION="7d"
 
 # Application
 NODE_ENV=development
-PORT=8001
+PORT=8000
 ```
 
 ### Running Migrations
@@ -372,7 +372,7 @@ Production environment requires:
 
 ```env
 NODE_ENV=production
-PORT=8001
+PORT=8000
 DATABASE_URL="postgresql://prod-user:prod-pass@prod-host:5432/pitch_prod"
 JWT_SECRET="production-secret-key-64-characters-minimum"
 RABBITMQ_URL="amqp://prod-user:prod-pass@rabbitmq-host:5672"
@@ -446,7 +446,7 @@ async healthCheck(): Promise<HealthCheckResult> {
 docker logs rabbitmq-container
 
 # Check service registration
-curl http://localhost:8001/health
+curl http://localhost:8000/health
 ```
 
 **Database Connection Issues:**
@@ -466,5 +466,5 @@ npx prisma migrate status
 echo $JWT_SECRET
 
 # Test token validation
-curl -H "Authorization: Bearer <token>" http://localhost:8001/api/v1/users
+curl -H "Authorization: Bearer <token>" http://localhost:8000/api/v1/users
 ```

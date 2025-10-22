@@ -126,7 +126,7 @@ export function LoginForm({ onSwitchToRegister }: LoginFormProps) {
       } else if (result.requiresOAuth && result.provider) {
         // User exists, redirect to their provider
         setDetectedProvider(result.provider)
-        const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001/api/v1'
+        const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1'
 
         notifications.show({
           title: 'Redirecting...',
@@ -152,7 +152,7 @@ export function LoginForm({ onSwitchToRegister }: LoginFormProps) {
     try {
       console.log('Initiating OAuth with provider:', provider.name)
 
-      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001/api/v1'
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1'
 
       notifications.show({
         title: 'Redirecting...',

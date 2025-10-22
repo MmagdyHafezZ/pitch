@@ -12,7 +12,7 @@
 //       clientSecret: process.env.MICROSOFT_CLIENT_SECRET,
 //       callbackURL:
 //         process.env.MICROSOFT_CALLBACK_URL ||
-//         'http://localhost:8001/api/v1/auth/oauth/microsoft/callback',
+//         'http://localhost:8000/api/v1/auth/oauth/microsoft/callback',
 //       scope: ['user.read'],
 //     });
 //   }

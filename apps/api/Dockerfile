@@ -61,7 +61,7 @@ COPY --from=builder --chown=nestjs:nodejs /app/package.json ./
 
 USER nestjs
 
-EXPOSE 8001
+EXPOSE 8000
 
 WORKDIR /app/apps/api
 

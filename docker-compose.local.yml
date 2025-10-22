@@ -79,9 +79,9 @@ services:
   #     RABBITMQ_URL: amqp://${RABBITMQ_USER:-pitch_admin}:${RABBITMQ_PASSWORD:-pitch_admin}@rabbitmq:5672/${RABBITMQ_VHOST:-pitch_local}
   #     JWT_SECRET: ${JWT_SECRET:-local-dev-secret-key-change-me}
   #     JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-local-dev-refresh-secret-key-change-me}
-  #     PORT: 8001
+  #     PORT: 8000
   #   ports:
-  #     - "8001:8001"
+  #     - "8000:8000"
   #   depends_on:
   #     postgres-auth:
   #       condition: service_healthy
@@ -110,7 +110,7 @@ services:
   #   container_name: pitch-web-local
   #   environment:
   #     NODE_ENV: development
-  #     NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8001}
+  #     NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
   #     NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3000}
   #     NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-local-dev-secret-key-change-me}
   #     NEXT_TELEMETRY_DISABLED: 1

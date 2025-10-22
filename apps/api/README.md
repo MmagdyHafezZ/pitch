@@ -73,8 +73,8 @@ The API follows a microservices architecture with an API Gateway pattern:
    ```
 
 5. **Open the application:**
-   - API Gateway: [http://localhost:8001](http://localhost:8001)
-   - API docs: [http://localhost:8001/docs](http://localhost:8001/docs)
+   - API Gateway: [http://localhost:8000](http://localhost:8000)
+   - API docs: [http://localhost:8000/docs](http://localhost:8000/docs)
 
 ## Project Structure
 
@@ -192,7 +192,7 @@ Create `.env` file in the API directory:
 ```env
 # Application
 NODE_ENV=development
-PORT=8001
+PORT=8000
 
 # Database URLs
 DATABASE_URL="postgresql://username:password@localhost:5432/pitch_dev"
@@ -275,7 +275,7 @@ docker-compose -f docker-compose.prod.yml up -d
 
 ```env
 NODE_ENV=production
-PORT=8001
+PORT=8000
 DATABASE_URL="postgresql://prod-user:prod-pass@prod-host:5432/pitch_prod"
 JWT_SECRET="production-secret-key-64-characters-minimum"
 RABBITMQ_URL="amqp://prod-user:prod-pass@rabbitmq-host:5672"
@@ -287,11 +287,11 @@ RABBITMQ_URL="amqp://prod-user:prod-pass@rabbitmq-host:5672"
 
 ```bash
 # Check API health
-curl http://localhost:8001/health
+curl http://localhost:8000/health
 
 # Check individual services
-curl http://localhost:8001/health/database
-curl http://localhost:8001/health/rabbitmq
+curl http://localhost:8000/health/database
+curl http://localhost:8000/health/rabbitmq
 ```
 
 ### Logging

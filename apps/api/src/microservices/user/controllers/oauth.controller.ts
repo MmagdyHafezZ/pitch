@@ -38,36 +38,6 @@ export class OAuthController {
     private oauthProviderFactory: OAuthProviderFactory,
   ) {}
 
-  @Get('providers')
-  @Public()
-  @ApiOperation({
-    summary: 'Get available OAuth providers',
-    description: 'Returns list of configured OAuth providers for the frontend',
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'Available OAuth providers',
-    example: [
-      {
-        name: 'google',
-        displayName: 'Google',
-        icon: '🔍',
-        color: '#4285f4',
-        authUrl: '/auth/oauth/google',
-      },
-      {
-        name: 'github',
-        displayName: 'GitHub',
-        icon: '🐙',
-        color: '#333333',
-        authUrl: '/auth/oauth/github',
-      },
-    ],
-  })
-  getProviders() {
-    return this.oauthProviderFactory.getEnabledProviders();
-  }
-
   // Google OAuth
   @Get('google')
   @Public()

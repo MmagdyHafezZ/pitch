@@ -96,7 +96,7 @@ export function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
     try {
       console.log('Initiating OAuth signup with provider:', provider.name)
 
-      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001/api/v1'
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1'
 
       notifications.show({
         title: 'Redirecting...',

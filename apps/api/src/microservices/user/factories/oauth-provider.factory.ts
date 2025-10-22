@@ -88,6 +88,7 @@ export class OAuthProviderFactory {
   }
 
   getEnabledProviders(): ProviderConfig[] {
+    console.log('Fetching enabled OAuth providers');
     return Array.from(this.providers.values()).filter((p) => p.enabled);
   }
 
