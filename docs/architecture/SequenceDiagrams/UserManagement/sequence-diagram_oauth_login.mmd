@@ -1,0 +1,64 @@
+sequenceDiagram
+    autonumber
+    actor U as User
+    participant AG as Auth Gateway
+    participant AC as Auth Controller
+    participant AS as Auth Service
+    participant OP as OAuth Provider (Google/MS/IBM)
+    participant OAR as OAuthAccount Repo
+    participant UR as User Repo
+    participant RTR as RefreshToken Repo
+    participant DB as Database
+
+    %% Start OAuth
+    U->>AG: GET /auth/oauth/{provider}/start
+    AG-->>U: 302 redirect to OP
+
+    %% Provider auth
+    U->>OP: login + consent
+    OP-->>AG: redirect with code
+
+    %% Exchange code for profile
+    AG->>AC: /auth/oauth/callback?code=...
+    AC->>AS: exchangeCode(provider, code)
+    AS->>OP: token + userinfo
+    OP-->>AS: {providerId,email,name,avatar}
+
+    %% Link or resolve account
+    AS->>OAR: upsert({provider,providerId},{email,name,avatar})
+    OAR->>DB: SELECT/INSERT/UPDATE oauth_accounts
+    DB-->>OAR: oauthAccount{userId?}
+    OAR-->>AS: oauthAccount
+
+    alt oauthAccount.userId exists
+        AS->>UR: getUserById(oauthAccount.userId)
+        UR->>DB: SELECT users WHERE id=?
+        DB-->>UR: user{isActive}
+        UR-->>AS: user
+    else first-time link
+        AS->>UR: findByEmail(email)
+        UR->>DB: SELECT users WHERE email=?
+        DB-->>UR: user?
+        UR-->>AS: user?
+        alt user exists (invited previously)
+            AS->>OAR: attach userId to oauthAccount
+            OAR->>DB: UPDATE oauth_accounts SET userId=?
+            DB-->>OAR: ok
+            OAR-->>AS: ok
+        else no user (invite-only)
+            AS-->>AC: 403 invite_only_no_account
+            AC-->>AG: 403
+            AG-->>U: 403 Use invite link to create account
+        end
+    end
+
+    %% Issue tokens (only on success paths)
+    opt success
+        AS-->>AC: issue accessJWT{userId}
+        AC->>RTR: insert refresh_token{userId,expiresAt}
+        RTR->>DB: INSERT refresh_tokens(...)
+        DB-->>RTR: ok
+        RTR-->>AC: refreshToken
+        AC-->>AG: 200 {accessJWT, refreshToken}
+        AG-->>U: tokens
+    end

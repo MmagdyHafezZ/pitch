@@ -1,0 +1,64 @@
+sequenceDiagram
+    autonumber
+    actor Admin as Admin Client
+    participant TG as Team Gateway
+    participant TC as Team Controller
+    participant TS as Team Service
+    participant TMR as TeamMembership Repo
+    participant ITR as InviteToken Repo
+    participant ES as Email Service
+    participant DB as Database
+
+    Admin->>TG: POST /teams/{teamId}/invites/{inviteId}/actions {action: RESEND|REVOKE}
+    TG->>TC: forward request
+    TC->>TS: handleInviteAction(teamId, inviteId, action, invitedBy)
+
+    %% AuthZ: Admin or Owner on Team
+    TS->>TMR: hasRole(invitedBy, teamId) ∈ {OWNER, ADMIN}?
+    TMR->>DB: SELECT team_memberships WHERE userId=? AND teamId=?
+    DB-->>TMR: membership or null
+    TMR-->>TS: allow/deny
+    alt not authorized
+        TS-->>TC: 403
+        TC-->>TG: 403
+        TG-->>Admin: 403 not authorized
+    else authorized
+        %% Load invite
+        TS->>ITR: get(inviteId, teamId)
+        ITR->>DB: SELECT invite_tokens WHERE id=? AND teamId=?
+        DB-->>ITR: invite or null
+        ITR-->>TS: invite?
+        alt invite not found
+            TS-->>TC: 404
+            TC-->>TG: 404
+            TG-->>Admin: 404 not found
+        else invite found
+            alt action == "RESEND"
+                alt invite.status == "PENDING"
+                    TS->>ES: sendInvite(invite.email, link(invite.token))
+                    ES-->>TS: accepted
+                    TS-->>TC: 200 {status:"resent", inviteId}
+                    TC-->>TG: 200
+                    TG-->>Admin: 200 resent
+                else not PENDING
+                    TS-->>TC: 409 {error:"cannot_resend_non_pending"}
+                    TC-->>TG: 409
+                    TG-->>Admin: 409 conflict
+                end
+            else action == "REVOKE"
+                alt invite.status == "PENDING"
+                    TS->>ITR: update(inviteId, {status:"REVOKED", revokedAt:now()})
+                    ITR->>DB: UPDATE invite_tokens SET status='REVOKED'
+                    DB-->>ITR: ok
+                    ITR-->>TS: ok
+                    TS-->>TC: 204 No Content
+                    TC-->>TG: 204
+                    TG-->>Admin: 204 revoked
+                else not PENDING
+                    TS-->>TC: 409 {error:"cannot_revoke_non_pending"}
+                    TC-->>TG: 409
+                    TG-->>Admin: 409 conflict
+                end
+            end
+        end
+    end

@@ -1,0 +1,65 @@
+sequenceDiagram
+    autonumber
+    actor Admin as Admin/Owner Client
+    participant UG as User Gateway
+    participant UC as User Controller
+    participant US as User Service
+    participant UR as User Repo
+    participant TMR as TeamMembership Repo
+    participant OAR as OAuthAccount Repo
+    participant RTR as RefreshToken Repo
+    participant EV as Event Bus
+    participant DB as Database
+
+    Admin->>UG: DELETE /users/{userId}
+    UG->>UC: forward
+    UC->>US: deleteUser(requestedBy, userId)
+
+    %% AuthZ: only deploy-admin or the same user (self-delete)
+    US->>UR: getUserById(requestedBy)
+    UR->>DB: SELECT * FROM users WHERE id=?
+    DB-->>UR: requester
+    UR-->>US: requester
+    alt not allowed
+        US-->>UC: 403 forbidden
+        UC-->>UG: 403
+        UG-->>Admin: 403
+    else allowed
+        %% 1) Revoke sessions
+        US->>RTR: revokeAll(userId)
+        RTR->>DB: UPDATE refresh_tokens SET revokedAt=now() WHERE userId=?
+        DB-->>RTR: ok
+        RTR-->>US: ok
+
+        %% 2) Remove OAuth links
+        US->>OAR: deleteByUser(userId)
+        OAR->>DB: DELETE FROM oauth_accounts WHERE userId=?
+        DB-->>OAR: ok
+        OAR-->>US: ok
+
+        %% 3) Detach from all teams
+        US->>TMR: listByUser(userId)
+        TMR->>DB: SELECT * FROM team_memberships WHERE userId=?
+        DB-->>TMR: memberships[]
+        TMR-->>US: memberships[]
+        loop for each membership
+            US->>TMR: deleteMembership(userId, teamId)
+            TMR->>DB: DELETE FROM team_memberships WHERE userId=? AND teamId=?
+            DB-->>TMR: ok
+            TMR-->>US: ok
+        end
+
+        %% 4) Delete user record (hard delete for GDPR)
+        US->>UR: deleteUser(userId)
+        UR->>DB: DELETE FROM users WHERE id=?
+        DB-->>UR: ok
+        UR-->>US: ok
+
+        %% 5) Emit audit/event
+        US->>EV: emit "user.deleted" {userId}
+        EV-->>US: queued
+
+        US-->>UC: 204 No Content
+        UC-->>UG: 204
+        UG-->>Admin: 204 deleted
+    end

@@ -1,0 +1,66 @@
+sequenceDiagram
+    autonumber
+    actor SC as Service Client
+    participant UG as Usage Gateway
+    participant UC as Usage Controller
+    participant US as Usage Service
+    participant TMR as TeamMembership Repo
+    participant TR as Team Repo
+    participant THR as TokenHistory Repo
+    participant EV as Event Bus
+    participant DB as Database
+
+    %% Team-scoped LLM request with token estimate
+    SC->>UG: POST /usage/check-and-record {teamId, userId, tokens}
+    UG->>UC: forward
+    UC->>US: checkAndRecord(teamId, userId, tokens)
+
+    %% AuthZ: user must belong to team
+    US->>TMR: getMembership(userId, teamId)
+    TMR->>DB: SELECT * FROM team_memberships WHERE userId=? AND teamId=? AND isActive=TRUE
+    DB-->>TMR: membership?
+    TMR-->>US: membership?
+    alt no membership
+        US-->>UC: 403 not a member
+        UC-->>UG: 403
+        UG-->>SC: 403
+    else member found
+        %% Per-user limit
+        US->>US: projectedUser = membership.used?+tokens (if tracked per user)
+        alt tokenLimit > 0 and projectedUser > tokenLimit
+            US-->>UC: 429 quota_exceeded_user
+            UC-->>UG: 429
+            UG-->>SC: 429 user limit
+        else within user limit
+            %% Team quota
+            US->>TR: getTeam(teamId)
+            TR->>DB: SELECT availableTokens, usedTokens FROM teams WHERE id=?
+            DB-->>TR: team{availableTokens,usedTokens}
+            TR-->>US: team
+
+            US->>US: projectedTeam = team.usedTokens + tokens
+            alt projectedTeam > team.availableTokens
+                US-->>UC: 429 quota_exceeded_team
+                UC-->>UG: 429
+                UG-->>SC: 429 team limit
+            else within team quota
+                %% Commit usage
+                US->>TR: updateUsedTokens(teamId, +tokens)
+                TR->>DB: UPDATE teams SET usedTokens = usedTokens + ? WHERE id=?
+                DB-->>TR: ok
+                TR-->>US: ok
+
+                US->>THR: upsertForCurrentPeriod(teamId, +tokens)
+                THR->>DB: INSERT/UPDATE token_history(...)
+                DB-->>THR: ok
+                THR-->>US: ok
+
+                US->>EV: emit "quota.updated" {teamId, delta:tokens}
+                EV-->>US: queued
+
+                US-->>UC: 200 {status:"ok"}
+                UC-->>UG: 200
+                UG-->>SC: 200 proceed
+            end
+        end
+    end

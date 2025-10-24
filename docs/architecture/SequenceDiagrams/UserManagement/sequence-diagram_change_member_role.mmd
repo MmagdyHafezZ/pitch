@@ -1,0 +1,61 @@
+sequenceDiagram
+    autonumber
+    actor Admin as Admin Client
+    participant TG as Team Gateway
+    participant TC as Team Controller
+    participant TS as Team Service
+    participant TMR as TeamMembership Repo
+    participant EV as Event Bus
+    participant DB as Database
+
+    Admin->>TG: PATCH /teams/{teamId}/members/{userId} {role: ADMIN|MEMBER}
+    TG->>TC: forward
+    TC->>TS: changeMemberRole(teamId, targetUserId, newRole, requestedBy)
+
+    %% AuthZ: only OWNER or ADMIN; only OWNER can demote another OWNER
+    TS->>TMR: getMembership(requestedBy, teamId)
+    TMR->>DB: SELECT team_memberships WHERE userId=? AND teamId=?
+    DB-->>TMR: reqMemb?
+    TMR-->>TS: reqMemb?
+
+    alt requester not OWNER/ADMIN
+        TS-->>TC: 403 forbidden
+        TC-->>TG: 403
+        TG-->>Admin: 403 not authorized
+    else ok
+        TS->>TMR: getMembership(targetUserId, teamId)
+        TMR->>DB: SELECT team_memberships WHERE userId=? AND teamId=?
+        DB-->>TMR: tgtMemb?
+        TMR-->>TS: tgtMemb?
+
+        alt target not found
+            TS-->>TC: 404 member not found
+            TC-->>TG: 404
+            TG-->>Admin: 404
+        else found
+            %% Guard: only OWNER may change OWNER role
+            alt tgtMemb.role == OWNER and reqMemb.role != OWNER
+                TS-->>TC: 403 cannot change OWNER
+                TC-->>TG: 403
+                TG-->>Admin: 403
+            else idempotency check
+                alt tgtMemb.role == newRole
+                    TS-->>TC: 200 {status:"no_change"}
+                    TC-->>TG: 200
+                    TG-->>Admin: 200 no change
+                else apply update
+                    TS->>TMR: updateRole(targetUserId, teamId, newRole)
+                    TMR->>DB: UPDATE team_memberships SET role=? WHERE userId=? AND teamId=?
+                    DB-->>TMR: ok
+                    TMR-->>TS: updated
+
+                    TS->>EV: emit "team.role_changed" {teamId,targetUserId,oldRole:tgtMemb.role,newRole}
+                    EV-->>TS: queued
+
+                    TS-->>TC: 200 {userId:targetUserId,newRole}
+                    TC-->>TG: 200
+                    TG-->>Admin: 200 updated
+                end
+            end
+        end
+    end

@@ -1,0 +1,74 @@
+sequenceDiagram
+    autonumber
+    actor Admin as Admin Client
+    participant TG as Team Gateway
+    participant TC as Team Controller
+    participant TS as Team Service
+    participant UR as User Repo
+    participant TMR as TeamMembership Repo
+    participant ITR as InviteToken Repo
+    participant ES as Email Service
+    participant DB as Database
+
+    Admin->>TG: POST /teams/{teamId}/invites {email, role}
+    TG->>TC: forward
+    TC->>TS: inviteExistingUserToTeam(teamId,email,role,invitedBy)
+
+    %% AuthZ: Owner/Admin on target team
+    TS->>TMR: hasRole(invitedBy, teamId) ∈ {OWNER, ADMIN}?
+    TMR->>DB: SELECT team_memberships WHERE userId=? AND teamId=?
+    DB-->>TMR: membership?
+    TMR-->>TS: allow/deny
+    alt not authorized
+        TS-->>TC: 403
+        TC-->>TG: 403
+        TG-->>Admin: 403 not authorized
+    else authorized
+        %% Resolve user
+        TS->>UR: findByEmail(email)
+        UR->>DB: SELECT users WHERE email=?
+        DB-->>UR: user?
+        UR-->>TS: user?
+
+        alt user not found (invite-only system)
+            TS-->>TC: 404 user not found (must be invited first)
+            TC-->>TG: 404
+            TG-->>Admin: 404 unknown user
+        else user exists
+            %% Already in this team?
+            TS->>TMR: find(user.id, teamId)
+            TMR->>DB: SELECT team_memberships WHERE userId=? AND teamId=?
+            DB-->>TMR: membership?
+            TMR-->>TS: membership?
+
+            alt already member
+                TS-->>TC: 200 {status:"already_member"}
+                TC-->>TG: 200
+                TG-->>Admin: 200 already member
+            else not a member yet
+                %% Check pending invite idempotently
+                TS->>ITR: findPending(teamId, email)
+                ITR->>DB: SELECT invite_tokens WHERE teamId=? AND email=? AND status='PENDING'
+                DB-->>ITR: token?
+                ITR-->>TS: pendingToken?
+
+                alt pending exists
+                    TS->>ES: sendInvite(email, link(pendingToken))
+                    ES-->>TS: accepted
+                    TS-->>TC: 200 {inviteId: pendingToken.id, status:"resent"}
+                    TC-->>TG: 200
+                    TG-->>Admin: 200 resent
+                else create new invite
+                    TS->>ITR: create({teamId,email,role,userId:user.id,invitedBy,expiresAt})
+                    ITR->>DB: INSERT invite_tokens(...)
+                    DB-->>ITR: {id, token}
+                    ITR-->>TS: inviteToken
+                    TS->>ES: sendInvite(email, link(inviteToken))
+                    ES-->>TS: accepted
+                    TS-->>TC: 201 {inviteId: inviteToken.id, status:"sent"}
+                    TC-->>TG: 201
+                    TG-->>Admin: 201 sent
+                end
+            end
+        end
+    end

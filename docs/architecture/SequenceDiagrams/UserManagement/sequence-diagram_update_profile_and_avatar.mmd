@@ -1,0 +1,52 @@
+sequenceDiagram
+    autonumber
+    actor U as User
+    participant UG as User Gateway
+    participant UC as User Controller
+    participant US as User Service
+    participant UR as User Repo
+    participant ST as Object Storage (e.g., S3/GCS)
+    participant IM as Image Processor (thumb/validate)
+    participant DB as Database
+
+    %% A) Update profile fields
+    U->>UG: PATCH /users/me {name}
+    UG->>UC: forward
+    UC->>US: updateProfile(userId,{name})
+    US->>UR: update(userId,{name})
+    UR->>DB: UPDATE users SET name=? WHERE id=?
+    DB-->>UR: ok
+    UR-->>US: user{ id,email,name,avatar }
+    US-->>UC: 200 user
+    UC-->>UG: 200
+    UG-->>U: updated profile
+
+    %% B) Avatar upload via presigned URL
+    U->>UG: POST /users/me/avatar/initiate {contentType,imageSize}
+    UG->>UC: forward
+    UC->>US: initiateAvatarUpload(userId, contentType, size)
+    US->>IM: validate(contentType,size,max=5MB, types=[png,jpg,webp])
+    IM-->>US: ok
+    US->>ST: createUploadUrl(key="avatars/{userId}/{uuid}.png", contentType)
+    ST-->>US: {uploadUrl, publicUrl, key}
+    US-->>UC: 200 {uploadUrl, publicUrl}
+    UC-->>UG: 200
+    UG-->>U: uploadUrl
+
+    %% Client uploads directly to storage
+    U->>ST: PUT {file bytes} (to uploadUrl)
+    ST-->>U: 200
+
+    %% C) Confirm avatar and persist URL
+    U->>UG: POST /users/me/avatar/confirm {publicUrl}
+    UG->>UC: forward
+    UC->>US: confirmAvatar(userId, publicUrl)
+    US->>IM: probe(publicUrl)  %% optional: fetch-head/scan
+    IM-->>US: ok
+    US->>UR: update(userId,{avatar:publicUrl})
+    UR->>DB: UPDATE users SET avatar=? WHERE id=?
+    DB-->>UR: ok
+    UR-->>US: user{avatar}
+    US-->>UC: 200 {avatar:publicUrl}
+    UC-->>UG: 200
+    UG-->>U: avatar set
