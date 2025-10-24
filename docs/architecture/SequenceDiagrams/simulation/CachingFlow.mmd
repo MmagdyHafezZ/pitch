@@ -1,0 +1,16 @@
+sequenceDiagram
+    participant Orch as Orchestrator Service
+    participant Redis as Redis Cache
+    participant SessRepo as Session Repository
+    participant PG as Postgres
+
+    Orch->>Redis: GET session:{id}
+    alt Cache hit
+        Redis-->>Orch: session JSON
+    else Miss
+        Orch->>SessRepo: findById(id)
+        SessRepo->>PG: SELECT sessions
+        PG-->>SessRepo: row
+        SessRepo-->>Orch: session
+        Orch->>Redis: SETEX session:{id}
+    end

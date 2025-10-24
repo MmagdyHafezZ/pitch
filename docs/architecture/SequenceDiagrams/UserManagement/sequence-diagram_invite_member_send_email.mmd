@@ -1,0 +1,58 @@
+sequenceDiagram
+    autonumber
+    actor Admin as Admin Client
+    participant TG as Team Gateway
+    participant TC as Team Controller
+    participant TS as Team Service
+    participant TMR as TeamMembership Repo
+    participant UR as User Repo
+    participant ITR as InviteToken Repo
+    participant ES as Email Service
+    participant DB as Database
+
+    Admin->>TG: POST /teams/{teamId}/invites {email, role}
+    TG->>TC: forward request
+    TC->>TS: invite(teamId, email, role, invitedBy)
+
+    %% 1) Authorize: invitedBy must be OWNER or ADMIN on this Team
+    TS->>TMR: hasRole(invitedBy, teamId) ∈ {OWNER, ADMIN}?
+    TMR->>DB: SELECT team_memberships WHERE userId=? AND teamId=?
+    DB-->>TMR: membership or null
+    TMR-->>TS: allow/deny
+    alt not authorized
+        TS-->>TC: 403 Forbidden
+        TC-->>TG: 403
+        TG-->>Admin: 403 not authorized
+    else authorized
+        %% 2) Resolve target user by email (may not exist yet)
+        TS->>UR: findByEmail(email)
+        UR->>DB: SELECT users WHERE email=?
+        DB-->>UR: user | null
+        UR-->>TS: user?
+
+        %% 3) Idempotency: pending invite exists?
+        TS->>ITR: findPending(teamId, email)
+        ITR->>DB: SELECT invite_tokens WHERE teamId=? AND email=? AND status='PENDING'
+        DB-->>ITR: token?
+        ITR-->>TS: pendingToken?
+
+        alt pending exists
+            TS->>ES: sendInvite(email, link(pendingToken))
+            ES-->>TS: accepted
+            TS-->>TC: 200 {inviteId: pendingToken.id, status:"resent"}
+            TC-->>TG: 200
+            TG-->>Admin: 200 resent
+        else create new invite
+            TS->>ITR: create({teamId, email, role, userId:user?.id, invitedBy, expiresAt})
+            ITR->>DB: INSERT invite_tokens(...)
+            DB-->>ITR: {id, token}
+            ITR-->>TS: inviteToken
+
+            TS->>ES: sendInvite(email, link(inviteToken))
+            ES-->>TS: accepted
+
+            TS-->>TC: 201 {inviteId: inviteToken.id, status:"sent"}
+            TC-->>TG: 201
+            TG-->>Admin: 201 sent
+        end
+    end

@@ -1,0 +1,130 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "./generated"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("SUPPORT_DATABASE_URL")
+}
+
+//// ======================================
+//// ENUMS
+//// ======================================
+
+enum EmailStatus {
+  SENT
+  FAILED
+  QUEUED
+}
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  CLOSED
+}
+
+enum TicketPriority {
+  LOW
+  NORMAL
+  HIGH
+}
+
+enum ChatRole {
+  USER
+  ASSISTANT
+  SYSTEM
+}
+
+//// ======================================
+//// SUPPORT MICROSERVICE 
+//// ======================================
+
+model FAQ {
+  id          String   @id @default(cuid())
+  question    String
+  answer      String
+  category    String?
+  isPublished Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([category])
+  @@map("faq")
+}
+
+model Chat {
+  id           String         @id @default(uuid())
+  userId       String
+  startedAt    DateTime       @default(now())
+  lastActiveAt DateTime       @updatedAt
+  title        String?
+  isActive     Boolean        @default(true)
+  messages     ChatMessage[]
+  user         User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, startedAt])
+  @@map("chats")
+}
+
+model ChatMessage {
+  id        Int        @id @default(autoincrement())
+  chatId    String
+  role      ChatRole
+  content   String     @db.Text
+  timestamp DateTime   @default(now())
+  toolCalls Json?
+
+  chat Chat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+
+  @@index([chatId, timestamp])
+  @@map("chat_messages")
+}
+
+model EmailLog {
+  id          String       @id @default(cuid())
+  toEmail     String
+  subject     String
+  body        String
+  sentAt      DateTime     @default(now())
+  status      EmailStatus  @default(SENT)
+  teamMember  String?
+  meetingLink String?
+  createdAt   DateTime     @default(now())
+
+  @@index([toEmail])
+  @@map("email_logs")
+}
+
+model SupportTicket {
+  id          String          @id @default(cuid())
+  userId      String
+  subject     String
+  message     String
+  status      TicketStatus    @default(OPEN)
+  priority    TicketPriority  @default(NORMAL)
+  assignedTo  String?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([status, priority])
+  @@map("support_tickets")
+}
+
+//// ======================================
+//// SHARED USER REFERENCE (from User Management)
+//// ======================================
+
+model User {
+  id    String  @id
+  email String  @unique
+  name  String?
+
+  // Relations
+  chats           Chat[]
+  supportTickets  SupportTicket[]
+
+  @@map("users")
+}

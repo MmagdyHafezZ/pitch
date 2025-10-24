@@ -33,7 +33,14 @@ The Support Microservice follows a **layered microservice architecture**, adheri
 - **Tables** – Underlying database schema representations.
 - **Shared Infrastructure** – Redis cache, RabbitMQ event bus, centralized logging.
 
----
+
+### Sequence Diagrams:
+- AI CHAT
+- Email Notifications
+- FAQ Management
+- Ticket Creation
+- Release Notes
+
 ## 🔄 Data Flow Summary
 
 User interacts through the Support UI → routed via API Gateway.
@@ -62,12 +69,3 @@ Centralized monitoring and logging.
 
 Graceful fallbacks when AI endpoints fail.
 
-## 🧰 Future Enhancements
-
-Integration with Slack / MS Teams for instant meeting scheduling.
-
-Personalized FAQ recommendations using ML.
-
-Multi-language support for global teams.
-
-API usage analytics dashboards.

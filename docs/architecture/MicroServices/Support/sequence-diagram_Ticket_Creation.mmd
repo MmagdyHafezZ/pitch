@@ -1,0 +1,19 @@
+sequenceDiagram
+    participant ADMIN as Admin
+    participant C as Dashboard Client
+    participant API as API Gateway
+    participant SVC as Support Microservice
+    participant EMAIL as Email Service (SES/SMTP)
+    participant DB as PostgreSQL
+    participant USER as User
+
+    ADMIN->>C: Send Meeting Request (User, Subject, Link)
+    C->>API: POST /support/email/send
+    API->>SVC: Forward Request
+    SVC->>EMAIL: Send Email via SES
+    EMAIL-->>SVC: Response (SENT)
+    SVC->>DB: Insert EmailLog(status=SENT)
+    DB-->>SVC: OK
+    SVC-->>API: Response 200 OK
+    API-->>C: Display “Email Sent”
+    EMAIL-->>USER: User Receives Meeting Invite

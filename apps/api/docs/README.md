@@ -48,7 +48,7 @@ The PITCH API follows a microservices architecture with an API Gateway pattern:
 
 ## API Overview
 
-- **Base URL**: `http://localhost:8001` (development)
+- **Base URL**: `http://localhost:8000` (development)
 - **Authentication**: JWT-based with gateway validation
 - **Communication**: RabbitMQ message patterns between services
 - **Databases**: Multi-database approach with service isolation
@@ -109,12 +109,12 @@ async getUsers(@Payload() data: MessageWithUserClaims) {
 ```env
 # Application
 NODE_ENV=development
-PORT=8001
+PORT=8000
 
 # Databases
 DATABASE_URL="postgresql://username:password@localhost:5432/pitch_dev"
 MONGODB_URL="mongodb://localhost:27017/pitch_business"
-REDIS_URL="redis://localhost:6379"
+REDIS_URL="redis://localhost:6380"
 
 # Message Queue
 RABBITMQ_URL="amqp://admin:admin123@localhost:5672"

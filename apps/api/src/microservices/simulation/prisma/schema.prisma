@@ -1,0 +1,524 @@
+// prisma/schema.prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/* =================== Enums =================== */
+
+enum SessionMode {
+  text
+  voice
+  video
+}
+
+enum TurnRole {
+  user
+  system
+  assistant
+  tool
+}
+
+enum EventType {
+  simulation_started
+  turn_completed
+  simulation_completed
+  recording_available
+  stt_completed
+  media_ingested
+  analytics_updated
+}
+
+enum IngestPipeline {
+  transcribe
+  transcribe_enrich
+  full
+}
+
+enum IngestStatus {
+  queued
+  running
+  completed
+  failed
+}
+
+enum RecordingLayout {
+  grid
+  speaker
+  screen
+}
+
+enum ReportFormat {
+  pdf
+  json
+}
+
+/* =================== Orchestrator Core =================== */
+/* Users/Orgs are EXTERNAL. Store only opaque IDs + optional snapshots. */
+
+model Session {
+  id            String      @id @default(cuid())
+  userId        String
+  orgId         String
+
+  // immutable-at-create or slow-changing denormalized fields (optional)
+  userSnapshot  Json?
+  orgSnapshot   Json?
+
+  mode          SessionMode
+  scenarioId    String?
+  personaId     String?
+  language      String?
+  crmContextId  String?
+  status        String      @default("active") // active|ended
+  endedReason   String?
+
+  turns         Turn[]
+  events        Event[]
+  metrics       Metric[]
+  calls         CallSession[]
+  scorecards    Scorecard[]
+  drafts        DraftEmail[]
+  messages      Message[]
+
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  endedAt       DateTime?
+
+  @@index([orgId, userId])
+  @@index([status])
+  ReportRequest ReportRequest[]
+  EvalArtifact EvalArtifact[]
+  Transcript Transcript[]
+  MediaAsset MediaAsset[]
+  Persona Persona[]
+  Scenario Scenario[]
+  ToolCall ToolCall[]
+}
+
+model Turn {
+  id            String    @id @default(cuid())
+  sessionId     String
+  session       Session   @relation(fields: [sessionId], references: [id])
+  role          TurnRole
+  text          String?
+  audioAssetId  String?
+  attachments   Json?   // AssetRef[]
+  metadata      Json?
+  order         Int
+
+  messages      Message[]
+  toolCalls     ToolCall[]
+
+  createdAt     DateTime  @default(now())
+
+  @@index([sessionId, order])
+  @@index([role])
+  EvalArtifact EvalArtifact[]
+}
+
+model Message {
+  id        String   @id @default(cuid())
+  sessionId String
+  session   Session  @relation(fields: [sessionId], references: [id])
+  turnId    String?
+  turn      Turn?    @relation(fields: [turnId], references: [id])
+  role      TurnRole
+  content   String?
+  json      Json?    // token streams / segments
+  redaction Json?    // PII span annotations
+  language  String?
+
+  createdAt DateTime @default(now())
+
+  @@index([sessionId, turnId])
+  RedactionSpan RedactionSpan[]
+}
+
+model ToolCall {
+  id         String   @id @default(cuid())
+  sessionId  String
+  session    Session  @relation(fields: [sessionId], references: [id])
+  turnId     String?
+  turn       Turn?    @relation(fields: [turnId], references: [id])
+  name       String
+  input      Json
+  output     Json?
+  latencyMs  Int?
+  success    Boolean?
+
+  createdAt  DateTime @default(now())
+
+  @@index([sessionId, turnId, name])
+}
+
+model Event {
+  id         String    @id @default(cuid())
+  sessionId  String
+  session    Session   @relation(fields: [sessionId], references: [id])
+  type       EventType
+  payload    Json?
+  createdAt  DateTime  @default(now())
+
+  @@index([sessionId, type, createdAt])
+}
+
+model Metric {
+  id           String   @id @default(cuid())
+  sessionId    String
+  session      Session  @relation(fields: [sessionId], references: [id])
+  tokensInput  Int?
+  tokensOutput Int?
+  toolCount    Int?
+  latencyMs    Int?
+  model        String?
+
+  createdAt    DateTime @default(now())
+
+  @@index([sessionId, createdAt])
+}
+
+/* =================== Configuration (owned by this service) =================== */
+
+model Scenario {
+  id          String   @id @default(cuid())
+  orgId       String   // external
+  name        String
+  description String?
+  config      Json?
+  sessions    Session[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([orgId])
+}
+
+model Persona {
+  id        String   @id @default(cuid())
+  orgId     String   // external
+  name      String
+  traits    Json?
+  sessions  Session[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([orgId])
+}
+
+/* =================== Chat (text) =================== */
+
+model DraftEmail {
+  id         String   @id @default(cuid())
+  sessionId  String
+  session    Session  @relation(fields: [sessionId], references: [id])
+  audience   String
+  purpose    String
+  tone       String?
+  bullets    Json?    // string[]
+  body       String?
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([sessionId, createdAt])
+}
+
+/* =================== Voice/Video =================== */
+
+model CallSession {
+  id          String    @id @default(cuid())
+  sessionId   String
+  session     Session   @relation(fields: [sessionId], references: [id])
+  tracks      String[]  // ["audio","video"]
+  sdpOffer    String?
+  sdpAnswer   String?
+  status      String     @default("created") // created|active|ended
+
+  recordings  Recording[]
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model Recording {
+  id         String      @id @default(cuid())
+  callId     String
+  call       CallSession @relation(fields: [callId], references: [id])
+  layout     RecordingLayout?
+  tracks     String[]
+  assetId    String      // FK to MediaAsset.id
+  durationMs Int?
+
+  createdAt  DateTime    @default(now())
+
+  @@index([callId, createdAt])
+}
+
+model MediaAsset {
+  id           String   @id @default(cuid())
+  mimeType     String
+  sizeBytes    BigInt
+  storageKey   String   // s3/minio key
+  url          String?  // ephemeral if ever persisted
+  ownerSessionId String?
+  ownerSession   Session? @relation(fields: [ownerSessionId], references: [id])
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([storageKey])
+  Transcript Transcript[]
+  IngestionJob IngestionJob[]
+}
+
+/* =================== Media Ingestion (batch) =================== */
+
+model IngestionJob {
+  id           String        @id @default(cuid())
+  assetId      String
+  asset        MediaAsset    @relation(fields: [assetId], references: [id])
+  pipeline     IngestPipeline
+  status       IngestStatus  @default(queued)
+  error        String?
+  transcriptId String?       // FK to Transcript.id (below)
+  startedAt    DateTime?
+  completedAt  DateTime?
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([assetId, status])
+}
+
+/* =================== Transcripts & Enrichment (moved from Mongo → Postgres) =================== */
+
+model Transcript {
+  id          String      @id @default(cuid())
+  assetId     String
+  asset       MediaAsset  @relation(fields: [assetId], references: [id])
+  sessionId   String?
+  session     Session?    @relation(fields: [sessionId], references: [id])
+  language    String?
+  text        String?     // optional aggregate text
+  metadata    Json?
+
+  segments    TranscriptSegment[]
+  speakers    Speaker[]
+  enrichment  Enrichment?
+
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@index([assetId])
+  @@index([sessionId])
+}
+
+model TranscriptSegment {
+  id            String     @id @default(cuid())
+  transcriptId  String
+  transcript    Transcript @relation(fields: [transcriptId], references: [id])
+  speakerId     String?
+  speaker       Speaker?   @relation(fields: [speakerId], references: [id])
+  startMs       Int?
+  endMs         Int?
+  text          String
+  tokens        Json?      // optional token/time map
+  entities      Json?      // inline NER
+
+  createdAt     DateTime   @default(now())
+
+  @@index([transcriptId, startMs])
+}
+
+model Speaker {
+  id            String      @id @default(cuid())
+  transcriptId  String
+  transcript    Transcript  @relation(fields: [transcriptId], references: [id])
+  label         String?     // "Speaker 1"
+  diarization   Json?       // raw diarization payload
+
+  createdAt     DateTime    @default(now())
+
+  @@index([transcriptId])
+  TranscriptSegment TranscriptSegment[]
+}
+
+model Enrichment {
+  id            String      @id @default(cuid())
+  transcriptId  String      @unique
+  transcript    Transcript  @relation(fields: [transcriptId], references: [id])
+  summary       String?
+  topics        String[]
+  sentiment     Json?       // {overall, perSegment}
+  entities      Json?
+
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+}
+
+/* =================== Redactions & Evals (moved from Mongo → Postgres) =================== */
+
+model RedactionSpan {
+  id         String   @id @default(cuid())
+  messageId  String   // links to Message.id
+  message    Message  @relation(fields: [messageId], references: [id])
+  spans      Json     // [{start, end, label}]
+  createdAt  DateTime @default(now())
+
+  @@index([messageId])
+}
+
+model EvalArtifact {
+  id         String   @id @default(cuid())
+  sessionId  String
+  session    Session  @relation(fields: [sessionId], references: [id])
+  turnId     String?
+  turn       Turn?    @relation(fields: [turnId], references: [id])
+  kind       String   // "prompt_eval" | "ragas" | "deepeval" | ...
+  data       Json
+  score      Float?
+  createdAt  DateTime @default(now())
+
+  @@index([sessionId, kind])
+}
+
+/* =================== Optional: Numeric features for analytics =================== */
+
+model FeatureVector {
+  id        String   @id @default(cuid())
+  refType   String   // "TranscriptSegment" | "Message" | "Doc"
+  refId     String
+  features  Json     // numeric arrays in JSON
+  createdAt DateTime @default(now())
+
+  @@index([refType, refId])
+}
+
+/* =================== RAG: pgvector in Postgres =================== */
+/* Add the actual vector column & indexes via SQL migrations. */
+
+model EmbeddingRow {
+  id         String  @id @default(cuid())
+  // Placeholder; add real vector column via SQL migration
+  embedding  Unsupported("vector")
+  namespace  String   // "kb" | "transcript" | "previous_calls"
+  refType    String   // "TranscriptSegment" | "Doc" | "Message"
+  refId      String
+  metadata   Json?
+
+  createdAt  DateTime @default(now())
+
+  @@index([namespace])
+}
+
+/* =================== Feedback Engine =================== */
+
+model Rubric {
+  id        String     @id @default(cuid())
+  orgId     String
+  name      String
+  version   Int        @default(1)
+  criteria  Criterion[]
+
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  @@unique([orgId, name, version])
+  @@index([orgId])
+  Scorecard Scorecard[]
+}
+
+model Criterion {
+  id         String   @id @default(cuid())
+  rubricId   String
+  rubric     Rubric   @relation(fields: [rubricId], references: [id])
+  label      String
+  maxPoints  Int
+  weight     Float?
+  order      Int
+
+  createdAt  DateTime @default(now())
+
+  @@index([rubricId, order])
+  ScoreItem ScoreItem[]
+}
+
+model Scorecard {
+  id          String    @id @default(cuid())
+  sessionId   String
+  session     Session   @relation(fields: [sessionId], references: [id])
+  rubricId    String?
+  rubric      Rubric?   @relation(fields: [rubricId], references: [id])
+  totalScore  Float?
+  maxScore    Float?
+  locale      String?
+
+  items       ScoreItem[]
+  coachTips   CoachTip[]
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([sessionId])
+}
+
+model ScoreItem {
+  id           String     @id @default(cuid())
+  scorecardId  String
+  scorecard    Scorecard  @relation(fields: [scorecardId], references: [id])
+  criterionId  String?
+  criterion    Criterion? @relation(fields: [criterionId], references: [id])
+  score        Float?
+  maxPoints    Int?
+  details      Json?
+
+  createdAt    DateTime   @default(now())
+
+  @@index([scorecardId])
+}
+
+model CoachTip {
+  id           String     @id @default(cuid())
+  scorecardId  String
+  scorecard    Scorecard  @relation(fields: [scorecardId], references: [id])
+  text         String
+  link         String?
+  excerptRef   String?    // points to Message/Segment/Doc id
+  createdAt    DateTime   @default(now())
+
+  @@index([scorecardId])
+}
+
+model Benchmark {
+  id        String   @id @default(cuid())
+  orgId     String
+  name      String
+  metric    String
+  value     Float
+  window    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([orgId, name])
+}
+
+/* =================== Reports =================== */
+
+model ReportRequest {
+  id         String       @id @default(cuid())
+  sessionId  String
+  session    Session      @relation(fields: [sessionId], references: [id])
+  format     ReportFormat
+  status     String       @default("queued") // queued|ready|failed
+  assetId    String?      // MediaAsset holding produced PDF/JSON
+  error      String?
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([sessionId, format, status])
+}

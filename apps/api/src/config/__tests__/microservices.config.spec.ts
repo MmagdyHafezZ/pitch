@@ -20,8 +20,6 @@ describe('microservices.config', () => {
   it('exposes default microservice definitions', () => {
     expect(MICROSERVICES_CONFIG).toEqual([
       { name: 'USER_SERVICE', queue: 'user_queue' },
-      { name: 'BUSINESS_SERVICE', queue: 'business_queue' },
-      { name: 'AUTH_SERVICE', queue: 'auth_queue' },
     ]);
   });
 
@@ -44,7 +42,9 @@ describe('microservices.config', () => {
 
   it('falls back to default RabbitMQ URL when environment variable missing', () => {
     delete process.env.RABBITMQ_URL;
-    expect(getRabbitMQUrl()).toBe('amqp://localhost:5672');
+    expect(getRabbitMQUrl()).toBe(
+      'amqp://admin:admin123@localhost:5672/pitch_local',
+    );
   });
 
   it('returns queue options with durable queue', () => {

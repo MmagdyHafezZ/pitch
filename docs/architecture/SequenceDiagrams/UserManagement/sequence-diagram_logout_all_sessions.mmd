@@ -1,0 +1,32 @@
+sequenceDiagram
+    autonumber
+    actor U as User
+    participant AG as Auth Gateway
+    participant AC as Auth Controller
+    participant AS as Auth Service
+    participant RTR as RefreshToken Repo
+    participant DB as Database
+
+    U->>AG: POST /auth/logout/all
+    AG->>AC: forward request
+    AC->>AS: logoutAllSessions(userId)
+
+    %% 1) Validate user session via current JWT
+    AS->>RTR: findByUser(userId)
+    RTR->>DB: SELECT refresh_tokens WHERE userId=? AND revokedAt IS NULL
+    DB-->>RTR: list of active tokens
+    RTR-->>AS: tokens[]
+
+    alt tokens found
+        AS->>RTR: revokeAll(userId)
+        RTR->>DB: UPDATE refresh_tokens SET revokedAt=now() WHERE userId=?
+        DB-->>RTR: ok
+        RTR-->>AS: done
+        AS-->>AC: 204 No Content
+        AC-->>AG: 204
+        AG-->>U: 204 All sessions revoked
+    else none found
+        AS-->>AC: 200 already logged out
+        AC-->>AG: 200
+        AG-->>U: 200 already logged out
+    end

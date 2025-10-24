@@ -1,0 +1,32 @@
+sequenceDiagram
+    actor User
+    participant Client as Client (Web/Edge)
+    participant CallGW as Call Gateway
+    participant CallCtrl as Call Controller
+    participant WebRTC as WebRTC Service
+    participant STT as STT Service
+    participant STTAPI as Whisper/Azure STT API
+    participant LLM as LLM Service
+    participant TTS as TTS Service
+    participant TTSAPI as ElevenLabs/Azure TTS API
+
+    User->>Client: Start call
+    Client->>CallGW: POST /calls
+    CallGW->>CallCtrl: createCall()
+    CallCtrl->>WebRTC: negotiate SDP/ICE
+    WebRTC-->>Client: answer media established
+
+    loop streaming audio frames
+        Client-->>WebRTC: RTP audio
+        WebRTC-->>STT: forward stream
+        STT->>STTAPI: transcribe(stream)
+        STTAPI-->>STT: partial/Final text
+        STT-->>CallCtrl: transcript events
+        CallCtrl->>LLM: generate(reply context)
+        LLM-->>CallCtrl: text reply
+        CallCtrl->>TTS: synthesize(reply)
+        TTS->>TTSAPI: TTS request
+        TTSAPI-->>TTS: PCM/Opus audio
+        TTS-->>WebRTC: audio track
+        WebRTC-->>Client: RTP synthesized speech
+    end

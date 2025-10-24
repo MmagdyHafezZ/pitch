@@ -4,6 +4,13 @@ export const USER_SERVICE_PATTERNS = {
   UPDATE_USER: 'update_user',
   DELETE_USER: 'delete_user',
   GET_USERS: 'get_users',
+  REGISTER: 'auth.register',
+  LOGIN: 'auth.login',
+  LOGOUT: 'auth.logout',
+  REFRESH: 'auth.refresh',
+  VALIDATE_USER: 'auth.validateUser',
+  OAUTH_GET_PROVIDERS: 'auth.oauth.getProviders',
+  CHECK_EMAIL: 'auth.checkEmail',
 } as const;
 
 export const BUSINESS_SERVICE_PATTERNS = {
@@ -15,18 +22,7 @@ export const BUSINESS_SERVICE_PATTERNS = {
   GET_BUSINESSES: 'get_businesses',
 } as const;
 
-export const AUTH_SERVICE_PATTERNS = {
-  REGISTER: 'auth.register',
-  LOGIN: 'auth.login',
-  LOGOUT: 'auth.logout',
-  REFRESH: 'auth.refresh',
-  GET_USER: 'auth.getUser',
-  VALIDATE_USER: 'auth.validateUser',
-} as const;
-
 export type UserServicePattern =
   (typeof USER_SERVICE_PATTERNS)[keyof typeof USER_SERVICE_PATTERNS];
 export type BusinessServicePattern =
   (typeof BUSINESS_SERVICE_PATTERNS)[keyof typeof BUSINESS_SERVICE_PATTERNS];
-export type AuthServicePattern =
-  (typeof AUTH_SERVICE_PATTERNS)[keyof typeof AUTH_SERVICE_PATTERNS];

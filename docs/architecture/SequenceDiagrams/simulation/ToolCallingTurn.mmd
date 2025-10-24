@@ -1,0 +1,21 @@
+sequenceDiagram
+    participant ChatCtrl as Chat Controller
+    participant LLM as LLM Service
+    participant Orch as Orchestrator Service
+    participant ToolRepo as ToolCall Repository
+    participant MsgRepo as Message Repository
+    participant PG as Postgres
+    participant MQ as RabbitMQ
+
+    ChatCtrl->>LLM: generate with tool schema
+    LLM-->>ChatCtrl: toolCall(name,args)
+    ChatCtrl->>Orch: executeTool(toolCall)
+    Orch->>ToolRepo: save(request PENDING)
+    ToolRepo->>PG: INSERT tool_calls
+
+    Orch-->>ChatCtrl: toolResult
+    ChatCtrl->>ToolRepo: update(result SUCCESS)
+    ToolRepo->>PG: UPDATE tool_calls
+    ChatCtrl->>MsgRepo: append assistant message (tool result summarized)
+    MsgRepo->>PG: INSERT messages
+    Orch-->>MQ: publish simulation.tool.completed

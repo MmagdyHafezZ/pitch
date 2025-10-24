@@ -1,0 +1,20 @@
+sequenceDiagram
+    participant IngestGW as Ingestion Gateway
+    participant IngestCtrl as Ingest Controller
+    participant Trans as Transcribe Service
+    participant Enrich as Enrichment Service
+    participant TRepo as Transcript Repository
+    participant Mongo as Mongo DB
+    participant PGV as pgvector
+
+    IngestGW->>IngestCtrl: POST /ingest (media URL/files)
+    IngestCtrl->>Trans: transcribe(media)
+    Trans->>TRepo: save(raw transcript)
+    TRepo->>Mongo: INSERT transcript
+    Trans-->>IngestCtrl: transcriptId
+
+    IngestCtrl->>Enrich: enrich(transcriptId)
+    Enrich->>TRepo: update(segments, topics, entities)
+    TRepo->>Mongo: UPDATE transcript
+    TRepo-->>PGV: upsert embeddings for segments
+    IngestCtrl-->>IngestGW: 202 accepted + ids

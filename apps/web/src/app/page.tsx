@@ -12,6 +12,8 @@ export default function Home() {
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
       router.push('/auth/login')
+    } else if (!isLoading && isAuthenticated) {
+      router.push('/home')
     }
   }, [isAuthenticated, isLoading, router])
 
@@ -24,7 +26,7 @@ export default function Home() {
   }
 
   if (!isAuthenticated) {
-    return null // Will redirect
+    return null
   }
 
   return (
@@ -39,8 +41,8 @@ export default function Home() {
         </Text>
 
         <Text ta="center">
-          This is your business management dashboard. The platform is ready for you to start
-          building your business features.
+          This is your business management home. The platform is ready for you to start building
+          your business features.
         </Text>
 
         <Button onClick={() => logout()} variant="light">

@@ -1,0 +1,26 @@
+sequenceDiagram
+    participant ADMIN as Admin / User
+    participant UI as Support UI (Dashboard)
+    participant API as API Gateway
+    participant SVC as Support Microservice
+    participant GITHUB as GitHub Releases API
+    participant CACHE as Redis Cache (optional)
+    participant DB as PostgreSQL (metadata cache)
+
+    ADMIN->>UI: Open "Release Notes" Page
+    UI->>API: GET /support/releases
+    API->>SVC: Forward Request (Fetch Releases)
+
+    alt Cache Hit
+        SVC->>CACHE: Check Cached Releases
+        CACHE-->>SVC: Cached Release Data Found
+    else Cache Miss
+        SVC->>GITHUB: GET /repos/{org}/{repo}/releases (via GitHub API)
+        GITHUB-->>SVC: JSON Response (Latest Releases)
+        SVC->>CACHE: Store Release Data (TTL 1h)
+        SVC->>DB: Optionally persist metadata (version, date, notes summary)
+    end
+
+    SVC-->>API: Return Parsed Release Notes
+    API-->>UI: Render Latest Release Notes List
+    Note over UI,ADMIN: User sees version, title, description, and published date

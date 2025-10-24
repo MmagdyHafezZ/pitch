@@ -18,15 +18,17 @@ import {
 } from '@nestjs/swagger';
 import { catchError, timeout } from 'rxjs/operators';
 import { throwError } from 'rxjs';
-import { Public } from '../../microservices/auth/decorators/public.decorator';
-import { CurrentUser } from '../../microservices/auth/decorators/current-user.decorator';
+import { Public } from '../../microservices/user/decorators/public.decorator';
+import { CurrentUser } from '../../microservices/user/decorators/current-user.decorator';
+import { USER_SERVICE_PATTERNS } from '../../common/interfaces/message-patterns.interface';
+import { getWhitelistedRoutes } from '../config/auth-whitelist.config';
 import {
   RegisterDto,
   LoginDto,
   RefreshTokenDto,
   AuthResponseDto,
   UserResponseDto,
-} from '../../microservices/auth/dto/auth.dto';
+} from '../../microservices/user/dto/auth.dto';
 import type { ServiceError } from '../../common/interfaces/error.interface';
 
 @ApiTags('authentication')
@@ -34,7 +36,7 @@ import type { ServiceError } from '../../common/interfaces/error.interface';
 export class AuthGatewayController {
   private readonly logger = new Logger(AuthGatewayController.name);
 
-  constructor(@Inject('AUTH_SERVICE') private authService: ClientProxy) {}
+  constructor(@Inject('USER_SERVICE') private userService: ClientProxy) {}
 
   @Post('register')
   @Public()
@@ -49,20 +51,22 @@ export class AuthGatewayController {
   register(@Body() registerDto: RegisterDto) {
     this.logger.log(`Registration attempt for: ${registerDto.email}`);
 
-    return this.authService.send('auth.register', registerDto).pipe(
-      timeout(10000),
-      catchError((err: unknown) => {
-        const error = err as ServiceError;
-        const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
-        const message = error.message ?? 'Registration failed';
-        const stack = error.stack ?? JSON.stringify(err);
-        this.logger.error(
-          `Registration failed for ${registerDto.email}`,
-          stack,
-        );
-        return throwError(() => new HttpException(message, status));
-      }),
-    );
+    return this.userService
+      .send(USER_SERVICE_PATTERNS.REGISTER, registerDto)
+      .pipe(
+        timeout(10000),
+        catchError((err: unknown) => {
+          const error = err as ServiceError;
+          const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
+          const message = error.message ?? 'Registration failed';
+          const stack = error.stack ?? JSON.stringify(err);
+          this.logger.error(
+            `Registration failed for ${registerDto.email}`,
+            stack,
+          );
+          return throwError(() => new HttpException(message, status));
+        }),
+      );
   }
 
   @Post('login')
@@ -77,7 +81,7 @@ export class AuthGatewayController {
   login(@Body() loginDto: LoginDto) {
     this.logger.log(`Login attempt for: ${loginDto.email}`);
 
-    return this.authService.send('auth.login', loginDto).pipe(
+    return this.userService.send('auth.login', loginDto).pipe(
       timeout(10000),
       catchError((err: unknown) => {
         const error = err as ServiceError;
@@ -98,8 +102,8 @@ export class AuthGatewayController {
   refresh(@Body() refreshTokenDto: RefreshTokenDto) {
     this.logger.log('Token refresh attempt');
 
-    return this.authService
-      .send('auth.refresh', {
+    return this.userService
+      .send(USER_SERVICE_PATTERNS.REFRESH, {
         refreshToken: refreshTokenDto.refreshToken,
       })
       .pipe(
@@ -126,7 +130,7 @@ export class AuthGatewayController {
   ) {
     this.logger.log(`Logout attempt for user: ${userId}`);
 
-    return this.authService
+    return this.userService
       .send('auth.logout', {
         userId,
         refreshToken: body?.refreshToken,
@@ -157,17 +161,19 @@ export class AuthGatewayController {
   getProfile(@CurrentUser('id') userId: string) {
     this.logger.log(`Profile request for user: ${userId}`);
 
-    return this.authService.send('auth.getUser', { userId }).pipe(
-      timeout(10000),
-      catchError((err: unknown) => {
-        const error = err as ServiceError;
-        const stack = error.stack ?? JSON.stringify(err);
-        this.logger.error(`Failed to get profile for user: ${userId}`, stack);
-        const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
-        const message = error.message ?? 'Failed to get user profile';
-        return throwError(() => new HttpException(message, status));
-      }),
-    );
+    return this.userService
+      .send(USER_SERVICE_PATTERNS.GET_USER, { userId })
+      .pipe(
+        timeout(10000),
+        catchError((err: unknown) => {
+          const error = err as ServiceError;
+          const stack = error.stack ?? JSON.stringify(err);
+          this.logger.error(`Failed to get profile for user: ${userId}`, stack);
+          const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
+          const message = error.message ?? 'Failed to get user profile';
+          return throwError(() => new HttpException(message, status));
+        }),
+      );
   }
 
   @Get('validate')
@@ -182,5 +188,111 @@ export class AuthGatewayController {
   validateToken(@CurrentUser() user: UserResponseDto) {
     this.logger.log(`Token validation for user: ${user.id}`);
     return user;
+  }
+
+  @Get('oauth/providers')
+  @Public()
+  @ApiOperation({
+    summary: 'Get available OAuth providers',
+    description: 'Returns list of configured OAuth providers for the frontend',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Available OAuth providers',
+    example: [
+      {
+        name: 'google',
+        displayName: 'Google',
+        icon: '🔍',
+        color: '#4285f4',
+        authUrl: '/auth/oauth/google',
+      },
+      {
+        name: 'github',
+        displayName: 'GitHub',
+        icon: '🐙',
+        color: '#333333',
+        authUrl: '/auth/oauth/github',
+      },
+    ],
+  })
+  getOAuthProviders() {
+    this.logger.log('Fetching OAuth providers');
+
+    return this.userService
+      .send(USER_SERVICE_PATTERNS.OAUTH_GET_PROVIDERS, {})
+      .pipe(
+        timeout(10000),
+        catchError((err: unknown) => {
+          const error = err as ServiceError;
+          const stack = error.stack ?? JSON.stringify(err);
+          this.logger.error('Failed to get OAuth providers', stack);
+          const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
+          const message = error.message ?? 'Failed to get OAuth providers';
+          return throwError(() => new HttpException(message, status));
+        }),
+      );
+  }
+
+  @Get('whitelist')
+  @Public()
+  @ApiOperation({
+    summary: 'Get auth whitelist configuration',
+    description:
+      'Returns list of routes that bypass authentication (for debugging)',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Auth whitelist configuration',
+  })
+  getAuthWhitelist() {
+    this.logger.log('Fetching auth whitelist configuration');
+    return {
+      routes: getWhitelistedRoutes(),
+      message: 'These routes bypass the global JWT auth guard',
+    };
+  }
+
+  @Post('check-email')
+  @Public()
+  @ApiOperation({
+    summary: 'Check if email exists and return associated OAuth provider',
+    description:
+      'Returns the OAuth provider associated with the email for redirect-based login',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Email check result',
+    example: {
+      exists: true,
+      provider: 'google',
+      requiresOAuth: true,
+      message: 'Please continue with Google to sign in',
+    },
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Email not found',
+    example: {
+      exists: false,
+      message: 'No account found with this email. Please sign up first.',
+    },
+  })
+  checkEmail(@Body() checkEmailDto: { email: string }) {
+    this.logger.log(`Checking email existence: ${checkEmailDto.email}`);
+
+    return this.userService
+      .send(USER_SERVICE_PATTERNS.CHECK_EMAIL, { email: checkEmailDto.email })
+      .pipe(
+        timeout(10000),
+        catchError((err: unknown) => {
+          const error = err as ServiceError;
+          const stack = error.stack ?? JSON.stringify(err);
+          this.logger.error('Email check failed', stack);
+          const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
+          const message = error.message ?? 'Email check failed';
+          return throwError(() => new HttpException(message, status));
+        }),
+      );
   }
 }

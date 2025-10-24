@@ -1,0 +1,98 @@
+sequenceDiagram
+    autonumber
+    actor Admin as Admin Client
+    participant TG as Team Gateway
+    participant TC as Team Controller
+    participant TS as Team Service
+    participant TMR as TeamMembership Repo
+    participant EV as Event Bus
+    participant DB as Database
+
+    Admin->>TG: POST /teams/{teamId}/members/{userId}/actions {action: "DEACTIVATE"|"ACTIVATE"|"REMOVE"}
+    TG->>TC: forward
+    TC->>TS: handleMemberAction(teamId, targetUserId, action, requestedBy)
+
+    %% AuthZ: OWNER or ADMIN; only OWNER may change another OWNER
+    TS->>TMR: getMembership(requestedBy, teamId)
+    TMR->>DB: SELECT team_memberships WHERE userId=? AND teamId=?
+    DB-->>TMR: reqMemb?
+    TMR-->>TS: reqMemb?
+
+    alt requester not OWNER/ADMIN
+        TS-->>TC: 403 forbidden
+        TC-->>TG: 403
+        TG-->>Admin: 403 not authorized
+    else ok
+        TS->>TMR: getMembership(targetUserId, teamId)
+        TMR->>DB: SELECT team_memberships WHERE userId=? AND teamId=?
+        DB-->>TMR: tgtMemb?
+        TMR-->>TS: tgtMemb?
+
+        alt target not found
+            TS-->>TC: 404 member not found
+            TC-->>TG: 404
+            TG-->>Admin: 404
+        else found
+            %% Guard: only OWNER can modify OWNER; cannot remove last OWNER
+            alt tgtMemb.role == "OWNER" and reqMemb.role != "OWNER"
+                TS-->>TC: 403 cannot modify OWNER
+                TC-->>TG: 403
+                TG-->>Admin: 403
+            else check last OWNER on team
+                TS->>TMR: countOwners(teamId)
+                TMR->>DB: SELECT COUNT(*) FROM team_memberships WHERE teamId=? AND role='OWNER' AND isActive=TRUE
+                DB-->>TMR: ownerCount
+                TMR-->>TS: ownerCount
+
+                alt action == "REMOVE" and tgtMemb.role == "OWNER" and ownerCount == 1
+                    TS-->>TC: 409 cannot remove last OWNER
+                    TC-->>TG: 409
+                    TG-->>Admin: 409 conflict
+                else proceed
+                    alt action == "DEACTIVATE"
+                        alt tgtMemb.isActive == false
+                            TS-->>TC: 200 {status:"no_change"}
+                            TC-->>TG: 200
+                            TG-->>Admin: 200 no change
+                        else
+                            TS->>TMR: updateActive(targetUserId, teamId, false)
+                            TMR->>DB: UPDATE team_memberships SET isActive=FALSE WHERE userId=? AND teamId=?
+                            DB-->>TMR: ok
+                            TMR-->>TS: ok
+                            TS->>EV: emit "team.member_deactivated" {teamId,targetUserId}
+                            EV-->>TS: queued
+                            TS-->>TC: 200 {status:"deactivated"}
+                            TC-->>TG: 200
+                            TG-->>Admin: 200 deactivated
+                        end
+                    else action == "ACTIVATE"
+                        alt tgtMemb.isActive == true
+                            TS-->>TC: 200 {status:"no_change"}
+                            TC-->>TG: 200
+                            TG-->>Admin: 200 no change
+                        else
+                            TS->>TMR: updateActive(targetUserId, teamId, true)
+                            TMR->>DB: UPDATE team_memberships SET isActive=TRUE WHERE userId=? AND teamId=?
+                            DB-->>TMR: ok
+                            TMR-->>TS: ok
+                            TS->>EV: emit "team.member_activated" {teamId,targetUserId}
+                            EV-->>TS: queued
+                            TS-->>TC: 200 {status:"activated"}
+                            TC-->>TG: 200
+                            TG-->>Admin: 200 activated
+                        end
+                    else action == "REMOVE"
+                        TS->>TMR: deleteMembership(targetUserId, teamId)
+                        TMR->>DB: DELETE FROM team_memberships WHERE userId=? AND teamId=?
+                        DB-->>TMR: ok
+                        TMR-->>TS: ok
+                        TS->>EV: emit "team.member_removed" {teamId,targetUserId}
+                        EV-->>TS: queued
+                        TS-->>TC: 204 No Content
+                        TC-->>TG: 204
+                        TG-->>Admin: 204 removed
+                    end
+                end
+            end
+        end
+    end

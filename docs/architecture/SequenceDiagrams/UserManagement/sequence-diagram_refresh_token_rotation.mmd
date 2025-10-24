@@ -1,0 +1,37 @@
+sequenceDiagram
+    autonumber
+    actor C as Client
+    participant AG as Auth Gateway
+    participant AC as Auth Controller
+    participant AS as Auth Service
+    participant RTR as RefreshToken Repo
+    participant DB as Database
+
+    C->>AG: POST /auth/refresh {refreshToken}
+    AG->>AC: forward
+    AC->>AS: validate(refreshToken)
+
+    AS->>RTR: getByToken(refreshToken)
+    RTR->>DB: SELECT refresh_tokens WHERE token=?
+    DB-->>RTR: row?
+    RTR-->>AS: tokenRow?
+
+    alt not found | expired | revoked
+        AS-->>AC: 401 invalid_refresh_token
+        AC-->>AG: 401
+        AG-->>C: 401
+    else valid
+        AS->>RTR: revoke(tokenRow.id, revokedAt=now())
+        RTR->>DB: UPDATE refresh_tokens SET revokedAt=now()
+        DB-->>RTR: ok
+        RTR-->>AS: ok
+
+        AS-->>AC: issue accessJWT{userId=tokenRow.userId}
+        AC->>RTR: insert new refresh_token{userId,expiresAt}
+        RTR->>DB: INSERT refresh_tokens(...)
+        DB-->>RTR: ok
+        RTR-->>AC: newRefreshToken
+
+        AC-->>AG: 200 {accessJWT, refreshToken:newRefreshToken}
+        AG-->>C: tokens
+    end

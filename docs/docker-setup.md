@@ -1,6 +1,7 @@
 # Docker Setup Guide
 
-This guide covers running the PITCH application using Docker containers across different environments.
+This guide covers running the PITCH application using Docker containers across
+different environments.
 
 ## Prerequisites
 
@@ -11,11 +12,12 @@ This guide covers running the PITCH application using Docker containers across d
 ## Architecture
 
 The Docker setup includes:
+
 - **Web Application** (Next.js) - Port 3000
-- **API Server** (NestJS) - Port 3001  
+- **API Server** (NestJS) - Port 3001
 - **PostgreSQL Database** - Port 5432
 - **MongoDB Database** - Port 27017
-- **Redis Cache** - Port 6379
+- **Redis Cache** - Port 6380
 - **Nginx Reverse Proxy** (staging/prod) - Ports 80/443
 
 ## Environment Configurations
@@ -25,12 +27,14 @@ The Docker setup includes:
 **File**: `docker-compose.local.yml`
 
 Features:
+
 - Hot reloading enabled
-- Volume mounts for live code changes  
+- Volume mounts for live code changes
 - Development database credentials
 - All services exposed on localhost
 
 **Setup**:
+
 ```bash
 # Copy environment template
 cp .env.example .env.local
@@ -40,6 +44,7 @@ nano .env.local
 ```
 
 **Usage**:
+
 ```bash
 # Start all services
 docker-compose -f docker-compose.local.yml up -d
@@ -55,17 +60,19 @@ docker-compose -f docker-compose.local.yml up --build -d
 ```
 
 **Access**:
+
 - Web App: http://localhost:3000
 - API: http://localhost:3001
 - PostgreSQL: localhost:5432
 - MongoDB: localhost:27017
-- Redis: localhost:6379
+- Redis: localhost:6380
 
 ### Staging Environment
 
 **File**: `docker-compose.staging.yml`
 
 Features:
+
 - Environment variables for configuration
 - Resource limits and health checks
 - Nginx reverse proxy
@@ -73,6 +80,7 @@ Features:
 - Auto-restart policies
 
 **Setup**:
+
 ```bash
 # Create environment file
 cp .env.example .env.staging
@@ -92,6 +100,7 @@ docker-compose -f docker-compose.staging.yml ps
 **File**: `docker-compose.prod.yml`
 
 Features:
+
 - High availability with replicas
 - Performance-optimized database settings
 - SSL/TLS support via Nginx
@@ -100,12 +109,13 @@ Features:
 - Resource limits and reservations
 
 **Setup**:
+
 ```bash
 # Create data directories
 sudo mkdir -p /opt/pitch/data/{postgres,mongodb,mongodb-config,redis}
 sudo chown -R 1001:1001 /opt/pitch/data
 
-# Create environment file  
+# Create environment file
 cp .env.example .env.prod
 
 # Start core services
@@ -127,7 +137,7 @@ POSTGRES_DB=pitch_app
 POSTGRES_USER=pitch_user
 POSTGRES_PASSWORD=secure_password_here
 
-# MongoDB  
+# MongoDB
 MONGO_DB=pitch_app
 MONGO_USER=pitch_user
 MONGO_PASSWORD=secure_password_here
@@ -151,13 +161,15 @@ GRAFANA_ADMIN_PASSWORD=secure_grafana_password
 ### PostgreSQL Initialization
 
 The PostgreSQL container will automatically:
+
 1. Create the specified database
 2. Set up the user with proper permissions
 3. Run any SQL scripts in `docker/postgres/init/`
 
-### MongoDB Initialization  
+### MongoDB Initialization
 
 The MongoDB container will:
+
 1. Create the root user
 2. Initialize the specified database
 3. Run any JS scripts in `docker/mongodb/init/`
@@ -165,6 +177,7 @@ The MongoDB container will:
 ### Prisma Migrations
 
 The API container automatically runs:
+
 ```bash
 prisma migrate deploy  # Apply pending migrations
 prisma generate        # Generate Prisma client
@@ -173,6 +186,7 @@ prisma generate        # Generate Prisma client
 ## Common Commands
 
 ### Building Images
+
 ```bash
 # Build all images
 docker-compose -f docker-compose.local.yml build
@@ -185,11 +199,12 @@ docker-compose -f docker-compose.local.yml build --no-cache
 ```
 
 ### Managing Services
+
 ```bash
 # Start specific services
 docker-compose -f docker-compose.local.yml up -d postgres redis
 
-# Restart a service  
+# Restart a service
 docker-compose -f docker-compose.local.yml restart api
 
 # Scale services (prod only)
@@ -197,11 +212,12 @@ docker-compose -f docker-compose.prod.yml up -d --scale api=3 --scale web=2
 ```
 
 ### Logs and Debugging
+
 ```bash
 # View all logs
 docker-compose -f docker-compose.local.yml logs
 
-# Follow specific service logs  
+# Follow specific service logs
 docker-compose -f docker-compose.local.yml logs -f api
 
 # Execute commands in running container
@@ -210,11 +226,12 @@ docker-compose -f docker-compose.local.yml exec postgres psql -U pitch_user -d p
 ```
 
 ### Data Management
+
 ```bash
 # Create database backup
 docker-compose -f docker-compose.prod.yml exec postgres pg_dump -U pitch_user pitch_app > backup.sql
 
-# Restore database backup  
+# Restore database backup
 docker-compose -f docker-compose.prod.yml exec -T postgres psql -U pitch_user -d pitch_app < backup.sql
 
 # Clear all data (destructive!)
@@ -226,21 +243,25 @@ docker-compose -f docker-compose.local.yml down -v
 ### Production Optimizations
 
 **PostgreSQL**:
+
 - Connection pooling (max_connections=200)
 - Memory settings optimized for container limits
 - WAL settings for better write performance
 
-**MongoDB**:  
+**MongoDB**:
+
 - WiredTiger storage engine with compression
 - Memory cache size configured
 - Journal compression enabled
 
 **Redis**:
+
 - Append-only file persistence
 - Memory policy for cache eviction
 - Connection pooling
 
 **Application**:
+
 - Multi-stage Docker builds for smaller images
 - Node.js process optimization
 - Resource limits and health checks
@@ -248,12 +269,14 @@ docker-compose -f docker-compose.local.yml down -v
 ### Resource Requirements
 
 **Minimum (Local)**:
+
 - 2 CPU cores
 - 4GB RAM
 - 10GB disk space
 
 **Recommended (Production)**:
-- 4+ CPU cores  
+
+- 4+ CPU cores
 - 8GB+ RAM
 - 50GB+ SSD storage
 - Load balancer for high availability
@@ -263,6 +286,7 @@ docker-compose -f docker-compose.local.yml down -v
 For staging/production environments:
 
 1. Place SSL certificates in `docker/nginx/ssl/`:
+
    ```
    docker/nginx/ssl/
    ├── cert.pem
@@ -279,8 +303,9 @@ For staging/production environments:
 ### Built-in Health Checks
 
 All services include health checks:
+
 - PostgreSQL: `pg_isready`
-- MongoDB: `mongosh ping`  
+- MongoDB: `mongosh ping`
 - Redis: `redis-cli ping`
 - API: HTTP endpoint `/health`
 - Web: HTTP endpoint `/api/health`
@@ -288,11 +313,13 @@ All services include health checks:
 ### Prometheus Metrics (Production)
 
 Enable monitoring profile:
+
 ```bash
 docker-compose -f docker-compose.prod.yml --profile monitoring up -d
 ```
 
 Access:
+
 - Prometheus: http://localhost:9090
 - Grafana: http://localhost:3010
 
@@ -301,12 +328,14 @@ Access:
 ### Common Issues
 
 **Permission Denied**:
+
 ```bash
 # Fix data directory permissions
 sudo chown -R 1001:1001 /opt/pitch/data
 ```
 
 **Out of Memory**:
+
 ```bash
 # Check container resource usage
 docker stats
@@ -316,6 +345,7 @@ docker stats
 ```
 
 **Database Connection Failed**:
+
 ```bash
 # Check if database is ready
 docker-compose -f docker-compose.local.yml exec postgres pg_isready
@@ -325,37 +355,42 @@ docker-compose -f docker-compose.local.yml exec api env | grep DATABASE_URL
 ```
 
 **Build Failures**:
+
 ```bash
 # Clear Docker build cache
 docker system prune -a
 
-# Rebuild from scratch  
+# Rebuild from scratch
 docker-compose -f docker-compose.local.yml build --no-cache
 ```
 
 ### Debugging Steps
 
 1. Check service status:
+
    ```bash
    docker-compose -f docker-compose.local.yml ps
    ```
 
 2. View service logs:
+
    ```bash
    docker-compose -f docker-compose.local.yml logs service-name
    ```
 
 3. Execute interactive shell:
+
    ```bash
    docker-compose -f docker-compose.local.yml exec service-name sh
    ```
 
 4. Test database connections:
+
    ```bash
    # PostgreSQL
    docker-compose -f docker-compose.local.yml exec postgres psql -U pitch_user -d pitch_local -c "SELECT version();"
-   
-   # MongoDB  
+
+   # MongoDB
    docker-compose -f docker-compose.local.yml exec mongodb mongosh --eval "db.runCommand('ping')"
    ```
 
@@ -374,6 +409,7 @@ docker-compose -f docker-compose.local.yml build --no-cache
 ### Automated Backups
 
 Create a backup script:
+
 ```bash
 #!/bin/bash
 # backup.sh
@@ -383,6 +419,7 @@ docker-compose -f docker-compose.prod.yml exec mongodb mongodump --uri="mongodb:
 ```
 
 Add to crontab for daily backups:
+
 ```bash
 0 2 * * * /path/to/backup.sh
 ```
