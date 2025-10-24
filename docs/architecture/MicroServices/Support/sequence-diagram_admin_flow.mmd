@@ -1,0 +1,43 @@
+sequenceDiagram
+    autonumber
+
+    participant A as Admin User
+    participant AGW as Admin API Gateway
+    participant ACTRL as Admin Controller
+    participant ASVC as Admin Service
+    participant REPO as Repository Layer
+    participant DB as PostgreSQL Tables
+    participant C as Redis Cache Cluster
+    participant BUS as RabbitMQ Event Bus
+    participant LOG as Centralized Logger
+    participant JOB as Background Sync Job (GitHub Releases)
+
+    Note over A,LOG: Example — Admin updates FAQ, modifies ticket status, or reviews logs
+
+    A->>AGW: Authenticated HTTP Request (PUT /admin/faq/:id or PATCH /admin/ticket/:id)
+    AGW->>ACTRL: Forward Request to Admin Controller
+    ACTRL->>ASVC: Validate Role & Input
+    ASVC->>REPO: Perform DB Operation (INSERT/UPDATE/DELETE)
+    REPO->>DB: Execute SQL Query
+    DB-->>REPO: Operation Successful
+    REPO-->>ASVC: DB Confirmation
+
+    alt FAQ or Docs Update
+        ASVC->>C: Invalidate / Refresh Cached Entry
+        C-->>ASVC: Cache Updated
+    else Ticket Update
+        ASVC->>BUS: Publish "TicketUpdated" Event (async)
+        BUS-->>ASVC: Event Queued
+    else Logs View
+        ASVC->>REPO: Query Logs from DB
+        DB-->>REPO: Return Log Data
+        REPO-->>ASVC: Logs Ready
+    end
+
+    ASVC->>LOG: Log Admin Action (Audit Trail)
+    LOG-->>ASVC: Logged OK
+    ASVC-->>ACTRL: Operation Success / Data Ready
+    ACTRL-->>AGW: HTTP 200 Response
+    AGW-->>A: Display Confirmation / Data
+
+    Note over JOB,DB: Background Job periodically fetches GitHub Release Notes via API and stores metadata (auto-sync)
