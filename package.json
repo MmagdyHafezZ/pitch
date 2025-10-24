@@ -5,7 +5,7 @@
   "main": "index.js",
   "private": true,
   "workspaces": [
-    "apps/*",
+    "apps/I*",
     "packages/*"
   ],
   "scripts": {
@@ -13,6 +13,8 @@
     "prisma:generate": "turbo run db:migrate:all --filter=api",
     "dev:api": "turbo run dev --filter=api",
     "dev:web": "turbo run dev --filter=web",
+    "db:migrate:all": "turbo run db:migrate:all",
+    "db:generate:all": "turbo run db:generate:all",
     "build": "turbo run build",
     "secrets:allow": "python3 scripts/secrets_allow.py",
     "lint": "turbo run lint",
@@ -23,7 +25,8 @@
     "format:check": "turbo run format:check",
     "prepare": "husky install",
     "pre-commit": "lint-staged",
-    "commit": "cz"
+    "commit": "cz",
+    "compile:architecture": "cd docs/architecture/MicroServices && node compile-architecture.js"
   },
   "keywords": [],
   "author": "",
@@ -43,7 +46,7 @@
     "turbo": "^2.5.8"
   },
   "dependencies": {
-    "zod": "^4.1.11"
+    "zod": "^4.1.12"
   },
   "config": {
     "commitizen": {
@@ -53,6 +56,10 @@
   "lint-staged": {
     "*.{js,jsx,ts,tsx,json,md,yml,yaml}": [
       "prettier --write"
+    ],
+    "docs/architecture/MicroServices/*/architecture.mmd": [
+      "npm run compile:architecture",
+      "git add docs/architecture/MicroServices/overall-architecture.mmd"
     ]
   }
 }

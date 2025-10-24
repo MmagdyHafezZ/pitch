@@ -186,8 +186,8 @@ cd apps/api/src/microservices/auth npx prisma generate
 
 1. Start everything: pnpm run dev
 2. Access your applications:
-   - API: http://localhost:8001
-   - API Docs (Swagger): http://localhost:8001/docs
+   - API: http://localhost:8000
+   - API Docs (Swagger): http://localhost:8000/docs
    - Frontend: http://localhost:3000
 
 3. Test the authentication flow:
@@ -216,7 +216,7 @@ docker ps | grep rabbitmq
 
 If you get port conflicts:
 
-- API runs on port 8001
+- API runs on port 8000
 - Frontend runs on port 3000
 - Make sure these ports are available
 

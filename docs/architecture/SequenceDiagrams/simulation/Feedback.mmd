@@ -1,0 +1,28 @@
+sequenceDiagram
+    actor User
+    participant Client
+    participant FBGW as Feedback Gateway
+    participant FBCtrl as Feedback Controller
+    participant FBSvc as Feedback Service
+    participant RubricSvc as Rubric Service
+    participant ScoreRepo as Score Repository
+    participant RubricsRepo as Rubric Repository
+    participant PG as Postgres
+    participant MQ as RabbitMQ
+    participant Redis as Redis Cache
+
+    User->>Client: Submit feedback for session/turn
+    Client->>FBGW: POST /feedback
+    FBGW->>FBCtrl: handleFeedback()
+    FBCtrl->>FBSvc: score(feedback, rubrics?)
+    FBSvc->>RubricSvc: getRubric(config)
+    RubricSvc->>RubricsRepo: fetch rubric
+    RubricsRepo->>PG: SELECT rubrics
+    RubricSvc-->>FBSvc: rubric
+
+    FBSvc-->>FBCtrl: scores + rationale
+    FBCtrl->>ScoreRepo: save(score)
+    ScoreRepo->>PG: INSERT scores
+    FBCtrl-->>FBGW: result
+    FBSvc-->>Redis: cache aggregates
+    FBSvc-->>MQ: publish feedback.ready

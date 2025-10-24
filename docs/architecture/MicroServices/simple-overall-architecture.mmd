@@ -1,0 +1,112 @@
+%%{init: {'theme':'base', 'themeVariables': {
+  'primaryColor':'#f8fafc',
+  'primaryTextColor':'#1e293b',
+  'primaryBorderColor':'#3b82f6',
+  'lineColor':'#6366f1',
+  'secondaryColor':'#f1f5f9',
+  'secondaryTextColor':'#0f172a',
+  'secondaryBorderColor':'#8b5cf6',
+  'tertiaryColor':'#fef7ff',
+  'tertiaryTextColor':'#581c87',
+  'tertiaryBorderColor':'#a855f7',
+  'background':'#ffffff',
+  'mainBkg':'#f8fafc',
+  'secondBkg':'#e2e8f0',
+  'tertiaryBkg':'#f1f5f9',
+  'noteBkgColor':'#fef3c7',
+  'noteTextColor':'#92400e',
+  'noteBorderColor':'#f59e0b'
+}}}%%
+flowchart TB
+    %% PITCH Platform - Simplified Architecture Overview
+
+    subgraph PitchPlatform["🎯 PITCH Platform - Simplified Overview"]
+        direction TB
+
+        %% Core Services
+        subgraph CoreServices["📊 Core Services"]
+            direction LR
+            SimulationMS["🔬 Simulation<br/>Core Engine"]
+            AnalyticsMS["📈 Analytics<br/>Data & Reporting"]
+        end
+
+        %% Integration Services
+        subgraph IntegrationServices["🔗 Integration Services"]
+            direction LR
+            LTIAdvantageMS["📡 LTI-Advantage<br/>LMS Integration"]
+            S3ManagerMS["🗄️ S3-Manager<br/>File Storage"]
+        end
+
+        %% Support Services
+        subgraph SupportServices["🛠️ Support Services"]
+            SupportMS["💬 Support<br/>Help & Documentation"]
+        end
+
+    end
+
+    %% Shared Infrastructure
+    subgraph SharedInfra["🏗️ Shared Infrastructure"]
+        SharedRedis[("🔴 Redis<br/>Cache Cluster")]
+        SharedRabbitMQ[("🐰 RabbitMQ<br/>Event Bus")]
+        Postgres[("🐘 PostgreSQL<br/>Database")]
+        Mongo[("🍃 MongoDB<br/>Document Store")]
+        S3[("☁️ S3<br/>Object Storage")]
+        Logger[("📝 Centralized<br/>Logging")]
+    end
+
+    %% External Services
+    subgraph External["🌐 External Services"]
+        LTIPlatform["🎓 LTI Platform"]
+        STTService[("🎤 Speech-to-Text")]
+        TTSService[("🔊 Text-to-Speech")]
+        LLMService[("🤖 LLM API")]
+    end
+
+    %% Infrastructure Connections
+    SimulationMS -.-> SharedRedis
+    SimulationMS -.-> SharedRabbitMQ
+    SimulationMS --> Postgres
+    SimulationMS --> Mongo
+    SimulationMS --> S3
+
+    AnalyticsMS -.-> SharedRedis
+    AnalyticsMS -.-> SharedRabbitMQ
+    AnalyticsMS --> Postgres
+
+    LTIAdvantageMS -.-> SharedRedis
+    LTIAdvantageMS -.-> SharedRabbitMQ
+    LTIAdvantageMS --> LTIPlatform
+
+    S3ManagerMS -.-> SharedRedis
+    S3ManagerMS -.-> SharedRabbitMQ
+    S3ManagerMS --> S3
+
+    SupportMS -.-> SharedRedis
+    SupportMS -.-> SharedRabbitMQ
+    SupportMS --> Postgres
+
+    %% External API Connections
+    SimulationMS -.-> STTService
+    SimulationMS -.-> TTSService
+    SimulationMS -.-> LLMService
+
+    %% Event-Driven Communication
+    SimulationMS -.->|"📡 simulation.*"| SharedRabbitMQ
+    SupportMS -.->|"📡 support.*"| SharedRabbitMQ
+    AnalyticsMS -.->|"📡 analytics.*"| SharedRabbitMQ
+    LTIAdvantageMS -.->|"📡 lti.*"| SharedRabbitMQ
+    S3ManagerMS -.->|"📡 storage.*"| SharedRabbitMQ
+
+    %% Inter-Service Communication
+    SharedRabbitMQ -.->|"📨 event routing"| SimulationMS
+    SharedRabbitMQ -.->|"📨 event routing"| SupportMS
+    SharedRabbitMQ -.->|"📨 event routing"| AnalyticsMS
+    SharedRabbitMQ -.->|"📨 event routing"| LTIAdvantageMS
+    SharedRabbitMQ -.->|"📨 event routing"| S3ManagerMS
+
+    %% Shared Cache & Logging
+    SimulationMS -.-> Logger
+    AnalyticsMS -.-> Logger
+    LTIAdvantageMS -.-> Logger
+    S3ManagerMS -.-> Logger
+    SupportMS -.-> Logger

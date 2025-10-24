@@ -109,7 +109,7 @@ The auth system expects these backend endpoints:
 ### Environment Variables
 
 ```env
-NEXT_PUBLIC_API_URL=http://localhost:8001/api/v1
+NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
 ```
 
 ### Client Configuration

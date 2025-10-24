@@ -8,7 +8,8 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
-import { IS_PUBLIC_KEY } from '../../microservices/auth/decorators/public.decorator';
+import { IS_PUBLIC_KEY } from '../../microservices/user/decorators/public.decorator';
+import { isWhitelistedRoute } from '../config/auth-whitelist.config';
 import type { ServiceError } from '../../common/interfaces/error.interface';
 import type {
   RequestWithHeaders,
@@ -33,15 +34,24 @@ export class GlobalJwtAuthGuard implements CanActivate {
   ) {}
 
   canActivate(context: ExecutionContext): Promise<boolean> {
+    const req = context
+      .switchToHttp()
+      .getRequest<RequestWithHeaders & RequestWithUser>();
+
     const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
       context.getHandler(),
       context.getClass(),
     ]);
     if (isPublic) return Promise.resolve(true);
 
-    const req = context
-      .switchToHttp()
-      .getRequest<RequestWithHeaders & RequestWithUser>();
+    const method = req.method;
+    const path = req.url;
+    if (isWhitelistedRoute(method, path)) {
+      this.logger.log(`Allowing whitelisted route: ${method} ${path}`);
+      return Promise.resolve(true);
+    }
+    this.logger.log(`Validating JWT for route: ${method} ${path}`);
+
     const token = extractBearer(req.headers.authorization);
     if (!token) throw new UnauthorizedException('Access token is required');
 

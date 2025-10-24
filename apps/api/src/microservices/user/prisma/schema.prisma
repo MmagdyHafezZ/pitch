@@ -1,6 +1,6 @@
 generator client {
   provider = "prisma-client-js"
-  output   = "./generated"
+  output = "../../../../../node_modules/@prisma/user-client"
 }
 
 datasource db {
@@ -8,11 +8,19 @@ datasource db {
   url      = env("USER_DATABASE_URL")
 }
 
+enum AuthProvider {
+  GOOGLE
+  GITHUB
+  LINKEDIN
+  MICROSOFT
+  DISCORD
+}
+
 model User {
   id        String   @id @default(cuid())
   email     String   @unique
-  password  String
   name      String
+  avatar    String?
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -20,7 +28,31 @@ model User {
   // Refresh tokens
   refreshTokens RefreshToken[]
 
+  // OAuth accounts
+  oauthAccounts OAuthAccount[]
+
   @@map("users")
+}
+
+model OAuthAccount {
+  id           String       @id @default(cuid())
+  provider     AuthProvider
+  providerId   String
+  email        String
+  name         String?
+  avatar       String?
+  accessToken  String?
+  refreshToken String?
+  expiresAt    DateTime?
+  userId       String
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerId])
+  @@unique([provider, userId])
+  @@map("oauth_accounts")
 }
 
 model RefreshToken {

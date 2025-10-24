@@ -3,13 +3,15 @@ version: '3.8'
 services:
   rabbitmq:
     image: rabbitmq:3-management
-    container_name: rabbitmq
+    container_name: rabbitmq=
     ports:
-      - "5672:5672"     # AMQP port
-      - "15672:15672"   # Management UI port
+      - '5672:5672' # AMQP port
+      - '15672:15672' # Management UI port
+      - '15692:15692' # Prometheus metrics port
     environment:
       RABBITMQ_DEFAULT_USER: admin
       RABBITMQ_DEFAULT_PASS: admin123
+      RABBITMQ_ENABLED_PLUGINS: rabbitmq_management,rabbitmq_prometheus
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
     networks:

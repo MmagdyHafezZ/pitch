@@ -1,0 +1,21 @@
+sequenceDiagram
+    participant CallCtrl as Call Controller
+    participant Rec as Recording Service
+    participant RecRepo as Recording Repository
+    participant MediaRepo as Media Repository
+    participant PG as Postgres
+    participant S3 as MinIO/S3
+
+    CallCtrl->>Rec: startRecording(callId)
+    Rec-->>CallCtrl: recordingId
+
+    Note over Rec: Stream chunks to object storage
+    loop every chunk
+        Rec->>S3: PUT /recordings/{id}/chunkN
+    end
+
+    Rec->>MediaRepo: save media record (URI, duration, codec)
+    MediaRepo->>PG: INSERT media
+    Rec->>RecRepo: finalize recording (status=READY)
+    RecRepo->>PG: UPDATE recordings
+    Rec-->>CallCtrl: READY + mediaUri

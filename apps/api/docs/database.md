@@ -22,7 +22,7 @@ DATABASE_URL="postgresql://username:password@localhost:5432/pitch_users"
 MONGODB_URL="mongodb://localhost:27017/pitch_business"
 
 # Redis (Caching)
-REDIS_URL="redis://localhost:6379"
+REDIS_URL="redis://localhost:6380"
 
 # Test databases
 TEST_DATABASE_URL="postgresql://username:password@localhost:5432/pitch_test"

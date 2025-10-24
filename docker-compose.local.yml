@@ -1,26 +1,6 @@
 version: "3.8"
 
 services:
-  # Auth Service PostgreSQL Database
-  postgres-auth:
-    image: postgres:16-alpine
-    container_name: pitch-postgres-auth-local
-    environment:
-      POSTGRES_DB: pitch_auth
-      POSTGRES_USER: ${POSTGRES_USER:-pitch_user}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pitch_admin}
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_auth_data_local:/var/lib/postgresql/data
-    networks:
-      - pitch-network
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U pitch_user -d pitch_auth"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
   # User Service PostgreSQL Database
   postgres-user:
     image: postgres:16-alpine
@@ -41,32 +21,12 @@ services:
       timeout: 5s
       retries: 5
 
-  # Business Service PostgreSQL Database
-  postgres-business:
-    image: postgres:16-alpine
-    container_name: pitch-postgres-business-local
-    environment:
-      POSTGRES_DB: pitch_business
-      POSTGRES_USER: ${POSTGRES_USER:-pitch_user}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pitch_admin}
-    ports:
-      - "5434:5432"
-    volumes:
-      - postgres_business_data_local:/var/lib/postgresql/data
-    networks:
-      - pitch-network
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U pitch_user -d pitch_business"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
   # Redis Cache
   redis:
     image: redis:7-alpine
     container_name: pitch-redis-local
     ports:
-      - "6379:6379"
+      - "6380:6380"
     volumes:
       - redis_data_local:/data
     networks:
@@ -80,7 +40,7 @@ services:
 
   # RabbitMQ Message Broker
   rabbitmq:
-    image: rabbitmq:3.13-management-alpine
+    image: rabbitmq:3.13-alpine
     container_name: pitch-rabbitmq-local
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-admin}
@@ -89,10 +49,9 @@ services:
     ports:
       - "5672:5672" # AMQP port
       - "15672:15672" # Management UI port
+      - "15692:15692" # Prometheus metrics port
     volumes:
       - rabbitmq_data_local:/var/lib/rabbitmq
-      - ./docker/rabbitmq/definitions.json:/etc/rabbitmq/definitions.json:ro
-      - ./docker/rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
       - ./docker/rabbitmq/enabled_plugins:/etc/rabbitmq/enabled_plugins:ro
     networks:
       - pitch-network
@@ -115,13 +74,13 @@ services:
   #     DATABASE_URL: postgresql://${POSTGRES_USER:-pitch_user}:${POSTGRES_PASSWORD:-pitch_admin}@postgres-auth:5432/pitch_auth
   #     USER_DATABASE_URL: postgresql://${POSTGRES_USER:-pitch_user}:${POSTGRES_PASSWORD:-pitch_admin}@postgres-user:5432/pitch_user
   #     BUSINESS_DATABASE_URL: postgresql://${POSTGRES_USER:-pitch_user}:${POSTGRES_PASSWORD:-pitch_admin}@postgres-business:5432/pitch_business
-  #     REDIS_URL: redis://redis:6379
+  #     REDIS_URL: redis://redis:6380
   #     RABBITMQ_URL: amqp://${RABBITMQ_USER:-pitch_admin}:${RABBITMQ_PASSWORD:-pitch_admin}@rabbitmq:5672/${RABBITMQ_VHOST:-pitch_local}
   #     JWT_SECRET: ${JWT_SECRET:-local-dev-secret-key-change-me}
   #     JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-local-dev-refresh-secret-key-change-me}
-  #     PORT: 8001
+  #     PORT: 8000
   #   ports:
-  #     - "8001:8001"
+  #     - "8000:8000"
   #   depends_on:
   #     postgres-auth:
   #       condition: service_healthy
@@ -150,7 +109,7 @@ services:
   #   container_name: pitch-web-local
   #   environment:
   #     NODE_ENV: development
-  #     NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8001}
+  #     NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
   #     NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3000}
   #     NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-local-dev-secret-key-change-me}
   #     NEXT_TELEMETRY_DISABLED: 1
@@ -167,9 +126,7 @@ services:
   #   restart: unless-stopped
 
 volumes:
-  postgres_auth_data_local:
   postgres_user_data_local:
-  postgres_business_data_local:
   redis_data_local:
   rabbitmq_data_local:
 

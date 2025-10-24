@@ -1,5 +1,5 @@
-import { UserController } from '../user.controller';
-import type { UserService } from '../user.service';
+import { UserController } from '../controllers/user.controller';
+import type { UserService } from '../services/user.service';
 import { toRpcException } from '../../../common/helpers/exceptions';
 import { RpcException } from '@nestjs/microservices';
 
@@ -16,7 +16,12 @@ describe('UserController', () => {
       update: jest.fn(),
       remove: jest.fn(),
     }) as unknown as jest.Mocked<UserService>;
-
+  const createOauthProviderFactoryMock = () =>
+    ({
+      getProvider: jest.fn(),
+      getEnabledProviders: jest.fn(),
+      getAllProviders: jest.fn(),
+    }) as any;
   const basePayload = {
     userClaims: {
       id: 'admin-1',
@@ -35,8 +40,9 @@ describe('UserController', () => {
 
   it('returns all users', async () => {
     const service = createServiceMock();
+    const oauthProviderFactory = createOauthProviderFactoryMock();
     service.findAll.mockResolvedValue([user] as any);
-    const controller = new UserController(service);
+    const controller = new UserController(service, oauthProviderFactory);
 
     await expect(controller.getUsers(basePayload as any)).resolves.toEqual([
       user,
@@ -45,8 +51,9 @@ describe('UserController', () => {
 
   it('returns a single user', async () => {
     const service = createServiceMock();
+    const oauthProviderFactory = createOauthProviderFactoryMock();
     service.findOne.mockResolvedValue(user as any);
-    const controller = new UserController(service);
+    const controller = new UserController(service, oauthProviderFactory);
 
     await expect(
       controller.getUser({ id: 'user-1', ...basePayload } as any),
@@ -56,12 +63,12 @@ describe('UserController', () => {
 
   it('creates a user after removing user claims from payload', async () => {
     const service = createServiceMock();
+    const oauthProviderFactory = createOauthProviderFactoryMock();
     service.create.mockResolvedValue(user as any);
-    const controller = new UserController(service);
+    const controller = new UserController(service, oauthProviderFactory);
 
     const payload = {
       email: 'user@example.com',
-      password: 'secret',
       name: 'User',
       ...basePayload,
     } as any;
@@ -69,15 +76,15 @@ describe('UserController', () => {
     await expect(controller.createUser(payload)).resolves.toEqual(user);
     expect(service.create).toHaveBeenCalledWith({
       email: 'user@example.com',
-      password: 'secret',
       name: 'User',
     });
   });
 
   it('updates a user', async () => {
     const service = createServiceMock();
+    const oauthProviderFactory = createOauthProviderFactoryMock();
     service.update.mockResolvedValue(user as any);
-    const controller = new UserController(service);
+    const controller = new UserController(service, oauthProviderFactory);
 
     const payload = {
       id: 'user-1',
@@ -91,8 +98,9 @@ describe('UserController', () => {
 
   it('deletes a user', async () => {
     const service = createServiceMock();
+    const oauthProviderFactory = createOauthProviderFactoryMock();
     service.remove.mockResolvedValue({ message: 'deleted' } as any);
-    const controller = new UserController(service);
+    const controller = new UserController(service, oauthProviderFactory);
 
     await expect(
       controller.deleteUser({ id: 'user-1', ...basePayload } as any),
@@ -102,11 +110,12 @@ describe('UserController', () => {
 
   it('transforms errors using toRpcException helper', async () => {
     const service = createServiceMock();
+    const oauthProviderFactory = createOauthProviderFactoryMock();
     const error = new Error('failure');
     const rpcError = new RpcException('rpc');
     service.findAll.mockRejectedValue(error);
     toRpcExceptionMock.mockReturnValueOnce(rpcError);
-    const controller = new UserController(service);
+    const controller = new UserController(service, oauthProviderFactory);
 
     await expect(controller.getUsers(basePayload as any)).rejects.toThrow(
       rpcError,
@@ -116,11 +125,12 @@ describe('UserController', () => {
 
   it('wraps errors when retrieving a user', async () => {
     const service = createServiceMock();
+    const oauthProviderFactory = createOauthProviderFactoryMock();
     const error = new Error('failure');
     const rpcError = new RpcException('rpc');
     service.findOne.mockRejectedValue(error);
     toRpcExceptionMock.mockReturnValueOnce(rpcError);
-    const controller = new UserController(service);
+    const controller = new UserController(service, oauthProviderFactory);
 
     await expect(
       controller.getUser({ id: 'user-1', ...basePayload } as any),
@@ -129,16 +139,16 @@ describe('UserController', () => {
 
   it('wraps errors when creating a user', async () => {
     const service = createServiceMock();
+    const oauthProviderFactory = createOauthProviderFactoryMock();
     const error = new Error('failure');
     const rpcError = new RpcException('rpc');
     service.create.mockRejectedValue(error);
     toRpcExceptionMock.mockReturnValueOnce(rpcError);
-    const controller = new UserController(service);
+    const controller = new UserController(service, oauthProviderFactory);
 
     await expect(
       controller.createUser({
         email: 'user@example.com',
-        password: 'pwd',
         name: 'User',
         ...basePayload,
       } as any),
@@ -147,11 +157,12 @@ describe('UserController', () => {
 
   it('wraps errors when updating a user', async () => {
     const service = createServiceMock();
+    const oauthProviderFactory = createOauthProviderFactoryMock();
     const error = new Error('failure');
     const rpcError = new RpcException('rpc');
     service.update.mockRejectedValue(error);
     toRpcExceptionMock.mockReturnValueOnce(rpcError);
-    const controller = new UserController(service);
+    const controller = new UserController(service, oauthProviderFactory);
 
     await expect(
       controller.updateUser({
@@ -164,11 +175,12 @@ describe('UserController', () => {
 
   it('wraps errors when deleting a user', async () => {
     const service = createServiceMock();
+    const oauthProviderFactory = createOauthProviderFactoryMock();
     const error = new Error('failure');
     const rpcError = new RpcException('rpc');
     service.remove.mockRejectedValue(error);
     toRpcExceptionMock.mockReturnValueOnce(rpcError);
-    const controller = new UserController(service);
+    const controller = new UserController(service, oauthProviderFactory);
 
     await expect(
       controller.deleteUser({ id: 'user-1', ...basePayload } as any),

@@ -2,7 +2,7 @@ import { QueryClient } from '@tanstack/react-query'
 
 // API configuration
 export const API_CONFIG = {
-  baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001/api/v1',
+  baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1',
   timeout: 10000,
 }
 
@@ -114,7 +114,7 @@ export const api = {
       }),
   },
 
-  // Auth endpoints (to be implemented)
+  // Auth endpoints
   auth: {
     login: (credentials: { email: string; password: string }) =>
       apiRequest<{ token: string; user: any }>('/auth/login', {
@@ -135,5 +135,51 @@ export const api = {
         method: 'POST',
       }),
     me: () => apiRequest<any>('/auth/me'),
+    checkEmail: (email: string) =>
+      apiRequest<{
+        exists: boolean
+        provider?: string
+        requiresOAuth?: boolean
+        message: string
+        providers?: Array<{ provider: string; displayName: string }>
+      }>('/auth/check-email', {
+        method: 'POST',
+        body: JSON.stringify({ email }),
+      }),
+  },
+
+  // OAuth endpoints
+  oauth: {
+    getProviders: () =>
+      apiRequest<
+        Array<{
+          name: string
+          displayName: string
+          icon: string
+          color: string
+          authUrl: string
+        }>
+      >('/auth/oauth/providers'),
+
+    getLinkedAccounts: () =>
+      apiRequest<
+        Array<{
+          provider: string
+          providerId: string
+          email: string
+          linkedAt: string
+        }>
+      >('/auth/oauth/linked-accounts'),
+
+    unlinkAccount: (provider: string) =>
+      apiRequest<{ message: string }>(`/auth/oauth/unlink/${provider}`, {
+        method: 'DELETE',
+      }),
+
+    refreshToken: (refreshToken: string) =>
+      apiRequest<{ access_token: string; refresh_token: string }>('/auth/oauth/refresh', {
+        method: 'POST',
+        body: JSON.stringify({ refresh_token: refreshToken }),
+      }),
   },
 }

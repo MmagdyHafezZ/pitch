@@ -1,6 +1,7 @@
 # PITCH Web Application
 
-The frontend for the PITCH business management platform built with Next.js, Mantine UI, and modern React practices.
+The frontend for the PITCH business management platform built with Next.js,
+Mantine UI, and modern React practices.
 
 ## Tech Stack
 
@@ -15,6 +16,7 @@ The frontend for the PITCH business management platform built with Next.js, Mant
 ## Getting Started
 
 ### Prerequisites
+
 - Node.js 18+
 - pnpm (package manager)
 - Docker (for database services)
@@ -22,12 +24,14 @@ The frontend for the PITCH business management platform built with Next.js, Mant
 ### Development Setup
 
 1. **Start database services:**
+
    ```bash
    # From project root
    docker-compose -f docker-compose.local.yml up -d postgres mongodb redis rabbitmq
    ```
 
 2. **Start development servers:**
+
    ```bash
    # From project root (starts both web and API)
    pnpm run dev
@@ -38,7 +42,7 @@ The frontend for the PITCH business management platform built with Next.js, Mant
 
 3. **Open the application:**
    - Web app: [http://localhost:3000](http://localhost:3000)
-   - API docs: [http://localhost:8001/docs](http://localhost:8001/docs)
+   - API docs: [http://localhost:8000/docs](http://localhost:8000/docs)
 
 ## Project Structure
 
@@ -66,6 +70,7 @@ apps/web/
 ## Features
 
 ### Authentication System
+
 - **Login/Register forms** with Mantine components
 - **JWT-based authentication** with refresh tokens
 - **Zustand store** for auth state management
@@ -73,6 +78,7 @@ apps/web/
 - **Protected routes** and authentication guards
 
 ### UI Components
+
 - **Mantine UI** component library
 - **Responsive design** with mobile-first approach
 - **Dark/light theme** support
@@ -92,26 +98,28 @@ pnpm type-check            # Run TypeScript checking
 
 ## API Integration
 
-The web app connects to the PITCH API running on port 8001:
+The web app connects to the PITCH API running on port 8000:
 
 ```typescript
 // API client configuration
-export const API_BASE_URL = 'http://localhost:8001/api/v1'
+export const API_BASE_URL = 'http://localhost:8000/api/v1'
 
 // Example API usage
 const { data: user } = useQuery({
   queryKey: ['auth', 'me'],
-  queryFn: () => api.auth.me()
+  queryFn: () => api.auth.me(),
 })
 ```
 
 ## State Management
 
 ### Zustand Stores
+
 - **Auth Store**: User authentication state
 - **UI Store**: Global UI state (modals, notifications)
 
 ### TanStack Query
+
 - **API caching** and synchronization
 - **Optimistic updates** for better UX
 - **Background refetching** and error handling
@@ -121,7 +129,7 @@ const { data: user } = useQuery({
 Create `.env.local` in the web app directory:
 
 ```env
-NEXT_PUBLIC_API_URL=http://localhost:8001
+NEXT_PUBLIC_API_URL=http://localhost:8000
 NEXTAUTH_SECRET=your-secret-here
 NEXTAUTH_URL=http://localhost:3000
 ```

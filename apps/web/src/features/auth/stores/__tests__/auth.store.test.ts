@@ -5,7 +5,7 @@ import { useAuthStore, persistAuthToken, clearAuthToken } from '../auth.store'
 import { api } from '@/lib/client'
 import { http, HttpResponse } from 'msw'
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001/api/v1'
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1'
 
 const flushPromises = () => new Promise((resolve) => setTimeout(resolve, 0))
 

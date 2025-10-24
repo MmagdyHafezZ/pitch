@@ -27,7 +27,7 @@ pnpm --filter web dev
 ```
 
 The frontend will be available at `http://localhost:3000`. The API will be
-available at `http://localhost:8001`.
+available at `http://localhost:8000`.
 
 ### Project Structure
 
@@ -479,7 +479,7 @@ pnpm --filter web type-check
 Create `.env.local` in the `apps/web` directory:
 
 ```env
-NEXT_PUBLIC_API_URL=http://localhost:8001
+NEXT_PUBLIC_API_URL=http://localhost:8000
 NEXTAUTH_SECRET=your-secret-here
 NEXTAUTH_URL=http://localhost:3000
 ```
@@ -529,7 +529,7 @@ NEXTAUTH_URL=http://localhost:3000
 **API calls failing:**
 
 - Verify API_BASE_URL in environment variables
-- Check that the API server is running on port 8001
+- Check that the API server is running on port 8000
 - Inspect network tab for detailed error messages
 
 **TypeScript errors:**

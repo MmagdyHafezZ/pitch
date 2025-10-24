@@ -14,9 +14,7 @@ export class MicroserviceConfigService {
   private readonly logger = new Logger(MicroserviceConfigService.name);
 
   private readonly defaultServices: MicroserviceDefinition[] = [
-    { name: 'AUTH_SERVICE', queue: 'auth_queue', priority: 1 },
     { name: 'USER_SERVICE', queue: 'user_queue', priority: 2 },
-    { name: 'BUSINESS_SERVICE', queue: 'business_queue', priority: 3 },
   ];
 
   /**

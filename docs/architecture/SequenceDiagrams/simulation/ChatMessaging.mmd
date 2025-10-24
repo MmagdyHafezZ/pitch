@@ -1,0 +1,32 @@
+sequenceDiagram
+    actor User
+    participant Client as Client App
+    participant ChatGW as Chat Gateway
+    participant ChatCtrl as Chat Controller
+    participant Prompt as Prompt Service
+    participant LLM as LLM Service
+    participant Ret as Retrieval Service
+    participant MsgRepo as Message Repository
+    participant PG as Postgres
+    participant PGV as pgvector
+
+    User->>Client: Send chat text
+    Client->>ChatGW: POST /chat
+    ChatGW->>ChatCtrl: handleMessage()
+    ChatCtrl->>Prompt: buildPrompt(session, turn, persona)
+    Prompt-->>ChatCtrl: promptTemplate + vars
+
+    ChatCtrl->>LLM: generate(prompt)
+    par RAG retrieval
+        LLM->>Ret: retrieveRelevantDocs(query)
+        Ret->>PGV: similaritySearch(embeddings)
+        PGV-->>Ret: topK passages
+        Ret-->>LLM: context passages
+    and Generation
+        LLM-->>ChatCtrl: answer + citations
+    end
+
+    ChatCtrl->>MsgRepo: save user/assistant messages
+    MsgRepo->>PG: INSERT messages
+    ChatCtrl-->>ChatGW: response payload
+    ChatGW-->>Client: assistant answer

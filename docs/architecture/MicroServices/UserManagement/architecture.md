@@ -17,7 +17,7 @@
 - Roles (Admin, Manager, Member)
 - UserRole mappings (user ↔ org ↔ role)
 
-### 3. Plans & Subscriptions
+### 3. Plansl & Subscriptions
 
 - Define plans (name, quota, features JSON)
 - Subscription lifecycle (active, trial, cancelled, expired)

@@ -1,7 +1,7 @@
 {
-  "extends": "../../tsconfig.base.json",
+  "display": "Default",
   "compilerOptions": {
-    "outDir": "dist",
+    "outDir": "./dist",
     "rootDir": ".",
     "module": "nodenext",
     "moduleResolution": "nodenext",
@@ -24,6 +24,6 @@
     "strictBindCallApply": false,
     "noFallthroughCasesInSwitch": false
   },
-  "include": ["src/**/*.ts"],
+  "include": ["src/**/*.ts", "main.ts"],
   "exclude": ["node_modules", "dist"]
 }
