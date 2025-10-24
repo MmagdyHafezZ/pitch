@@ -1,0 +1,7 @@
+flowchart LR
+    ChatCtrl["Chat Controller"] -->|toolCall {name,args}| Orch["Orchestrator Svc"]
+    Orch -->|INSERT pending\n{toolName,args}| ToolRepo["ToolCall Repo"] --> PG["Postgres"]
+    Orch -->|exec & result\n{output}| ChatCtrl
+    ChatCtrl -->|UPDATE success\n{result}| ToolRepo --> PG
+    ChatCtrl -->|append assistant message\n{summary, artifacts}| MsgRepo["Message Repo"] --> PG
+    Orch -.->|publish simulation.tool.completed\n{toolId}| MQ[(RabbitMQ)]

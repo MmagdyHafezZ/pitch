@@ -1,0 +1,6 @@
+flowchart LR
+    Client["Client"] -->|POST /media (multipart)| MediaCtrl["Media Controller"]
+    MediaCtrl -->|putObject(stream,path)| Storage["Storage Svc"] --> S3[(MinIO/S3)]
+    Storage -->|uri| MediaCtrl
+    MediaCtrl -->|INSERT media {uri,size,type}| MediaRepo["Media Repo"] --> PG["Postgres"]
+    MediaCtrl -->|201 {id, uri}| Client

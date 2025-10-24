@@ -1,0 +1,20 @@
+sequenceDiagram
+    actor User
+    participant Client
+    participant SessGW as Session Gateway
+    participant SessCtrl as Session Controller
+    participant Orch as Orchestrator Service
+    participant MsgRepo as Message Repository
+    participant PG as Postgres
+    participant MQ as RabbitMQ
+
+    User->>Client: End session
+    Client->>SessGW: POST /sessions/:id/close
+    SessGW->>SessCtrl: closeSession(id)
+    SessCtrl->>Orch: finalizeSession(id)
+    Orch->>MsgRepo: write final summary/system notes
+    MsgRepo->>PG: INSERT summary
+    Orch-->>SessCtrl: status=CLOSED
+    SessCtrl-->>SessGW: 200 CLOSED
+    SessGW-->>Client: ok
+    Orch-->>MQ: publish simulation.completed

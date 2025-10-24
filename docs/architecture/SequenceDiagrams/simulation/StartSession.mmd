@@ -1,0 +1,34 @@
+sequenceDiagram
+    actor User
+    participant Client as Client App
+    participant SessGW as Session Gateway
+    participant SessCtrl as Session Controller
+    participant Orch as Orchestrator Service
+    participant SessRepo as Session Repository
+    participant TurnRepo as Turn Repository
+    participant PG as Postgres
+    participant Redis as Redis Cache
+    participant MQ as RabbitMQ
+
+    User->>Client: Start simulation
+    Client->>SessGW: POST /sessions
+    SessGW->>SessCtrl: createSession()
+    SessCtrl->>Orch: initSession()
+    Orch->>SessRepo: insert(session)
+    SessRepo->>PG: INSERT sessions
+    Orch-->>SessCtrl: sessionId
+    SessCtrl-->>SessGW: 201 sessionId
+    SessGW-->>Client: sessionId
+
+    Note over Client: First turn
+    Client->>SessGW: POST /sessions/:id/turns
+    SessGW->>SessCtrl: createTurn()
+    SessCtrl->>Orch: startTurn(sessionId)
+    Orch->>TurnRepo: insert(turn)
+    TurnRepo->>PG: INSERT turns
+    Orch-->>SessCtrl: turnId
+    SessCtrl-->>SessGW: 201 turnId
+    SessGW-->>Client: turnId
+
+    Orch-->>Redis: cache session context
+    Orch-->>MQ: publish simulation.started

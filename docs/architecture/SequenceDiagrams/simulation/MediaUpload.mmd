@@ -1,0 +1,19 @@
+sequenceDiagram
+    actor User
+    participant Client
+    participant MediaCtrl as Media Controller
+    participant Storage as Storage Service
+    participant S3 as MinIO/S3
+    participant MediaRepo as Media Repository
+    participant PG as Postgres
+
+    User->>Client: Upload media
+    Client->>MediaCtrl: POST /media (multipart)
+    MediaCtrl->>Storage: putObject(stream, path)
+    Storage->>S3: PUT /bucket/path
+    S3-->>Storage: 200 OK
+    Storage-->>MediaCtrl: objectUri
+
+    MediaCtrl->>MediaRepo: save metadata(uri, size, type)
+    MediaRepo->>PG: INSERT media
+    MediaCtrl-->>Client: 201 { id, uri }
