@@ -1,9 +1,14 @@
 flowchart LR
-    IngestGW["Ingestion Gateway"] -->|POST /ingest\n{mediaURI, meta}| IngestCtrl["Ingest Controller"]
-    IngestCtrl -->|transcribe\n{mediaURI}| Trans["Transcribe Svc"]
-    Trans -->|save transcript\n{rawText, segments[]}| TRepo["Transcript Repo"] --> Mongo[(Mongo DB)]
-    IngestCtrl -->|enrich\n{transcriptId}| Enrich["Enrichment Svc"]
-    Enrich -->|update transcript\n{topics[], entities[], chunks[]}| TRepo --> Mongo
-    TRepo -->|embed chunks\n{vectors, ids}| PGV["pgvector Index"]
-    IngestCtrl -->|202 {transcriptId, chunkCount}| IngestGW
+    IngestGW["Ingestion Gateway"] -->|"POST /ingest {mediaURI, meta}"| IngestCtrl["Ingest Controller"]
 
+    IngestCtrl -->|"transcribe {mediaURI}"| Trans["Transcribe Svc"]
+
+    Trans -->|"save transcript {rawText, segments[]}"| TRepo["Transcript Repo"]
+    TRepo --> Mongo[(Mongo DB)]
+
+    IngestCtrl -->|"enrich {transcriptId}"| Enrich["Enrichment Svc"]
+
+    Enrich -->|"update transcript {topics[], entities[], chunks[]}"| TRepo
+    TRepo -->|"embed chunks {vectors, ids}"| PGV["pgvector Index"]
+
+    IngestCtrl -->|"202 {transcriptId, chunkCount}"| IngestGW

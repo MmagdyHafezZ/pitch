@@ -1,13 +1,17 @@
 flowchart LR
-    Client["Client App"] -->|POST /sessions\n{userId, scenarioId}| SessGW["Session Gateway"]
+    Client["Client App"] -->|"POST /sessions {userId, scenarioId}"| SessGW["Session Gateway"]
     SessGW --> SessCtrl["Session Controller"]
-    SessCtrl -->|create.session\n{userId, scenarioId}| Orch["Orchestrator Svc"]
-    Orch -->|session.row| SessRepo["Session Repo"] --> PG["Postgres"]
-    Orch -->|cache session JSON| Redis[(Redis)]
-    SessCtrl -->|201 {sessionId}| SessGW --> Client
 
-    Client -->|POST /sessions/:id/turns\n{inputType, meta}| SessGW --> SessCtrl
-    SessCtrl -->|create.turn\n{sessionId}| Orch
-    Orch -->|turn.row| TurnRepo["Turn Repo"] --> PG
-    SessCtrl -->|201 {turnId}| SessGW --> Client
-    Orch -.->|publish simulation.started\n{sessionId, turnId}| MQ[(RabbitMQ)]
+    SessCtrl -->|"create.session {userId, scenarioId}"| Orch["Orchestrator Svc"]
+    Orch -->|"session.row"| SessRepo["Session Repo"]
+    SessRepo --> PG["Postgres"]
+    Orch -->|"cache session JSON"| Redis[(Redis)]
+    SessCtrl -->|"201 {sessionId}"| SessGW --> Client
+
+    Client -->|"POST /sessions/:id/turns {inputType, meta}"| SessGW --> SessCtrl
+    SessCtrl -->|"create.turn {sessionId}"| Orch
+    Orch -->|"turn.row"| TurnRepo["Turn Repo"]
+    TurnRepo --> PG
+    SessCtrl -->|"201 {turnId}"| SessGW --> Client
+
+    Orch -.->|"publish simulation.started {sessionId, turnId}"| MQ[(RabbitMQ)]

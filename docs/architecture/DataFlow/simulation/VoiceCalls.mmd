@@ -1,8 +1,23 @@
 flowchart LR
-    Client["Client (Web/Edge)"] -->|SDP Offer| CallGW["Call Gateway"] --> CallCtrl["Call Controller"]
-    CallCtrl -->|negotiate| WebRTC["WebRTC Service"] -->|SDP Answer| Client
-    Client ==>|RTP Audio Frames| WebRTC -->|audio.stream| STT["STT Service"] -->|STT API stream| STTAPI[(Whisper/Azure STT)]
-    STTAPI -->|transcript.partial/final\n{text, timestamps}| STT --> CallCtrl
-    CallCtrl -->|llm.request\n{text, sessionCtx}| LLM["LLM Service"] --> CallCtrl
-    CallCtrl -->|tts.request\n{replyText, voice}| TTS["TTS Service"] -->|API| TTSAPI[(ElevenLabs/Azure TTS)]
-    TTSAPI -->|pcm/opus frames| TTS -->|audio.track| WebRTC ==>|RTP Synth Speech| Client
+    Client["Client (Web/Edge)"] -->|"SDP Offer"| CallGW["Call Gateway"]
+    CallGW --> CallCtrl["Call Controller"]
+
+    CallCtrl -->|"negotiate"| WebRTC["WebRTC Service"]
+    WebRTC -->|"SDP Answer"| Client
+
+    Client ==>|"RTP Audio Frames"| WebRTC
+    WebRTC -->|"audio.stream"| STT["STT Service"]
+    STT -->|"STT API stream"| STTAPI[(Whisper/Azure STT)]
+
+    STTAPI -->|"transcript.partial/final {text, timestamps}"| STT
+    STT --> CallCtrl
+
+    CallCtrl -->|"llm.request {text, sessionCtx}"| LLM["LLM Service"]
+    LLM --> CallCtrl
+
+    CallCtrl -->|"tts.request {replyText, voice}"| TTS["TTS Service"]
+    TTS -->|"API"| TTSAPI[(ElevenLabs/Azure TTS)]
+
+    TTSAPI -->|"pcm/opus frames"| TTS
+    TTS -->|"audio.track"| WebRTC
+    WebRTC ==>|"RTP Synth Speech"| Client

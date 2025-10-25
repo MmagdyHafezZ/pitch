@@ -1,15 +1,24 @@
 flowchart LR
     subgraph Client["Client App"]
-        UTXT["User Text\n(JSON)"]
+        UTXT["User Text (JSON)"]
     end
-    ChatGW["Chat Gateway"] -->|request: chat.message\n{sessionId, turnId, text}| ChatCtrl["Chat Controller"]
-    ChatCtrl -->|fetch: prompt.context\n{personaId, scenarioId}| Prompt["Prompt Service"]
-    Prompt -->|prompt.template + vars| ChatCtrl
-    ChatCtrl -->|inference.request\n{prompt, context[]}| LLM["LLM Service"]
-    LLM -->|retrieval.query\n{embedding(query)}| Ret["Retrieval Service"]
-    Ret -->|similarity KNN| PGV["pgvector Index"]
-    PGV -->|topK passages[]| Ret --> LLM
-    LLM -->|inference.result\n{answer, citations[]}| ChatCtrl
-    ChatCtrl -->|persist.message\n{role, content, meta}| MsgRepo["Message Repo"]
-    MsgRepo -->|INSERT| PG["Postgres"]
-    ChatCtrl -->|response\n{answer, sources[]}| ChatGW --> Client
+
+    UTXT --> ChatGW["Chat Gateway"]
+
+    ChatGW -->|"request: chat.message {sessionId, turnId, text}"| ChatCtrl["Chat Controller"]
+    ChatCtrl -->|"fetch: prompt.context {personaId, scenarioId}"| Prompt["Prompt Service"]
+    Prompt -->|"prompt.template + vars"| ChatCtrl
+
+    ChatCtrl -->|"inference.request {prompt, context[]}"| LLM["LLM Service"]
+
+    LLM -->|"retrieval.query {embedding(query)}"| Ret["Retrieval Service"]
+    Ret -->|"similarity KNN"| PGV["pgvector Index"]
+    PGV -->|"topK passages[]"| Ret
+    Ret --> LLM
+
+    LLM -->|"inference.result {answer, citations[]}"| ChatCtrl
+
+    ChatCtrl -->|"persist.message {role, content, meta}"| MsgRepo["Message Repo"]
+    MsgRepo -->|"INSERT"| PG["Postgres"]
+
+    ChatCtrl -->|"response {answer, sources[]}"| ChatGW --> Client

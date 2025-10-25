@@ -1,9 +1,13 @@
 flowchart LR
-    Client["Client"] -->|POST /feedback\n{sessionId, answers[]}| FBGW["Feedback GW"] --> FBCtrl["Feedback Ctrl"]
-    FBCtrl -->|score.request\n{answers[], rubricId?}| FBSvc["Feedback Svc"]
-    FBSvc -->|getRubric {id or config}| RubricSvc["Rubric Svc"] --> RubricsRepo["Rubrics Repo"] --> PG["Postgres"]
-    FBSvc -->|scores[], rationale| FBCtrl
-    FBCtrl -->|INSERT score rows| ScoreRepo["Score Repo"] --> PG
-    FBSvc -->|cache aggregates| Redis[(Redis)]
-    FBSvc -.->|publish feedback.ready\n{sessionId, turnId}| MQ[(RabbitMQ)]
-    FBCtrl -->|200 {scores}| FBGW --> Client
+    Client["Client"] -->|"POST /feedback {sessionId, answers[]}"| FBGW["Feedback GW"]
+    FBGW --> FBCtrl["Feedback Ctrl"]
+    FBCtrl -->|"score.request {answers[], rubricId?}"| FBSvc["Feedback Svc"]
+    FBSvc -->|"getRubric {id or config}"| RubricSvc["Rubric Svc"]
+    RubricSvc --> RubricsRepo["Rubrics Repo"]
+    RubricsRepo --> PG["Postgres"]
+    FBSvc -->|"scores[], rationale"| FBCtrl
+    FBCtrl -->|"INSERT score rows"| ScoreRepo["Score Repo"]
+    ScoreRepo --> PG
+    FBSvc -->|"cache aggregates"| Redis[(Redis)]
+    FBSvc -.->|"publish feedback.ready {sessionId, turnId}"| MQ[(RabbitMQ)]
+    FBCtrl -->|"200 {scores}"| FBGW --> Client

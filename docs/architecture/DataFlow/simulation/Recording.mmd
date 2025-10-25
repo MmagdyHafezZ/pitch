@@ -1,6 +1,12 @@
 flowchart LR
-    CallCtrl["Call Controller"] -->|startRecording {callId}| Rec["Recording Svc"]
-    Rec -->|PUT chunkN| S3[(MinIO/S3)]
-    Rec -->|persist media\n{uri, codec, duration}| MediaRepo["Media Repo"] --> PG["Postgres"]
-    Rec -->|finalize\n{status: READY}| RecRepo["Recording Repo"] --> PG
-    Rec -->|READY {mediaUri}| CallCtrl
+    CallCtrl["Call Controller"] -->|"startRecording {callId}"| Rec["Recording Svc"]
+
+    Rec -->|"PUT chunkN"| S3[(MinIO/S3)]
+
+    Rec -->|"persist media {uri, codec, duration}"| MediaRepo["Media Repo"]
+    MediaRepo --> PG["Postgres"]
+
+    Rec -->|"finalize {status: READY}"| RecRepo["Recording Repo"]
+    RecRepo --> PG
+
+    Rec -->|"READY {mediaUri}"| CallCtrl
