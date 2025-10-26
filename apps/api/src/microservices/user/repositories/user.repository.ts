@@ -27,18 +27,18 @@ export class UserRepository {
   constructor(private readonly prisma: UserPrismaService) {}
 
   async findMany(): Promise<User[]> {
-    return this.prisma.user.findMany();
+    return await this.prisma.user.findMany();
   }
 
   async findById(id: string): Promise<User | null> {
-    return this.prisma.user.findUnique({
+    return await this.prisma.user.findUnique({
       where: { id },
       include: { oauthAccounts: true },
     });
   }
 
   async findByEmail(email: string): Promise<User | null> {
-    return this.prisma.user.findUnique({
+    return await this.prisma.user.findUnique({
       where: { email },
       include: { oauthAccounts: true },
     });
@@ -48,7 +48,7 @@ export class UserRepository {
     provider: AuthProvider,
     providerId: string,
   ): Promise<User | null> {
-    return this.prisma.user.findFirst({
+    return await this.prisma.user.findFirst({
       where: {
         oauthAccounts: {
           some: {
@@ -62,7 +62,7 @@ export class UserRepository {
   }
 
   async create(data: CreateUserData): Promise<User> {
-    return this.prisma.user.create({
+    return await this.prisma.user.create({
       data,
       include: { oauthAccounts: true },
     });
@@ -72,7 +72,7 @@ export class UserRepository {
     userData: CreateUserData,
     oauthData: Omit<CreateOAuthAccountData, 'userId'>,
   ): Promise<User> {
-    return this.prisma.user.create({
+    return await this.prisma.user.create({
       data: {
         ...userData,
         oauthAccounts: {
@@ -84,7 +84,7 @@ export class UserRepository {
   }
 
   async update(id: string, data: Partial<CreateUserData>): Promise<User> {
-    return this.prisma.user.update({
+    return await this.prisma.user.update({
       where: { id },
       data,
       include: { oauthAccounts: true },
@@ -98,7 +98,7 @@ export class UserRepository {
   }
 
   async getOAuthAccounts(userId: string): Promise<OAuthAccount[]> {
-    return this.prisma.oAuthAccount.findMany({
+    return await this.prisma.oAuthAccount.findMany({
       where: { userId },
       orderBy: { createdAt: 'asc' },
     });
@@ -107,7 +107,7 @@ export class UserRepository {
   async createOAuthAccount(
     data: CreateOAuthAccountData,
   ): Promise<OAuthAccount> {
-    return this.prisma.oAuthAccount.create({
+    return await this.prisma.oAuthAccount.create({
       data,
     });
   }

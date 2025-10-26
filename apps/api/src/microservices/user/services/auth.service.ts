@@ -99,7 +99,7 @@ export class AuthService {
   }
 
   async findUserByOAuthAccount(provider: AuthProvider, providerId: string) {
-    return this.prisma.user.findFirst({
+    return await this.prisma.user.findFirst({
       where: {
         oauthAccounts: {
           some: {

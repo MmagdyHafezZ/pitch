@@ -14,6 +14,7 @@ The PITCH API now follows a microservices architecture:
 - **RabbitMQ** - Message queue communication between services
 
 For current development patterns, see:
+
 - [Development Guide](./development.md) - Current microservices patterns
 - [Database Guide](./database.md) - Multi-database setup
 - [Main API README](../README.md) - Setup and architecture
@@ -23,6 +24,7 @@ For current development patterns, see:
 The patterns below show traditional NestJS development that has been superseded by the microservices architecture.
 
 ### Traditional Project Structure
+
 ```
 src/
 ├── app.controller.ts    # Main app controller
@@ -42,6 +44,7 @@ src/
 ```
 
 ### Current Project Structure
+
 ```
 src/
 ├── gateway/                # API Gateway
@@ -68,7 +71,9 @@ src/
 ## Migration from Legacy to Microservices
 
 ### 1. Database Separation
+
 **Before (Single Database):**
+
 ```prisma
 // Single schema.prisma
 model User {
@@ -86,6 +91,7 @@ model Project {
 ```
 
 **After (Separate Databases):**
+
 ```prisma
 // User microservice - PostgreSQL
 model User {
@@ -103,7 +109,9 @@ model Project {
 ```
 
 ### 2. Service Communication
+
 **Before (Direct Method Calls):**
+
 ```typescript
 @Injectable()
 export class ProjectsService {
@@ -117,6 +125,7 @@ export class ProjectsService {
 ```
 
 **After (Message Patterns):**
+
 ```typescript
 // Gateway Controller
 @Controller('projects')
@@ -141,7 +150,9 @@ async createProject(@Payload() data: CreateProjectDto) {
 ```
 
 ### 3. Authentication Evolution
+
 **Before (Monolithic Auth):**
+
 ```typescript
 @UseGuards(JwtAuthGuard)
 @Controller('users')
@@ -154,6 +165,7 @@ export class UsersController {
 ```
 
 **After (Gateway Auth with Claims Forwarding):**
+
 ```typescript
 // Gateway Controller
 @UseGuards(GlobalJwtAuthGuard)
@@ -161,7 +173,7 @@ export class UsersController {
 export class UserGatewayController {
   @Get('profile')
   async getProfile(@UserClaims() userClaims: any) {
-    return this.userService.send('get_profile', { userClaims });
+    return await this.userService.send('get_profile', { userClaims });
   }
 }
 
@@ -176,6 +188,7 @@ async getProfile(@Payload() data: MessageWithUserClaims) {
 ## Deprecated Technologies
 
 ### tRPC (No Longer Used)
+
 The original architecture planned to use tRPC for type-safe APIs:
 
 ```typescript
@@ -185,11 +198,9 @@ export const appRouter = router({
     list: publicProcedure.query(() => {
       return this.usersService.findAll();
     }),
-    byId: publicProcedure
-      .input(z.string())
-      .query(({ input }) => {
-        return this.usersService.findOne(input);
-      }),
+    byId: publicProcedure.input(z.string()).query(({ input }) => {
+      return this.usersService.findOne(input);
+    }),
   },
 });
 ```
@@ -197,6 +208,7 @@ export const appRouter = router({
 **Why Removed:** tRPC doesn't fit well with microservices architecture. RabbitMQ message patterns provide better service isolation and reliability.
 
 ### Single Database Approach
+
 ```typescript
 // Deprecated single Prisma service
 @Injectable()
@@ -212,21 +224,25 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
 ## Benefits of Microservices Migration
 
 ### 1. Service Isolation
+
 - User service can scale independently
 - Business logic separated from user management
 - Database technology optimized per service (PostgreSQL vs MongoDB)
 
 ### 2. Development Independence
+
 - Teams can work on services independently
 - Separate deployment cycles
 - Technology stack flexibility per service
 
 ### 3. Fault Tolerance
+
 - Failure in one service doesn't bring down entire system
 - Message queues provide retry mechanisms
 - Better error isolation and recovery
 
 ### 4. Security
+
 - Centralized authentication at gateway level
 - User context forwarded securely to services
 - No direct database access from external clients
@@ -234,21 +250,25 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
 ## Migration Best Practices
 
 ### 1. Gradual Migration
+
 - Start with API Gateway for authentication
 - Migrate one domain at a time (users first, then business logic)
 - Keep legacy endpoints during transition
 
 ### 2. Data Consistency
+
 - Plan for eventual consistency between services
 - Use saga patterns for distributed transactions
 - Implement proper rollback mechanisms
 
 ### 3. Testing Strategy
+
 - Test individual microservices in isolation
 - Integration tests for message patterns
 - End-to-end tests through API Gateway
 
 ### 4. Monitoring and Logging
+
 - Centralized logging with correlation IDs
 - Service health checks
 - Performance monitoring per service

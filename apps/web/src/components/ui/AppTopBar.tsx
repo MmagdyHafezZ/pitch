@@ -10,7 +10,11 @@ type HeaderProps = {
   onChange?: (v: string) => void
   date?: Date
   gutter?: number
+  onLogout?: () => Promise<void> | void
+  showSearch?: boolean
+  searchPlaceholder?: string
 }
+
 
 export function AppTopBar({ value, onChange, date = new Date(), gutter = 16 }: HeaderProps) {
   const weekday = useMemo(() => dayjs(date).format('dddd'), [date])

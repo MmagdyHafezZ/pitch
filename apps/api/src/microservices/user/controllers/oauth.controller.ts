@@ -60,7 +60,7 @@ export class OAuthController {
         throw new Error('No user data received from Google OAuth');
       }
 
-      const tokens = this.authService.generateTokens(req.user);
+      const tokens = await this.authService.generateTokens(req.user);
 
       const frontendUrl =
         process.env.NEXT_PUBLIC_FRONTEND_URL || 'http://localhost:3000';
@@ -103,7 +103,7 @@ export class OAuthController {
         throw new Error('No user data received from LinkedIn OAuth');
       }
 
-      const tokens = this.authService.generateTokens(req.user);
+      const tokens = await this.authService.generateTokens(req.user);
       const frontendUrl =
         process.env.NEXT_PUBLIC_FRONTEND_URL || 'http://localhost:3000';
 
@@ -143,7 +143,7 @@ export class OAuthController {
         throw new Error('No user data received from GitHub OAuth');
       }
 
-      const tokens = this.authService.generateTokens(req.user);
+      const tokens = await this.authService.generateTokens(req.user);
       const frontendUrl =
         process.env.NEXT_PUBLIC_FRONTEND_URL || 'http://localhost:3000';
 
@@ -183,7 +183,7 @@ export class OAuthController {
         throw new Error('No user data received from Microsoft OAuth');
       }
 
-      const tokens = this.authService.generateTokens(req.user);
+      const tokens = await this.authService.generateTokens(req.user);
       const frontendUrl =
         process.env.NEXT_PUBLIC_FRONTEND_URL || 'http://localhost:3000';
 
@@ -223,7 +223,7 @@ export class OAuthController {
         throw new Error('No user data received from Discord OAuth');
       }
 
-      const tokens = this.authService.generateTokens(req.user);
+      const tokens = await this.authService.generateTokens(req.user);
       const frontendUrl =
         process.env.NEXT_PUBLIC_FRONTEND_URL || 'http://localhost:3000';
 
@@ -250,7 +250,7 @@ export class OAuthController {
     description: 'Returns all OAuth accounts linked to the current user',
   })
   async getLinkedAccounts(@GetUser() user: any) {
-    return this.authService.getUserOAuthAccounts(user.id);
+    return await this.authService.getUserOAuthAccounts(user.id);
   }
 
   @Delete('unlink/:provider')
@@ -271,7 +271,7 @@ export class OAuthController {
     @GetUser() user: any,
     @Param('provider') provider: AuthProvider,
   ) {
-    return this.authService.unlinkOAuthAccount(user.id, provider);
+    return await this.authService.unlinkOAuthAccount(user.id, provider);
   }
 
   // Link additional OAuth accounts (when user is already logged in)
@@ -293,7 +293,7 @@ export class OAuthController {
   ) {
     // This would redirect to the OAuth provider with a "link" state
     // Implementation depends on your specific linking flow
-    return { message: `Linking ${provider} account...` };
+    return await { message: `Linking ${provider} account...` };
   }
 
   // Refresh token endpoint
@@ -308,6 +308,6 @@ export class OAuthController {
     if (!refreshToken) {
       throw new Error('Refresh token is required');
     }
-    return this.authService.refreshToken(refreshToken);
+    return await this.authService.refreshToken(refreshToken);
   }
 }
