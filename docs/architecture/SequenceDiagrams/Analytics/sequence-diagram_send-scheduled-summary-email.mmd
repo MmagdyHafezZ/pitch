@@ -1,0 +1,60 @@
+sequenceDiagram
+    autonumber
+    participant CR as Scheduler/Cron
+    participant J as SummaryEmailJob
+    participant PR as Preferences Repo
+    participant D as Directory Repository
+    participant MR as Metrics Repository
+    participant US as Usage Service
+    participant T as Template Renderer
+    participant N as Notification Service
+    participant JR as Job Repository
+    participant EB as Event Bus
+
+    Note over CR,J: Periodic summaries to managers by org/team
+
+    CR->>J: triggerSchedules()
+
+    %% Load schedules and targets
+    J->>PR: listEnabledSummaries()
+    PR-->>J: summaries[{orgId, teamId?, cadence, recipients?}]
+    J->>JR: createBatchRun(status="running")
+    JR-->>J: {runId}
+
+    loop for each summary
+        Note over J: Resolve recipients and time window
+        alt recipients provided
+            J-->>J: use recipients
+        else no recipients
+            J->>D: listManagerEmails(orgId, teamId?)
+            D-->>J: recipients[]
+        end
+
+        J-->>J: compute window = [from,to] by cadence
+
+        par gather metrics
+            J->>MR: fetchMetrics(scope=org|team, id, from, to)
+            MR-->>J: metrics{}
+        and gather usage
+            J->>US: fetchUsage(scope=org|team, id, from, to)
+            US-->>J: usage{}
+        end
+
+        Note over J: derive KPIs, deltas, trends
+
+        J->>T: render("summary_email", {metrics, usage, window, scope})
+        T-->>J: htmlBody
+
+        par send email
+            J->>N: sendEmail(to=recipients, subject="Weekly KPI summary", body=htmlBody)
+            N-->>J: {messageId, result}
+        and audit
+            J->>JR: appendRunLog(runId, {orgId, teamId?, count=recipients.length, result})
+            JR-->>J: ok
+        end
+
+        J->>EB: publish(event="summary.email.sent", payload={orgId, teamId?, window})
+    end
+
+    J->>JR: finalizeRun(runId, status="succeeded")
+    JR-->>J: ok

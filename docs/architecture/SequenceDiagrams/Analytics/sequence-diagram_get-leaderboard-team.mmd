@@ -1,0 +1,46 @@
+sequenceDiagram
+    autonumber
+    participant M as Manager Client
+    participant G as API Gateway
+    participant Z as AuthZ Service
+    participant C as LeaderboardController
+    participant R as Shared Redis Cluster
+    participant MR as Metrics Repository
+    participant US as Usage Service
+
+    Note over M,C: Team leaderboard within org scope\nInputs: orgId, teamId, metric (score|sessions|tokens|calls), from, to, limit, cursor
+
+    M->>G: GET /orgs/{orgId}/teams/{teamId}/leaderboards?metric=&from=&to=&limit=&cursor=
+    G->>Z: authorize(subject=manager, action=read_leaderboard, resource=teamId)
+    alt authorized
+        Z-->>G: allow
+        G->>C: Forward request (orgId, teamId, metric, from, to, limit, cursor)
+
+        C->>R: GET cache["lb_team", teamId, metric, from, to, limit, cursor]
+        alt cache hit
+            R-->>C: cached page
+            C-->>G: 200 OK + {rows[], nextCursor}
+            G-->>M: 200 OK + {rows[], nextCursor}
+        else cache miss
+            alt metric in [score, sessions]
+                C->>MR: getTeamLeaderboard(teamId, metric, from, to, limit, cursor)
+                MR-->>C: {rows[], nextCursor}
+            else metric in [tokens, calls]
+                C->>US: getTeamUsageLeaderboard(teamId, metric, from, to, limit, cursor)
+                US-->>C: {rows[], nextCursor}
+            end
+
+            Note over C: Break ties by lastActivity desc then userId asc
+            C->>R: SET cache["lb_team", teamId, metric, from, to, limit, cursor] = page TTL=5m
+            C-->>G: 200 OK + {rows[], nextCursor}
+            G-->>M: 200 OK + {rows[], nextCursor}
+        end
+    else forbidden
+        Z-->>G: deny
+        G-->>M: 403 Forbidden
+    end
+
+    opt cache bust on team re-aggregation
+        MR-->>C: leaderboardRebuilt(teamId, metric, from, to)
+        C->>R: DEL cache["lb_team", teamId, metric, *]
+    end

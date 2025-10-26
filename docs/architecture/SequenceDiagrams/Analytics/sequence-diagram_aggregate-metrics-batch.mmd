@@ -1,0 +1,65 @@
+sequenceDiagram
+    autonumber
+    participant CR as Scheduler/Cron
+    participant BA as BatchAggregator Job
+    participant S as Session Repository
+    participant MR as Metrics Repository
+    participant UR as Usage Repository
+    participant SC as Scoring Service
+    participant RZ as Shared Redis Cache
+    participant EB as Event Bus
+    participant L as Logger
+
+    Note over CR,BA: Periodic batch to aggregate KPIs for orgs, teams, users within [from,to]
+
+    CR->>BA: triggerAggregate(from,to, granularity=hour|day)
+    BA->>L: log("aggregate_start", {from,to,granularity})
+
+    %% Pull raw facts
+    par sessions
+        BA->>S: listSessions(from,to)
+        S-->>BA: sessions[]
+    and usage
+        BA->>UR: listUsageRollups(from,to)
+        UR-->>BA: usageRollups[]
+    and scores
+        BA->>SC: listScores(from,to)
+        SC-->>BA: scores[]
+    end
+
+    %% Compute aggregates per scope
+    loop for each orgId in data
+        BA->>MR: upsertOrgAggregates(orgId, from,to, {sessionCounts, activeUsers, avgScore, tokens,calls})
+        MR-->>BA: ok
+        loop for each teamId under orgId
+            BA->>MR: upsertTeamAggregates(teamId, from,to, {sessionCounts, activeUsers, avgScore, tokens,calls})
+            MR-->>BA: ok
+        end
+        loop for each userId under orgId
+            BA->>MR: upsertUserAggregates(userId, from,to, {sessionCounts, lastActivity, avgScore, tokens,calls})
+            MR-->>BA: ok
+        end
+    end
+
+    %% Time series rollups
+    par hourly_or_daily_series
+        BA->>MR: upsertTimeseries(scope=org, from,to, granularity)
+        MR-->>BA: ok
+    and
+        BA->>MR: upsertTimeseries(scope=team, from,to, granularity)
+        MR-->>BA: ok
+    and
+        BA->>MR: upsertTimeseries(scope=user, from,to, granularity)
+        MR-->>BA: ok
+    end
+
+    %% Cache hygiene and notifications
+    BA->>RZ: DEL cache["org_metrics", *]
+    BA->>RZ: DEL cache["team_metrics", *]
+    BA->>RZ: DEL cache["user_detail", *]
+    BA->>RZ: DEL cache["user_trends", *]
+
+    BA->>EB: publish("metrics.batch.aggregated", {from,to,granularity})
+    EB-->>BA: ack
+
+    BA->>L: log("aggregate_done", {from,to})

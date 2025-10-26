@@ -1,0 +1,54 @@
+sequenceDiagram
+    autonumber
+    participant EB as Event Bus
+    participant SP as Stream Processor (Sessionizer)
+    participant R as Raw Events Repo
+    participant S as Session Repository
+    participant MR as Metrics Repository
+    participant RZ as Shared Redis Cache
+    participant L as Logger/Tracing
+
+    EB-->>SP: subscribe("provider.webhook.normalized")
+    SP->>L: log("start_batch")
+
+    loop each event
+        SP->>R: fetchRaw(event.rawId)
+        R-->>SP: rawPayload
+
+        alt has orgId and userId
+            SP-->>SP: set key = {orgId, userId}
+        else missing keys
+            SP->>L: log("skip_event_missing_keys")
+            SP-->>SP: skip processing for this event
+        end
+
+        alt event.type == "session.start" or event.type == "interaction.start"
+            SP->>S: openOrCreateSession(key, event.ts, metadata)
+            S-->>SP: sessionId
+        else event.type in ["interaction.token_usage","interaction.score","interaction.end"]
+            SP->>S: upsertInteraction(sessionId?, key, event.ts, payload)
+            S-->>SP: sessionId
+        else event.type == "session.end" or event.type == "timeout"
+            SP->>S: closeSessionIfOpen(key, event.ts)
+            S-->>SP: sessionId (closed)
+        else heartbeat or other
+            SP-->>SP: update lastSeen for key
+        end
+
+        opt session timeout handling
+            SP->>S: closeIdleSessions(key, now)
+            S-->>SP: closedSessions
+        end
+
+        opt aggregates on close
+            SP->>MR: upsertSessionAggregates(sessionId, metrics)
+            MR-->>SP: ok
+        end
+
+        SP->>RZ: DEL cache["user_detail", userId, *]
+        SP->>RZ: DEL cache["me_sessions", userId, *]
+        SP->>RZ: DEL cache["org_metrics", orgId, *]
+        SP->>RZ: DEL cache["team_metrics", teamId, *]
+    end
+
+    SP->>L: log("end_batch")

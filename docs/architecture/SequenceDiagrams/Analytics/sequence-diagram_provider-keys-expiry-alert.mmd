@@ -1,0 +1,56 @@
+sequenceDiagram
+    autonumber
+    participant CR as Scheduler/Cron
+    participant M as ProviderKeyMonitor (Job)
+    participant TM as Key Metadata Registry
+    participant PS as Provider Sync Service
+    participant V as Secrets Store (Vault/KMS)
+    participant AR as Alerts Repository
+    participant N as Notification Service
+    participant EB as Event Bus
+
+    Note over CR,M: Periodic scan for soon-to-expire or expired provider keys
+
+    CR->>M: triggerScan()
+
+    par refresh stale provider metadata
+        M->>PS: refreshMetadataIfStale()
+        PS-->>M: refreshed={true|false}
+    and list candidate keys
+        M->>TM: listKeyRefs(filter=active|expiringSoon|expired)
+        TM-->>M: keyRefs[]
+    end
+
+    loop for each keyRef in keyRefs
+        M->>TM: getKeyMetadata(keyRefId)
+        TM-->>M: {provider, orgId, teamId, createdAt, lastRotatedAt, expiresAt, status}
+
+        Note over M: compute ttl = expiresAt - now\nalertLevel = {info|warning|critical}
+
+        alt status == revoked or deleted
+            Note over M: skip alert creation
+        else status in [active, expiring, expired]
+            opt fetch key tail if policy requires
+                M->>V: readKeyTail(keyRefId)
+                V-->>M: ****...1234
+            end
+
+            M->>AR: upsertAlert(orgId, teamId, keyRefId, provider, expiresAt, alertLevel, keyTail)
+            AR-->>M: {alertId, created|updated}
+
+            M->>EB: publish(event=providerKey.expiryAlert, payload={alertId, orgId, teamId, keyRefId, alertLevel})
+        end
+    end
+
+    par notify channels
+        M->>N: notifyEmail(alertsBatch)
+        N-->>M: emailResult
+    and
+        M->>N: notifySlack(alertsBatch)
+        N-->>M: slackResult
+    and
+        M->>N: notifyWebhook(alertsBatch)
+        N-->>M: webhookResult
+    end
+
+    Note over M: record job metrics: scanned, alerted, skipped, failures, duration

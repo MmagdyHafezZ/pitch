@@ -1,0 +1,65 @@
+sequenceDiagram
+    autonumber
+    participant M as Manager Client
+    participant G as API Gateway
+    participant Z as AuthZ Service
+    participant C as ProviderKeyController
+    participant R as Shared Redis Cluster
+    participant TM as Key Metadata Registry
+    participant V as Secrets Store (Vault/KMS)
+    participant PS as Provider Sync Service
+
+    Note over M,C: List LLM provider keys with expiry and alert flags\nInputs: orgId, optional teamId, provider, expiresBefore, page, size
+
+    M->>G: GET /orgs/{orgId}/provider-keys?teamId=&provider=&expiresBefore=&page=&size=
+    G->>Z: authorize(subject=manager, action=read_provider_keys, resource=orgId)
+    alt authorized
+        Z-->>G: allow
+        G->>C: Forward request (orgId, teamId, provider, expiresBefore, page, size)
+
+        C->>R: GET cache["prov_keys", orgId, teamId, provider, expiresBefore, page, size]
+        alt cache hit
+            R-->>C: cached page
+            C-->>G: 200 OK {keys[], nextCursor}
+            G-->>M: 200 OK {keys[], nextCursor}
+        else cache miss
+            par ensure metadata fresh
+                C->>PS: refreshMetadataIfStale(orgId, teamId, provider)
+                PS-->>C: refreshed={true|false}
+            and read key refs
+                C->>TM: listKeyRefs(orgId, teamId, provider, expiresBefore, page, size)
+                TM-->>C: {keyRefs[], nextCursor}
+            end
+
+            loop for each keyRef in keyRefs
+                C->>TM: getKeyMetadata(keyRefId)
+                TM-->>C: {provider, teamId, createdAt, lastRotatedAt, expiresAt, status}
+                Note over C: alertFlag = expiresAt within threshold
+            end
+
+            opt reveal key tail if permitted
+                M->>G: header X-Reveal-Key-Tail=true
+                G->>C: propagate header
+                alt policy allows
+                    loop for each keyRef needing tail
+                        C->>V: readKeyTail(keyRefId)
+                        V-->>C: ****...1234
+                    end
+                else masked by default
+                    Note over C: keep masked tails
+                end
+            end
+
+            C->>R: SET cache["prov_keys", orgId, teamId, provider, expiresBefore, page, size]=page TTL=5m
+            C-->>G: 200 OK {keys:[{id, provider, teamId, expiresAt, status, alertFlag, keyTail}], nextCursor}
+            G-->>M: 200 OK {keys[], nextCursor}
+        end
+    else forbidden
+        Z-->>G: deny
+        G-->>M: 403 Forbidden
+    end
+
+    opt cache bust on rotation/revocation
+        TM-->>C: keyUpdated(orgId, keyRefId)
+        C->>R: DEL cache["prov_keys", orgId, *]
+    end

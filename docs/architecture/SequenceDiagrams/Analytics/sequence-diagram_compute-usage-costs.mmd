@@ -1,0 +1,42 @@
+sequenceDiagram
+    autonumber
+    participant CR as Scheduler/Cron
+    participant CJ as CostingJob
+    participant UR as Usage Repository
+    participant PT as Pricing Table
+    participant MR as Metrics Repository
+    participant EB as Event Bus
+    participant N as Notification Service
+
+    Note over CR,CJ: Periodic job to compute cost from usage rollups
+
+    CR->>CJ: triggerCosting(range=from..to, scope=org|team|user)
+    CJ->>UR: listUsageRollups(range, scope)
+    UR-->>CJ: rollups[{orgId,teamId?,userId?,model,period,qty:{tokensIn,tokensOut,calls}}]
+
+    loop for each rollup
+        CJ->>PT: getPrice(model, period)
+        PT-->>CJ: {per1kPrompt, per1kCompletion, perCall, currency}
+
+        CJ->>CJ: compute cost = (tokensIn/1000)*per1kPrompt + (tokensOut/1000)*per1kCompletion + calls*perCall
+
+        CJ->>UR: upsertCost(rollupKey, cost, currency)
+        UR-->>CJ: ok
+
+        CJ->>MR: upsertCostAggregates(orgId, teamId?, userId?, period, model, cost)
+        MR-->>CJ: ok
+
+        CJ->>EB: publish(event="usage.cost.computed", payload={orgId,teamId?,userId?,model,period,cost})
+        EB-->>CJ: ack
+    end
+
+    opt notify anomalies
+        CJ->>MR: getCostAnomalies(range, threshold)
+        MR-->>CJ: anomalies[]
+        alt anomalies not empty
+            CJ->>N: sendEmail(to=FinOps, subject="Cost anomaly detected", body=anomalies)
+            N-->>CJ: sent
+        else no anomalies
+            CJ->>CJ: proceed
+        end
+    end

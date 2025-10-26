@@ -1,0 +1,56 @@
+sequenceDiagram
+    autonumber
+    participant M as Manager Client
+    participant G as Managers API (Gateway)
+    participant Z as AuthZ Service
+    participant C as TeamMetricsController
+    participant R as Shared Redis Cluster
+    participant D as Directory Repository
+    participant S as Session Repository
+    participant MR as Metrics Repository
+    participant US as Usage Service
+
+    Note over M,C: Team detail = profile, members, last activity, sessions, avg score, AI usage, trends\nInputs: orgId, teamId, from, to, page, size
+
+    M->>G: GET /orgs/{orgId}/teams/{teamId}/detail?from=&to=&page=&size=
+    G->>Z: authorize(subject=manager, action=read, resource=teamId)
+    alt authorized
+        Z-->>G: allow
+        G->>C: Forward request (orgId, teamId, from, to, page, size)
+
+        C->>R: GET cache["team_detail", teamId, from, to, page, size]
+        alt Cache hit
+            R-->>C: cached detail
+            C-->>G: 200 OK + detail
+            G-->>M: 200 OK + detail
+        else Cache miss
+            par Fetch team profile
+                C->>D: getTeamProfile(orgId, teamId)
+                D-->>C: {teamName, members[], createdAt}
+            and Fetch team sessions
+                C->>S: getTeamSessions(teamId, from, to, page, size)
+                S-->>C: {sessions[], lastActivity, paging}
+            and Compute team aggregates
+                C->>MR: getTeamScoreSeries(teamId, from, to)
+                MR-->>C: scoreTimeseries
+                C->>MR: getTeamAggregates(teamId, from, to)
+                MR-->>C: {avgScore, sessionCount}
+            and Fetch AI usage
+                C->>US: getTeamAiUsage(teamId, from, to)
+                US-->>C: {tokens, calls, cost}
+            end
+
+            Note over C: Compose trends from scoreTimeseries and sessions
+            C->>R: SET cache["team_detail", teamId, from, to, page, size]=detail TTL=15m
+            C-->>G: 200 OK + detail
+            G-->>M: 200 OK + detail
+        end
+    else forbidden
+        Z-->>G: deny
+        G-->>M: 403 Forbidden
+    end
+
+    opt cache invalidation on membership changes
+        D-->>C: teamUpdated|memberAdded|memberRemoved (teamId)
+        C->>R: DEL cache["team_detail", teamId, *]
+    end

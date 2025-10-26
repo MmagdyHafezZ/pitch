@@ -1,0 +1,56 @@
+sequenceDiagram
+    autonumber
+    participant CR as Scheduler/Cron
+    participant PJ as ProviderUsageSync Job
+    participant TM as Key Metadata Registry
+    participant V as Secrets Store (Vault/KMS)
+    participant PA as Provider API Client
+    participant UR as Usage Repository
+    participant MR as Metrics Repository
+    participant AR as Alerts Repository
+    participant EB as Event Bus
+    participant L as Logger
+
+    Note over CR,PJ: Periodic sync of per-key usage and quotas from providers
+
+    CR->>PJ: triggerSync()
+    PJ->>L: log("sync_start")
+
+    PJ->>TM: listActiveKeys()
+    TM-->>PJ: keyRefs[{keyRefId, provider, orgId, teamId?}]
+
+    loop for each keyRef
+        PJ->>V: getCredentials(keyRefId)
+        V-->>PJ: credHandle
+
+        PJ->>PA: fetchUsage(provider, credHandle)
+        PA-->>PJ: {windowStart, windowEnd, tokensIn, tokensOut, calls, quota?, softLimit?}
+
+        PJ->>UR: upsertKeyUsage(keyRefId, windowStart, windowEnd, {tokensIn, tokensOut, calls})
+        UR-->>PJ: ok
+
+        PJ->>MR: upsertOrgTeamUsage(orgId, teamId?, windowEnd, {tokensIn, tokensOut, calls})
+        MR-->>PJ: ok
+
+        alt quota present
+            PJ-->>PJ: pct = (tokensIn+tokensOut)/quota * 100
+            alt pct >= 100
+                PJ->>AR: upsertAlert(orgId, teamId?, keyRefId, level="critical", reason="quota_exhausted")
+                AR-->>PJ: alertId
+                PJ->>EB: publish("providerKey.quota.exhausted", {keyRefId, orgId, teamId?, pct})
+                EB-->>PJ: ack
+            else pct >= 80
+                PJ->>AR: upsertAlert(orgId, teamId?, keyRefId, level="warning", reason="quota_80_percent")
+                AR-->>PJ: alertId
+                PJ->>EB: publish("providerKey.quota.warning", {keyRefId, orgId, teamId?, pct})
+                EB-->>PJ: ack
+            else pct < 80
+                PJ->>AR: clearAlert(orgId, teamId?, keyRefId, reasons=["quota_80_percent","quota_exhausted"])
+                AR-->>PJ: ok
+            end
+        else no quota info
+            PJ->>L: log("no_quota_info", keyRefId)
+        end
+    end
+
+    PJ->>L: log("sync_done")

@@ -1,0 +1,45 @@
+sequenceDiagram
+    autonumber
+    participant U as User Client
+    participant G as API Gateway
+    participant Z as AuthZ Service
+    participant C as MySessionsController
+    participant R as Shared Redis Cluster
+    participant S as Session Repository
+    participant MR as Metrics Repository
+
+    Note over U,C: Return my sessions count, durations, recency within time-range\nInputs: userId (from auth), from, to, page, size
+
+    U->>G: GET /me/sessions?from=&to=&page=&size=
+    G->>Z: authorize(subject=user, action=read_self, resource=self)
+    alt authorized
+        Z-->>G: allow
+        G->>C: Forward request (userId, from, to, page, size)
+
+        C->>R: GET cache["me_sessions", userId, from, to, page, size]
+        alt cache hit
+            R-->>C: cached page
+            C-->>G: 200 OK {sessions[], totals, lastActivity, nextCursor}
+            G-->>U: 200 OK {sessions[], totals, lastActivity, nextCursor}
+        else cache miss
+            par list windowed sessions
+                C->>S: listUserSessions(userId, from, to, page, size)
+                S-->>C: {sessions[], nextCursor}
+            and compute aggregates
+                C->>MR: getUserSessionAggregates(userId, from, to)
+                MR-->>C: {count, totalDuration, avgDuration, lastActivity}
+            end
+
+            C->>R: SET cache["me_sessions", userId, from, to, page, size]=payload TTL=10m
+            C-->>G: 200 OK {sessions[], totals, lastActivity, nextCursor}
+            G-->>U: 200 OK {sessions[], totals, lastActivity, nextCursor}
+        end
+    else forbidden
+        Z-->>G: deny
+        G-->>U: 403 Forbidden
+    end
+
+    opt cache invalidation on new session end
+        S-->>C: sessionFinalized(userId, sessionId)
+        C->>R: DEL cache["me_sessions", userId, *]
+    end
