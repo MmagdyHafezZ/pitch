@@ -1,0 +1,43 @@
+sequenceDiagram
+    autonumber
+    participant M as Manager Client
+    participant G as Managers API (Gateway)
+    participant C as ManagerMetricsController
+    participant R as Shared Redis Cluster
+    participant A as Aggregation Service
+    participant D as Directory Repository
+    participant S as Session Repository
+    participant MR as Metrics Repository
+
+    Note over M,C: Retrieve team-level KPIs — users per team, team sessions, active users\nRequest includes orgId, teamId, time-range (from,to)
+
+    M->>G: GET /orgs/{orgId}/teams/{teamId}/metrics?from=&to=
+    G->>C: Forward request (orgId, teamId, from, to)
+
+    C->>R: GET cache["team_metrics", teamId, from, to]
+    alt Cache hit
+        R-->>C: Return cached metrics
+        C-->>G: 200 OK + metrics
+        G-->>M: 200 OK + metrics
+    else Cache miss
+        par Compute Team User Counts
+            C->>A: getTeamUserCounts(orgId, teamId, from, to)
+            A->>D: countUsersInTeam(teamId)
+            D-->>A: totalUsers
+            A->>S: countActiveUsersInTeam(teamId, from, to)
+            S-->>A: activeUsers
+            A-->>C: {totalUsers, activeUsers}
+        and Compute Team Sessions
+            C->>MR: getPreAggregatedSessions(teamId, from, to)
+            alt Pre-aggregated available
+                MR-->>C: totalSessions
+            else No pre-aggregation
+                C->>S: countTeamSessions(teamId, from, to)
+                S-->>C: totalSessions
+            end
+        end
+
+        C->>R: SET cache["team_metrics", teamId, from, to] = {metrics} TTL=15m
+        C-->>G: 200 OK + computed metrics
+        G-->>M: 200 OK + computed metrics
+    end

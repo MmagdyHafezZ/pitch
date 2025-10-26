@@ -1,0 +1,43 @@
+sequenceDiagram
+    autonumber
+    participant M as Manager Client
+    participant G as Managers API (Gateway)
+    participant C as ManagerMetricsController
+    participant R as Redis Cache
+    participant A as Aggregation Service
+    participant D as Directory Repository
+    participant S as Session Repository
+    participant MR as Metrics Repository
+
+    Note over M,C: Compute org KPIs: total users, active users, total sessions\nQuery params include time-range: from,to
+
+    M->>G: GET /orgs/{orgId}/metrics?from=&to=
+    G->>C: Forward request with orgId and time-range
+
+    C->>R: GET cache[orgId, from, to]
+    alt Cache hit
+        R-->>C: cached metrics
+        C-->>G: 200 OK + metrics
+        G-->>M: 200 OK + metrics
+    else Cache miss
+        par Compute user counts
+            C->>A: getOrgUserCounts(orgId, from, to)
+            A->>D: countUsers(orgId)
+            D-->>A: totalUsers
+            A->>S: countActiveUsers(orgId, from, to)
+            S-->>A: activeUsers
+            A-->>C: {totalUsers, activeUsers}
+        and Compute total sessions
+            C->>MR: getPreAggregatedSessions(orgId, from, to)
+            alt Pre-aggregated available
+                MR-->>C: totalSessions
+            else Not available
+                C->>S: countSessions(orgId, from, to)
+                S-->>C: totalSessions
+            end
+        end
+
+        C->>R: SET cache[orgId, from, to] = metrics TTL=15m
+        C-->>G: 200 OK + metrics
+        G-->>M: 200 OK + metrics
+    end

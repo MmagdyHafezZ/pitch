@@ -1,10 +1,17 @@
 import { createParamDecorator, ExecutionContext } from '@nestjs/common';
+import type { Request } from 'express';
+
+type RequestWithUser = Request & { user?: Record<string, unknown> };
 
 export const CurrentUser = createParamDecorator(
-  (data: string | undefined, ctx: ExecutionContext) => {
-    const request = ctx.switchToHttp().getRequest();
-    const user = request.user;
+  (data: string | undefined, ctx: ExecutionContext): unknown => {
+    const req = ctx.switchToHttp().getRequest<RequestWithUser>();
+    const user = req.user;
 
-    return data ? user?.[data] : user;
+    if (!data) return user;
+    if (user && typeof user === 'object' && data in user) {
+      return (user as Record<string, unknown>)[data];
+    }
+    return undefined;
   },
 );

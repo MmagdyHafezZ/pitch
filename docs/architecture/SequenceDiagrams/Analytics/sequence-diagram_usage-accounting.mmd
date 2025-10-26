@@ -1,0 +1,60 @@
+sequenceDiagram
+    autonumber
+    participant EB as Event Bus
+    participant UI as Usage Ingestor
+    participant I as Idempotency Store
+    participant UR as Usage Repository
+    participant MR as Metrics Repository
+    participant RZ as Shared Redis Cache
+    participant L as Logger
+
+    Note over EB,UI: Account per-event usage (tokens, calls) by org/team/user and model
+
+    EB-->>UI: consume("provider.webhook.normalized")
+    UI->>L: log("start_event", eventId)
+
+    UI->>I: check(eventId)
+    alt already processed
+        I-->>UI: seen
+        UI->>L: log("duplicate", eventId)
+    else new
+        I-->>UI: not_seen
+
+        %% Derive keys and quantities
+        UI-->>UI: derive {orgId, teamId?, userId?, model, ts}
+        UI-->>UI: qty = {tokensIn, tokensOut, calls=1}
+
+        %% Upsert granular counters
+        par user scope
+            UI->>UR: upsertUserUsage(userId, model, ts, qty)
+            UR-->>UI: ok
+        and team scope
+            UI->>UR: upsertTeamUsage(teamId?, model, ts, qty)
+            UR-->>UI: ok
+        and org scope
+            UI->>UR: upsertOrgUsage(orgId, model, ts, qty)
+            UR-->>UI: ok
+        end
+
+        %% Aggregate rollups for fast reads
+        par daily rollups
+            UI->>UR: rollupDaily(orgId, teamId?, userId?, model, ts)
+            UR-->>UI: ok
+        and hourly rollups
+            UI->>UR: rollupHourly(orgId, teamId?, userId?, model, ts)
+            UR-->>UI: ok
+        end
+
+        %% Publish for downstream metrics
+        UI->>MR: upsertUsageAggregates(orgId, teamId?, userId?, ts, qty)
+        MR-->>UI: ok
+
+        %% Cache hygiene
+        UI->>RZ: DEL cache["user_detail", userId, *]
+        UI->>RZ: DEL cache["user_trends", userId, *]
+        UI->>RZ: DEL cache["lb_global", orgId, *, *]
+        UI->>RZ: DEL cache["lb_team", teamId?, *, *]
+
+        UI->>I: markProcessed(eventId)
+        UI->>L: log("processed", eventId)
+    end

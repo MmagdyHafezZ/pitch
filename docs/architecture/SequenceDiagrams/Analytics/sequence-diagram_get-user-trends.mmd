@@ -1,0 +1,45 @@
+sequenceDiagram
+    autonumber
+    participant M as Manager/User Client
+    participant G as API Gateway
+    participant Z as AuthZ Service
+    participant C as TrendsController
+    participant R as Shared Redis Cluster
+    participant MR as Metrics Repository
+    participant S as Session Repository
+    participant US as Usage Service
+
+    Note over M,C: Fetch user trends for sessions, scores, and AI usage\nInputs: orgId, userId, from, to, granularity (hour/day/week)
+
+    M->>G: GET /users/{userId}/trends?orgId=&from=&to=&granularity=
+    G->>Z: authorize(subject, action=read_trends, resource=userId)
+    alt authorized
+        Z-->>G: allow
+        G->>C: Forward request (orgId, userId, from, to, granularity)
+
+        C->>R: GET cache["user_trends", userId, from, to, granularity]
+        alt cache hit
+            R-->>C: cached timeseries
+            C-->>G: 200 OK + timeseries
+            G-->>M: 200 OK + timeseries
+        else cache miss
+            par session counts timeseries
+                C->>MR: getUserSessionSeries(userId, from, to, granularity)
+                MR-->>C: sessionSeries[]
+            and scores timeseries
+                C->>MR: getUserScoreSeries(userId, from, to, granularity)
+                MR-->>C: scoreSeries[]
+            and AI usage timeseries
+                C->>US: getUserAiUsageSeries(userId, from, to, granularity)
+                US-->>C: {tokensSeries[], callsSeries[]}
+            end
+
+            Note over C: Post-process: align buckets, fill gaps, compute rolling averages
+            C->>R: SET cache["user_trends", userId, from, to, granularity] = timeseries TTL=15m
+            C-->>G: 200 OK + timeseries
+            G-->>M: 200 OK + timeseries
+        end
+    else forbidden
+        Z-->>G: deny
+        G-->>M: 403 Forbidden
+    end

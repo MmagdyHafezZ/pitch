@@ -1,0 +1,51 @@
+sequenceDiagram
+    autonumber
+    participant U as User Client
+    participant G as API Gateway
+    participant Z as AuthZ Service
+    participant C as MyScoresController
+    participant R as Shared Redis Cluster
+    participant MR as Metrics Repository
+    participant S as Session Repository
+    participant SC as Scoring Service
+
+    Note over U,C: Return per-session scores and rolling averages\nInputs: userId(from auth), from, to, granularity(day|week), page, size
+
+    U->>G: GET /me/scores?from=&to=&granularity=&page=&size=
+    G->>Z: authorize(subject=user, action=read_self, resource=self)
+    alt authorized
+        Z-->>G: allow
+        G->>C: Forward request (userId, from, to, granularity, page, size)
+
+        C->>R: GET cache["me_scores", userId, from, to, granularity, page, size]
+        alt cache hit
+            R-->>C: cached payload
+            C-->>G: 200 OK {sessions[], rollingAverages{}, nextCursor}
+            G-->>U: 200 OK {sessions[], rollingAverages{}, nextCursor}
+        else cache miss
+            par list scored sessions
+                C->>S: listUserSessions(userId, from, to, page, size, filter=scored)
+                S-->>C: {sessions[{id, startedAt, endedAt}], nextCursor}
+                loop for each session
+                    C->>SC: getSessionScore(sessionId)
+                    SC-->>C: {score, rubric?, submetrics?}
+                end
+            and compute rolling averages
+                C->>MR: getUserScoreSeries(userId, from, to, granularity)
+                MR-->>C: scoreSeries[{ts, score}]
+                Note over C: compute rolling averages: 7d, 14d, 28d windows
+            end
+
+            C->>R: SET cache["me_scores", userId, from, to, granularity, page, size]=payload TTL=10m
+            C-->>G: 200 OK {sessions[{id, startedAt, endedAt, score, rubric?, submetrics?}], rollingAverages{w7,w14,w28}, nextCursor}
+            G-->>U: 200 OK {sessions[], rollingAverages{}, nextCursor}
+        end
+    else forbidden
+        Z-->>G: deny
+        G-->>U: 403 Forbidden
+    end
+
+    opt cache invalidation on rescoring
+        SC-->>C: sessionRescored(userId, sessionId)
+        C->>R: DEL cache["me_scores", userId, *]
+    end

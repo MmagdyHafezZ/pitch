@@ -1,0 +1,50 @@
+sequenceDiagram
+    autonumber
+    participant P as Provider (LLM/Platform)
+    participant W as Webhook Ingress API
+    participant V as Signature Validator
+    participant I as Idempotency Store
+    participant N as Event Normalizer
+    participant R as Raw Events Repo
+    participant DLQ as Dead-Letter Queue
+    participant EB as Event Bus
+    participant L as Logger/Tracing
+
+    Note over P,W: Provider posts signed webhook event
+
+    P->>W: POST /webhooks/provider {headers, body}
+    W->>L: log("received", eventId)
+    W->>V: verifySignature(headers, body)
+    alt valid signature
+        V-->>W: ok
+        W->>I: check(eventId)
+        alt already processed
+            I-->>W: seen
+            W-->>P: 200 OK
+            W->>L: log("duplicate", eventId)
+        else new event
+            I-->>W: not_seen
+            W->>R: storeRawEvent(headers, body)
+            R-->>W: rawId
+            W->>N: normalize(rawId)
+            alt normalization ok
+                N-->>W: {type, orgId, teamId?, userId?, ts, data}
+                W->>I: markProcessed(eventId, rawId)
+                W->>EB: publish(topic="provider.webhook.normalized", payload={type, orgId, teamId?, userId?, ts, data})
+                EB-->>W: ack
+                W-->>P: 200 OK
+                W->>L: log("success", eventId)
+            else normalization error
+                N-->>W: error(detail)
+                W->>DLQ: enqueue({reason:"normalize_error", rawId, detail})
+                W->>I: markFailed(eventId, rawId)
+                W-->>P: 202 Accepted
+                W->>L: log("error", "normalize_error")
+            end
+        end
+    else invalid signature
+        V-->>W: fail
+        W->>DLQ: enqueue({reason:"invalid_signature", headers})
+        W-->>P: 202 Accepted
+        W->>L: log("error", "invalid_signature")
+    end

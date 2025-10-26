@@ -98,7 +98,7 @@ export class UserController {
   async getOAuthProviders() {
     try {
       this.logger.log('Getting OAuth providers');
-      return this.oauthProviderFactory.getEnabledProviders();
+      return await this.oauthProviderFactory.getEnabledProviders();
     } catch (error) {
       this.logger.error('Failed to get OAuth providers', error);
       throw toRpcException(error);

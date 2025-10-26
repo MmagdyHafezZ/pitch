@@ -1,0 +1,35 @@
+sequenceDiagram
+    autonumber
+    participant CR as Scheduler/Cron
+    participant LJ as LeaderboardRebuildJob
+    participant MR as Metrics Repository
+    participant US as Usage Service
+    participant RZ as Shared Redis Cache
+    participant EB as Event Bus
+    participant L as Logger
+
+    Note over CR,LJ: Recompute leaderboards for a window and metric
+
+    CR->>LJ: triggerRebuild(orgId, metric, from, to, scope=global|team)
+    LJ->>L: log("start", orgId, metric, from, to, scope)
+
+    alt metric in [score, sessions]
+        LJ->>MR: fetchRankInputs(orgId, scope, from, to, metric)
+        MR-->>LJ: rows[{subjectId, value, lastActivity}]
+    else metric in [tokens, calls]
+        LJ->>US: fetchUsageRankInputs(orgId, scope, from, to, metric)
+        US-->>LJ: rows[{subjectId, value, lastActivity}]
+    end
+
+    Note over LJ: sort by value desc, tie-break lastActivity desc then subjectId asc
+
+    LJ->>MR: writeLeaderboard(orgId, scope, metric, from, to, rows)
+    MR-->>LJ: ok
+
+    LJ->>RZ: DEL cache["lb_global", orgId, metric, *]
+    LJ->>RZ: DEL cache["lb_team", *, metric, *]
+
+    LJ->>EB: publish("leaderboard.rebuilt", {orgId, scope, metric, from, to})
+    EB-->>LJ: ack
+
+    LJ->>L: log("done", counts=rows.length)

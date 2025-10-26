@@ -1,0 +1,84 @@
+sequenceDiagram
+    autonumber
+    participant CR as Scheduler/Cron
+    participant DM as Directory Mirror Service
+    participant UM as User Management API
+    participant D as Directory Repository
+    participant RZ as Shared Redis Cache
+    participant EB as Event Bus
+    participant L as Logger
+
+    Note over CR,DM: Periodic mirror of orgs/teams/users from User Management
+
+    CR->>DM: triggerSync(since=lastCursor?)
+    DM->>L: log("sync_start", since)
+
+    alt initial sync
+        DM-->>DM: since = null
+    else incremental sync
+        DM-->>DM: use provided since cursor
+    end
+
+    loop page through changes
+        DM->>UM: GET /directory/changes?since={since}&pageSize=1000
+        UM-->>DM: {changes[], nextSince, hasMore}
+
+        loop for each change in changes
+            alt change.type == "org.upsert"
+                DM->>D: upsertOrg(change.org)
+                D-->>DM: ok
+                DM->>EB: publish("org.upserted", {orgId: change.org.id})
+                EB-->>DM: ack
+            else change.type == "team.upsert"
+                DM->>D: upsertTeam(change.team)
+                D-->>DM: ok
+                DM->>EB: publish("team.upserted", {teamId: change.team.id})
+                EB-->>DM: ack
+            else change.type == "user.upsert"
+                DM->>D: upsertUser(change.user)
+                D-->>DM: ok
+                DM->>EB: publish("user.upserted", {userId: change.user.id})
+                EB-->>DM: ack
+            else change.type == "membership.upsert"
+                DM->>D: upsertMembership(change.membership)
+                D-->>DM: ok
+                DM->>EB: publish("membership.upserted", {teamId: change.membership.teamId, userId: change.membership.userId})
+                EB-->>DM: ack
+            else change.type == "org.delete"
+                DM->>D: deleteOrg(change.orgId)
+                D-->>DM: ok
+                DM->>EB: publish("org.deleted", {orgId: change.orgId})
+                EB-->>DM: ack
+            else change.type == "team.delete"
+                DM->>D: deleteTeam(change.teamId)
+                D-->>DM: ok
+                DM->>EB: publish("team.deleted", {teamId: change.teamId})
+                EB-->>DM: ack
+            else change.type == "user.delete"
+                DM->>D: deleteUser(change.userId)
+                D-->>DM: ok
+                DM->>EB: publish("user.deleted", {userId: change.userId})
+                EB-->>DM: ack
+            else change.type == "membership.delete"
+                DM->>D: deleteMembership(change.teamId, change.userId)
+                D-->>DM: ok
+                DM->>EB: publish("membership.deleted", {teamId: change.teamId, userId: change.userId})
+                EB-->>DM: ack
+            end
+
+            %% Cache hygiene for affected subjects
+            DM->>RZ: DEL cache["team_detail", *, *]  %% safe broad delete if fine-grained keys unknown
+            DM->>RZ: DEL cache["user_detail", *, *]
+            DM->>RZ: DEL cache["org_metrics", *, *]
+            DM->>RZ: DEL cache["team_metrics", *, *]
+        end
+
+        DM-->>DM: since = nextSince
+        alt hasMore == true
+            DM-->>DM: continue paging
+        else hasMore == false
+            DM-->>DM: exit loop
+        end
+    end
+
+    DM->>L: log("sync_done", {lastSince: since})

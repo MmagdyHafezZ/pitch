@@ -3,16 +3,28 @@
 import { Box, Group, TextInput, ActionIcon, Text, rem } from '@mantine/core'
 import { IconSearch, IconBell, IconUser } from '@tabler/icons-react'
 import dayjs from 'dayjs'
-import { useMemo } from 'react'
+import { ReactNode, useMemo } from 'react'
 
-type HeaderProps = {
+export type HeaderProps = {
   value?: string
   onChange?: (v: string) => void
   date?: Date
   gutter?: number
+  onLogout?: () => Promise<void> | void
+  showSearch?: boolean
+  searchPlaceholder?: string
+  rightSlot?: ReactNode
 }
 
-export function AppTopBar({ value, onChange, date = new Date(), gutter = 16 }: HeaderProps) {
+export function AppTopBar({
+  value,
+  onChange,
+  date = new Date(),
+  gutter = 16,
+  rightSlot,
+  showSearch = true,
+  searchPlaceholder = 'Search',
+}: HeaderProps) {
   const weekday = useMemo(() => dayjs(date).format('dddd'), [date])
   const shortDate = useMemo(() => dayjs(date).format('MMM D, YYYY'), [date])
 
@@ -29,26 +41,29 @@ export function AppTopBar({ value, onChange, date = new Date(), gutter = 16 }: H
         }}
       >
         <Group justify="space-between" align="center" w="100%" gap={rem(8)}>
-          <TextInput
-            value={value}
-            onChange={(e) => onChange?.(e.currentTarget.value)}
-            placeholder=""
-            leftSection={<IconSearch size={16} />}
-            size="sm"
-            w={rem(360)}
-            styles={{
-              input: {
-                height: rem(28),
-                borderRadius: rem(999),
-                border: 'none',
-                background: 'white',
-                paddingLeft: rem(28),
-                paddingRight: rem(10),
-                boxShadow: 'inset 0 0 0 1px rgba(0,0,0,0.06)',
-              },
-              section: { color: 'var(--mantine-color-dark-6)' },
-            }}
-          />
+          {rightSlot ??
+            (showSearch && (
+              <TextInput
+                value={value}
+                onChange={(e) => onChange?.(e.currentTarget.value)}
+                placeholder={searchPlaceholder}
+                leftSection={<IconSearch size={16} />}
+                size="sm"
+                w={rem(360)}
+                styles={{
+                  input: {
+                    height: rem(28),
+                    borderRadius: rem(999),
+                    border: 'none',
+                    background: 'white',
+                    paddingLeft: rem(28),
+                    paddingRight: rem(10),
+                    boxShadow: 'inset 0 0 0 1px rgba(0,0,0,0.06)',
+                  },
+                  section: { color: 'var(--mantine-color-dark-6)' },
+                }}
+              />
+            ))}
 
           <Group gap={rem(8)} align="center">
             <Box ta="right" lh={1}>

@@ -76,7 +76,7 @@ The gateway acts as a single entry point for all client requests:
 export class UserGatewayController {
   @Get()
   async getUsers(@UserClaims() userClaims: any) {
-    return this.userService.send('get_users', { userClaims });
+    return await this.userService.send('get_users', { userClaims });
   }
 }
 ```

@@ -250,7 +250,7 @@ export class OAuthController {
     description: 'Returns all OAuth accounts linked to the current user',
   })
   async getLinkedAccounts(@GetUser() user: any) {
-    return this.authService.getUserOAuthAccounts(user.id);
+    return await this.authService.getUserOAuthAccounts(user.id);
   }
 
   @Delete('unlink/:provider')
@@ -271,7 +271,7 @@ export class OAuthController {
     @GetUser() user: any,
     @Param('provider') provider: AuthProvider,
   ) {
-    return this.authService.unlinkOAuthAccount(user.id, provider);
+    return await this.authService.unlinkOAuthAccount(user.id, provider);
   }
 
   // Link additional OAuth accounts (when user is already logged in)
@@ -308,6 +308,6 @@ export class OAuthController {
     if (!refreshToken) {
       throw new Error('Refresh token is required');
     }
-    return this.authService.refreshToken(refreshToken);
+    return await this.authService.refreshToken(refreshToken);
   }
 }

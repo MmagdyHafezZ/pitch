@@ -25,7 +25,7 @@ export class UserService {
   constructor(private readonly userRepository: UserRepository) {}
 
   async findAll(): Promise<User[]> {
-    return this.userRepository.findMany();
+    return await this.userRepository.findMany();
   }
 
   async findOne(id: string): Promise<User> {
@@ -37,7 +37,7 @@ export class UserService {
   }
 
   async findByEmail(email: string): Promise<User | null> {
-    return this.userRepository.findByEmail(email);
+    return await this.userRepository.findByEmail(email);
   }
 
   async findByOAuthAccount(
@@ -77,6 +77,6 @@ export class UserService {
   }
 
   async getOAuthAccountsByUserId(userId: string) {
-    return this.userRepository.getOAuthAccounts(userId);
+    return await this.userRepository.getOAuthAccounts(userId);
   }
 }
