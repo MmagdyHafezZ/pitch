@@ -1,0 +1,148 @@
+---
+config:
+  theme: base
+  themeVariables:
+    primaryColor: '#e3f2fd'
+    primaryTextColor: '#1a237e'
+    primaryBorderColor: '#1976d2'
+    lineColor: '#42a5f5'
+    secondaryColor: '#fff3e0'
+    secondaryTextColor: '#e65100'
+    secondaryBorderColor: '#fb8c00'
+    tertiaryColor: '#f3e5f5'
+    tertiaryTextColor: '#4a148c'
+    tertiaryBorderColor: '#7b1fa2'
+    noteBkgColor: '#fff9c4'
+    noteTextColor: '#f57f17'
+---
+flowchart LR
+  %% Lanes: Gateways → Controllers → Services → Repositories → Tables
+
+  subgraph GATEWAYS[API Gateways]
+    gwContact[Contact Gateway]
+    gwCompany[Company Gateway]
+    gwDeal[Deal Gateway]
+    gwActivity[Activity Gateway]
+    gwTask[Task Gateway]
+    gwNote[Note Gateway]
+    gwPipeline[Pipeline Gateway]
+    gwEmail[Email Sync Gateway]
+    gwWebhook[Webhook Gateway]
+    gwReport[Reporting Gateway]
+  end
+
+  subgraph CTL[Controllers]
+    ctlContact[Contact Controller]
+    ctlCompany[Company Controller]
+    ctlDeal[Deal Controller]
+    ctlActivity[Activity Controller]
+    ctlTask[Task Controller]
+    ctlNote[Note Controller]
+    ctlPipeline[Pipeline Controller]
+    ctlEmail[Email Sync Controller]
+    ctlWebhook[Webhook Controller]
+    ctlReport[Reporting Controller]
+  end
+
+  subgraph SVC[Services]
+    svcContact[Contact Service]
+    svcCompany[Company Service]
+    svcDeal[Deal Service<br/>create/update, stage moves, win/loss]
+    svcActivity[Activity Service<br/>calls, meetings, emails logged]
+    svcTask[Task Service]
+    svcNote[Note Service]
+    svcPipeline[Pipeline Service<br/>pipelines, stages, rules]
+    svcEmail[Email Sync Service<br/>IMAP/API ingest, threading]
+    svcWebhook[Webhook Service<br/>inbound validation, outbound dispatch]
+    svcReport[Reporting Service<br/>metrics, dashboards]
+  end
+
+  subgraph REPO[Repositories]
+    repoContact[Contact Repository]
+    repoCompany[Company Repository]
+    repoDeal[Deal Repository]
+    repoActivity[Activity Repository]
+    repoTask[Task Repository]
+    repoNote[Note Repository]
+    repoPipeline[Pipeline Repository]
+    repoStage[Stage Repository]
+    repoEmailMsg[EmailMessage Repository]
+    repoEmailThread[EmailThread Repository]
+    repoWebhookEvt[WebhookEvent Repository]
+    repoReport[Report Repository]
+    repoXref[ContactCompany Repository]
+  end
+
+  subgraph TBL[Tables]
+    tblContact[(Contact Table)]
+    tblCompany[(Company Table)]
+    tblContactCompany[(ContactCompany Table)]
+    tblDeal[(Deal Table)]
+    tblPipeline[(Pipeline Table)]
+    tblStage[(Stage Table)]
+    tblActivity[(Activity Table)]
+    tblTask[(Task Table)]
+    tblNote[(Note Table)]
+    tblEmailMsg[(EmailMessage Table)]
+    tblEmailThread[(EmailThread Table)]
+    tblWebhookEvt[(WebhookEvent Table)]
+    tblReport[(Report Table)]
+  end
+
+  %% Gateways → Controllers
+  gwContact --> ctlContact
+  gwCompany --> ctlCompany
+  gwDeal --> ctlDeal
+  gwActivity --> ctlActivity
+  gwTask --> ctlTask
+  gwNote --> ctlNote
+  gwPipeline --> ctlPipeline
+  gwEmail --> ctlEmail
+  gwWebhook --> ctlWebhook
+  gwReport --> ctlReport
+
+  %% Controllers → Services
+  ctlContact --> svcContact
+  ctlCompany --> svcCompany
+  ctlDeal --> svcDeal
+  ctlActivity --> svcActivity
+  ctlTask --> svcTask
+  ctlNote --> svcNote
+  ctlPipeline --> svcPipeline
+  ctlEmail --> svcEmail
+  ctlWebhook --> svcWebhook
+  ctlReport --> svcReport
+
+  %% Services → Repositories
+  svcContact --> repoContact
+  svcCompany --> repoCompany
+  svcDeal --> repoDeal
+  svcActivity --> repoActivity
+  svcTask --> repoTask
+  svcNote --> repoNote
+  svcPipeline --> repoPipeline
+  svcPipeline --> repoStage
+  svcEmail --> repoEmailMsg
+  svcEmail --> repoEmailThread
+  svcWebhook --> repoWebhookEvt
+  svcReport --> repoReport
+  svcContact --> repoXref
+  svcCompany --> repoXref
+  svcDeal --> repoContact
+  svcDeal --> repoCompany
+
+  %% Repositories → Tables
+  repoContact --> tblContact
+  repoCompany --> tblCompany
+  repoXref --> tblContactCompany
+  repoDeal --> tblDeal
+  repoPipeline --> tblPipeline
+  repoStage --> tblStage
+  repoActivity --> tblActivity
+  repoTask --> tblTask
+  repoNote --> tblNote
+  repoEmailMsg --> tblEmailMsg
+  repoEmailThread --> tblEmailThread
+  repoWebhookEvt --> tblWebhookEvt
+  repoReport --> tblReport
+
