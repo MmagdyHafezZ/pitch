@@ -60,7 +60,7 @@ export class OAuthController {
         throw new Error('No user data received from Google OAuth');
       }
 
-      const tokens = await this.authService.generateTokens(req.user);
+      const tokens = this.authService.generateTokens(req.user);
 
       const frontendUrl =
         process.env.NEXT_PUBLIC_FRONTEND_URL || 'http://localhost:3000';
@@ -103,7 +103,7 @@ export class OAuthController {
         throw new Error('No user data received from LinkedIn OAuth');
       }
 
-      const tokens = await this.authService.generateTokens(req.user);
+      const tokens = this.authService.generateTokens(req.user);
       const frontendUrl =
         process.env.NEXT_PUBLIC_FRONTEND_URL || 'http://localhost:3000';
 
@@ -143,7 +143,7 @@ export class OAuthController {
         throw new Error('No user data received from GitHub OAuth');
       }
 
-      const tokens = await this.authService.generateTokens(req.user);
+      const tokens = this.authService.generateTokens(req.user);
       const frontendUrl =
         process.env.NEXT_PUBLIC_FRONTEND_URL || 'http://localhost:3000';
 
@@ -183,7 +183,7 @@ export class OAuthController {
         throw new Error('No user data received from Microsoft OAuth');
       }
 
-      const tokens = await this.authService.generateTokens(req.user);
+      const tokens = this.authService.generateTokens(req.user);
       const frontendUrl =
         process.env.NEXT_PUBLIC_FRONTEND_URL || 'http://localhost:3000';
 
@@ -223,7 +223,7 @@ export class OAuthController {
         throw new Error('No user data received from Discord OAuth');
       }
 
-      const tokens = await this.authService.generateTokens(req.user);
+      const tokens = this.authService.generateTokens(req.user);
       const frontendUrl =
         process.env.NEXT_PUBLIC_FRONTEND_URL || 'http://localhost:3000';
 
@@ -293,7 +293,7 @@ export class OAuthController {
   ) {
     // This would redirect to the OAuth provider with a "link" state
     // Implementation depends on your specific linking flow
-    return await { message: `Linking ${provider} account...` };
+    return { message: `Linking ${provider} account...` };
   }
 
   // Refresh token endpoint
