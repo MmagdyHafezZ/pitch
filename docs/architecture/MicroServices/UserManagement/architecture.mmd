@@ -19,41 +19,42 @@ flowchart TB
  subgraph API["API Gateways"]
         AuthGW["Auth Gateway"]
         UserGW["User Gateway"]
-        OrgGW["Org Gateway"]
+        TeamGW["Team Gateway"]
+        QuotaGW["Usage Gateway"]
         PlanGW["Plan Gateway"]
         SubGW["Subscription Gateway"]
-        QuotaGW["Usage Gateway"]
   end
  subgraph CTRL["Controllers"]
         AuthCtrl["Auth Controller"]
         UserCtrl["User Controller"]
-        OrgCtrl["Org Controller"]
+        TeamCtrl["Team Controller"]
+        QuotaCtrl["Usage Controller"]
         PlanCtrl["Plan Controller"]
         SubCtrl["Subscription Controller"]
-        QuotaCtrl["Usage Controller"]
   end
  subgraph SVC["Services"]
         AuthSvc["Auth Service"]
         UserSvc["User Service"]
-        OrgSvc["Org Service"]
+        TeamSvc["Team Service"]
+        QuotaSvc["Usage Service"]
         PlanSvc["Plan Service"]
         SubSvc["Subscription Service"]
-        QuotaSvc["Usage Service"]
   end
  subgraph REPO["Repositories"]
         UserRepo["User Repository"]
-        OrgRepo["Org Repository"]
+        TeamRepo["Team Repository"]
+        QuotaRepo["UsageRecord Repository"]
         PlanRepo["Plan Repository"]
         SubRepo["Subscription Repository"]
-        QuotaRepo["UsageRecord Repository"]
   end
  subgraph Table["Tables"]
         UserTable[("User Table<br>")]
-        OrgTable[("Org Details Table<br>")]
-        MembershipTable[("Membership Table<br>")]
+        OAuthTable[("OAUTHAccount Table<br>")]
+        TeamTable[("Team Table<br>")]
+        TeamMembershipTable[("TeamMembership Table<br>")]
+        QuotaTable[("UsageRecord Table")]
         PlanTable[("Plan Table<br>")]
         SubTable[("Subscription Table<br>")]
-        QuotaTable[("UsageRecord Table")]
   end
  subgraph UserManagement["UserManagement Microservice"]
         API
@@ -66,13 +67,19 @@ flowchart TB
     AuthCtrl --> AuthSvc
     AuthSvc --> UserRepo
     UserRepo --> UserTable
+    UserRepo --> OAuthTable
     UserGW --> UserCtrl
     UserCtrl --> UserSvc
     UserSvc --> UserRepo
-    OrgGW --> OrgCtrl
-    OrgCtrl --> OrgSvc
-    OrgSvc --> OrgRepo
-    OrgRepo --> OrgTable & MembershipTable
+    TeamGW --> TeamCtrl
+    TeamCtrl --> TeamSvc
+    TeamSvc --> TeamRepo
+    TeamRepo --> TeamTable & TeamMembershipTable
+QuotaGW --> QuotaCtrl
+    QuotaCtrl --> QuotaSvc
+    QuotaSvc --> QuotaRepo
+    QuotaRepo --> QuotaTable
+    QuotaRepo --> TeamTable
     PlanGW --> PlanCtrl
     PlanCtrl --> PlanSvc
     PlanSvc --> PlanRepo
@@ -81,7 +88,4 @@ flowchart TB
     SubCtrl --> SubSvc
     SubSvc --> SubRepo
     SubRepo --> SubTable
-    QuotaGW --> QuotaCtrl
-    QuotaCtrl --> QuotaSvc
-    QuotaSvc --> QuotaRepo
-    QuotaRepo --> QuotaTable
+
