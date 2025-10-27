@@ -21,6 +21,12 @@ export interface TokenPair {
   refresh_token: string;
 }
 
+export interface TokenPayload {
+  id: string;
+  email: string;
+  name?: string | null;
+}
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -112,11 +118,11 @@ export class AuthService {
     });
   }
 
-  generateTokens(user: any): TokenPair {
+  generateTokens(user: TokenPayload): TokenPair {
     const payload = {
       sub: user.id,
       email: user.email,
-      name: user.name,
+      name: user.name ?? undefined,
     };
 
     const access_token = this.jwtService.sign(payload, {
@@ -178,7 +184,7 @@ export class AuthService {
 
   async refreshToken(refreshToken: string): Promise<TokenPair> {
     try {
-      const payload = this.jwtService.verify(refreshToken);
+      const payload = this.jwtService.verify<{ sub: string }>(refreshToken);
       const user = await this.prisma.user.findUnique({
         where: { id: payload.sub },
       });
@@ -188,7 +194,7 @@ export class AuthService {
       }
 
       return this.generateTokens(user);
-    } catch (error) {
+    } catch {
       throw new UnauthorizedException('Invalid refresh token');
     }
   }
@@ -205,7 +211,7 @@ export class AuthService {
       }
 
       return user;
-    } catch (error) {
+    } catch {
       throw new NotFoundException('User not found');
     }
   }

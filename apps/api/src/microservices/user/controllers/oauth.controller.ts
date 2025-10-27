@@ -10,6 +10,8 @@ import {
   Query,
   HttpCode,
   HttpStatus,
+  BadRequestException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import {
@@ -18,7 +20,6 @@ import {
   ApiResponse,
   ApiBearerAuth,
   ApiParam,
-  ApiQuery,
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../guards/jwt-auth.guard';
 import { AuthService } from '../services/auth.service';
@@ -26,9 +27,28 @@ import {
   OAuthProviderFactory,
   AuthProvider,
 } from '../factories/oauth-provider.factory';
+import type { TokenPair } from '../services/auth.service';
+import type { JwtUser } from '../guards/jwt-auth.guard';
 import { GetUser } from '../decorators/get-user.decorator';
 import { Public } from '../decorators/public.decorator';
 import express from 'express';
+
+type OAuthRequestUser = {
+  id: string;
+  email: string;
+  name?: string | null;
+};
+
+const isOAuthRequestUser = (user: unknown): user is OAuthRequestUser => {
+  if (!user || typeof user !== 'object') {
+    return false;
+  }
+
+  const candidate = user as { id?: unknown; email?: unknown };
+  return (
+    typeof candidate.id === 'string' && typeof candidate.email === 'string'
+  );
+};
 
 @ApiTags('OAuth Authentication')
 @Controller('auth/oauth')
@@ -43,7 +63,7 @@ export class OAuthController {
   @Public()
   @UseGuards(AuthGuard('google'))
   @ApiOperation({ summary: 'Initiate Google OAuth login' })
-  googleAuth(@Req() req: express.Request) {
+  googleAuth() {
     // Passport handles the redirect
   }
 
@@ -51,34 +71,14 @@ export class OAuthController {
   @Public()
   @UseGuards(AuthGuard('google'))
   @ApiOperation({ summary: 'Google OAuth callback' })
-  async googleCallback(
-    @Req() req: express.Request,
-    @Res() res: express.Response,
-  ) {
+  googleCallback(@Req() req: express.Request, @Res() res: express.Response) {
     try {
-      if (!req.user) {
-        throw new Error('No user data received from Google OAuth');
-      }
-
-      const tokens = this.authService.generateTokens(req.user);
-
-      const frontendUrl =
-        process.env.NEXT_PUBLIC_FRONTEND_URL || 'http://localhost:3000';
-
-      console.log('Using frontend URL:', frontendUrl);
-
-      const redirectUrl = `${frontendUrl}/auth/callback?token=${tokens.access_token}&refresh=${tokens.refresh_token}`;
-      console.log('Redirecting to:', redirectUrl);
-
-      res.redirect(redirectUrl);
-    } catch (error) {
+      const user = this.ensureOAuthUser(req.user, 'Google');
+      const tokens = this.authService.generateTokens(user);
+      this.redirectWithTokens(res, tokens);
+    } catch (error: unknown) {
       console.error('Google OAuth callback error:', error);
-      const frontendUrl =
-        process.env.NEXT_PUBLIC_FRONTEND_URL || 'http://localhost:3000';
-      const errorMessage = encodeURIComponent(
-        error.message || 'Authentication failed',
-      );
-      res.redirect(`${frontendUrl}/auth/callback?error=${errorMessage}`);
+      this.handleOAuthError(res, error, 'Google');
     }
   }
 
@@ -94,30 +94,14 @@ export class OAuthController {
   @Public()
   @UseGuards(AuthGuard('linkedin'))
   @ApiOperation({ summary: 'LinkedIn OAuth callback' })
-  async linkedinCallback(
-    @Req() req: express.Request,
-    @Res() res: express.Response,
-  ) {
+  linkedinCallback(@Req() req: express.Request, @Res() res: express.Response) {
     try {
-      if (!req.user) {
-        throw new Error('No user data received from LinkedIn OAuth');
-      }
-
-      const tokens = this.authService.generateTokens(req.user);
-      const frontendUrl =
-        process.env.NEXT_PUBLIC_FRONTEND_URL || 'http://localhost:3000';
-
-      res.redirect(
-        `${frontendUrl}/auth/callback?token=${tokens.access_token}&refresh=${tokens.refresh_token}`,
-      );
-    } catch (error) {
+      const user = this.ensureOAuthUser(req.user, 'LinkedIn');
+      const tokens = this.authService.generateTokens(user);
+      this.redirectWithTokens(res, tokens);
+    } catch (error: unknown) {
       console.error('LinkedIn OAuth callback error:', error);
-      const frontendUrl =
-        process.env.NEXT_PUBLIC_FRONTEND_URL || 'http://localhost:3000';
-      const errorMessage = encodeURIComponent(
-        error.message || 'Authentication failed',
-      );
-      res.redirect(`${frontendUrl}/auth/callback?error=${errorMessage}`);
+      this.handleOAuthError(res, error, 'LinkedIn');
     }
   }
 
@@ -134,30 +118,14 @@ export class OAuthController {
   @Public()
   @UseGuards(AuthGuard('github'))
   @ApiOperation({ summary: 'GitHub OAuth callback' })
-  async githubCallback(
-    @Req() req: express.Request,
-    @Res() res: express.Response,
-  ) {
+  githubCallback(@Req() req: express.Request, @Res() res: express.Response) {
     try {
-      if (!req.user) {
-        throw new Error('No user data received from GitHub OAuth');
-      }
-
-      const tokens = this.authService.generateTokens(req.user);
-      const frontendUrl =
-        process.env.NEXT_PUBLIC_FRONTEND_URL || 'http://localhost:3000';
-
-      res.redirect(
-        `${frontendUrl}/auth/callback?token=${tokens.access_token}&refresh=${tokens.refresh_token}`,
-      );
-    } catch (error) {
+      const user = this.ensureOAuthUser(req.user, 'GitHub');
+      const tokens = this.authService.generateTokens(user);
+      this.redirectWithTokens(res, tokens);
+    } catch (error: unknown) {
       console.error('GitHub OAuth callback error:', error);
-      const frontendUrl =
-        process.env.NEXT_PUBLIC_FRONTEND_URL || 'http://localhost:3000';
-      const errorMessage = encodeURIComponent(
-        error.message || 'Authentication failed',
-      );
-      res.redirect(`${frontendUrl}/auth/callback?error=${errorMessage}`);
+      this.handleOAuthError(res, error, 'GitHub');
     }
   }
 
@@ -174,30 +142,14 @@ export class OAuthController {
   @Public()
   @UseGuards(AuthGuard('microsoft'))
   @ApiOperation({ summary: 'Microsoft OAuth callback' })
-  async microsoftCallback(
-    @Req() req: express.Request,
-    @Res() res: express.Response,
-  ) {
+  microsoftCallback(@Req() req: express.Request, @Res() res: express.Response) {
     try {
-      if (!req.user) {
-        throw new Error('No user data received from Microsoft OAuth');
-      }
-
-      const tokens = this.authService.generateTokens(req.user);
-      const frontendUrl =
-        process.env.NEXT_PUBLIC_FRONTEND_URL || 'http://localhost:3000';
-
-      res.redirect(
-        `${frontendUrl}/auth/callback?token=${tokens.access_token}&refresh=${tokens.refresh_token}`,
-      );
-    } catch (error) {
+      const user = this.ensureOAuthUser(req.user, 'Microsoft');
+      const tokens = this.authService.generateTokens(user);
+      this.redirectWithTokens(res, tokens);
+    } catch (error: unknown) {
       console.error('Microsoft OAuth callback error:', error);
-      const frontendUrl =
-        process.env.NEXT_PUBLIC_FRONTEND_URL || 'http://localhost:3000';
-      const errorMessage = encodeURIComponent(
-        error.message || 'Authentication failed',
-      );
-      res.redirect(`${frontendUrl}/auth/callback?error=${errorMessage}`);
+      this.handleOAuthError(res, error, 'Microsoft');
     }
   }
 
@@ -214,30 +166,14 @@ export class OAuthController {
   @Public()
   @UseGuards(AuthGuard('discord'))
   @ApiOperation({ summary: 'Discord OAuth callback' })
-  async discordCallback(
-    @Req() req: express.Request,
-    @Res() res: express.Response,
-  ) {
+  discordCallback(@Req() req: express.Request, @Res() res: express.Response) {
     try {
-      if (!req.user) {
-        throw new Error('No user data received from Discord OAuth');
-      }
-
-      const tokens = this.authService.generateTokens(req.user);
-      const frontendUrl =
-        process.env.NEXT_PUBLIC_FRONTEND_URL || 'http://localhost:3000';
-
-      res.redirect(
-        `${frontendUrl}/auth/callback?token=${tokens.access_token}&refresh=${tokens.refresh_token}`,
-      );
-    } catch (error) {
+      const user = this.ensureOAuthUser(req.user, 'Discord');
+      const tokens = this.authService.generateTokens(user);
+      this.redirectWithTokens(res, tokens);
+    } catch (error: unknown) {
       console.error('Discord OAuth callback error:', error);
-      const frontendUrl =
-        process.env.NEXT_PUBLIC_FRONTEND_URL || 'http://localhost:3000';
-      const errorMessage = encodeURIComponent(
-        error.message || 'Authentication failed',
-      );
-      res.redirect(`${frontendUrl}/auth/callback?error=${errorMessage}`);
+      this.handleOAuthError(res, error, 'Discord');
     }
   }
 
@@ -249,8 +185,9 @@ export class OAuthController {
     summary: "Get user's linked OAuth accounts",
     description: 'Returns all OAuth accounts linked to the current user',
   })
-  async getLinkedAccounts(@GetUser() user: any) {
-    return await this.authService.getUserOAuthAccounts(user.id);
+  async getLinkedAccounts(@GetUser() user: JwtUser | undefined) {
+    const { id } = this.ensureAuthenticatedUser(user);
+    return await this.authService.getUserOAuthAccounts(id);
   }
 
   @Delete('unlink/:provider')
@@ -268,10 +205,11 @@ export class OAuthController {
     description: 'OAuth provider to unlink',
   })
   async unlinkAccount(
-    @GetUser() user: any,
+    @GetUser() user: JwtUser | undefined,
     @Param('provider') provider: AuthProvider,
   ) {
-    return await this.authService.unlinkOAuthAccount(user.id, provider);
+    const { id } = this.ensureAuthenticatedUser(user);
+    return await this.authService.unlinkOAuthAccount(id, provider);
   }
 
   // Link additional OAuth accounts (when user is already logged in)
@@ -287,13 +225,22 @@ export class OAuthController {
     enum: AuthProvider,
     description: 'OAuth provider to link',
   })
-  async linkAccount(
-    @Param('provider') provider: string,
-    @Query('user_id') userId: string,
+  linkAccount(
+    @Param('provider') provider: AuthProvider,
+    @Query('user_id') userId?: string,
   ) {
     // This would redirect to the OAuth provider with a "link" state
     // Implementation depends on your specific linking flow
-    return { message: `Linking ${provider} account...` };
+    const providerConfig = this.oauthProviderFactory.getProvider(provider);
+    if (!providerConfig) {
+      throw new BadRequestException('Unsupported OAuth provider');
+    }
+
+    const suffix = userId ? ` for user ${userId}` : '';
+    return {
+      message: `Linking ${providerConfig.displayName} account${suffix}...`,
+      provider: providerConfig.name,
+    };
   }
 
   // Refresh token endpoint
@@ -304,10 +251,70 @@ export class OAuthController {
     description: 'New access and refresh tokens',
   })
   async refreshToken(@Req() req: express.Request) {
-    const refreshToken = req.body.refresh_token;
-    if (!refreshToken) {
-      throw new Error('Refresh token is required');
-    }
+    const refreshToken = this.extractRefreshToken(req.body);
     return await this.authService.refreshToken(refreshToken);
+  }
+
+  private getFrontendUrl(): string {
+    return process.env.NEXT_PUBLIC_FRONTEND_URL || 'http://localhost:3000';
+  }
+
+  private redirectWithTokens(res: express.Response, tokens: TokenPair): void {
+    const frontendUrl = this.getFrontendUrl();
+    const redirectUrl = `${frontendUrl}/auth/callback?token=${tokens.access_token}&refresh=${tokens.refresh_token}`;
+    res.redirect(redirectUrl);
+  }
+
+  private redirectWithError(res: express.Response, message: string): void {
+    const frontendUrl = this.getFrontendUrl();
+    res.redirect(
+      `${frontendUrl}/auth/callback?error=${encodeURIComponent(message)}`,
+    );
+  }
+
+  private handleOAuthError(
+    res: express.Response,
+    error: unknown,
+    providerName: string,
+  ): void {
+    const fallback = `${providerName} authentication failed`;
+    this.redirectWithError(res, this.formatErrorMessage(error, fallback));
+  }
+
+  private ensureOAuthUser(
+    user: unknown,
+    providerName: string,
+  ): OAuthRequestUser {
+    if (!isOAuthRequestUser(user)) {
+      throw new Error(`No user data received from ${providerName} OAuth`);
+    }
+    return user;
+  }
+
+  private ensureAuthenticatedUser(user: JwtUser | undefined): JwtUser {
+    if (!user?.id) {
+      throw new UnauthorizedException('Invalid user context');
+    }
+    return user;
+  }
+
+  private formatErrorMessage(error: unknown, fallback: string): string {
+    if (error instanceof Error && error.message) {
+      return error.message;
+    }
+    if (typeof error === 'string' && error.length > 0) {
+      return error;
+    }
+    return fallback;
+  }
+
+  private extractRefreshToken(body: unknown): string {
+    if (typeof body === 'object' && body !== null && 'refresh_token' in body) {
+      const token = (body as { refresh_token?: unknown }).refresh_token;
+      if (typeof token === 'string' && token.trim().length > 0) {
+        return token.trim();
+      }
+    }
+    throw new BadRequestException('Refresh token is required');
   }
 }

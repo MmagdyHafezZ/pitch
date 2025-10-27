@@ -1,11 +1,14 @@
 // auth/strategies/google.strategy.ts
 import { Injectable } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
-import { Strategy } from 'passport-google-oauth20';
+import { Strategy, Profile } from 'passport-google-oauth20';
+import type { Request } from 'express';
 import { OAuthProfile } from '../interfaces/oauth-provider.interface';
 import { AuthService } from '../services/auth.service';
 import { AuthProvider } from '../factories/oauth-provider.factory';
 import { ITokenData } from '../interfaces/token-data.interface';
+
+type GoogleProfile = Profile & { _json?: Record<string, unknown> };
 @Injectable()
 export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
   constructor(private authService: AuthService) {
@@ -20,33 +23,37 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
   }
 
   async validate(
-    req: any,
+    _req: Request,
     accessToken: string,
     refreshToken: string,
-    profile: any,
+    profile: Profile,
   ): Promise<any> {
     try {
+      void _req;
       console.log('Google profile received:', JSON.stringify(profile, null, 2));
 
       // Check if profile exists and has required properties
-      if (!profile || !profile.id || !profile.emails || !profile.emails[0]) {
+      if (!profile?.id || !profile.emails?.[0]?.value) {
         throw new Error('Invalid profile data received from Google');
       }
 
+      const primaryEmail = profile.emails[0].value;
+      const fallbackName =
+        profile.displayName ||
+        (profile.name
+          ? `${profile.name.givenName || ''} ${profile.name.familyName || ''}`.trim()
+          : '') ||
+        primaryEmail.split('@')[0];
+
       const oauthProfile: OAuthProfile = {
         id: profile.id,
-        email: profile.emails[0].value,
-        name:
-          profile.displayName ||
-          (profile.name
-            ? `${profile.name.givenName || ''} ${profile.name.familyName || ''}`.trim()
-            : '') ||
-          profile.emails[0].value.split('@')[0],
+        email: primaryEmail,
+        name: fallbackName,
         firstName: profile.name?.givenName || '',
         lastName: profile.name?.familyName || '',
         avatar: profile.photos?.[0]?.value || null,
         provider: AuthProvider.GOOGLE,
-        providerData: profile._json || profile,
+        providerData: (profile as GoogleProfile)._json || profile,
       };
 
       const tokenData: ITokenData = {
@@ -55,7 +62,7 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
         expiresAt: new Date(Date.now() + 3600 * 1000), // 1 hour
       };
 
-      const user = await this.authService.validateOAuthUser(
+      const user: unknown = await this.authService.validateOAuthUser(
         oauthProfile,
         tokenData,
       );

@@ -7,11 +7,19 @@ import { AuthGuard } from '@nestjs/passport';
 import { JwtService } from '@nestjs/jwt';
 import { Observable } from 'rxjs';
 
-interface JwtUser {
+export interface JwtUser {
   id: string;
   email?: string;
   [key: string]: unknown;
 }
+
+const isJwtUser = (user: unknown): user is JwtUser => {
+  return Boolean(
+    user &&
+      typeof user === 'object' &&
+      typeof (user as { id?: unknown }).id === 'string',
+  );
+};
 
 @Injectable()
 export class JwtAuthGuard extends AuthGuard('jwt') {
@@ -25,15 +33,19 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
     return super.canActivate(context);
   }
 
-  handleRequest<TUser = unknown>(
+  handleRequest<TUser = JwtUser>(
     err: unknown,
     user: unknown,
-    _info: unknown,
-    _context: ExecutionContext,
-    _status?: unknown,
+    ..._args: unknown[]
   ): TUser {
-    if (err) throw err;
-    if (!user || typeof user !== 'object') {
+    void _args;
+    if (err) {
+      if (err instanceof Error) {
+        throw err;
+      }
+      throw new UnauthorizedException('Authentication error');
+    }
+    if (!isJwtUser(user)) {
       throw new UnauthorizedException('Invalid token');
     }
     return user as TUser;

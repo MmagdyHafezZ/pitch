@@ -54,6 +54,7 @@ export class UserController {
         `Creating user - Requested by: ${data.userClaims.email} (${data.userClaims.id})`,
       );
       const { userClaims: _userClaims, ...createUserDto } = data;
+      void _userClaims;
       return await this.userService.create(createUserDto);
     } catch (error) {
       throw toRpcException(error);
@@ -74,6 +75,7 @@ export class UserController {
         `Updating user ${data.id} - Requested by: ${data.userClaims.email} (${data.userClaims.id})`,
       );
       const { userClaims: _userClaims, id, ...updateData } = data;
+      void _userClaims;
       return await this.userService.update(id, updateData);
     } catch (error) {
       throw toRpcException(error);
@@ -95,10 +97,10 @@ export class UserController {
   }
 
   @MessagePattern(USER_SERVICE_PATTERNS.OAUTH_GET_PROVIDERS)
-  async getOAuthProviders() {
+  getOAuthProviders() {
     try {
       this.logger.log('Getting OAuth providers');
-      return await this.oauthProviderFactory.getEnabledProviders();
+      return this.oauthProviderFactory.getEnabledProviders();
     } catch (error) {
       this.logger.error('Failed to get OAuth providers', error);
       throw toRpcException(error);

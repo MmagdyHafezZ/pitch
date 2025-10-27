@@ -2,35 +2,53 @@ import { UserController } from '../controllers/user.controller';
 import type { UserService } from '../services/user.service';
 import { toRpcException } from '../../../common/helpers/exceptions';
 import { RpcException } from '@nestjs/microservices';
+import type { OAuthProviderFactory } from '../factories/oauth-provider.factory';
+import type { User } from '../../../common/interfaces/user.interface';
+import type { MessageWithUserClaims } from '../../../common/interfaces/user-claims.interface';
 
 jest.mock('../../../common/helpers/exceptions', () => ({
   toRpcException: jest.fn((error: unknown) => error),
 }));
 
 describe('UserController', () => {
-  const createServiceMock = () =>
+  const createServiceMock = (): jest.Mocked<UserService> =>
     ({
       findAll: jest.fn(),
       findOne: jest.fn(),
+      findByEmail: jest.fn(),
+      findByOAuthAccount: jest.fn(),
       create: jest.fn(),
       update: jest.fn(),
       remove: jest.fn(),
+      getOAuthAccountsByUserId: jest.fn(),
     }) as unknown as jest.Mocked<UserService>;
-  const createOauthProviderFactoryMock = () =>
-    ({
-      getProvider: jest.fn(),
-      getEnabledProviders: jest.fn(),
-      getAllProviders: jest.fn(),
-    }) as any;
-  const basePayload = {
+
+  const createOauthProviderFactoryMock =
+    (): jest.Mocked<OAuthProviderFactory> =>
+      ({
+        getProvider: jest.fn(),
+        getEnabledProviders: jest.fn(),
+        getAllProviders: jest.fn(),
+      }) as unknown as jest.Mocked<OAuthProviderFactory>;
+
+  const basePayload: MessageWithUserClaims = {
     userClaims: {
       id: 'admin-1',
       email: 'admin@example.com',
       name: 'Admin User',
     },
-  } as const;
+  };
 
-  const user = { id: 'user-1', email: 'user@example.com' } as const;
+  const user: User = {
+    id: 'user-1',
+    email: 'user@example.com',
+    name: 'Test User',
+    avatar: null,
+    isActive: true,
+    createdAt: new Date('2023-01-01T00:00:00.000Z'),
+    updatedAt: new Date('2023-01-01T00:00:00.000Z'),
+    oauthAccounts: [],
+  };
   const toRpcExceptionMock = jest.mocked(toRpcException);
 
   beforeEach(() => {
@@ -41,37 +59,35 @@ describe('UserController', () => {
   it('returns all users', async () => {
     const service = createServiceMock();
     const oauthProviderFactory = createOauthProviderFactoryMock();
-    service.findAll.mockResolvedValue([user] as any);
+    service.findAll.mockResolvedValue([user]);
     const controller = new UserController(service, oauthProviderFactory);
 
-    await expect(controller.getUsers(basePayload as any)).resolves.toEqual([
-      user,
-    ]);
+    await expect(controller.getUsers(basePayload)).resolves.toEqual([user]);
   });
 
   it('returns a single user', async () => {
     const service = createServiceMock();
     const oauthProviderFactory = createOauthProviderFactoryMock();
-    service.findOne.mockResolvedValue(user as any);
+    service.findOne.mockResolvedValue(user);
     const controller = new UserController(service, oauthProviderFactory);
 
-    await expect(
-      controller.getUser({ id: 'user-1', ...basePayload } as any),
-    ).resolves.toEqual(user);
+    const payload = { id: 'user-1', ...basePayload };
+
+    await expect(controller.getUser(payload)).resolves.toEqual(user);
     expect(service.findOne).toHaveBeenCalledWith('user-1');
   });
 
   it('creates a user after removing user claims from payload', async () => {
     const service = createServiceMock();
     const oauthProviderFactory = createOauthProviderFactoryMock();
-    service.create.mockResolvedValue(user as any);
+    service.create.mockResolvedValue(user);
     const controller = new UserController(service, oauthProviderFactory);
 
     const payload = {
       email: 'user@example.com',
       name: 'User',
       ...basePayload,
-    } as any;
+    };
 
     await expect(controller.createUser(payload)).resolves.toEqual(user);
     expect(service.create).toHaveBeenCalledWith({
@@ -83,14 +99,14 @@ describe('UserController', () => {
   it('updates a user', async () => {
     const service = createServiceMock();
     const oauthProviderFactory = createOauthProviderFactoryMock();
-    service.update.mockResolvedValue(user as any);
+    service.update.mockResolvedValue(user);
     const controller = new UserController(service, oauthProviderFactory);
 
     const payload = {
       id: 'user-1',
       name: 'Updated',
       ...basePayload,
-    } as any;
+    };
 
     await expect(controller.updateUser(payload)).resolves.toEqual(user);
     expect(service.update).toHaveBeenCalledWith('user-1', { name: 'Updated' });
@@ -99,11 +115,11 @@ describe('UserController', () => {
   it('deletes a user', async () => {
     const service = createServiceMock();
     const oauthProviderFactory = createOauthProviderFactoryMock();
-    service.remove.mockResolvedValue({ message: 'deleted' } as any);
+    service.remove.mockResolvedValue({ message: 'deleted' });
     const controller = new UserController(service, oauthProviderFactory);
 
     await expect(
-      controller.deleteUser({ id: 'user-1', ...basePayload } as any),
+      controller.deleteUser({ id: 'user-1', ...basePayload }),
     ).resolves.toEqual({ message: 'deleted' });
     expect(service.remove).toHaveBeenCalledWith('user-1');
   });
@@ -117,9 +133,7 @@ describe('UserController', () => {
     toRpcExceptionMock.mockReturnValueOnce(rpcError);
     const controller = new UserController(service, oauthProviderFactory);
 
-    await expect(controller.getUsers(basePayload as any)).rejects.toThrow(
-      rpcError,
-    );
+    await expect(controller.getUsers(basePayload)).rejects.toThrow(rpcError);
     expect(toRpcExceptionMock).toHaveBeenCalledWith(error);
   });
 
@@ -133,7 +147,7 @@ describe('UserController', () => {
     const controller = new UserController(service, oauthProviderFactory);
 
     await expect(
-      controller.getUser({ id: 'user-1', ...basePayload } as any),
+      controller.getUser({ id: 'user-1', ...basePayload }),
     ).rejects.toThrow(rpcError);
   });
 
@@ -151,7 +165,7 @@ describe('UserController', () => {
         email: 'user@example.com',
         name: 'User',
         ...basePayload,
-      } as any),
+      }),
     ).rejects.toThrow(rpcError);
   });
 
@@ -169,7 +183,7 @@ describe('UserController', () => {
         id: 'user-1',
         name: 'Updated',
         ...basePayload,
-      } as any),
+      }),
     ).rejects.toThrow(rpcError);
   });
 
@@ -183,7 +197,7 @@ describe('UserController', () => {
     const controller = new UserController(service, oauthProviderFactory);
 
     await expect(
-      controller.deleteUser({ id: 'user-1', ...basePayload } as any),
+      controller.deleteUser({ id: 'user-1', ...basePayload }),
     ).rejects.toThrow(rpcError);
   });
 });
