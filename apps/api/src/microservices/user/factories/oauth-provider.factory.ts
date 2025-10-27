@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import type { AuthProvider as PrismaAuthProvider } from '@prisma/user-client';
 
 export enum AuthProvider {
   GOOGLE = 'GOOGLE',
@@ -96,3 +97,7 @@ export class OAuthProviderFactory {
     return Array.from(this.providers.values());
   }
 }
+
+export const toPrismaAuthProvider = (
+  provider: AuthProvider,
+): PrismaAuthProvider => provider as PrismaAuthProvider;

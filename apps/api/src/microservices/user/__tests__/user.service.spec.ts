@@ -14,6 +14,7 @@ describe('UserService', () => {
     isActive: true,
     createdAt: new Date(),
     updatedAt: new Date(),
+    lastSeen: null,
   };
 
   beforeEach(() => {

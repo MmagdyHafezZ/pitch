@@ -1,6 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { UserPrismaService } from '../prisma/user-prisma.service';
-import { AuthProvider } from '../factories/oauth-provider.factory';
+import {
+  AuthProvider,
+  toPrismaAuthProvider,
+} from '../factories/oauth-provider.factory';
 import type { User, OAuthAccount } from '@prisma/user-client';
 
 export interface CreateUserData {
@@ -52,7 +55,7 @@ export class UserRepository {
       where: {
         oauthAccounts: {
           some: {
-            provider,
+            provider: toPrismaAuthProvider(provider),
             providerId,
           },
         },
@@ -76,7 +79,10 @@ export class UserRepository {
       data: {
         ...userData,
         oauthAccounts: {
-          create: oauthData,
+          create: {
+            ...oauthData,
+            provider: toPrismaAuthProvider(oauthData.provider),
+          },
         },
       },
       include: { oauthAccounts: true },
@@ -108,7 +114,10 @@ export class UserRepository {
     data: CreateOAuthAccountData,
   ): Promise<OAuthAccount> {
     return await this.prisma.oAuthAccount.create({
-      data,
+      data: {
+        ...data,
+        provider: toPrismaAuthProvider(data.provider),
+      },
     });
   }
 
@@ -119,7 +128,7 @@ export class UserRepository {
     await this.prisma.oAuthAccount.deleteMany({
       where: {
         userId,
-        provider,
+        provider: toPrismaAuthProvider(provider),
       },
     });
   }

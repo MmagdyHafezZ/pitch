@@ -5,7 +5,10 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { UserPrismaService } from '../prisma/user-prisma.service';
-import { AuthProvider } from '../factories/oauth-provider.factory';
+import {
+  AuthProvider,
+  toPrismaAuthProvider,
+} from '../factories/oauth-provider.factory';
 import { ITokenData } from '../interfaces/token-data.interface';
 
 export interface OAuthProfile {
@@ -49,7 +52,7 @@ export class AuthService {
       if (existingUser) {
         await this.prisma.oAuthAccount.create({
           data: {
-            provider: profile.provider,
+            provider: toPrismaAuthProvider(profile.provider),
             providerId: profile.id,
             email: profile.email,
             name: profile.name,
@@ -69,7 +72,7 @@ export class AuthService {
             avatar: profile.avatar,
             oauthAccounts: {
               create: {
-                provider: profile.provider,
+                provider: toPrismaAuthProvider(profile.provider),
                 providerId: profile.id,
                 email: profile.email,
                 name: profile.name,
@@ -87,7 +90,7 @@ export class AuthService {
       // User exists, update their OAuth tokens
       await this.prisma.oAuthAccount.updateMany({
         where: {
-          provider: profile.provider,
+          provider: toPrismaAuthProvider(profile.provider),
           providerId: profile.id,
         },
         data: {
@@ -109,7 +112,7 @@ export class AuthService {
       where: {
         oauthAccounts: {
           some: {
-            provider,
+            provider: toPrismaAuthProvider(provider),
             providerId,
           },
         },
@@ -175,7 +178,7 @@ export class AuthService {
     await this.prisma.oAuthAccount.deleteMany({
       where: {
         userId,
-        provider,
+        provider: toPrismaAuthProvider(provider),
       },
     });
 

@@ -51,7 +51,7 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
         name: fallbackName,
         firstName: profile.name?.givenName || '',
         lastName: profile.name?.familyName || '',
-        avatar: profile.photos?.[0]?.value || null,
+        avatar: profile.photos?.[0]?.value ?? undefined,
         provider: AuthProvider.GOOGLE,
         providerData: (profile as GoogleProfile)._json || profile,
       };
