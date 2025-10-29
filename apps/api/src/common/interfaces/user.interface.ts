@@ -34,3 +34,38 @@ export interface UpdateUserDto {
   avatar?: string;
   isActive?: boolean;
 }
+
+export interface Team {
+  id: string;
+  name: string;
+  slug?: string;
+  isActive: boolean;
+  availableTokens: number;
+  usedTokens: number;
+  billingEmail: string;
+  billingAddress: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+  createdAt: Date;
+  updatedAt: Date;
+  deletedAt?: Date | null;
+}
+
+export interface CreateTeamDto {
+  name: string;
+  slug?: string;
+  availableTokens: number;
+  billingEmail: string;
+  billingAddress: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+}
+
+export interface UpdateTeamDto {
+  name: string;
+  slug?: string;
+  isActive: boolean;
+  availableTokens: number;
+  usedTokens: number;
+  billingEmail: string;
+  billingAddress: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+}

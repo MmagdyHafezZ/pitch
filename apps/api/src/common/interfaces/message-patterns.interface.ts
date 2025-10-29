@@ -13,6 +13,14 @@ export const USER_SERVICE_PATTERNS = {
   CHECK_EMAIL: 'auth.checkEmail',
 } as const;
 
+export const TEAM_SERVICE_PATTERNS = {
+  GET_TEAM: 'get_team',
+  CREATE_TEAM: 'create_team',
+  UPDATE_TEAM: 'update_team',
+  DELETE_TEAM: 'delete_team',
+  GET_TEAMS: 'get_teams',
+} as const;
+
 export const BUSINESS_SERVICE_PATTERNS = {
   GET_BUSINESS: 'get_business',
   GET_BUSINESS_WITH_USER: 'get_business_with_user',
