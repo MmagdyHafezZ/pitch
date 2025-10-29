@@ -18,8 +18,8 @@ import {
 } from '@nestjs/swagger';
 import { catchError, timeout } from 'rxjs/operators';
 import { throwError } from 'rxjs';
-import { Public } from '../../microservices/user/decorators/public.decorator';
-import { CurrentUser } from '../../microservices/user/decorators/current-user.decorator';
+import { Public } from '../../microservices/userManagement/decorators/public.decorator';
+import { CurrentUser } from '../../microservices/userManagement/decorators/current-user.decorator';
 import { USER_SERVICE_PATTERNS } from '../../common/interfaces/message-patterns.interface';
 import { getWhitelistedRoutes } from '../config/auth-whitelist.config';
 import {
@@ -28,7 +28,7 @@ import {
   RefreshTokenDto,
   AuthResponseDto,
   UserResponseDto,
-} from '../../microservices/user/dto/auth.dto';
+} from '../../microservices/userManagement/dto/auth.dto';
 import type { ServiceError } from '../../common/interfaces/error.interface';
 
 @ApiTags('authentication')

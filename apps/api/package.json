@@ -31,7 +31,7 @@
     "db:migrate:user": "cd src/microservices/user && prisma migrate dev --schema=./prisma/schema.prisma",
     "db:generate:all": "pnpm run db:generate:user && pnpm run db:generate:support",
     "db:migrate:all": "pnpm run db:migrate:user ",
-    "db:migrate-deploy:all": "pnpm run db:migrate:user -- --create-only  -- --create-only && prisma migrate deploy --schema=./src/microservices/user/prisma/schema.prisma && prisma migrate deploy --schema=./src/microservices/business/prisma/schema.prisma",
+    "db:migrate-deploy:all": "pnpm run db:migrate:user -- --create-only  -- --create-only && prisma migrate deploy --schema=./src/microservices/userManagement/prisma/schema.prisma && prisma migrate deploy --schema=./src/microservices/business/prisma/schema.prisma",
     "db:studio:user": "cd src/microservices/user && prisma studio --schema=./prisma/schema.prisma",
     "db:studio:all": "pnpm run db:studio:user "
   },

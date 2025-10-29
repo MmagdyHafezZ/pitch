@@ -1,4 +1,4 @@
-import type { UserResponseDto } from '../../microservices/user/dto/auth.dto';
+import type { UserResponseDto } from '../../microservices/userManagement/dto/auth.dto';
 
 export interface RequestWithUser {
   user?: UserResponseDto;

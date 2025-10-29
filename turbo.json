@@ -44,7 +44,7 @@
     },
     "db:generate:user": {
       "cache": false,
-      "outputs": ["src/microservices/user/prisma/generated/**"]
+      "outputs": ["src/microservices/userManagement/prisma/generated/**"]
     },
     "db:generate:business": {
       "cache": false,
