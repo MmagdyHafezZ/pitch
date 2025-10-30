@@ -2,7 +2,9 @@ import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { UserController } from './controllers/user.controller';
+import { TeamController } from './controllers/team.controller';
 import { UserService } from './services/user.service';
+import { TeamService } from './services/team.service';
 import { UserPrismaService } from './prisma/user-prisma.service';
 import { AuthService } from './services/auth.service';
 import { OAuthProviderFactory } from './factories/oauth-provider.factory';
@@ -15,6 +17,7 @@ import { GoogleStrategy } from './strategies/google.strategy';
 // import { DiscordStrategy } from './strategies/discord.strategy';
 import { OAuthController } from './controllers/oauth.controller';
 import { UserRepository } from './repositories/user.repository';
+import { TeamRepository } from './repositories/team.repository';
 
 @Module({
   imports: [
@@ -24,7 +27,7 @@ import { UserRepository } from './repositories/user.repository';
       signOptions: { expiresIn: '15m' },
     }),
   ],
-  controllers: [UserController, OAuthController],
+  controllers: [UserController, TeamController, OAuthController],
   providers: [
     UserService,
     UserPrismaService,
@@ -38,7 +41,9 @@ import { UserRepository } from './repositories/user.repository';
     // LinkedInStrategy,
     // MicrosoftStrategy,
     // DiscordStrategy,
+    TeamService,
+    TeamRepository,
   ],
-  exports: [UserService, AuthService, JwtAuthGuard, JwtStrategy],
+  exports: [UserService, TeamService, AuthService, JwtAuthGuard, JwtStrategy],
 })
 export class UserModule {}

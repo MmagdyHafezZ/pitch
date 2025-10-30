@@ -137,7 +137,7 @@ Each microservice has its own Prisma schema:
 
 ```bash
 # User microservice migrations
-cd src/microservices/user
+cd src/microservices/userManagement
 npx prisma migrate dev
 npx prisma generate
 

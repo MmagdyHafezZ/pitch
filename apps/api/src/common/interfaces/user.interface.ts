@@ -1,3 +1,5 @@
+import { Prisma } from '@prisma/user-client';
+
 export interface User {
   id: string;
   email: string;
@@ -38,13 +40,10 @@ export interface UpdateUserDto {
 export interface Team {
   id: string;
   name: string;
-  slug?: string;
+  slug: string;
   isActive: boolean;
-  availableTokens: number;
-  usedTokens: number;
-  billingEmail: string;
-  billingAddress: Record<string, unknown>;
-  metadata?: Record<string, unknown>;
+  billingEmail?: string | null;
+  billingAddress?: Prisma.JsonValue | undefined;
   createdAt: Date;
   updatedAt: Date;
   deletedAt?: Date | null;
@@ -53,19 +52,17 @@ export interface Team {
 export interface CreateTeamDto {
   name: string;
   slug?: string;
-  availableTokens: number;
-  billingEmail: string;
-  billingAddress: Record<string, unknown>;
-  metadata?: Record<string, unknown>;
+  isActive?: boolean;
+  billingEmail?: string | null;
+  billingAddress?: Prisma.JsonValue | undefined;
+  metadata?: Prisma.JsonValue;
 }
 
 export interface UpdateTeamDto {
-  name: string;
+  name?: string;
   slug?: string;
-  isActive: boolean;
-  availableTokens: number;
-  usedTokens: number;
-  billingEmail: string;
-  billingAddress: Record<string, unknown>;
-  metadata?: Record<string, unknown>;
+  isActive?: boolean;
+  billingEmail?: string | null;
+  billingAddress?: Prisma.JsonValue | undefined;
+  metadata?: Prisma.JsonValue;
 }

@@ -26,13 +26,13 @@
     "test:e2e": "jest --config jest-e2e.config.js",
     "test:e2e:watch": "jest --config jest-e2e.config.js --watch",
     "test:all": "pnpm test && pnpm test:integration && pnpm test:e2e",
-    "db:generate:user": "cd src/microservices/user && prisma generate --schema=./prisma/schema.prisma",
+    "db:generate:user": "cd src/microservices/userManagement && prisma generate --schema=./prisma/schema.prisma",
     "db:generate:support": "cd src/microservices/support && prisma generate --schema=./prisma/schema.prisma",
-    "db:migrate:user": "cd src/microservices/user && prisma migrate dev --schema=./prisma/schema.prisma",
+    "db:migrate:user": "cd src/microservices/userManagement && prisma migrate dev --schema=./prisma/schema.prisma",
     "db:generate:all": "pnpm run db:generate:user && pnpm run db:generate:support",
     "db:migrate:all": "pnpm run db:migrate:user ",
     "db:migrate-deploy:all": "pnpm run db:migrate:user -- --create-only  -- --create-only && prisma migrate deploy --schema=./src/microservices/userManagement/prisma/schema.prisma && prisma migrate deploy --schema=./src/microservices/business/prisma/schema.prisma",
-    "db:studio:user": "cd src/microservices/user && prisma studio --schema=./prisma/schema.prisma",
+    "db:studio:user": "cd src/microservices/userManagement && prisma studio --schema=./prisma/schema.prisma",
     "db:studio:all": "pnpm run db:studio:user "
   },
   "dependencies": {

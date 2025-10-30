@@ -1,56 +1,91 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { Prisma } from '@prisma/user-client';
 import {
   IsBoolean,
   IsEmail,
-  IsInt,
   IsObject,
   IsOptional,
   IsString,
   Length,
   Matches,
-  Min,
 } from 'class-validator';
 
-type JsonMap = Record<string, unknown>;
-
-export class TeamResponseDto {
-  @ApiProperty()
-  id: string;
-
-  @ApiProperty()
+export class CreateTeamRequestDto {
+  @ApiProperty({ description: 'Required Team Name', example: 'My Team' })
   @IsString()
   @Length(2, 64)
-  name: string;
+  name!: string;
 
   @ApiProperty({
-    description: 'URL-friendly unique identifier',
+    description: 'Optional URL-friendly unique identifier',
     example: 'my-team-123',
   })
-  @IsOptional()
   @IsString()
   @Matches(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
+  @IsOptional()
   slug?: string;
 
-  @ApiProperty({ description: 'Indicates if the team is active' })
-  @IsBoolean()
-  isActive: boolean;
-
-  @IsInt()
-  @Min(0)
-  availableTokens: number;
-
-  @IsInt()
-  @Min(0)
-  usedTokens: number;
-
+  @ApiProperty({
+    description: 'Required Billing email address',
+    example: 'billing@example.com',
+  })
   @IsEmail()
-  billingEmail: string;
-
-  @IsObject()
-  billingAddress: JsonMap;
-
-  @ApiProperty({ description: 'Additional metadata for the team' })
   @IsOptional()
+  billingEmail?: string;
+
+  @ApiProperty({
+    description: 'Required Billing address',
+    example: {
+      street: '123 Main St',
+      city: 'Anytown',
+      state: 'CA',
+      zip: '12345',
+    },
+  })
   @IsObject()
-  metadata?: JsonMap;
+  @IsOptional()
+  billingAddress?: Prisma.JsonValue | null;
+}
+
+export class UpdateTeamRequestDto {
+  @ApiProperty({ description: 'Optional Team Name', example: 'My Team' })
+  @IsString()
+  @Length(2, 64)
+  @IsOptional()
+  name?: string;
+
+  @ApiProperty({
+    description: 'Optional URL-friendly unique identifier',
+    example: 'my-team',
+  })
+  @IsString()
+  @Matches(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
+  @IsOptional()
+  slug?: string;
+
+  @ApiProperty({ description: 'Optional Indicates if the team is active' })
+  @IsBoolean()
+  @IsOptional()
+  isActive?: boolean;
+
+  @ApiProperty({
+    description: 'Optional Billing email address',
+    example: 'billing@example.com',
+  })
+  @IsEmail()
+  @IsOptional()
+  billingEmail?: string;
+
+  @ApiProperty({
+    description: 'Optional Billing address',
+    example: {
+      street: '123 Main St',
+      city: 'Anytown',
+      state: 'CA',
+      zip: '12345',
+    },
+  })
+  @IsObject()
+  @IsOptional()
+  billingAddress?: Prisma.JsonValue | null;
 }

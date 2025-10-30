@@ -11,6 +11,7 @@ import {
   getQueueOptions,
 } from '../config/microservices.config';
 import { APP_GUARD } from '@nestjs/core';
+import { TeamGatewayController } from './controllers/userManagement/team-gateway.controller';
 
 @Module({
   imports: [
@@ -30,7 +31,11 @@ import { APP_GUARD } from '@nestjs/core';
       })),
     ),
   ],
-  controllers: [UserGatewayController, AuthGatewayController],
+  controllers: [
+    UserGatewayController,
+    AuthGatewayController,
+    TeamGatewayController,
+  ],
   providers: [
     { provide: APP_GUARD, useClass: GlobalJwtAuthGuard },
     UserClaimsInterceptor,

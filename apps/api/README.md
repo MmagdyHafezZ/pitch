@@ -52,7 +52,7 @@ The API follows a microservices architecture with an API Gateway pattern:
 
    ```bash
    # User microservice (PostgreSQL)
-   cd src/microservices/user
+   cd src/microservices/userManagement
    npx prisma migrate dev
    npx prisma generate
 

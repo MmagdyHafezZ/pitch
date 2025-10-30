@@ -51,7 +51,7 @@ This is a Turborepo monorepo containing:
 2. **Start database services:**
 
    ```bash
-   docker-compose -f docker-compose.local.yml up -d postgres mongodb redis rabbitmq
+   docker-compose -f docker-compose.local.yml up -d
    ```
 
 3. **Run database migrations:**

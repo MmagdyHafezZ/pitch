@@ -7,6 +7,7 @@ export interface MicroserviceConfig {
 
 export const MICROSERVICES_CONFIG: MicroserviceConfig[] = [
   { name: 'USER_SERVICE', queue: 'user_queue' },
+  { name: 'TEAM_SERVICE', queue: 'team_queue' },
 ];
 
 export function createMicroserviceOptions(queue: string): MicroserviceOptions {

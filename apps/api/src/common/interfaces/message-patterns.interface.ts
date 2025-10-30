@@ -11,9 +11,6 @@ export const USER_SERVICE_PATTERNS = {
   VALIDATE_USER: 'auth.validateUser',
   OAUTH_GET_PROVIDERS: 'auth.oauth.getProviders',
   CHECK_EMAIL: 'auth.checkEmail',
-} as const;
-
-export const TEAM_SERVICE_PATTERNS = {
   GET_TEAM: 'get_team',
   CREATE_TEAM: 'create_team',
   UPDATE_TEAM: 'update_team',
