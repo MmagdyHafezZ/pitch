@@ -1,0 +1,25 @@
+sequenceDiagram
+    participant Client
+    participant S3Gateway as API Gateway (S3Gateway)
+    participant FileController
+    participant FileService
+    participant S3Repository
+    participant AWSS3 as AWS S3
+
+    %% Step 1: Client initiates request
+    Client->>S3Gateway: POST /s3/upload<br/>File data and metadata
+    S3Gateway->>FileController: Forward upload request
+
+    %% Step 2: Controller handles the request
+    FileController->>FileService: Validate request and call uploadFile(bucket, file)
+
+    %% Step 3: Service performs upload logic
+    FileService->>S3Repository: uploadFile(bucket, key, file)
+    S3Repository->>AWSS3: Upload object to target bucket
+    AWSS3-->>S3Repository: Confirm successful upload
+    S3Repository-->>FileService: Return upload result
+
+    %% Step 4: Return response
+    FileService-->>FileController: Return upload success response
+    FileController-->>S3Gateway: Format and send response
+    S3Gateway-->>Client: 200 OK (File uploaded successfully)
