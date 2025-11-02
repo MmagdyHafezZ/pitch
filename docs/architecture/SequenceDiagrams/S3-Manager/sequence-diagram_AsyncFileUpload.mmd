@@ -1,0 +1,20 @@
+sequenceDiagram
+    participant ProducerService as Other Microservice
+    participant RabbitMQ
+    participant FileService
+    participant S3Repository
+    participant AWSS3 as AWS S3
+
+    %% Step 1: Event Trigger
+    ProducerService->>RabbitMQ: Publish "upload_request" message<br/>to storage-requests queue
+
+    %% Step 2: FileService consumes event
+    RabbitMQ-->>FileService: Deliver upload_request message
+    FileService->>S3Repository: uploadFile(bucket, key, file)
+    S3Repository->>AWSS3: Upload object to S3 bucket
+    AWSS3-->>S3Repository: Upload successful
+    S3Repository-->>FileService: Return success
+
+    %% Step 3: Publish completion event
+    FileService->>RabbitMQ: Publish "file_uploaded" event<br/>to storage-events queue
+    RabbitMQ-->>ProducerService: Notify or log event

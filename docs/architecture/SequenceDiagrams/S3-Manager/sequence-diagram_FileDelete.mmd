@@ -1,0 +1,25 @@
+sequenceDiagram
+    participant Client
+    participant S3Gateway as API Gateway (S3Gateway)
+    participant FileController
+    participant FileService
+    participant S3Repository
+    participant AWSS3 as AWS S3
+
+    %% Step 1: Client initiates deletion request
+    Client->>S3Gateway: DELETE /s3/delete/{bucket}/{fileKey}
+    S3Gateway->>FileController: Forward delete request
+
+    %% Step 2: Controller processes request
+    FileController->>FileService: Validate request and call deleteFile(bucket, fileKey)
+
+    %% Step 3: Service performs deletion
+    FileService->>S3Repository: deleteFile(bucket, fileKey)
+    S3Repository->>AWSS3: Delete object from bucket
+    AWSS3-->>S3Repository: Deletion successful
+    S3Repository-->>FileService: Return success result
+
+    %% Step 4: Return response
+    FileService-->>FileController: Confirm deletion
+    FileController-->>S3Gateway: Send 200 OK response
+    S3Gateway-->>Client: 200 OK — File deleted successfully

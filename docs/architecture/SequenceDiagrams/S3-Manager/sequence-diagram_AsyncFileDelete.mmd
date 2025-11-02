@@ -1,0 +1,20 @@
+sequenceDiagram
+    participant ProducerService as Other Microservice
+    participant RabbitMQ
+    participant FileService
+    participant S3Repository
+    participant AWSS3 as AWS S3
+
+    %% Step 1: Event Trigger
+    ProducerService->>RabbitMQ: Publish "delete_request" message<br/>to storage-requests queue
+
+    %% Step 2: FileService consumes event
+    RabbitMQ-->>FileService: Deliver delete_request message
+    FileService->>S3Repository: deleteFile(bucket, fileKey)
+    S3Repository->>AWSS3: Delete object from bucket
+    AWSS3-->>S3Repository: Confirm deletion
+    S3Repository-->>FileService: Return success
+
+    %% Step 3: Publish completion event
+    FileService->>RabbitMQ: Publish "file_deleted" event<br/>to storage-events queue
+    RabbitMQ-->>ProducerService: Notify deletion completed
