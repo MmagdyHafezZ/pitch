@@ -1,0 +1,20 @@
+sequenceDiagram
+autonumber
+participant LMS as LMS (Instructor)
+participant LTIGW as LTI Gateway
+participant DLC as DeepLinkController
+participant DLS as DeepLinkService
+
+LMS->>LTIGW: Deep Link Launch Request
+LTIGW->>DLC: Forward Request
+DLC->>DLS: Process Deep Link Request
+
+DLS-->>DLC: Provide Content Selection UI Payload
+DLC-->>LMS: Display Tool Configuration UI
+
+LMS->>LTIGW: Instructor Selects Content
+LTIGW->>DLC: Return Selection Data
+DLC->>DLS: Generate Deep Link Response (JWT)
+
+DLS-->>DLC: Deep Link JWT Ready
+DLC-->>LMS: Return DeepLinkResponse (Add to Course)
