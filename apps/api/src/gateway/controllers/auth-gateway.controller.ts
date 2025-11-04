@@ -16,7 +16,7 @@ import {
   ApiResponse,
   ApiBearerAuth,
 } from '@nestjs/swagger';
-import { catchError, timeout } from 'rxjs/operators';
+import { catchError, timeout, retry, delay } from 'rxjs/operators';
 import { throwError } from 'rxjs';
 import { Public } from '../../microservices/user/decorators/public.decorator';
 import { CurrentUser } from '../../microservices/user/decorators/current-user.decorator';
@@ -55,6 +55,17 @@ export class AuthGatewayController {
       .send(USER_SERVICE_PATTERNS.REGISTER, registerDto)
       .pipe(
         timeout(10000),
+        retry({
+          count: 2,
+          delay: (error, retryCount) => {
+            this.logger.warn(
+              `Retry attempt ${retryCount} for registration: ${registerDto.email}`,
+            );
+            return delay(Math.min(1000 * retryCount, 3000))(
+              throwError(() => error),
+            );
+          },
+        }),
         catchError((err: unknown) => {
           const error = err as ServiceError;
           const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;

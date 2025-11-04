@@ -1,0 +1,203 @@
+%%{init: {'theme':'base', 'themeVariables': {
+  'primaryColor':'#ffffff',
+  'primaryTextColor':'#0d1117',
+  'primaryBorderColor':'#1565c0',
+  'lineColor':'#1976d2',
+  'secondaryColor':'#fef3c7',
+  'secondaryTextColor':'#1f2937',
+  'secondaryBorderColor':'#d97706',
+  'tertiaryColor':'#f3e8ff',
+  'tertiaryTextColor':'#111827',
+  'actorTextColor':'#0d1117',
+  'noteBkgColor':'#fffde7',
+  'noteTextColor':'#374151',
+  'mainBkg':'#ffffff',
+  'secondBkg':'#ffffff',
+  'tertiaryBkg':'#ffffff',
+  'edgeLabelBackground':'#ffffff'
+}}}%%
+
+---
+title: "Figure 8.10 - Generate Scorecard with Rubric"
+---
+
+sequenceDiagram
+    participant Admin as Admin Client
+    participant FeedbackGW as Feedback Gateway
+    participant FeedbackCtrl as Feedback Controller
+    participant SessionRepo as Session Repository
+    participant RubricSvc as Rubric Service
+    participant RubricRepo as Rubric Repository
+    participant FeedbackSvc as Feedback Service
+    participant TurnRepo as Turn Repository
+    participant MessageRepo as Message Repository
+    participant ScoringSvc as Scoring Service
+    participant LLMSvc as LLM Service
+    participant ScoreRepo as Score Repository
+    participant CoachingSvc as Coaching Service
+    participant BenchmarkSvc as Benchmark Service
+    participant BenchmarkRepo as Benchmark Repository
+    participant EventBus as Event Bus
+
+    Admin->>FeedbackGW: POST /feedback/score<br/>{sessionId, rubricId?}
+    FeedbackGW->>FeedbackCtrl: Forward request
+
+    FeedbackCtrl->>SessionRepo: Validate session ended
+    alt Session not ended
+        SessionRepo-->>FeedbackCtrl: Not complete
+        FeedbackCtrl-->>Admin: 409 Session Not Complete
+    end
+    SessionRepo-->>FeedbackCtrl: Session valid
+
+    alt rubricId provided
+        FeedbackCtrl->>RubricSvc: Retrieve rubric
+        RubricSvc->>RubricRepo: Get Rubric & Criterion records
+        alt Rubric not found
+            RubricRepo-->>RubricSvc: Not found
+            RubricSvc-->>FeedbackCtrl: 404 Rubric Not Found
+            FeedbackCtrl-->>Admin: 404 Error
+        end
+        RubricRepo-->>RubricSvc: Rubric & criteria
+    else No rubricId
+        FeedbackCtrl->>RubricSvc: Get default rubric for org
+        RubricSvc->>RubricRepo: Retrieve default
+        RubricRepo-->>RubricSvc: Default rubric
+    end
+    RubricSvc-->>FeedbackCtrl: Rubric ready
+
+    FeedbackCtrl->>FeedbackSvc: Generate scorecard
+    FeedbackSvc->>TurnRepo: Retrieve all turns
+    FeedbackSvc->>MessageRepo: Retrieve all messages
+    TurnRepo-->>FeedbackSvc: Turn history
+    MessageRepo-->>FeedbackSvc: Message history
+
+    loop For each Criterion
+        FeedbackSvc->>ScoringSvc: Evaluate session
+
+        alt LLM-based scoring
+            ScoringSvc->>LLMSvc: Generate score with reasoning
+            Note over LLMSvc: Analyze conversation<br/>Score 0-maxPoints
+            LLMSvc-->>ScoringSvc: Score + reasoning
+        else Rule-based scoring
+            Note over ScoringSvc: Pattern matching<br/>Keyword detection
+        end
+
+        ScoringSvc->>ScoreRepo: Create ScoreItem<br/>{criterionId, score, maxPoints, details}
+    end
+
+    Note over FeedbackSvc: Calculate totalScore<br/>(weighted sum)
+    FeedbackSvc->>ScoreRepo: Create Scorecard<br/>{sessionId, rubricId, totalScore, maxScore}
+    ScoreRepo-->>FeedbackSvc: Scorecard created {scorecardId}
+
+    FeedbackSvc->>CoachingSvc: Generate coaching tips
+    Note over CoachingSvc: Analyze low-scoring areas
+    CoachingSvc->>LLMSvc: Create coaching text
+    LLMSvc-->>CoachingSvc: Tips with excerpts
+
+    CoachingSvc->>ScoreRepo: Create CoachTip records<br/>{text, excerptRef, link}
+
+    FeedbackSvc->>BenchmarkSvc: Update team/org averages
+    BenchmarkSvc->>BenchmarkRepo: Update benchmarks
+
+    FeedbackSvc->>EventBus: Emit feedback.ready<br/>{scorecardId, sessionId}
+
+    FeedbackSvc-->>FeedbackCtrl: Scorecard complete
+    FeedbackCtrl-->>Admin: 200 OK<br/>{scorecardId, summary}
+
+---
+title: "Figure 8.11 - Retrieve Scorecard Details"
+---
+
+sequenceDiagram
+    participant User
+    participant FeedbackGW as Feedback Gateway
+    participant FeedbackCtrl as Feedback Controller
+    participant ScoreRepo as Score Repository
+    participant FeedbackSvc as Feedback Service
+    participant RubricSvc as Rubric Service
+    participant RubricRepo as Rubric Repository
+    participant MessageRepo as Message Repository
+    participant TranscriptRepo as Transcript Repository
+
+    User->>FeedbackGW: GET /feedback/scorecards/{id}
+    FeedbackGW->>FeedbackCtrl: Forward request
+
+    FeedbackCtrl->>ScoreRepo: Retrieve Scorecard
+    alt Scorecard not found
+        ScoreRepo-->>FeedbackCtrl: Not found
+        FeedbackCtrl-->>User: 404 Scorecard Not Found
+    end
+    ScoreRepo-->>FeedbackCtrl: Scorecard data
+
+    FeedbackCtrl->>FeedbackSvc: Assemble full details
+    FeedbackSvc->>ScoreRepo: Retrieve all ScoreItem records
+    ScoreRepo-->>FeedbackSvc: Score items
+
+    loop For each ScoreItem
+        FeedbackSvc->>RubricSvc: Get criterion details
+        RubricSvc->>RubricRepo: Retrieve Criterion
+        RubricRepo-->>RubricSvc: Criterion {label, description}
+        RubricSvc-->>FeedbackSvc: Criterion info
+    end
+
+    FeedbackSvc->>ScoreRepo: Retrieve all CoachTip records
+    ScoreRepo-->>FeedbackSvc: Coach tips
+
+    loop For each CoachTip with excerptRef
+        alt Reference is Message
+            FeedbackSvc->>MessageRepo: Retrieve referenced content
+            MessageRepo-->>FeedbackSvc: Message excerpt
+        else Reference is TranscriptSegment
+            FeedbackSvc->>TranscriptRepo: Retrieve segment
+            TranscriptRepo-->>FeedbackSvc: Transcript excerpt
+        end
+    end
+
+    Note over FeedbackSvc: Assemble response:<br/>- Summary (score, %)<br/>- Criterion scores<br/>- Coaching tips + excerpts<br/>- Session context
+
+    FeedbackSvc-->>FeedbackCtrl: Complete scorecard
+    FeedbackCtrl-->>User: 200 OK<br/>{scorecard, items, tips, context}
+
+---
+title: "Figure 8.12 - Create or Update Rubric"
+---
+
+sequenceDiagram
+    participant Admin as Admin Client
+    participant FeedbackGW as Feedback Gateway
+    participant RubricCtrl as Rubric Controller
+    participant RubricSvc as Rubric Service
+    participant RubricRepo as Rubric Repository
+
+    Admin->>FeedbackGW: POST /rubrics<br/>{name, orgId, criteria[]}
+    FeedbackGW->>RubricCtrl: Forward request
+
+    RubricCtrl->>RubricCtrl: Validate structure & criteria
+    alt Invalid structure
+        RubricCtrl-->>Admin: 400 Invalid Rubric Structure
+    end
+
+    RubricCtrl->>RubricSvc: Create/update rubric
+    RubricSvc->>RubricRepo: Check if rubric exists<br/>(by orgId + name)
+
+    alt Rubric exists
+        Note over RubricSvc: Increment version<br/>(rubrics are immutable)
+        RubricRepo-->>RubricSvc: Current version
+        Note over RubricSvc: version = current + 1
+    else New rubric
+        Note over RubricSvc: version = 1
+    end
+
+    RubricSvc->>RubricRepo: Create Rubric<br/>{orgId, name, version}
+    RubricRepo-->>RubricSvc: Rubric created {rubricId}
+
+    loop For each criterion
+        RubricSvc->>RubricRepo: Create Criterion<br/>{rubricId, label, maxPoints, weight, order}
+    end
+
+    Note over RubricSvc: Existing scorecards remain<br/>linked to original version
+
+    RubricSvc-->>RubricCtrl: Rubric complete
+    RubricCtrl-->>Admin: 201 Created<br/>{rubricId, version}
+
+    Note over Admin: For PATCH /rubrics/{id}:<br/>Same flow, always creates<br/>new version

@@ -1,0 +1,59 @@
+%%{init: {'theme':'base', 'themeVariables': {
+  'primaryColor':'#ffffff',
+  'primaryTextColor':'#0d1117',
+  'primaryBorderColor':'#1565c0',
+  'lineColor':'#1976d2',
+  'secondaryColor':'#fef3c7',
+  'secondaryTextColor':'#1f2937',
+  'secondaryBorderColor':'#d97706',
+  'tertiaryColor':'#f3e8ff',
+  'tertiaryTextColor':'#111827',
+  'actorTextColor':'#0d1117',
+  'noteBkgColor':'#fffde7',
+  'noteTextColor':'#374151',
+  'mainBkg':'#ffffff',
+  'secondBkg':'#ffffff',
+  'tertiaryBkg':'#ffffff',
+  'edgeLabelBackground':'#ffffff'
+}}}%%
+
+
+sequenceDiagram
+    participant OrchSvc as Orchestrator Service
+    participant RetrievalSvc as Retrieval Service
+    participant EmbeddingSvc as Embedding Service
+    participant EmbeddingRepo as Embedding Repository (pgvector)
+    participant TranscriptRepo as Transcript Repository
+    participant MessageRepo as Message Repository
+    participant DocStore as Document Store
+
+    Note over RetrievalSvc: During simulation turn,<br/>need to find relevant context
+
+    OrchSvc->>RetrievalSvc: Find context<br/>{query, sessionId}
+
+    RetrievalSvc->>EmbeddingSvc: Generate query embedding
+    Note over EmbeddingSvc: Use sentence transformer<br/>(e.g., all-MiniLM-L6-v2)
+    EmbeddingSvc-->>RetrievalSvc: Query vector
+
+    RetrievalSvc->>EmbeddingRepo: Vector similarity search
+    Note over EmbeddingRepo: pgvector <-> operator<br/>Filter by namespace<br/>Limit to top-k (5-10)
+    EmbeddingRepo-->>RetrievalSvc: Matching EmbeddingRow records<br/>{refType, refId, score}
+
+    loop For each match
+        alt refType = "TranscriptSegment"
+            RetrievalSvc->>TranscriptRepo: Fetch segment content
+            TranscriptRepo-->>RetrievalSvc: Segment text + metadata
+        else refType = "Document"
+            RetrievalSvc->>DocStore: Fetch document
+            DocStore-->>RetrievalSvc: Document content
+        else refType = "Message"
+            RetrievalSvc->>MessageRepo: Fetch message
+            MessageRepo-->>RetrievalSvc: Message content
+        end
+    end
+
+    Note over RetrievalSvc: Assemble chunks with:<br/>- Source<br/>- Timestamp<br/>- Relevance score
+
+    RetrievalSvc-->>OrchSvc: Retrieved context chunks
+
+    Note over OrchSvc: Include in LLM prompt<br/>as grounding info

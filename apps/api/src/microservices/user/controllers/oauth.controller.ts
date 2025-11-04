@@ -12,6 +12,7 @@ import {
   HttpStatus,
   BadRequestException,
   UnauthorizedException,
+  Logger,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import {
@@ -53,6 +54,8 @@ const isOAuthRequestUser = (user: unknown): user is OAuthRequestUser => {
 @ApiTags('OAuth Authentication')
 @Controller('auth/oauth')
 export class OAuthController {
+  private readonly logger = new Logger(OAuthController.name);
+
   constructor(
     private authService: AuthService,
     private oauthProviderFactory: OAuthProviderFactory,
@@ -77,7 +80,7 @@ export class OAuthController {
       const tokens = this.authService.generateTokens(user);
       this.redirectWithTokens(res, tokens);
     } catch (error: unknown) {
-      console.error('Google OAuth callback error:', error);
+      this.logger.error('Google OAuth callback error:', error);
       this.handleOAuthError(res, error, 'Google');
     }
   }
@@ -100,7 +103,7 @@ export class OAuthController {
       const tokens = this.authService.generateTokens(user);
       this.redirectWithTokens(res, tokens);
     } catch (error: unknown) {
-      console.error('LinkedIn OAuth callback error:', error);
+      this.logger.error('LinkedIn OAuth callback error:', error);
       this.handleOAuthError(res, error, 'LinkedIn');
     }
   }
@@ -124,7 +127,7 @@ export class OAuthController {
       const tokens = this.authService.generateTokens(user);
       this.redirectWithTokens(res, tokens);
     } catch (error: unknown) {
-      console.error('GitHub OAuth callback error:', error);
+      this.logger.error('GitHub OAuth callback error:', error);
       this.handleOAuthError(res, error, 'GitHub');
     }
   }
@@ -148,7 +151,7 @@ export class OAuthController {
       const tokens = this.authService.generateTokens(user);
       this.redirectWithTokens(res, tokens);
     } catch (error: unknown) {
-      console.error('Microsoft OAuth callback error:', error);
+      this.logger.error('Microsoft OAuth callback error:', error);
       this.handleOAuthError(res, error, 'Microsoft');
     }
   }
@@ -172,7 +175,7 @@ export class OAuthController {
       const tokens = this.authService.generateTokens(user);
       this.redirectWithTokens(res, tokens);
     } catch (error: unknown) {
-      console.error('Discord OAuth callback error:', error);
+      this.logger.error('Discord OAuth callback error:', error);
       this.handleOAuthError(res, error, 'Discord');
     }
   }

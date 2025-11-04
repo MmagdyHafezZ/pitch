@@ -2,13 +2,12 @@ import {
   Injectable,
   UnauthorizedException,
   NotFoundException,
+  Logger,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { UserPrismaService } from '../prisma/user-prisma.service';
-import {
-  AuthProvider,
-  toPrismaAuthProvider,
-} from '../factories/oauth-provider.factory';
+import { UserRepository } from '../repositories/user.repository';
+import { AuthRepository } from '../repositories/auth.repository';
+import { AuthProvider } from '../factories/oauth-provider.factory';
 import { ITokenData } from '../interfaces/token-data.interface';
 
 export interface OAuthProfile {
@@ -30,29 +29,69 @@ export interface TokenPayload {
   name?: string | null;
 }
 
+/**
+ * Auth Service (Legacy/Domain Service)
+ *
+ * IMPORTANT: This service is being REFACTORED.
+ * - OAuth validation should use AuthApplicationService.validateOAuthUser()
+ * - This service now only contains domain logic and token generation
+ * - All orchestration moved to AuthApplicationService
+ * - All data access moved to repositories
+ *
+ * @deprecated Use AuthApplicationService for orchestration
+ */
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
-    private prisma: UserPrismaService,
-    private jwtService: JwtService,
+    private readonly userRepository: UserRepository,
+    private readonly authRepository: AuthRepository,
+    private readonly jwtService: JwtService,
   ) {}
 
+  /**
+   * @deprecated Use AuthApplicationService.validateOAuthUser() instead
+   * This method is kept for backward compatibility with OAuth strategies
+   */
   async validateOAuthUser(
     profile: OAuthProfile,
     tokenData?: ITokenData,
   ): Promise<any> {
-    let user = await this.findUserByOAuthAccount(profile.provider, profile.id);
+    this.logger.warn(
+      'DEPRECATED: Use AuthApplicationService.validateOAuthUser() instead',
+    );
+
+    let user = await this.userRepository.findByOAuthAccount(
+      profile.provider,
+      profile.id,
+    );
 
     if (!user) {
-      const existingUser = await this.prisma.user.findUnique({
-        where: { email: profile.email },
-        include: { oauthAccounts: true },
-      });
+      const existingUser = await this.userRepository.findByEmail(profile.email);
 
       if (existingUser) {
-        await this.prisma.oAuthAccount.create({
-          data: {
-            provider: toPrismaAuthProvider(profile.provider),
+        await this.authRepository.createOAuthAccount({
+          provider: profile.provider,
+          providerId: profile.id,
+          email: profile.email,
+          name: profile.name,
+          avatar: profile.avatar,
+          accessToken: tokenData?.accessToken,
+          refreshToken: tokenData?.refreshToken,
+          expiresAt: tokenData?.expiresAt,
+          userId: existingUser.id,
+        });
+        user = existingUser;
+      } else {
+        user = await this.userRepository.createWithOAuth(
+          {
+            email: profile.email,
+            name: profile.name,
+            avatar: profile.avatar,
+          },
+          {
+            provider: profile.provider,
             providerId: profile.id,
             email: profile.email,
             name: profile.name,
@@ -60,40 +99,14 @@ export class AuthService {
             accessToken: tokenData?.accessToken,
             refreshToken: tokenData?.refreshToken,
             expiresAt: tokenData?.expiresAt,
-            userId: existingUser.id,
           },
-        });
-        user = existingUser;
-      } else {
-        user = await this.prisma.user.create({
-          data: {
-            email: profile.email,
-            name: profile.name,
-            avatar: profile.avatar,
-            oauthAccounts: {
-              create: {
-                provider: toPrismaAuthProvider(profile.provider),
-                providerId: profile.id,
-                email: profile.email,
-                name: profile.name,
-                avatar: profile.avatar,
-                accessToken: tokenData?.accessToken,
-                refreshToken: tokenData?.refreshToken,
-                expiresAt: tokenData?.expiresAt,
-              },
-            },
-          },
-          include: { oauthAccounts: true },
-        });
+        );
       }
     } else {
-      // User exists, update their OAuth tokens
-      await this.prisma.oAuthAccount.updateMany({
-        where: {
-          provider: toPrismaAuthProvider(profile.provider),
-          providerId: profile.id,
-        },
-        data: {
+      await this.authRepository.updateOAuthAccount(
+        profile.provider,
+        profile.id,
+        {
           accessToken: tokenData?.accessToken,
           refreshToken: tokenData?.refreshToken,
           expiresAt: tokenData?.expiresAt,
@@ -101,26 +114,15 @@ export class AuthService {
           name: profile.name,
           avatar: profile.avatar,
         },
-      });
+      );
     }
 
     return user;
   }
 
-  async findUserByOAuthAccount(provider: AuthProvider, providerId: string) {
-    return await this.prisma.user.findFirst({
-      where: {
-        oauthAccounts: {
-          some: {
-            provider: toPrismaAuthProvider(provider),
-            providerId,
-          },
-        },
-      },
-      include: { oauthAccounts: true },
-    });
-  }
-
+  /**
+   * Generate JWT tokens (domain logic)
+   */
   generateTokens(user: TokenPayload): TokenPair {
     const payload = {
       sub: user.id,
@@ -129,11 +131,11 @@ export class AuthService {
     };
 
     const access_token = this.jwtService.sign(payload, {
-      expiresIn: '15m',
+      expiresIn: process.env.JWT_ACCESS_EXPIRATION || '15m',
     });
 
     const refresh_token = this.jwtService.sign(payload, {
-      expiresIn: '7d',
+      expiresIn: process.env.JWT_REFRESH_EXPIRATION || '7d',
     });
 
     return {
@@ -142,55 +144,45 @@ export class AuthService {
     };
   }
 
+  /**
+   * Get user OAuth accounts
+   */
   async getUserOAuthAccounts(userId: string) {
-    const accounts = await this.prisma.oAuthAccount.findMany({
-      where: { userId },
-      select: {
-        id: true,
-        provider: true,
-        email: true,
-        name: true,
-        avatar: true,
-        createdAt: true,
-      },
-    });
-
-    return accounts;
+    return await this.authRepository.getOAuthAccounts(userId);
   }
 
+  /**
+   * Unlink OAuth account
+   */
   async unlinkOAuthAccount(userId: string, provider: AuthProvider) {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      include: { oauthAccounts: true },
-    });
+    // Validate user has multiple OAuth accounts
+    const canUnlink = await this.authRepository.canUnlinkOAuthAccount(
+      userId,
+      provider,
+    );
 
-    if (!user) {
-      throw new UnauthorizedException('User not found');
-    }
-
-    // Ensure user has at least one OAuth account (since we don't support password auth)
-    if (user.oauthAccounts.length <= 1) {
+    if (!canUnlink) {
       throw new UnauthorizedException(
         'Cannot unlink the only authentication method',
       );
     }
 
-    await this.prisma.oAuthAccount.deleteMany({
-      where: {
-        userId,
-        provider: toPrismaAuthProvider(provider),
-      },
-    });
+    await this.authRepository.deleteOAuthAccount(userId, provider);
 
     return { message: `${provider} account unlinked successfully` };
   }
 
+  /**
+   * @deprecated Use AuthApplicationService.refreshToken() instead
+   */
   async refreshToken(refreshToken: string): Promise<TokenPair> {
+    this.logger.warn(
+      'DEPRECATED: Use AuthApplicationService.refreshToken() instead',
+    );
+
     try {
       const payload = this.jwtService.verify<{ sub: string }>(refreshToken);
-      const user = await this.prisma.user.findUnique({
-        where: { id: payload.sub },
-      });
+      const user = await this.userRepository.findById(payload.sub);
 
       if (!user) {
         throw new UnauthorizedException('User not found');
@@ -202,20 +194,16 @@ export class AuthService {
     }
   }
 
+  /**
+   * Get user by ID
+   */
   async getUser(userId: string): Promise<any> {
-    try {
-      const user = await this.prisma.user.findUnique({
-        where: { id: userId },
-        include: { oauthAccounts: true },
-      });
+    const user = await this.userRepository.findById(userId);
 
-      if (!user) {
-        throw new NotFoundException('User not found');
-      }
-
-      return user;
-    } catch {
+    if (!user) {
       throw new NotFoundException('User not found');
     }
+
+    return user;
   }
 }

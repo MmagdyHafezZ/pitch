@@ -1,0 +1,183 @@
+%%{init: {'theme':'base', 'themeVariables': {
+  'primaryColor':'#ffffff',
+  'primaryTextColor':'#0d1117',
+  'primaryBorderColor':'#1565c0',
+  'lineColor':'#1976d2',
+  'secondaryColor':'#fef3c7',
+  'secondaryTextColor':'#1f2937',
+  'secondaryBorderColor':'#d97706',
+  'tertiaryColor':'#f3e8ff',
+  'tertiaryTextColor':'#111827',
+  'actorTextColor':'#0d1117',
+  'noteBkgColor':'#fffde7',
+  'noteTextColor':'#374151',
+  'mainBkg':'#ffffff',
+  'secondBkg':'#ffffff',
+  'tertiaryBkg':'#ffffff',
+  'edgeLabelBackground':'#ffffff'
+}}}%%
+
+---
+title: "Figure 8.1 - Simulation Microservice Component Architecture"
+---
+
+graph TB
+    %% External Clients
+    subgraph Clients["External Clients"]
+        WebApp[Web Application]
+        MobileApp[Mobile Application]
+        ThirdParty[Third-party Integrations]
+    end
+
+    %% API Gateway Layer
+    subgraph Gateway["API Gateway Layer"]
+        direction LR
+        SessionGW[Session Gateway<br/>POST /sessions<br/>POST /sessions/:id/turns<br/>POST /sessions/:id/end]
+        CallGW[Call Gateway<br/>POST /calls<br/>POST /calls/:id/sdp]
+        IngestGW[Ingestion Gateway<br/>POST /ingest/upload/*<br/>POST /ingest/jobs]
+        FeedbackGW[Feedback Gateway<br/>POST /feedback/score<br/>GET /feedback/scorecards/:id]
+    end
+
+    %% Core Orchestration
+    subgraph Orchestration["Core Orchestration"]
+        direction TB
+        OrchSvc[Orchestrator Service<br/>• Session lifecycle<br/>• Turn management<br/>• State machine<br/>• Event emission]
+        ContextSvc[Context Service<br/>• History assembly<br/>• CRM integration<br/>• Persona/scenario loading]
+        GuardrailSvc[Guardrail Service<br/>• PII detection<br/>• Content filtering<br/>• Schema validation]
+    end
+
+    %% AI & NLP Services
+    subgraph AI["AI & NLP Services"]
+        direction TB
+        LLMSvc[LLM Service<br/>• GPT-4o/4.1<br/>• Streaming responses<br/>• Tool calling]
+        PromptSvc[Prompt Service<br/>• Template management<br/>• Instruction assembly]
+        RetrievalSvc[Retrieval Service<br/>• Semantic search<br/>• RAG over KB]
+        EvalSvc[Evaluation Service<br/>• RAGAS/DeepEval<br/>• Quality scoring]
+    end
+
+    %% Media Processing
+    subgraph Media["Media Processing"]
+        direction TB
+        WebRTCSvc[WebRTC Service<br/>• SDP signaling<br/>• ICE handling<br/>• Track control]
+        STTSvc[STT Service<br/>• Whisper/Azure<br/>• Streaming partials]
+        TTSSvc[TTS Service<br/>• ElevenLabs/Azure<br/>• Voice profiles]
+        RecordingSvc[Recording Service<br/>• Media capture<br/>• Layout muxing]
+        VADSvc[VAD Service<br/>• Speech detection<br/>• Silence filtering]
+    end
+
+    %% Transcription Pipeline
+    subgraph Transcription["Transcription & Enrichment"]
+        direction TB
+        TranscribeSvc[Transcribe Service<br/>• Batch processing<br/>• Diarization]
+        EnrichSvc[Enrichment Service<br/>• NER extraction<br/>• Topic modeling<br/>• Sentiment analysis]
+        IndexerSvc[Indexer Service<br/>• Embedding generation<br/>• Vector indexing]
+    end
+
+    %% Feedback System
+    subgraph Feedback["Feedback & Analytics"]
+        direction TB
+        FeedbackSvc[Feedback Service<br/>• Auto-scoring<br/>• Coaching tips]
+        RubricSvc[Rubric Service<br/>• Criteria management<br/>• Versioning]
+        BenchmarkSvc[Benchmark Service<br/>• Team metrics<br/>• Leaderboards]
+        ReportSvc[Report Service<br/>• PDF generation<br/>• Data export]
+    end
+
+    %% Data Layer
+    subgraph DataLayer["Data Access Layer"]
+        direction LR
+        SessionRepo[(Session<br/>Repository)]
+        TurnRepo[(Turn<br/>Repository)]
+        MessageRepo[(Message<br/>Repository)]
+        TranscriptRepo[(Transcript<br/>Repository)]
+        ScoreRepo[(Score<br/>Repository)]
+        MediaRepo[(Media<br/>Repository)]
+        EmbeddingRepo[(Embedding<br/>Repository)]
+    end
+
+    %% Infrastructure
+    subgraph Infrastructure["Infrastructure Services"]
+        direction TB
+        StorageSvc[Storage Service<br/>• S3/MinIO<br/>• Pre-signed URLs<br/>• Multipart upload]
+        EventBus[Event Bus<br/>• RabbitMQ<br/>• Async processing]
+        CacheSvc[Cache Service<br/>• Redis<br/>• Session state]
+    end
+
+    %% Databases
+    subgraph Databases["Persistent Storage"]
+        direction LR
+        PostgresDB[(PostgreSQL<br/>+ pgvector)]
+        S3Storage[(S3/MinIO<br/>Media Storage)]
+        RedisCache[(Redis<br/>Cache)]
+    end
+
+    %% External APIs
+    subgraph ExternalAPIs["External APIs"]
+        direction TB
+        OpenAI[OpenAI API<br/>GPT-4o/4.1]
+        WhisperAPI[Whisper API<br/>Speech-to-Text]
+        ElevenLabs[ElevenLabs API<br/>Text-to-Speech]
+        AzureAPI[Azure Cognitive<br/>Services]
+    end
+
+    %% Connections - Client to Gateway
+    Clients --> Gateway
+
+    %% Gateway to Core Services
+    SessionGW --> Orchestration
+    CallGW --> Media
+    IngestGW --> Transcription
+    FeedbackGW --> Feedback
+
+    %% Orchestration connections
+    Orchestration --> AI
+    Orchestration --> DataLayer
+    Orchestration --> Infrastructure
+
+    %% AI connections
+    AI --> ExternalAPIs
+    AI --> DataLayer
+    RetrievalSvc --> EmbeddingRepo
+
+    %% Media connections
+    Media --> ExternalAPIs
+    Media --> DataLayer
+    Media --> Infrastructure
+
+    %% Transcription connections
+    Transcription --> ExternalAPIs
+    Transcription --> DataLayer
+    Transcription --> Infrastructure
+
+    %% Feedback connections
+    Feedback --> AI
+    Feedback --> DataLayer
+    Feedback --> Infrastructure
+
+    %% Data Layer to Databases
+    DataLayer --> Databases
+
+    %% Infrastructure to Databases
+    Infrastructure --> Databases
+
+    %% Event Bus connections
+    Orchestration -.->|simulation.*| EventBus
+    Media -.->|recording.*, stt.*| EventBus
+    Transcription -.->|media.*, analytics.*| EventBus
+    Feedback -.->|feedback.*, benchmark.*| EventBus
+
+    %% Styling
+    classDef gatewayStyle fill:#e3f2fd,stroke:#1976d2,stroke-width:2px,color:#1a237e
+    classDef serviceStyle fill:#fff3e0,stroke:#fb8c00,stroke-width:2px,color:#e65100
+    classDef dataStyle fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px,color:#4a148c
+    classDef infraStyle fill:#e8f5e9,stroke:#43a047,stroke-width:2px,color:#2e7d32
+    classDef externalStyle fill:#fce4ec,stroke:#e91e63,stroke-width:2px,color:#880e4f
+
+    class SessionGW,CallGW,IngestGW,FeedbackGW gatewayStyle
+    class OrchSvc,ContextSvc,GuardrailSvc,LLMSvc,PromptSvc,RetrievalSvc,EvalSvc serviceStyle
+    class WebRTCSvc,STTSvc,TTSSvc,RecordingSvc,VADSvc serviceStyle
+    class TranscribeSvc,EnrichSvc,IndexerSvc serviceStyle
+    class FeedbackSvc,RubricSvc,BenchmarkSvc,ReportSvc serviceStyle
+    class SessionRepo,TurnRepo,MessageRepo,TranscriptRepo,ScoreRepo,MediaRepo,EmbeddingRepo dataStyle
+    class PostgresDB,S3Storage,RedisCache dataStyle
+    class StorageSvc,EventBus,CacheSvc infraStyle
+    class OpenAI,WhisperAPI,ElevenLabs,AzureAPI externalStyle

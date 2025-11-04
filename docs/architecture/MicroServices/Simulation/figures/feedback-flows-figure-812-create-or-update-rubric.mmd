@@ -1,0 +1,59 @@
+%%{init: {'theme':'base', 'themeVariables': {
+  'primaryColor':'#ffffff',
+  'primaryTextColor':'#0d1117',
+  'primaryBorderColor':'#1565c0',
+  'lineColor':'#1976d2',
+  'secondaryColor':'#fef3c7',
+  'secondaryTextColor':'#1f2937',
+  'secondaryBorderColor':'#d97706',
+  'tertiaryColor':'#f3e8ff',
+  'tertiaryTextColor':'#111827',
+  'actorTextColor':'#0d1117',
+  'noteBkgColor':'#fffde7',
+  'noteTextColor':'#374151',
+  'mainBkg':'#ffffff',
+  'secondBkg':'#ffffff',
+  'tertiaryBkg':'#ffffff',
+  'edgeLabelBackground':'#ffffff'
+}}}%%
+
+
+sequenceDiagram
+    participant Admin as Admin Client
+    participant FeedbackGW as Feedback Gateway
+    participant RubricCtrl as Rubric Controller
+    participant RubricSvc as Rubric Service
+    participant RubricRepo as Rubric Repository
+
+    Admin->>FeedbackGW: POST /rubrics<br/>{name, orgId, criteria[]}
+    FeedbackGW->>RubricCtrl: Forward request
+
+    RubricCtrl->>RubricCtrl: Validate structure & criteria
+    alt Invalid structure
+        RubricCtrl-->>Admin: 400 Invalid Rubric Structure
+    end
+
+    RubricCtrl->>RubricSvc: Create/update rubric
+    RubricSvc->>RubricRepo: Check if rubric exists<br/>(by orgId + name)
+
+    alt Rubric exists
+        Note over RubricSvc: Increment version<br/>(rubrics are immutable)
+        RubricRepo-->>RubricSvc: Current version
+        Note over RubricSvc: version = current + 1
+    else New rubric
+        Note over RubricSvc: version = 1
+    end
+
+    RubricSvc->>RubricRepo: Create Rubric<br/>{orgId, name, version}
+    RubricRepo-->>RubricSvc: Rubric created {rubricId}
+
+    loop For each criterion
+        RubricSvc->>RubricRepo: Create Criterion<br/>{rubricId, label, maxPoints, weight, order}
+    end
+
+    Note over RubricSvc: Existing scorecards remain<br/>linked to original version
+
+    RubricSvc-->>RubricCtrl: Rubric complete
+    RubricCtrl-->>Admin: 201 Created<br/>{rubricId, version}
+
+    Note over Admin: For PATCH /rubrics/{id}:<br/>Same flow, always creates<br/>new version

@@ -1,0 +1,60 @@
+%%{init: {'theme':'base', 'themeVariables': {
+  'primaryColor':'#ffffff',
+  'primaryTextColor':'#0d1117',
+  'primaryBorderColor':'#1565c0',
+  'lineColor':'#1976d2',
+  'secondaryColor':'#fef3c7',
+  'secondaryTextColor':'#1f2937',
+  'secondaryBorderColor':'#d97706',
+  'tertiaryColor':'#f3e8ff',
+  'tertiaryTextColor':'#111827',
+  'actorTextColor':'#0d1117',
+  'noteBkgColor':'#fffde7',
+  'noteTextColor':'#374151',
+  'mainBkg':'#ffffff',
+  'secondBkg':'#ffffff',
+  'tertiaryBkg':'#ffffff',
+  'edgeLabelBackground':'#ffffff'
+}}}%%
+
+
+sequenceDiagram
+    participant FeedbackSvc as Feedback Service
+    participant ScoreRepo as Score Repository
+    participant BenchmarkSvc as Benchmark Service
+    participant BenchmarkRepo as Benchmark Repository
+    participant EventBus as Event Bus
+    participant Dashboard as Admin Dashboard
+
+    Note over FeedbackSvc: After scorecard generated
+
+    FeedbackSvc->>BenchmarkSvc: Update benchmarks<br/>{scorecardId, orgId}
+
+    BenchmarkSvc->>ScoreRepo: Retrieve new scorecard
+    ScoreRepo-->>BenchmarkSvc: Scorecard data
+
+    loop For each tracked metric
+        Note over BenchmarkSvc: Metrics:<br/>- avg_score<br/>- discovery_questions<br/>- objection_handling<br/>- closing_effectiveness
+
+        BenchmarkSvc->>ScoreRepo: Retrieve recent scorecards<br/>(team/org, time window)
+        ScoreRepo-->>BenchmarkSvc: Historical scorecards
+
+        Note over BenchmarkSvc: Calculate:<br/>- Rolling average<br/>- Median<br/>- Percentile
+
+        BenchmarkSvc->>BenchmarkRepo: Update/Create Benchmark<br/>{orgId, metric, value, window}
+        BenchmarkRepo-->>BenchmarkSvc: Benchmark updated
+    end
+
+    alt Threshold crossed
+        Note over BenchmarkSvc: E.g., team average<br/>drops below target
+        BenchmarkSvc->>EventBus: Emit benchmark.updated<br/>{orgId, metric, threshold}
+    end
+
+    Note over Dashboard: User views scorecard
+
+    Dashboard->>BenchmarkRepo: Query benchmarks<br/>{orgId, metrics[]}
+    BenchmarkRepo-->>Dashboard: Benchmark data
+
+    Note over Dashboard: Display:<br/>- User's current score<br/>- Team average<br/>- Org average<br/>- Percentile ranking
+
+    Note over Dashboard: Leaderboards:<br/>- Top performers by score<br/>- Most improved over time<br/>- Team comparison charts
