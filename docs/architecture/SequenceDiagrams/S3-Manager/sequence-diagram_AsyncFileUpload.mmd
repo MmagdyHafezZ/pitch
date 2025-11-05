@@ -5,16 +5,20 @@ sequenceDiagram
     participant S3Repository
     participant AWSS3 as AWS S3
 
-    %% Step 1: Event Trigger
-    ProducerService->>RabbitMQ: Publish "upload_request" message<br/>to storage-requests queue
-
-    %% Step 2: FileService consumes event
+    %% Step 1: Upload request event
+    ProducerService->>RabbitMQ: Publish "upload_request" message<br/>with file metadata
     RabbitMQ-->>FileService: Deliver upload_request message
-    FileService->>S3Repository: uploadFile(bucket, key, file)
-    S3Repository->>AWSS3: Upload object to S3 bucket
-    AWSS3-->>S3Repository: Upload successful
-    S3Repository-->>FileService: Return success
 
-    %% Step 3: Publish completion event
-    FileService->>RabbitMQ: Publish "file_uploaded" event<br/>to storage-events queue
-    RabbitMQ-->>ProducerService: Notify or log event
+    %% Step 2: Generate pre-signed upload URL
+    FileService->>S3Repository: Generate pre-signed URL for upload
+    S3Repository->>AWSS3: Request pre-signed URL
+    AWSS3-->>S3Repository: Return pre-signed URL
+    S3Repository-->>FileService: Return URL
+
+    %% Step 3: Perform upload
+    FileService->>AWSS3: PUT file using pre-signed URL
+    AWSS3-->>FileService: 200 OK — File uploaded successfully
+
+    %% Step 4: Publish completion event
+    FileService->>RabbitMQ: Publish "file_uploaded" event<br/>with file details
+    RabbitMQ-->>ProducerService: Notify upload completion

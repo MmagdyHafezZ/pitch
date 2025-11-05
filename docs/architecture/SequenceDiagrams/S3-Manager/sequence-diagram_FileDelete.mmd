@@ -6,20 +6,23 @@ sequenceDiagram
     participant S3Repository
     participant AWSS3 as AWS S3
 
-    %% Step 1: Client initiates deletion request
-    Client->>S3Gateway: DELETE /s3/delete/{bucket}/{fileKey}
-    S3Gateway->>FileController: Forward delete request
+    %% Step 1: Client requests pre-signed delete URL
+    Client->>S3Gateway: POST /s3/presigned/delete<br/>with file key
+    S3Gateway->>FileController: Forward request
+    FileController->>FileService: Request pre-signed delete URL
+    FileService->>S3Repository: Generate pre-signed delete URL
+    S3Repository->>AWSS3: Request pre-signed URL (DELETE method)
+    AWSS3-->>S3Repository: Return pre-signed URL
+    S3Repository-->>FileService: Return URL
+    FileService-->>FileController: Return URL
+    FileController-->>S3Gateway: Send pre-signed URL
+    S3Gateway-->>Client: 200 OK — Pre-signed delete URL returned
 
-    %% Step 2: Controller processes request
-    FileController->>FileService: Validate request and call deleteFile(bucket, fileKey)
+    %% Step 2: Client deletes file directly
+    Client->>AWSS3: DELETE file using pre-signed URL
+    AWSS3-->>Client: 204 No Content — File deleted successfully
 
-    %% Step 3: Service performs deletion
-    FileService->>S3Repository: deleteFile(bucket, fileKey)
-    S3Repository->>AWSS3: Delete object from bucket
-    AWSS3-->>S3Repository: Deletion successful
-    S3Repository-->>FileService: Return success result
-
-    %% Step 4: Return response
-    FileService-->>FileController: Confirm deletion
-    FileController-->>S3Gateway: Send 200 OK response
-    S3Gateway-->>Client: 200 OK — File deleted successfully
+    %% Step 3: (Optional) Notify backend of deletion completion
+    Client->>S3Gateway: POST /s3/notifyDeleteComplete<br/>with file key
+    S3Gateway->>FileController: Forward notification
+    FileController->>FileService: Update logs / publish "file_deleted" event
