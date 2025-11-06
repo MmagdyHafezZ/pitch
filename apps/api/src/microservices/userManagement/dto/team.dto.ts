@@ -2,13 +2,18 @@ import { ApiProperty } from '@nestjs/swagger';
 import { Prisma } from '@prisma/user-client';
 import {
   IsBoolean,
+  IsDate,
   IsEmail,
+  IsEnum,
+  IsNumber,
   IsObject,
   IsOptional,
   IsString,
   Length,
   Matches,
+  Min,
 } from 'class-validator';
+import { Role } from '@prisma/user-client';
 
 export class CreateTeamRequestDto {
   @ApiProperty({ description: 'Required Team Name', example: 'My Team' })
@@ -88,4 +93,61 @@ export class UpdateTeamRequestDto {
   @IsObject()
   @IsOptional()
   billingAddress?: Prisma.JsonValue | null;
+}
+
+export class AddMemberRequestDTO {
+  @ApiProperty({ description: 'Existing user ID to add to the team' })
+  @IsString()
+  @Length(2, 64)
+  userId!: string;
+
+  @ApiProperty({
+    description: 'Membership role. Defaults to MEMBER',
+    enum: Role,
+    example: Role.MEMBER,
+  })
+  @IsEnum(Role)
+  role!: Role;
+
+  @ApiProperty({ description: 'Per-member token limit', example: 0 })
+  @Min(0)
+  @IsNumber()
+  tokenLimit?: number;
+
+  @ApiProperty({
+    description: 'Whether the membership starts active. Defaults to true',
+    example: true,
+  })
+  @IsBoolean()
+  @IsOptional()
+  isActive?: boolean;
+}
+
+export class UpdateMemberRequestDto {
+  @ApiProperty({
+    description: 'Membership role. Defaults to MEMBER',
+    enum: Role,
+    example: Role.MEMBER,
+  })
+  @IsEnum(Role)
+  @IsOptional()
+  role?: Role;
+
+  @ApiProperty({ description: 'Per-member token limit', example: 0 })
+  @Min(0)
+  @IsNumber()
+  tokenLimit?: number;
+
+  @ApiProperty({
+    description: 'Whether the membership starts active. Defaults to true',
+    example: true,
+  })
+  @IsBoolean()
+  @IsOptional()
+  isActive?: boolean;
+
+  @ApiProperty({ description: 'Date when user accepted invite to the team' })
+  @IsDate()
+  @IsOptional()
+  acceptedAt?: Date;
 }

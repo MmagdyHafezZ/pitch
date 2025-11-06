@@ -7,43 +7,51 @@ import {
 import { Prisma } from '@prisma/user-client';
 import {
   Team,
+  TeamMembership,
   CreateTeamDto,
   UpdateTeamDto,
+  AddMemberDto,
+  UpdateMemberDto,
 } from '../../../common/interfaces/user.interface';
 import { TeamRepository } from '../repositories/team.repository';
-
-function toJson(v: unknown): Prisma.JsonValue | undefined {
-  if (v === undefined) return undefined;
-  return JSON.parse(JSON.stringify(v)) as Prisma.JsonValue;
-}
 
 @Injectable()
 export class TeamService {
   constructor(private readonly teamRepository: TeamRepository) {}
 
-  async create(createTeamDto: CreateTeamDto): Promise<Team> {
+  async createTeam(
+    createTeamDto: CreateTeamDto,
+    requesterId: string,
+  ): Promise<Team> {
     const slug = await this.createSlug({
       name: createTeamDto.name,
       slug: createTeamDto.slug,
     });
     const metadata = { temp: 'data' }; // this is temporary, will replace with actual logic
 
-    return this.teamRepository.create({
-      ...createTeamDto,
-      slug,
-      isActive: createTeamDto.isActive ?? true,
-      metadata,
-    });
+    return this.teamRepository.createTeam(
+      {
+        ...createTeamDto,
+        slug,
+        isActive: createTeamDto.isActive ?? true,
+        metadata,
+      },
+      requesterId,
+    );
   }
 
-  async update(id: string, dto: UpdateTeamDto): Promise<Team> {
-    const existingTeam = await this.teamRepository.findById(id);
+  async updateTeam(
+    teamId: string,
+    dto: UpdateTeamDto,
+    requesterId: string,
+  ): Promise<Team> {
+    const existingTeam = await this.teamRepository.findById(teamId);
     if (!existingTeam) {
-      throw new NotFoundException(`Team with ID ${id} not found`);
+      throw new NotFoundException(`Team with ID ${teamId} not found`);
     }
     if (existingTeam.name !== dto.name) {
       const teamWithName = await this.teamRepository.findByName(dto.name!);
-      if (teamWithName && teamWithName.id !== id) {
+      if (teamWithName && teamWithName.id !== teamId) {
         throw new ConflictException(
           `Team name '${dto.name}' is already in use`,
         );
@@ -61,16 +69,61 @@ export class TeamService {
 
     const metadata = { temp: 'data' }; // this is temporary, will replace with actual logic
 
-    return this.teamRepository.update(id, {
+    this.teamRepository.confirmAuthorityOrThrow(requesterId, teamId);
+
+    return this.teamRepository.updateTeam(teamId, {
       ...dto,
       slug,
       metadata,
     });
   }
 
-  async remove(id: string): Promise<{ message: string }> {
-    await this.teamRepository.delete(id);
-    return { message: `Team with ID ${id} has been deleted` };
+  async removeTeam(
+    teamId: string,
+    requesterId: string,
+  ): Promise<{ message: string }> {
+    this.teamRepository.confirmAuthorityOrThrow(requesterId, teamId);
+    await this.teamRepository.deleteTeam(teamId);
+    return { message: `Team with ID ${teamId} has been deleted` };
+  }
+
+  async addMember(
+    addMemberDto: AddMemberDto,
+    requesterId: string,
+  ): Promise<TeamMembership> {
+    this.teamRepository.confirmAuthorityOrThrow(
+      requesterId,
+      addMemberDto.teamId,
+    );
+    return this.teamRepository.addMember({
+      ...addMemberDto,
+    });
+  }
+
+  async updateMember(
+    updateMemberDto: UpdateMemberDto,
+    requesterId: string,
+  ): Promise<TeamMembership> {
+    this.teamRepository.confirmAuthorityOrThrow(
+      requesterId,
+      updateMemberDto.teamId,
+    );
+    updateMemberDto.acceptedAt = new Date();
+    return this.teamRepository.updateMember({
+      ...updateMemberDto,
+    });
+  }
+
+  async removeTeamMember(
+    teamId: string,
+    userId: string,
+    requesterId: string,
+  ): Promise<{ message: string }> {
+    this.teamRepository.confirmAuthorityOrThrow(requesterId, teamId);
+    await this.teamRepository.deleteTeamMember(teamId, userId);
+    return {
+      message: `User with ID ${userId} has been removed from team with ID: ${teamId}`,
+    };
   }
 
   async findAll(): Promise<Team[]> {

@@ -131,7 +131,7 @@ model TeamMembership {
   isActive        Boolean  @default(true)
   invitedAt       DateTime @default(now()) // when the user was invited
   acceptedAt      DateTime? // When user accepted invite
-  invitedbyUserId String?
+  invitedByUserId String?
 
   user            User @relation(fields: [userId], references: [id], onDelete: Cascade)
   team            Team @relation(fields: [teamId], references: [id], onDelete: Cascade)

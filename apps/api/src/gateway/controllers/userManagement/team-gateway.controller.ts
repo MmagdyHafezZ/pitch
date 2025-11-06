@@ -32,6 +32,8 @@ import type { ServiceError } from '../../../common/interfaces/error.interface';
 import {
   CreateTeamRequestDto,
   UpdateTeamRequestDto,
+  AddMemberRequestDTO,
+  UpdateMemberRequestDto,
 } from 'src/microservices/userManagement/dto/team.dto';
 
 @UsePipes(
@@ -162,6 +164,90 @@ export class TeamGatewayController {
         catchError((err: unknown) => {
           const error = err as ServiceError;
           const message = error.message ?? 'Failed to get team';
+          const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
+          return throwError(() => new HttpException(message, status));
+        }),
+      );
+  }
+
+  @Post(':teamId/members')
+  @ApiOperation({ summary: 'Add a new member to a team' })
+  @ApiResponse({ status: 201, description: 'Team member added' })
+  @ApiResponse({ status: 403, description: 'Not authorized to add members' })
+  @ApiResponse({ status: 404, description: 'Team or user not found' })
+  @ApiResponse({ status: 409, description: 'Member already exists' })
+  addTeamMember(
+    @Param('teamId') teamId: string,
+    @Body() addMemberDto: AddMemberRequestDTO,
+    @UserClaims() userClaims: UserClaimsType,
+  ) {
+    return this.teamService
+      .send(USER_SERVICE_PATTERNS.ADD_TEAM_MEMBER, {
+        teamId,
+        ...addMemberDto,
+        userClaims,
+      })
+      .pipe(
+        timeout(5000),
+        catchError((err: unknown) => {
+          const error = err as ServiceError;
+          const message = error.message ?? 'Failed to add Team Member';
+          const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
+          return throwError(() => new HttpException(message, status));
+        }),
+      );
+  }
+
+  @Put(':teamId/members/:userId')
+  @ApiOperation({ summary: 'Update a member in a team' })
+  @ApiResponse({ status: 200, description: 'Team member updated' })
+  @ApiResponse({ status: 403, description: 'Not authorized to update members' })
+  @ApiResponse({ status: 404, description: 'Membership not found' })
+  updateTeamMember(
+    @Param('teamId') teamId: string,
+    @Param('userId') userId: string,
+    @Body() updateMemberDto: UpdateMemberRequestDto,
+    @UserClaims() userClaims: UserClaimsType,
+  ) {
+    return this.teamService
+      .send(USER_SERVICE_PATTERNS.ADD_TEAM_MEMBER, {
+        teamId,
+        userId,
+        ...updateMemberDto,
+        userClaims,
+      })
+      .pipe(
+        timeout(5000),
+        catchError((err: unknown) => {
+          const error = err as ServiceError;
+          const message = error.message ?? 'Failed to update Team Member';
+          const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
+          return throwError(() => new HttpException(message, status));
+        }),
+      );
+  }
+
+  @Delete(':teamId/members/:userId')
+  @ApiOperation({ summary: 'Remove a user from a team' })
+  @ApiResponse({ status: 200, description: 'User removed successfully' })
+  @ApiResponse({ status: 403, description: 'Not authorized to remove members' })
+  @ApiResponse({ status: 404, description: 'User not found in team' })
+  removeTeamMember(
+    @Param('teamId') teamId: string,
+    @Param('userId') userId: string,
+    @UserClaims() userClaims: UserClaimsType,
+  ) {
+    return this.teamService
+      .send(USER_SERVICE_PATTERNS.DELETE_TEAM_MEMBER, {
+        teamId,
+        userId,
+        userClaims,
+      })
+      .pipe(
+        timeout(5000),
+        catchError((err: unknown) => {
+          const error = err as ServiceError;
+          const message = error.message ?? 'Failed to delete team';
           const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
           return throwError(() => new HttpException(message, status));
         }),
