@@ -23,16 +23,17 @@ sequenceDiagram
     participant ReportCtrl as Report Controller
     participant SessionRepo as Session Repository
     participant ScoreRepo as Score Repository
-    participant ReportRepo as Report Repository
+    participant ReportRepo as Report Repository (PostgreSQL)
     participant ReportSvc as Report Service
     participant TurnRepo as Turn Repository
     participant TranscriptRepo as Transcript Repository
     participant MetricRepo as Metric Repository
+    participant DocStoreSvc as Document Store Service (MongoDB)
     participant PDFLib as PDF Library (Puppeteer/PDFKit)
     participant StorageSvc as Storage Service
     participant S3 as S3/MinIO
 
-    User->>FeedbackGW: POST /reports/generate<br/>{sessionId, format: "pdf"}
+    User->>FeedbackGW: POST /reports/generate<br/>{sessionId, format: "pdf" | "json"}
     FeedbackGW->>ReportCtrl: Forward request
 
     ReportCtrl->>SessionRepo: Validate session exists
@@ -42,7 +43,7 @@ sequenceDiagram
         ReportCtrl-->>User: 404 Scorecard Not Found
     end
 
-    ReportCtrl->>ReportRepo: Create ReportRequest<br/>{sessionId, format: "pdf", status: "queued"}
+    ReportCtrl->>ReportRepo: Create ReportRequest<br/>{sessionId, format, status: "queued"}
     ReportRepo-->>ReportCtrl: Request created {reportRequestId}
 
     ReportCtrl-->>User: 200 OK (async)<br/>{reportRequestId}
@@ -68,20 +69,34 @@ sequenceDiagram
 
     Note over ReportSvc: Assemble report content:<br/>- Executive summary<br/>- Conversation transcript<br/>- Scoring breakdown<br/>- Coaching recommendations<br/>- Performance charts
 
-    ReportSvc->>PDFLib: Render PDF<br/>(with branding & formatting)
-    PDFLib-->>ReportSvc: PDF binary
+    alt format = "pdf"
+        ReportSvc->>PDFLib: Render PDF<br/>(with branding & formatting)
+        PDFLib-->>ReportSvc: PDF binary
 
-    ReportSvc->>StorageSvc: Upload PDF to S3
-    StorageSvc->>S3: Store file
-    S3-->>StorageSvc: Storage key
-    StorageSvc-->>ReportSvc: MediaAsset created {assetId}
+        ReportSvc->>StorageSvc: Upload PDF to S3
+        StorageSvc->>S3: Store file
+        S3-->>StorageSvc: Storage key
+        StorageSvc-->>ReportSvc: MediaAsset created {assetId}
 
-    ReportSvc->>ReportRepo: Update ReportRequest<br/>{status: "ready", assetId, signedURL}
+        ReportSvc->>ReportRepo: Update ReportRequest<br/>{status: "ready", assetId, signedURL}
+    else format = "json"
+        ReportSvc->>DocStoreSvc: Create ReportSnapshot<br/>{_id: reportRequestId, structured data}
+        DocStoreSvc-->>ReportSvc: Document created
+
+        ReportSvc->>ReportRepo: Update ReportRequest<br/>{status: "ready"}
+    end
 
     Note over User: User polls status
 
     User->>FeedbackGW: GET /reports/{reportRequestId}
     FeedbackGW->>ReportCtrl: Check status
     ReportCtrl->>ReportRepo: Retrieve ReportRequest
-    ReportRepo-->>ReportCtrl: Status & URL
-    ReportCtrl-->>User: 200 OK<br/>{status: "ready", downloadUrl}
+    ReportRepo-->>ReportCtrl: Status & format
+
+    alt format = "pdf"
+        ReportCtrl-->>User: 200 OK<br/>{status: "ready", downloadUrl}
+    else format = "json"
+        ReportCtrl->>DocStoreSvc: Retrieve ReportSnapshot
+        DocStoreSvc-->>ReportCtrl: Report data
+        ReportCtrl-->>User: 200 OK<br/>{status: "ready", data: {...}}
+    end

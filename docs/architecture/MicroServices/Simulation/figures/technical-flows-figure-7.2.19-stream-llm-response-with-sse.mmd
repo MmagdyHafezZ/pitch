@@ -27,6 +27,7 @@ sequenceDiagram
     participant LLMAPI as Language Model API
     participant TurnRepo as Turn Repository
     participant MessageRepo as Message Repository
+    participant DocStoreSvc as Document Store Service (MongoDB)
 
     User->>SessionGW: POST /sessions/{id}/turns<br/>Accept: text/event-stream
     SessionGW->>TurnCtrl: Forward request
@@ -34,7 +35,7 @@ sequenceDiagram
     Note over TurnCtrl: Establish SSE connection<br/>Keep connection open
 
     TurnCtrl->>OrchSvc: Process turn
-    Note over OrchSvc: Context assembly<br/>Retrieval<br/>Guardrails<br/>(as in Figure 8.3)
+    Note over OrchSvc: Context assembly<br/>Retrieval<br/>Guardrails<br/>(as in Figure 7.2.3)
 
     OrchSvc->>LLMSvc: Call LLM with streaming
     LLMSvc->>LLMAPI: Request streaming mode
@@ -55,6 +56,10 @@ sequenceDiagram
     LLMSvc->>OrchSvc: Full response ready
     OrchSvc->>TurnRepo: Create Turn<br/>{role: "assistant", text}
     OrchSvc->>MessageRepo: Create Message
+
+    Note over LLMSvc: Optional: Log LLM trace<br/>for debugging & cost analysis
+
+    LLMSvc->>DocStoreSvc: Create LLMTrace<br/>{sessionId, provider, model, request, response, usage, latency}
 
     OrchSvc->>TurnCtrl: Turn complete
     TurnCtrl-->>User: SSE event

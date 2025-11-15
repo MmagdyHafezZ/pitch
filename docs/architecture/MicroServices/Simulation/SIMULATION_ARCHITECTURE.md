@@ -1,40 +1,118 @@
 # Simulation Microservice Architecture
 
-The Simulation Microservice provides a comprehensive framework for orchestrating
-multi-modal sales training simulations, media processing, and performance
-evaluation. The overall system structure is shown in Figure [8.1] in the
-appendix.
+**Version**: `simulation.microservice.v1.0.0` (schema synchronized across
+PostgreSQL, MongoDB, RabbitMQ events)
+
+The Simulation Microservice is a bounded-context service responsible for
+orchestrating multi-modal sales training simulations, media processing, and
+performance evaluation. Internally, it is composed of modular components
+(gateways, controllers, services, workers) that can run as a single deployable
+or be split into separate services in future without changing contracts.
+
+The overall system structure is shown in Figure [7.2.1] in the appendix.
+
+## Core Storage Overview and Source of Truth
+
+**Storage Tier Responsibilities** (referenced throughout this document):
+
+### PostgreSQL (authoritative for structured data)
+
+- Primary source of truth for all normalized business entities
+- Relational integrity via foreign keys and constraints
+- ACID transactions for critical state changes
+- Entities: Sessions, Turns, Messages, Rubrics, Scores, Metrics, Benchmarks,
+  Config
+
+### pgvector (PostgreSQL extension)
+
+- Semantic search on embeddings within PostgreSQL
+- HNSW indexes for fast similarity queries
+
+### MongoDB (authoritative for document workloads)
+
+- Large, immutable, nested artifacts
+- Always referenced by PostgreSQL ID (**shared ID pattern**: UUIDv7 or CUID for
+  global uniqueness and deterministic lookup)
+- Collections: EnrichedTranscript, EvalArtifactData, LLMTrace, EventLog,
+  ReportSnapshot
+
+### Redis (ephemeral coordination only)
+
+- All keys have TTL (automatic expiration)
+- Stores only cached/derived data that is reconstructable
+- **Critical**: Redis loss is recoverable; no critical decisions depend solely
+  on Redis
+- Use cases: session cache, signaling, rate limits, locks, streaming cursors
+
+**Consistency Rule**: PostgreSQL is authoritative → MongoDB stores referenced
+documents → Redis caches derived state
 
 ## Features
 
 ### Simulation Orchestration
 
-Multi-turn conversation orchestration with text, voice, and video support, state
-machine management, context assembly from CRM/persona/scenario data, tool
-routing, and real-time event streaming.
+Multi-turn simulations with text, voice, and video, including:
+
+- State machine management
+- Context assembly from CRM, persona, and scenario data
+- Tool routing
+- Real-time event streaming
+
+**Execution**:
+
+- Active session context and state snapshots cached in Redis for low-latency
+  reads
+- PostgreSQL remains canonical
 
 ### Text Chat AI
 
-LLM-powered responses with RAG (Retrieval-Augmented Generation) over company
-knowledge bases, message drafting, translation, safety filters, and PII
-redaction capabilities.
+- LLM-powered responses
+- RAG over company knowledge bases (pgvector)
+- Drafting, translation, safety filters, PII redaction
+
+**Execution**:
+
+- Canonical messages, turns, and PII metadata in PostgreSQL
+- Optional LLM prompt/response traces in MongoDB, referenced by turn or tool
+  call IDs
 
 ### Voice/Video Communication
 
-WebRTC signaling for real-time audio/video, speech-to-text (STT) and
-text-to-speech (TTS) integration, voice activity detection (VAD), and recording
-capabilities with multiple layout options.
+- WebRTC signaling
+- STT/TTS integration
+- VAD
+- Recording with multiple layouts
+
+**Execution**:
+
+- Call sessions and recording metadata in PostgreSQL
+- Ephemeral signaling state (offers/answers/tokens) in Redis
+- Final recording references in PostgreSQL and object storage
 
 ### Media Ingestion
 
-Upload and processing pipeline for real sales call recordings, including
-transcription, speaker diarization, enrichment with NER (Named Entity
-Recognition), sentiment analysis, and topic extraction.
+- Upload audio/video call recordings
+- Transcription
+- Speaker diarization
+- NER, sentiment, topic extraction
+
+**Execution**:
+
+- Jobs, transcript stubs, and enrichment summaries in PostgreSQL
+- Full enriched transcript documents (segments, speakers, analysis) in MongoDB
 
 ### Feedback Engine
 
-Automated scoring based on customizable rubrics, AI-generated coaching tips,
-team benchmarks, and comprehensive report generation.
+- Rubric-based scoring
+- AI coaching tips
+- Benchmarks and leaderboards
+- PDF and structured report generation
+
+**Execution**:
+
+- Rubrics, scores, benchmarks, and report requests in PostgreSQL
+- Deep evaluation artifacts, reasoning traces, and report JSON snapshots in
+  MongoDB
 
 ---
 
@@ -60,107 +138,212 @@ Controller, Transcript Controller.
 
 ### Services
 
-This layer contains core business logic and orchestration. Services coordinate
-workflows, enforce business rules, and interact with repositories for data
-persistence.
+Core orchestration and business logic. Interact with PostgreSQL, Redis, MongoDB,
+RabbitMQ.
 
 **Components**:
 
-- **Orchestrator Service** - Session lifecycle and state machine management
-- **LLM Service** - Language model integration and completion streaming
-- **Prompt Service** - Template management and instruction assembly
-- **Retrieval Service** - Semantic search over pgvector embeddings
-- **WebRTC Service** - Real-time communication signaling
-- **STT Service** - Speech-to-text transcription
-- **TTS Service** - Text-to-speech synthesis
-- **Recording Service** - Media recording and muxing
-- **Storage Service** - MinIO/S3 asset management
-- **Transcribe Service** - Batch transcription processing
-- **Enrichment Service** - NER, topics, sentiment analysis
-- **Feedback Service** - Automated scoring and coach tip generation
-- **Rubric Service** - Rubric management and versioning
+- **Orchestrator Service** – Session lifecycle and state machine; reads/writes
+  PostgreSQL; caches session state in Redis
+- **LLM Service** – Model routing, completion streaming; logs traces to MongoDB
+  via LLMTrace docs
+- **Prompt Service** – Template management and prompt assembly
+- **Retrieval Service** – Semantic search via pgvector
+- **WebRTC Service** – Signaling; uses Redis for ephemeral call state
+- **STT Service** – Real-time and batch transcription
+- **TTS Service** – Response synthesis
+- **Recording Service** – Recording orchestration and muxing
+- **Storage Service** – S3/MinIO integration
+- **Transcribe Service** – Background transcription workers
+- **Enrichment Service** – NER, sentiment, topics; persists structured summaries
+  in PostgreSQL; optional full docs in MongoDB
+- **Feedback Service** – Scorecards, coaching tips
+- **Rubric Service** – Versioned rubric management
+- **Cache Service (Redis)** – Session cache, persona/scenario cache, rate
+  limits, SSE state, locks, idempotency
+- **Document Store Service (MongoDB)** – LLM traces, enriched transcripts,
+  evaluation artifacts, report snapshots
+- **Benchmark Service** – Aggregates and leaderboards over scorecards and
+  metrics
+
+### Component Boundaries (Future Splitting)
+
+The service can run as a monolith or be split into independent services without
+contract changes:
+
+**Potential Service Boundaries**:
+
+1. **simulation-orchestrator** - Session/turn management, LLM streaming
+   (gateways + orchestrator + LLM service)
+2. **media-ingest** - Upload, transcription, enrichment (ingest gateway +
+   transcribe + enrichment services)
+3. **feedback-engine** - Scoring, coaching, reports (feedback gateway +
+   scoring + rubric services)
+4. **llm-gateway** - LLM provider abstraction, prompt management (can be shared)
+
+**Contracts** (stable across splits):
+
+- HTTP/RPC APIs with versioned DTOs
+- RabbitMQ events with schema versioning
+- Shared PostgreSQL (or federated via APIs)
+- MongoDB collections remain logically separated
+
+**Non-breaking split**: Add gateway routing layer; existing services continue to
+communicate via RPC/events.
 
 ### Repositories
 
-Repositories abstract the data access layer, isolating persistence logic from
-business logic. They interact directly with databases for CRUD operations.
+Abstractions over concrete storage engines.
 
-**Components**: Session Repository, Turn Repository, Message Repository,
-ToolCall Repository, Scenario Repository, Persona Repository, Call Repository,
-Recording Repository, Media Repository, Transcript Repository, Rubric
-Repository, Score Repository, Embedding Repository.
+**Relational (PostgreSQL)**: Session, Turn, Message, ToolCall, Scenario,
+Persona, CallSession, Recording, MediaAsset, IngestionJob, Transcript (stub),
+Rubric, Criterion, Scorecard, ScoreItem, CoachTip, Metric, Benchmark,
+EvalArtifact (stub), EmbeddingRow, RedactionSpan, DraftEmail, ReportRequest,
+Event.
 
-### Tables (Database Layer) Figure [8.20]
+**Cache (Redis)**: SessionCache, ContextCache, PersonaScenarioCache, RateLimit,
+SSEChannel, CallSignalCache, JobLock/Idempotency.
 
-Each repository corresponds to one or more database tables responsible for
-storing structured data.
+**Document (MongoDB)**: EventLog, LLMTrace, STTPartial (optional/short-lived),
+EnrichedTranscript, EvalArtifactData, ReportSnapshot.
 
-**Core Tables**:
+**Clarification**:
 
-- **Session Table** - Stores simulation session state with user/org context
-- **Turn Table** - Individual conversation turns with role and content
-- **Message Table** - Message records with redaction support
-- **ToolCall Table** - Tool invocation logs with latency metrics
-- **Event Table** - System events emitted during simulations
+- Event (PostgreSQL): normalized key domain events for queries
+- EventLog (MongoDB): verbose event payloads when needed
 
-**Configuration Tables**:
+### Tables (Database Layer) – Figure [7.2.20]
 
-- **Scenario Table** - Training scenario definitions
-- **Persona Table** - AI persona characteristics and traits
+**Clarified roles**:
 
-**Media Tables**:
+- PostgreSQL: all normalized entities and relationships
+- MongoDB: large immutable documents, always referenced via PostgreSQL IDs
+- Redis: never a source of truth; all keys have TTLs and are reproducible
 
-- **CallSession Table** - WebRTC call metadata and SDP data
-- **Recording Table** - Recording references with layout info
-- **MediaAsset Table** - Uploaded media files and storage keys
+**Core Tables (PostgreSQL)**:
 
-**Transcription Tables**:
+- **Session** - Simulation session state with user/org snapshots
+- **Turn** - Individual conversation turns with role and content
+- **Message** - Message records with core text content and PII redaction
+  metadata
+- **ToolCall** - Tool invocation logs with latency metrics
+- **Event** - Minimal domain events (type, timestamp, small payload < 1KB)
+- **Metric** - Token usage and latency metrics per session/turn
 
-- **IngestionJob Table** - Background job status tracking
-- **Transcript Table** - Full transcription results
-- **TranscriptSegment Table** - Time-coded transcript segments
-- **Speaker Table** - Speaker identification and diarization
-- **Enrichment Table** - NER, sentiment, and topic data
+**Configuration Tables (PostgreSQL)**:
 
-**Evaluation Tables**:
+- **Scenario** - Training scenario definitions (small config JSON)
+- **Persona** - AI persona characteristics and traits (small traits JSON)
 
-- **Rubric Table** - Versioned scoring rubrics
-- **Criterion Table** - Individual rubric criteria
-- **Scorecard Table** - Session evaluation results
-- **ScoreItem Table** - Scores for individual criteria
-- **CoachTip Table** - Coaching feedback text
+**Media Tables (PostgreSQL)**:
 
-**Analytics Tables**:
+- **CallSession** - WebRTC call metadata and SDP data (offers/answers kept
+  small)
+- **Recording** - Recording references with layout info and asset FK
+- **MediaAsset** - Uploaded media files and storage keys
 
-- **Metric Table** - Token usage and latency metrics
-- **Benchmark Table** - Team performance baselines
-- **EvalArtifact Table** - Evaluation framework results (RAGAS, DeepEval)
-- **FeatureVector Table** - Numeric features for ML
-- **EmbeddingRow Table** - Vector embeddings for RAG (pgvector)
+**Ingestion Tables (PostgreSQL)**:
 
-**PII & Drafts**:
+- **IngestionJob** - Background job status tracking
 
-- **RedactionSpan Table** - PII detection and masking metadata
-- **DraftEmail Table** - AI-generated email drafts
-- **ReportRequest Table** - Report generation queue
+**Transcript Tables (PostgreSQL - Stubs Only)**:
+
+- **Transcript (stub)** - Lightweight index with id, assetId, sessionId,
+  language, text summary, metadata
+  - Full enriched transcript (segments, speakers, enrichment) stored in MongoDB
+    as EnrichedTranscript with same ID
+
+**Evaluation Tables (PostgreSQL)**:
+
+- **Rubric** - Versioned scoring rubrics
+- **Criterion** - Individual rubric criteria (source of truth for maxPoints)
+- **Scorecard** - Session evaluation results
+- **ScoreItem** - Scores for individual criteria (maxPoints removed - derive
+  from Criterion)
+- **CoachTip** - Coaching feedback text
+- **Benchmark** - Team/org performance baselines
+- **EvalArtifact (stub)** - Evaluation index (id, kind, score, sessionId,
+  turnId)
+  - Full evaluation data stored in MongoDB as EvalArtifactData with same ID
+
+**RAG Tables (PostgreSQL with pgvector)**:
+
+- **EmbeddingRow** - Vector embeddings for semantic search (pgvector extension)
+
+**PII & Drafts (PostgreSQL)**:
+
+- **RedactionSpan** - PII detection and masking metadata (small JSON spans)
+- **DraftEmail** - AI-generated email drafts
+
+**Reports (PostgreSQL)**:
+
+- **ReportRequest** - Report generation queue (status, format, assetId
+  reference)
+  - JSON reports stored in MongoDB as ReportSnapshot with same ID
+
+**MongoDB Collections**:
+
+- **EnrichedTranscript** - Full transcript documents with embedded segments,
+  speakers, enrichment
+- **EvalArtifactData** - Detailed evaluation results (RAGAS, DeepEval, LLM
+  judges)
+- **EventLog** - Verbose event payloads for debugging/audit
+- **LLMTrace** - LLM interaction traces (prompts, responses, usage, latency)
+- **ReportSnapshot** - Structured JSON report data
+
+**Redis Keys** (all ephemeral with TTL):
+
+- **Session cache** - Active session state for low-latency reads
+- **SSE state** - Server-sent events connection state
+- **WebRTC signaling** - Ephemeral offers/answers before finalization
+- **STT partials** - Streaming transcription buffers
+- **Rate limits** - Per-org/per-user quotas
+- **Job locks** - Distributed locks for background processing
+- **Idempotency keys** - Request deduplication
+
+### Storage Mapping Table
+
+| Domain Concept        | PostgreSQL Table(s)                     | MongoDB Collection           | Redis Keys                                     |
+| --------------------- | --------------------------------------- | ---------------------------- | ---------------------------------------------- |
+| **Session**           | Session                                 | -                            | `sim:session:{id}`, `sim:session:{id}:context` |
+| **Conversation**      | Turn, Message                           | -                            | `sim:turn:{sessionId}:{turnId}:ctx`            |
+| **Transcript (full)** | Transcript (stub only)                  | EnrichedTranscript           | `sim:stt:{callId}:partial`                     |
+| **LLM Interaction**   | Turn, Message (result)                  | LLMTrace                     | `sim:llm:{sessionId}:{turnId}:stream`          |
+| **Evaluation**        | EvalArtifact (stub)                     | EvalArtifactData             | -                                              |
+| **Report**            | ReportRequest                           | ReportSnapshot (JSON format) | -                                              |
+| **Event**             | Event (key events)                      | EventLog (verbose)           | -                                              |
+| **Configuration**     | Scenario, Persona                       | -                            | `sim:scenario:{id}`, `sim:persona:{id}`        |
+| **Scoring**           | Rubric, Criterion, Scorecard, ScoreItem | EvalArtifactData (detailed)  | -                                              |
+| **Media**             | MediaAsset, Recording, CallSession      | -                            | `sim:webrtc:{callId}:*`                        |
+| **PII**               | RedactionSpan                           | -                            | (transient only)                               |
+
+**ID Sharing Pattern**: When a domain concept spans Postgres + MongoDB, they
+share the same ID (e.g., `Transcript.id == EnrichedTranscript._id`). IDs are
+**UUIDv7 or CUID** for global uniqueness, time-ordering, and deterministic
+lookup across storage tiers.
 
 ---
 
 ## Data Flow Summary
 
-1. The request enters through the relevant API Gateway
-2. The Gateway Controller validates and routes it to the appropriate Service
-3. The Service executes domain logic and orchestrates across multiple
-   repositories
-4. The Repositories interact with underlying database Tables
-5. Events are published to RabbitMQ for async processing
-6. The response returns up the stack to the client
+1. Request enters through an API Gateway
+2. Controller validates, authorizes, and maps to a Service
+3. Service:
+   - Reads/writes canonical state in PostgreSQL
+   - Uses Redis for cache/ephemeral/session/signaling
+   - Uses MongoDB for large traces and enriched artifacts when applicable
+4. Repositories abstract the underlying store
+5. Relevant domain events are published to RabbitMQ using versioned schemas
+6. Response returned to client
+
+**All Redis state is ephemeral and backed by PostgreSQL/MongoDB. No business
+decision depends solely on Redis data.**
 
 ---
 
 ## Sequence Flows
 
-### Start Simulation Session Figure [8.2]
+### Start Simulation Session Figure [7.2.2]
 
 The User sends a `POST /sessions` request with userId, orgId, mode
 (text/voice/video), and optional scenarioId, personaId through the Session
@@ -193,51 +376,51 @@ context data.
 
 ---
 
-### Advance Turn - Text Chat Figure [8.3]
+### Advance Turn - Text Chat Figure [7.2.3]
 
 The User sends a `POST /sessions/{sessionId}/turns` request with text content
 through the Session Gateway to the Turn Controller.
 
-The Turn Controller validates the session exists by querying the Session
-Repository. If not found or status is "ended", it returns
+The Turn Controller validates session via Redis cache, fallback to PostgreSQL
+Session Repository. If not found or status is "ended", returns
 `404 Session Not Found` or `409 Session Ended`.
 
 The Orchestrator Service creates a new Turn record with role="user", incremented
-order number, and the user's message text in the Turn Repository.
+order number, and the user's message text in PostgreSQL Turn Repository.
 
-The Orchestrator Service checks if any guardrails need to run. The Guardrail
-Service scans for PII (emails, phone numbers, SSNs) and creates RedactionSpan
-records in the RedactionSpan Repository if detected.
+The Guardrail Service scans for PII (emails, phone numbers, SSNs) and creates
+RedactionSpan records in PostgreSQL RedactionSpan Repository if detected.
 
-The Context Service assembles the conversation history by retrieving previous
-Turns from the Turn Repository, along with scenario instructions and persona
-traits.
+The Context Service retrieves:
 
-The Retrieval Service performs semantic search over the Embedding Repository
-(pgvector) to find relevant context from company knowledge base or previous
-calls.
+- Conversation history from PostgreSQL Turn Repository
+- Scenario/persona from Redis cache (or PostgreSQL if cache miss)
+
+The Retrieval Service performs semantic search via pgvector in PostgreSQL
+Embedding Repository.
 
 The Prompt Service builds the full prompt with system instructions, conversation
 history, retrieved context, and guardrails.
 
 The LLM Service calls the language model API (GPT-4o) and streams the response
-back through Server-Sent Events (SSE).
+back through Server-Sent Events (SSE). SSE state tracked in Redis.
 
-As tokens arrive, the system saves the assistant's response as a new Turn with
-role="assistant" and creates a Message record in the Message Repository.
+As tokens arrive:
+
+- Assistant Turn and Message records saved to PostgreSQL
+- LLM trace (prompt + response + metadata) saved to MongoDB LLMTrace collection
 
 The Metric Service logs token counts (input/output), latency, and model name in
-the Metric Repository.
+PostgreSQL Metric Repository.
 
-The Event Bus emits a `turn.completed` event with turnId, sessionId, and
-metrics.
+The Event Bus emits `turn.completed` event with turnId, sessionId, and metrics.
 
 The system responds with `200 OK`, streaming the assistant's response to the
 client in real-time.
 
 ---
 
-### Tool Call - Draft Email Figure [8.4]
+### Tool Call - Draft Email Figure [7.2.4]
 
 During a conversation turn, the LLM Service determines an email draft is needed
 and invokes the draft tool.
@@ -269,20 +452,20 @@ response.
 
 ---
 
-### Start Voice/Video Call Figure [8.5]
+### Start Voice/Video Call Figure [7.2.5]
 
 The User sends a `POST /calls` request with sessionId and tracks array
 (["audio"] or ["audio", "video"]) through the Call Gateway to the Call
 Controller.
 
 The Call Controller validates the session exists and mode is "voice" or "video"
-via the Session Repository. If invalid, it returns `400 Invalid Session Mode`.
+via Session Repository. If invalid, returns `400 Invalid Session Mode`.
 
-The WebRTC Service creates a new CallSession record in the Call Repository with
-status="created" and the requested tracks.
+The WebRTC Service creates a new CallSession record in PostgreSQL Call
+Repository with status="created" and the requested tracks.
 
-The system generates server-side SDP offer using the WebRTC signaling layer and
-saves it in the CallSession record.
+The system generates server-side SDP offer using WebRTC signaling layer and
+caches it in Redis (ephemeral signaling state).
 
 The Call Controller responds with `201 Created`, returning the callId, SDP
 offer, and STUN/TURN server configuration.
@@ -290,28 +473,32 @@ offer, and STUN/TURN server configuration.
 The User's client sends a `POST /calls/{callId}/sdp` request with the SDP answer
 after local media setup.
 
-The WebRTC Service validates and stores the SDP answer in the Call Repository,
+The WebRTC Service validates and stores the SDP answer temporarily in Redis,
 then establishes the media connection.
 
-The Call Repository updates the CallSession status to "active" and records the
-connection timestamp.
+Once connection is established:
+
+- PostgreSQL CallSession updated with status="active", sdpOffer, sdpAnswer
+  (persisted)
+- Redis signaling state can be discarded
 
 If recording is enabled, the Recording Service starts capturing media streams
-and creates a Recording record in the Recording Repository linked to the call.
+and creates a Recording record in PostgreSQL Recording Repository linked to the
+call.
 
-The Event Bus emits a `call.started` event for monitoring and analytics.
+The Event Bus emits `call.started` event for monitoring and analytics.
 
 The system responds with `200 OK`, confirming the call is established.
 
 ---
 
-### Process Real-Time Speech (STT) Figure [8.6]
+### Process Real-Time Speech (STT) Figure [7.2.6]
 
 During an active voice call, the WebRTC Service receives audio chunks from the
 client's microphone through the RTC connection.
 
 The VAD Service analyzes each audio chunk to detect speech activity and filters
-out silence.
+out silence. VAD state managed in memory and Redis.
 
 When speech is detected, audio chunks are buffered and sent to the STT Service
 for transcription.
@@ -319,15 +506,17 @@ for transcription.
 The STT Service calls the Whisper or Azure STT API with streaming enabled,
 requesting partial results and timestamps.
 
-As partial transcriptions arrive, they are forwarded to the Orchestrator Service
-with speaker labels and timing information.
+As partial transcriptions arrive:
 
-The Orchestrator Service creates Turn records in real-time with role="user",
-text set to partial transcripts, and audio references.
+- Stored temporarily in Redis as STT partials (short-lived, discarded after
+  finalization)
+- Forwarded to Orchestrator Service with speaker labels and timing information
 
-When a complete utterance is detected (pause or turn-end), the final
-transcription is saved and a Message record is created in the Message
-Repository.
+When a complete utterance is detected (pause or turn-end):
+
+- Final Turn and Message records created in PostgreSQL
+- Transcript (stub) created in PostgreSQL with text summary
+- Full TranscriptSegment details optionally saved to MongoDB EnrichedTranscript
 
 The Context Service assembles the user's speech into the conversation history
 for the next LLM turn.
@@ -342,50 +531,53 @@ The synthesized audio is streamed back to the client through the WebRTC
 connection for playback.
 
 The Metric Service logs STT latency, TTS latency, and audio processing metrics
-in the Metric Repository.
+in PostgreSQL Metric Repository.
 
 The Event Bus emits `stt.completed` events for each completed transcription.
 
 ---
 
-### End Simulation Session Figure [8.7]
+### End Simulation Session Figure [7.2.7]
 
 The User sends a `POST /sessions/{sessionId}/end` request with optional reason
 through the Session Gateway to the Session Controller.
 
-The Session Controller validates the session exists and is active via the
-Session Repository. If not found or already ended, it returns `404` or `409`.
+The Session Controller validates the session exists and is active via Session
+Repository. If not found or already ended, returns `404` or `409`.
 
-The Orchestrator Service updates the Session record, setting status="ended",
-endedReason, and endedAt timestamp.
+The Orchestrator Service updates the Session record in PostgreSQL, setting
+status="ended", endedReason, and endedAt timestamp.
 
-If a call is active, the WebRTC Service retrieves the CallSession from the Call
-Repository and updates its status to "ended".
+If a call is active, the WebRTC Service retrieves the CallSession from
+PostgreSQL Call Repository and updates its status to "ended".
 
-If recording was active, the Recording Service stops capture, finalizes the
-media file, and uploads it to the Storage Service (MinIO/S3).
+If recording was active:
 
-A MediaAsset record is created in the Media Repository with the storage key,
-MIME type, and file size.
+- Recording Service stops capture, finalizes the media file
+- Uploads to Storage Service (MinIO/S3)
+- MediaAsset record created in PostgreSQL Media Repository with storage key,
+  MIME type, file size
+- Recording Repository updates the Recording record with final assetId and
+  duration
 
-The Recording Repository updates the Recording record with the final assetId and
-duration.
+The Orchestrator Service:
 
-The Orchestrator Service retrieves all Turns and calculates total tokens used
-via the Metric Repository.
+- Retrieves all Turns and calculates total tokens used via PostgreSQL Metric
+  Repository
+- Invalidates related Redis keys (session cache, context cache, SSE state)
 
-The Event Bus emits a `simulation.completed` event with sessionId, endedReason,
+The Event Bus emits `simulation.completed` event with sessionId, endedReason,
 total duration, and usage metrics.
 
 If auto-feedback is enabled, the Feedback Service is triggered asynchronously to
-generate a scorecard (see next flow).
+generate a scorecard.
 
 The system responds with `200 OK`, returning session summary with total turns,
 duration, and tokens used.
 
 ---
 
-### Upload Real Call Recording Figure [8.8]
+### Upload Real Call Recording Figure [7.2.8]
 
 The User initiates an upload by sending `POST /ingest/upload/init` with mimeType
 and sizeBytes through the Ingestion Gateway to the Ingest Controller.
@@ -423,15 +615,15 @@ The system responds with `200 OK`, returning the assetId and confirmation.
 
 ---
 
-### Process Uploaded Recording (Transcription) Figure [8.9]
+### Process Uploaded Recording (Transcription) Figure [7.2.9]
 
 After a media file is uploaded, the User sends `POST /ingest/jobs` with assetId
 and pipeline="transcribe_enrich" through the Ingestion Gateway.
 
-The Ingest Controller validates the asset exists via the Media Repository. If
-not found, it returns `404 Asset Not Found`.
+The Ingest Controller validates the asset exists via PostgreSQL Media
+Repository. If not found, returns `404 Asset Not Found`.
 
-An IngestionJob record is created in the Ingestion Job Repository with
+An IngestionJob record is created in PostgreSQL Ingestion Job Repository with
 status="queued" and pipeline type.
 
 The job is picked up by a background worker (BullMQ or similar), which updates
@@ -444,14 +636,18 @@ transcription with speaker diarization enabled.
 
 The API returns a full transcript with speaker labels and word-level timestamps.
 
-The Transcript Repository creates a Transcript record with the full text and
-language code.
+PostgreSQL Transcript (stub) created:
 
-The Diarization Service processes speaker changes and creates Speaker records in
-the Speaker Repository.
+- Transcript record with id, assetId, sessionId, language
+- Text summary for search/preview
+- Metadata (duration, speaker count, etc.)
 
-The Transcript Repository creates TranscriptSegment records for each utterance,
-linked to the appropriate Speaker.
+MongoDB EnrichedTranscript created (same ID as Postgres stub):
+
+- Full transcript text
+- Embedded segments[] with startMs, endMs, text, speakerId, tokens[], entities[]
+- Embedded speakers[] with labels, diarization data, role, statistics
+- Empty enrichment{} (populated in next step if pipeline includes enrichment)
 
 If the pipeline includes enrichment, the Enrichment Service processes the
 transcript:
@@ -460,15 +656,18 @@ transcript:
 - Topic modeling extracts main themes
 - Sentiment analysis scores emotional tone per segment
 
-An Enrichment record is created in the Enrichment Repository with summary,
-topics, sentiment, and entities.
+MongoDB EnrichedTranscript updated with enrichment{}:
 
-The Ingestion Job Repository updates the job with status="completed",
-transcriptId, and completedAt timestamp.
+- summary, topics[], sentiment{}, entities{}, highlights[]
 
-If the pipeline is "full", the Indexer Service generates embeddings for each
-segment using a sentence transformer model and stores them in the Embedding
-Repository (pgvector) for future RAG queries.
+The Ingestion Job Repository updates the job in PostgreSQL with
+status="completed", transcriptId, and completedAt timestamp.
+
+If the pipeline is "full", the Indexer Service:
+
+- Generates embeddings for each segment using a sentence transformer model
+- Stores them in PostgreSQL Embedding Repository (pgvector) for future RAG
+  queries
 
 The Event Bus emits `analytics.updated` event with transcriptId and job
 metadata.
@@ -478,24 +677,24 @@ status polling.
 
 ---
 
-### Generate Scorecard with Rubric Figure [8.10]
+### Generate Scorecard with Rubric Figure [7.2.10]
 
 After a simulation ends, the Admin Client sends `POST /feedback/score` with
 sessionId and optional rubricId through the Feedback Gateway to the Feedback
 Controller.
 
-The Feedback Controller validates the session exists and is ended via the
-Session Repository. If not ended, it returns `409 Session Not Complete`.
+The Feedback Controller validates the session exists and is ended via PostgreSQL
+Session Repository. If not ended, returns `409 Session Not Complete`.
 
 If rubricId is provided, the Rubric Service retrieves the Rubric and Criterion
-records from the Rubric Repository. If not found, it returns
+records from PostgreSQL Rubric Repository. If not found, returns
 `404 Rubric Not Found`.
 
 If no rubricId is provided, the Rubric Service retrieves the default rubric for
 the user's organization.
 
 The Feedback Service retrieves all Turn and Message records for the session from
-the Turn Repository and Message Repository.
+PostgreSQL Turn Repository and Message Repository.
 
 For each Criterion in the rubric, the Scoring Service evaluates the session:
 
@@ -504,31 +703,38 @@ For each Criterion in the rubric, the Scoring Service evaluates the session:
 - **Rule-based scoring**: Pattern matching or keyword detection for specific
   behaviors
 
-A ScoreItem record is created in the Score Repository for each criterion with
-the achieved score, maxPoints, and details JSON.
+For each evaluation:
+
+- PostgreSQL EvalArtifact (stub) created with id, sessionId, turnId, kind, score
+- MongoDB EvalArtifactData created (same ID) with full data{} (RAGAS metrics,
+  LLM judge reasoning, etc.)
+
+A ScoreItem record is created in PostgreSQL Score Repository for each criterion
+with the achieved score and details JSON (maxPoints derived from Criterion, not
+stored).
 
 The Feedback Service calculates totalScore by summing weighted criterion scores
 and maxScore from the rubric definition.
 
-A Scorecard record is created in the Score Repository with totalScore, maxScore,
-and rubricId.
+A Scorecard record is created in PostgreSQL Score Repository with totalScore,
+maxScore, and rubricId.
 
 The Coaching Service generates actionable tips by analyzing low-scoring areas:
 
 - The LLM Service creates coaching text linked to specific conversation excerpts
-- CoachTip records are created in the Score Repository with text, excerptRef,
-  and optional resource links
+- CoachTip records are created in PostgreSQL Score Repository with text,
+  excerptRef, and optional resource links
 
-The Benchmark Service updates team/org averages in the Benchmark Repository for
-performance tracking.
+The Benchmark Service updates team/org averages in PostgreSQL Benchmark
+Repository for performance tracking.
 
-The Event Bus emits a `feedback.ready` event with scorecardId and sessionId.
+The Event Bus emits `feedback.ready` event with scorecardId and sessionId.
 
 The system responds with `200 OK`, returning the scorecardId and summary scores.
 
 ---
 
-### Retrieve Scorecard Details Figure [8.11]
+### Retrieve Scorecard Details Figure [7.2.11]
 
 The User sends `GET /feedback/scorecards/{scorecardId}` through the Feedback
 Gateway to the Feedback Controller.
@@ -560,7 +766,7 @@ details.
 
 ---
 
-### Create or Update Rubric Figure [8.12]
+### Create or Update Rubric Figure [7.2.12]
 
 The Admin Client sends `POST /rubrics` with name, orgId, and criteria array
 through the Feedback Gateway to the Rubric Controller.
@@ -591,7 +797,7 @@ historical accuracy.
 
 ---
 
-### Semantic Search (RAG) Figure [8.13]
+### Semantic Search (RAG) Figure [7.2.13]
 
 During a simulation turn, the Retrieval Service needs to find relevant context
 from the knowledge base or previous calls.
@@ -627,25 +833,26 @@ responses.
 
 ---
 
-### Generate PDF Report Figure [8.14]
+### Generate PDF Report Figure [7.2.14]
 
-The User sends `POST /reports/generate` with sessionId and format="pdf" through
-the Feedback Gateway to the Report Controller.
+The User sends `POST /reports/generate` with sessionId and format="pdf" (or
+"json") through the Feedback Gateway to the Report Controller.
 
-The Report Controller validates the session exists and has a scorecard via the
-Session Repository and Score Repository. If no scorecard exists, it returns
-`404 Scorecard Not Found`.
+The Report Controller validates the session exists and has a scorecard via
+PostgreSQL Session Repository and Score Repository. If no scorecard exists,
+returns `404 Scorecard Not Found`.
 
-A ReportRequest record is created in the Report Repository with status="queued"
-and format="pdf".
+A ReportRequest record is created in PostgreSQL Report Repository with
+status="queued" and format.
 
 The Report Service retrieves comprehensive session data:
 
-- Session metadata from Session Repository
-- All Turns from Turn Repository
-- Scorecard with items and tips from Score Repository
-- Transcript if available from Transcript Repository
-- Metrics from Metric Repository
+- Session metadata from PostgreSQL Session Repository
+- All Turns from PostgreSQL Turn Repository
+- Scorecard with items and tips from PostgreSQL Score Repository
+- Transcript if available from PostgreSQL Transcript (stub) and MongoDB
+  EnrichedTranscript
+- Metrics from PostgreSQL Metric Repository
 
 The Report Service assembles the report content:
 
@@ -655,23 +862,31 @@ The Report Service assembles the report content:
 - Coaching recommendations with excerpts
 - Performance charts (scores over time, benchmark comparison)
 
-The Report Service uses a PDF generation library (e.g., Puppeteer, PDFKit) to
-render the content with branding and formatting.
+If format="pdf":
 
-The generated PDF is uploaded to the Storage Service (S3/MinIO) as a MediaAsset.
+- PDF generation library (e.g., Puppeteer, PDFKit) renders the content with
+  branding and formatting
+- Generated PDF uploaded to Storage Service (S3/MinIO) as a MediaAsset
+- PostgreSQL ReportRequest updated with status="ready", assetId, and signed
+  download URL
 
-The Report Repository updates the ReportRequest with status="ready", assetId,
-and a signed download URL.
+If format="json":
+
+- PostgreSQL ReportRequest updated with status="ready"
+- MongoDB ReportSnapshot created (same ID as ReportRequest) with full structured
+  report data{}
 
 The system responds with `200 OK` (async), returning the reportRequestId for
 status polling.
 
-When the user polls `GET /reports/{reportRequestId}`, the system returns the
-download URL if ready.
+When the user polls `GET /reports/{reportRequestId}`:
+
+- If PDF: returns download URL
+- If JSON: retrieves from MongoDB ReportSnapshot and returns structured data
 
 ---
 
-### Detect and Redact PII Figure [8.15]
+### Detect and Redact PII Figure [7.2.15]
 
 During message processing, the Guardrail Service automatically scans for
 personally identifiable information (PII).
@@ -690,7 +905,7 @@ The service uses pattern matching and NER models to detect:
 For each detected PII span, the service records the start position, end
 position, and label (e.g., "EMAIL", "PHONE").
 
-The Guardrail Service creates a RedactionSpan record in the RedactionSpan
+The Guardrail Service creates a RedactionSpan record in PostgreSQL RedactionSpan
 Repository linked to the Message.
 
 Depending on the configuration:
@@ -700,19 +915,25 @@ Depending on the configuration:
 - **Audit mode**: The PII is logged for compliance review
 
 The Message Repository stores both the original content (for authorized access)
-and the redacted version (for general display).
+and the redacted version (for general display) in PostgreSQL.
 
 When messages are retrieved for display, the system checks user permissions:
 
 - Regular users see redacted versions
 - Admins with PII access can view original content
 
+Storage security:
+
+- PII in Redis only transient, if at all (short TTL)
+- PII fields in PostgreSQL/MongoDB can be encrypted at rest
+- No long-lived sensitive data in Redis
+
 The Event Bus emits a `pii.detected` event for security monitoring and
 compliance auditing.
 
 ---
 
-### Voice Activity Detection (VAD) Figure [8.16]
+### Voice Activity Detection (VAD) Figure [7.2.16]
 
 During a live voice call, the VAD Service continuously monitors audio streams to
 detect when speech starts and ends.
@@ -750,7 +971,7 @@ actual speech segments.
 
 ---
 
-### Handle Multi-Speaker Diarization Figure [8.17]
+### Handle Multi-Speaker Diarization Figure [7.2.17]
 
 When processing a recording with multiple speakers, the Diarization Service
 identifies who spoke when.
@@ -784,7 +1005,7 @@ dominated the conversation or failed to ask discovery questions.
 
 ---
 
-### Benchmark Tracking and Leaderboards Figure [8.18]
+### Benchmark Tracking and Leaderboards Figure [7.2.18]
 
 After each scorecard is generated, the Benchmark Service updates team and
 org-level performance metrics.
@@ -820,7 +1041,7 @@ The Event Bus emits `benchmark.updated` events when thresholds are crossed
 
 ---
 
-### Stream LLM Response with SSE Figure [8.19]
+### Stream LLM Response with SSE Figure [7.2.19]
 
 For text chat, the system streams assistant responses in real-time using
 Server-Sent Events (SSE).
@@ -832,7 +1053,7 @@ The Turn Controller establishes an SSE connection and keeps it open for
 streaming.
 
 The Orchestrator Service processes the turn (context assembly, retrieval,
-guardrails) as described in Figure [8.3].
+guardrails) as described in Figure [7.2.3].
 
 When the LLM Service calls the language model API, it requests streaming mode
 with delta chunks.
@@ -869,6 +1090,48 @@ than waiting for the full response.
 
 ## Technical Notes
 
+### Storage and Consistency Rules
+
+**PostgreSQL and MongoDB are authoritative**:
+
+- PostgreSQL for normalized business data
+- MongoDB for large immutable artifacts referenced by PostgreSQL
+
+**Redis**:
+
+- Only caches or coordinates
+- All keys have TTL
+- Any Redis loss is recoverable
+
+**Events and Idempotency**:
+
+- All events use versioned, documented JSON schemas
+- Each event carries an eventId and sessionId
+- Consumers implement idempotency:
+  - Either via PostgreSQL unique constraints or Redis idempotency keys
+
+**Security and PII**:
+
+- PII detection integrated into message pipeline
+- Original content accessible only for authorized roles
+- Redacted version used by default
+
+**Encrypted Columns** (at-rest encryption required):
+
+- PostgreSQL: `Message.content` (original), `RedactionSpan.spans`
+- MongoDB: `LLMTrace.request.messages[].content`,
+  `EnrichedTranscript.segments[].text` (if containing PII)
+
+**Log Redaction Policy**:
+
+- Application logs: Never log message content, user input, or LLM outputs
+- LLMTrace (MongoDB): Store full traces for authorized debugging only; apply
+  access controls
+- EventLog (MongoDB): Sanitize payloads before logging; use `[REDACTED]`
+  placeholders for sensitive fields
+- Redis: No PII logged; transient only with short TTL
+- Audit trail: PII access logged to separate audit log with retention policy
+
 ### Database Configuration
 
 The Simulation microservice uses **PostgreSQL** as its primary database with the
@@ -886,48 +1149,228 @@ npx prisma migrate dev
 npx prisma generate
 ```
 
+### MongoDB Configuration
+
+MongoDB stores large document workloads (transcripts, eval artifacts, LLM
+traces).
+
+**Connection**: Standard MongoDB connection string
+
+**Collections**:
+
+- `enrichedTranscripts` - Full transcript documents
+- `evalArtifactData` - Evaluation framework results
+- `eventLogs` - Verbose event payloads
+- `llmTraces` - LLM interaction traces
+- `reportSnapshots` - Structured report data
+
+**ID Strategy**: Shared IDs between PostgreSQL and MongoDB (e.g., Transcript.id
+= EnrichedTranscript.\_id)
+
+### Redis Configuration
+
+Redis provides ephemeral caching and coordination.
+
+**Connection**: `REDIS_URL` (environment variable)
+
+**Key Patterns**: Defined in
+`apps/api/src/microservices/simulation/services/redis/redis-key-patterns.ts`
+
+**TTL Configuration** (centralized reference):
+
+| Key Pattern                           | Use Case                | TTL          | Invalidation                         |
+| ------------------------------------- | ----------------------- | ------------ | ------------------------------------ |
+| `sim:session:{id}`                    | Session cache           | 24 hours     | On session end (mandatory)           |
+| `sim:session:{id}:context`            | Session context         | 24 hours     | On session end (mandatory)           |
+| `sim:persona:{id}`                    | Persona config cache    | 1 hour       | On persona update                    |
+| `sim:scenario:{id}`                   | Scenario config cache   | 1 hour       | On scenario update                   |
+| `sim:sse:{sessionId}`                 | SSE connection state    | 1 hour       | On disconnect                        |
+| `sim:webrtc:{callId}:*`               | WebRTC signaling        | 5 minutes    | On call connected                    |
+| `sim:stt:{callId}:partial`            | STT streaming buffers   | 5 minutes    | On utterance complete                |
+| `sim:vad:{callId}:state`              | VAD state               | 5 minutes    | On call end                          |
+| `sim:ratelimit:*`                     | Rate limit counters     | 1-60 minutes | Sliding window                       |
+| `sim:idempotency:{key}`               | Request deduplication   | 24 hours     | Auto-expire                          |
+| `sim:lock:{type}:{id}`                | Job locks               | 10 minutes   | On job complete or heartbeat timeout |
+| `sim:turn:{sessionId}:{turnId}:ctx`   | Turn processing context | 10 minutes   | On turn complete                     |
+| `sim:llm:{sessionId}:{turnId}:stream` | LLM streaming state     | 5 minutes    | On stream complete                   |
+
+**Invalidation Policy**: Cache invalidation on session end is **mandatory**, not
+best-effort. Use `SimulationRedisService.clearSessionData()` to ensure cleanup.
+
 ### Event-Driven Architecture
 
 The microservice publishes events to RabbitMQ for async processing and
-cross-service communication:
+cross-service communication.
 
-- `simulation.started` - Session begins
-- `turn.completed` - Each conversation turn finishes
-- `simulation.completed` - Session ends
-- `recording.available` - Recording is ready
-- `stt.completed` - Transcription finishes
-- `media.ingested` - Upload completes
-- `analytics.updated` - Enrichment or scoring completes
-- `feedback.ready` - Scorecard is generated
-- `pii.detected` - PII is found in content
+**Event Schema Standard** (all events follow this structure):
+
+```typescript
+interface DomainEvent {
+  eventId: string // Unique event identifier (UUID)
+  eventType: string // Event type (see list below)
+  schemaVersion: string // Event schema version (e.g., "1.0", "2.1")
+  occurredAt: string // ISO 8601 timestamp
+  sessionId?: string // Optional session context
+  actor?: {
+    // Optional actor information
+    userId?: string
+    orgId?: string
+    actorType?: 'user' | 'system' | 'service'
+  }
+  payload: object // Event-specific data (versioned)
+  correlationId?: string // For tracing across services
+  causationId?: string // ID of the command/event that caused this
+}
+```
+
+**Published Events**:
+
+- `simulation.started` - Session begins (payload: sessionId, mode, scenarioId,
+  personaId)
+- `turn.completed` - Conversation turn finishes (payload: turnId, sessionId,
+  role, metrics)
+- `simulation.completed` - Session ends (payload: sessionId, endedReason,
+  duration, usage)
+- `recording.available` - Recording ready (payload: recordingId, assetId,
+  durationMs)
+- `stt.completed` - Transcription finishes (payload: transcriptId, assetId,
+  language)
+- `media.ingested` - Upload completes (payload: assetId, mimeType, sizeBytes)
+- `analytics.updated` - Enrichment/scoring completes (payload: transcriptId,
+  enrichmentType)
+- `feedback.ready` - Scorecard generated (payload: scorecardId, sessionId,
+  totalScore)
+- `pii.detected` - PII found (payload: messageId, piiTypes, spanCount)
+- `benchmark.updated` - Benchmark recalculated (payload: orgId, metric, value)
+
+**Consumer Guidelines**:
+
+- Events are append-only and non-authoritative vs PostgreSQL
+- Consumers must implement idempotency (use eventId for deduplication)
+- Events are published after PostgreSQL commit (Outbox pattern recommended for
+  future)
+- Backward compatibility: only add optional fields; never remove or change
+  existing fields
+
+**Contract Schemas** (traceable to code):
+
+- Event schemas:
+  [`contracts/simulation-events.json`](../../../contracts/simulation-events.json)
+- REST/RPC API:
+  [`contracts/simulation-api.yaml`](../../../contracts/simulation-api.yaml)
+  (OpenAPI 3.0)
+- MongoDB schemas:
+  [`apps/api/src/microservices/simulation/schemas/mongodb/`](../../../apps/api/src/microservices/simulation/schemas/mongodb/)
+- Prisma schema:
+  [`apps/api/src/microservices/simulation/prisma/schema.prisma`](../../../apps/api/src/microservices/simulation/prisma/schema.prisma)
+
+### Service Level Objectives (SLO)
+
+Target performance metrics that align architecture decisions with measurable
+goals:
+
+| Metric                             | Target            | Measurement                            |
+| ---------------------------------- | ----------------- | -------------------------------------- |
+| **Turn Latency (text)**            | p95 < 2s          | Time from user message to first token  |
+| **Turn Latency (voice)**           | p95 < 3s          | STT + LLM + TTS round-trip             |
+| **LLM Streaming TTFT**             | p95 < 800ms       | Time to first token from LLM           |
+| **Concurrent Sessions (per node)** | 1000+             | Active WebSocket/SSE connections       |
+| **Ingestion SLA (transcription)**  | p95 < 2x duration | 10-min call transcribed in < 20 min    |
+| **Ingestion SLA (enrichment)**     | p95 < 3x duration | 10-min call enriched in < 30 min       |
+| **Scorecard Generation**           | p95 < 30s         | End-to-end scoring with LLM evaluation |
+| **API Availability**               | 99.9%             | Excluding planned maintenance          |
+| **Event Processing Lag**           | p95 < 5s          | RabbitMQ message latency               |
+
+**Monitoring**: Track via Prometheus + Grafana; alert on SLO violations.
 
 ### External Service Integrations
 
-**Speech Services**:
+**Speech Services** (configurable providers):
 
-- Whisper (OpenAI) or Azure Speech Service for STT
-- ElevenLabs or Azure TTS for voice synthesis
+- STT: Whisper (OpenAI), Azure Speech Service, Deepgram
+- TTS: ElevenLabs, Azure TTS, OpenAI TTS
+- Diarization: pyannote.audio, Azure Speaker Recognition
 
-**LLM Providers**:
+**LLM Providers** (abstracted via LLM Service interface):
 
-- OpenAI (GPT-4o, GPT-4.1)
-- Fallback models for cost optimization
+Internal interface:
+
+```typescript
+interface ILLMProvider {
+  complete(request: LLMRequest): Promise<LLMResponse>
+  stream(request: LLMRequest): AsyncIterable<LLMChunk>
+}
+```
+
+Supported providers (configurable per-org or per-request):
+
+- OpenAI (GPT-4o, GPT-4-turbo, o1)
+- Anthropic (Claude 3.5 Sonnet, Claude 3 Opus)
+- Azure OpenAI
+- Custom endpoints
+
+**Provider Selection**: Configured via environment or per-request header;
+fallback chain for resilience
 
 **Storage**:
 
 - MinIO or AWS S3 for media asset storage
 - Pre-signed URLs for secure client uploads
 
-**Caching**:
+**Caching (Redis)**:
 
-- Redis for session state, prompt templates, and embedding cache
+- Session state and context (ephemeral, TTL: 24 hours)
+- Persona/scenario config (TTL: 1 hour)
+- Rate limits (sliding windows)
+- Job locks and idempotency keys
+- WebRTC signaling (TTL: 5 minutes)
+- STT partials (TTL: 5 minutes)
+- SSE connection state
+
+### Retry and Failure Strategy
+
+**Background Jobs** (IngestionJob, Scorecard Generation, Report Generation):
+
+| Job Type              | Max Retries | Backoff Strategy           | Poison Queue                |
+| --------------------- | ----------- | -------------------------- | --------------------------- |
+| **Transcription**     | 3           | Exponential (30s, 2m, 8m)  | Manual review queue         |
+| **Enrichment**        | 3           | Exponential (30s, 2m, 8m)  | Skip non-critical           |
+| **Scoring**           | 3           | Exponential (10s, 30s, 2m) | Manual scoring queue        |
+| **Report Generation** | 2           | Fixed (1m, 5m)             | Error logged, user notified |
+
+**Implementation**:
+
+- Use BullMQ with built-in retry and backoff
+- After max retries, move to Dead Letter Queue (DLQ)
+- DLQ monitored for manual intervention
+- Failed jobs logged with full context for replay
+
+**API Idempotency**:
+
+- All write APIs accept `Idempotency-Key` header (24-hour window)
+- Key format: `{orgId}:{operation}:{nonce}` (e.g., `org123:createSession:uuid`)
+- Duplicate requests return cached response (stored in Redis)
+- Example:
+  ```http
+  POST /sessions
+  Idempotency-Key: org123:createSession:550e8400-e29b-41d4-a716-446655440000
+  ```
+
+**External Service Failures**:
+
+- LLM: Retry with backoff (3 attempts), then fallback provider or return error
+- STT/TTS: Retry with backoff (2 attempts), then return partial/error
+- Storage: Retry with backoff (3 attempts), then fail request
 
 ### Guardrails and Safety
 
 **PII Redaction**: Automatic detection and masking of sensitive information
-**Content Filtering**: Safety checks on user inputs and LLM outputs **Schema
-Validation**: Zod-based validation on all DTOs **Rate Limiting**: Token usage
-quotas per org/user
+
+**Content Filtering**: Safety checks on user inputs and LLM outputs
+
+**Schema Validation**: Zod-based validation on all DTOs
+
+**Rate Limiting**: Token usage quotas per org/user (enforced via Redis counters)
 
 ### Performance Considerations
 
@@ -943,6 +1386,41 @@ background queues **Connection Pooling**: Database connections managed by Prisma
 patterns with test database **E2E Tests**: Full simulation flows with
 Testcontainers **Load Tests**: WebRTC call handling and LLM streaming under
 concurrency
+
+### Data Retention and Lifecycle
+
+**PostgreSQL**:
+
+- **Hot data** (active sessions, recent scorecards): Indefinite retention with
+  indexing
+- **Cold data** (ended sessions > 1 year): Archive to cold storage or delete per
+  org policy
+- **PII**: Retain per compliance requirements (GDPR: 30 days after account
+  deletion)
+
+**MongoDB**:
+
+- **LLMTrace**: Auto-expire after 180 days (TTL index on `createdAt`)
+- **EventLog**: Auto-expire after 90 days (TTL index on `createdAt`)
+- **EnrichedTranscript**: Retain indefinitely (linked to sessions)
+- **EvalArtifactData**: Retain indefinitely (audit trail)
+- **ReportSnapshot**: Auto-expire after 1 year (TTL index on `createdAt`)
+
+**Redis**:
+
+- All keys expire automatically per TTL configuration (see Redis Configuration
+  table)
+- No manual cleanup required
+
+**Object Storage (S3/MinIO)**:
+
+- **Recordings**: Lifecycle policy to glacier after 90 days; delete after 2
+  years (configurable per org)
+- **Reports (PDF)**: Lifecycle policy to delete after 1 year
+- **MediaAsset**: Retain until session deleted or per org retention policy
+
+**Compliance**: Support for data export (GDPR Subject Access Requests) and
+right-to-deletion via dedicated endpoints.
 
 ---
 
@@ -996,12 +1474,12 @@ concurrency
 
 ### Architecture Diagrams
 
-- **Figure [8.1]**: Overall Simulation Microservice Architecture
+- **Figure [7.2.1]**: Overall Simulation Microservice Architecture
   - Component diagram: [architecture.mmd](./architecture.mmd)
   - High-level component diagram:
     [figures/component-architecture.mmd](./figures/component-architecture.mmd)
 
-- **Figure [8.20]**: Database Schema Diagram
+- **Figure [7.2.20]**: Database Schema Diagram
   - Schema documentation: [prisma.schema.md](./prisma.schema.md)
   - Prisma schema file:
     [../../../apps/api/src/microservices/simulation/prisma/schema.prisma](../../../apps/api/src/microservices/simulation/prisma/schema.prisma)
@@ -1013,59 +1491,59 @@ All sequence diagrams are available as Mermaid files in the
 
 #### Session Management
 
-- **Figure [8.2]**: Start Simulation Session -
+- **Figure [7.2.2]**: Start Simulation Session -
   [figures/session-flows.mmd](./figures/session-flows.mmd#figure-82---start-simulation-session)
-- **Figure [8.3]**: Advance Turn - Text Chat -
+- **Figure [7.2.3]**: Advance Turn - Text Chat -
   [figures/session-flows.mmd](./figures/session-flows.mmd#figure-83---advance-turn---text-chat)
-- **Figure [8.7]**: End Simulation Session -
+- **Figure [7.2.7]**: End Simulation Session -
   [figures/session-flows.mmd](./figures/session-flows.mmd#figure-87---end-simulation-session)
 
 #### Tool Integration
 
-- **Figure [8.4]**: Tool Call - Draft Email -
+- **Figure [7.2.4]**: Tool Call - Draft Email -
   [figures/tool-flows.mmd](./figures/tool-flows.mmd)
 
 #### Voice/Video Communication
 
-- **Figure [8.5]**: Start Voice/Video Call -
+- **Figure [7.2.5]**: Start Voice/Video Call -
   [figures/call-flows.mmd](./figures/call-flows.mmd#figure-85---start-voicevideo-call)
-- **Figure [8.6]**: Process Real-Time Speech (STT) -
+- **Figure [7.2.6]**: Process Real-Time Speech (STT) -
   [figures/call-flows.mmd](./figures/call-flows.mmd#figure-86---process-real-time-speech-stt)
 
 #### Media Processing
 
-- **Figure [8.8]**: Upload Real Call Recording -
+- **Figure [7.2.8]**: Upload Real Call Recording -
   [figures/media-flows.mmd](./figures/media-flows.mmd#figure-88---upload-real-call-recording)
-- **Figure [8.9]**: Process Uploaded Recording (Transcription) -
+- **Figure [7.2.9]**: Process Uploaded Recording (Transcription) -
   [figures/media-flows.mmd](./figures/media-flows.mmd#figure-89---process-uploaded-recording-transcription)
 
 #### Feedback & Scoring
 
-- **Figure [8.10]**: Generate Scorecard with Rubric -
+- **Figure [7.2.10]**: Generate Scorecard with Rubric -
   [figures/feedback-flows.mmd](./figures/feedback-flows.mmd#figure-810---generate-scorecard-with-rubric)
-- **Figure [8.11]**: Retrieve Scorecard Details -
+- **Figure [7.2.11]**: Retrieve Scorecard Details -
   [figures/feedback-flows.mmd](./figures/feedback-flows.mmd#figure-811---retrieve-scorecard-details)
-- **Figure [8.12]**: Create or Update Rubric -
+- **Figure [7.2.12]**: Create or Update Rubric -
   [figures/feedback-flows.mmd](./figures/feedback-flows.mmd#figure-812---create-or-update-rubric)
 
 #### Reporting
 
-- **Figure [8.14]**: Generate PDF Report -
+- **Figure [7.2.14]**: Generate PDF Report -
   [figures/report-flows.mmd](./figures/report-flows.mmd)
 
 #### Technical Implementation Details
 
-- **Figure [8.13]**: Semantic Search (RAG) -
+- **Figure [7.2.13]**: Semantic Search (RAG) -
   [figures/technical-flows.mmd](./figures/technical-flows.mmd#figure-813---semantic-search-rag)
-- **Figure [8.15]**: Detect and Redact PII -
+- **Figure [7.2.15]**: Detect and Redact PII -
   [figures/technical-flows.mmd](./figures/technical-flows.mmd#figure-815---detect-and-redact-pii)
-- **Figure [8.16]**: Voice Activity Detection (VAD) -
+- **Figure [7.2.16]**: Voice Activity Detection (VAD) -
   [figures/technical-flows.mmd](./figures/technical-flows.mmd#figure-816---voice-activity-detection-vad)
-- **Figure [8.17]**: Handle Multi-Speaker Diarization -
+- **Figure [7.2.17]**: Handle Multi-Speaker Diarization -
   [figures/technical-flows.mmd](./figures/technical-flows.mmd#figure-817---handle-multi-speaker-diarization)
-- **Figure [8.18]**: Benchmark Tracking and Leaderboards -
+- **Figure [7.2.18]**: Benchmark Tracking and Leaderboards -
   [figures/technical-flows.mmd](./figures/technical-flows.mmd#figure-818---benchmark-tracking-and-leaderboards)
-- **Figure [8.19]**: Stream LLM Response with SSE -
+- **Figure [7.2.19]**: Stream LLM Response with SSE -
   [figures/technical-flows.mmd](./figures/technical-flows.mmd#figure-819---stream-llm-response-with-sse)
 
 ### Viewing the Diagrams

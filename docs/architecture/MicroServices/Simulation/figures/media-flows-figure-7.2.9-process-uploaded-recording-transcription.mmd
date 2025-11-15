@@ -29,11 +29,9 @@ sequenceDiagram
     participant S3 as S3/MinIO
     participant TranscribeSvc as Transcribe Service
     participant STTAPI as Whisper/Azure STT
-    participant TranscriptRepo as Transcript Repository
-    participant DiarizeSvc as Diarization Service
-    participant SpeakerRepo as Speaker Repository
+    participant TranscriptRepo as Transcript Repository (PostgreSQL)
+    participant DocStoreSvc as Document Store Service (MongoDB)
     participant EnrichSvc as Enrichment Service
-    participant EnrichRepo as Enrichment Repository
     participant IndexerSvc as Indexer Service
     participant EmbeddingRepo as Embedding Repository (pgvector)
     participant EventBus as Event Bus
@@ -66,26 +64,25 @@ sequenceDiagram
     TranscribeSvc->>STTAPI: Batch transcription<br/>(with diarization)
     STTAPI-->>TranscribeSvc: Full transcript + speakers + timestamps
 
-    TranscribeSvc->>TranscriptRepo: Create Transcript<br/>{text, language}
-    TranscriptRepo-->>TranscribeSvc: Transcript created {transcriptId}
+    Note over TranscribeSvc: Create Transcript stub in PostgreSQL<br/>(id, assetId, sessionId, language)<br/>Summary text for search/preview<br/>Metadata (duration, speaker count)
 
-    TranscribeSvc->>DiarizeSvc: Process speaker changes
-    DiarizeSvc->>SpeakerRepo: Create Speaker records
-    SpeakerRepo-->>DiarizeSvc: Speakers created
+    TranscribeSvc->>TranscriptRepo: Create Transcript stub<br/>{id (CUID), text summary, metadata}
+    TranscriptRepo-->>TranscribeSvc: Transcript stub created {transcriptId}
 
-    TranscribeSvc->>TranscriptRepo: Create TranscriptSegment records<br/>(linked to speakers)
+    Note over TranscribeSvc: Create EnrichedTranscript in MongoDB<br/>(same id as PostgreSQL stub)<br/>Full segments, speakers, timestamps
+
+    TranscribeSvc->>DocStoreSvc: Create EnrichedTranscript<br/>{_id: transcriptId, segments[], speakers[]}
+    DocStoreSvc-->>TranscribeSvc: Document created
 
     alt Pipeline includes enrichment
         Worker->>EnrichSvc: Process transcript
 
-        Note over EnrichSvc: NER: Extract entities<br/>(companies, products, people)
+        Note over EnrichSvc: NER: Extract entities<br/>(companies, products, people)<br/>Topic modeling: Extract main themes<br/>Sentiment analysis: Score emotional tone
 
-        Note over EnrichSvc: Topic modeling:<br/>Extract main themes
+        EnrichSvc->>DocStoreSvc: Update EnrichedTranscript<br/>Add enrichment{summary, topics, sentiment, entities}
+        DocStoreSvc-->>EnrichSvc: Enrichment saved
 
-        Note over EnrichSvc: Sentiment analysis:<br/>Score emotional tone
-
-        EnrichSvc->>EnrichRepo: Create Enrichment<br/>{summary, topics, sentiment, entities}
-        EnrichRepo-->>EnrichSvc: Enrichment saved
+        EnrichSvc->>TranscriptRepo: Update stub metadata<br/>(entity count, topics)
     end
 
     Worker->>JobRepo: Update job<br/>{status: "completed", transcriptId, completedAt}

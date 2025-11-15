@@ -22,8 +22,8 @@ sequenceDiagram
     participant TranscribeSvc as Transcribe Service
     participant DiarizeSvc as Diarization Service
     participant DiarizationAPI as pyannote/Azure API
-    participant SpeakerRepo as Speaker Repository
-    participant TranscriptRepo as Transcript Repository
+    participant DocStoreSvc as Document Store Service (MongoDB)
+    participant TranscriptRepo as Transcript Repository (PostgreSQL stub)
     participant EnrichSvc as Enrichment Service
 
     Note over TranscribeSvc: After initial transcript<br/>is generated
@@ -34,17 +34,18 @@ sequenceDiagram
     Note over DiarizationAPI: Speaker diarization model<br/>(who spoke when)
     DiarizationAPI-->>DiarizeSvc: Timeline with speaker labels<br/>{Speaker 1: [0-10s], Speaker 2: [10-15s], ...}
 
-    loop For each unique speaker
-        DiarizeSvc->>SpeakerRepo: Create Speaker<br/>{transcriptId, label: "Speaker 1", diarization}
-        SpeakerRepo-->>DiarizeSvc: Speaker created {speakerId}
-    end
+    Note over DiarizeSvc: Build speakers[] array<br/>with labels, statistics, diarization data
 
-    DiarizeSvc->>TranscriptRepo: Update TranscriptSegment records<br/>Link each segment to speakerId
+    Note over DiarizeSvc: Update segments[] in memory<br/>Link each segment to speaker
 
     alt Speaker names known
         Note over DiarizeSvc: Label as "Agent", "Customer"<br/>instead of "Speaker 1", "Speaker 2"
-        DiarizeSvc->>SpeakerRepo: Update labels
     end
+
+    DiarizeSvc->>DocStoreSvc: Update EnrichedTranscript<br/>{_id: transcriptId, speakers[], segments[]}
+    DocStoreSvc-->>DiarizeSvc: Document updated
+
+    DiarizeSvc->>TranscriptRepo: Update stub metadata<br/>(speakerCount, labels)
 
     DiarizeSvc->>EnrichSvc: Perform per-speaker analysis
 

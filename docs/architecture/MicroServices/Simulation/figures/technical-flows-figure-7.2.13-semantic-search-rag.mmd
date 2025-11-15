@@ -23,9 +23,9 @@ sequenceDiagram
     participant RetrievalSvc as Retrieval Service
     participant EmbeddingSvc as Embedding Service
     participant EmbeddingRepo as Embedding Repository (pgvector)
-    participant TranscriptRepo as Transcript Repository
+    participant TranscriptRepo as Transcript Repository (PostgreSQL)
+    participant DocStoreSvc as Document Store Service (MongoDB)
     participant MessageRepo as Message Repository
-    participant DocStore as Document Store
 
     Note over RetrievalSvc: During simulation turn,<br/>need to find relevant context
 
@@ -41,13 +41,13 @@ sequenceDiagram
 
     loop For each match
         alt refType = "TranscriptSegment"
-            RetrievalSvc->>TranscriptRepo: Fetch segment content
-            TranscriptRepo-->>RetrievalSvc: Segment text + metadata
+            RetrievalSvc->>DocStoreSvc: Fetch segment from EnrichedTranscript
+            DocStoreSvc-->>RetrievalSvc: Segment text + metadata
         else refType = "Document"
-            RetrievalSvc->>DocStore: Fetch document
-            DocStore-->>RetrievalSvc: Document content
+            RetrievalSvc->>DocStoreSvc: Fetch document from MongoDB
+            DocStoreSvc-->>RetrievalSvc: Document content
         else refType = "Message"
-            RetrievalSvc->>MessageRepo: Fetch message
+            RetrievalSvc->>MessageRepo: Fetch message from PostgreSQL
             MessageRepo-->>RetrievalSvc: Message content
         end
     end

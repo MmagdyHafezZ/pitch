@@ -18,7 +18,7 @@
 }}}%%
 
 ---
-title: "Figure 8.13 - Semantic Search (RAG)"
+title: "Figure 7.2.13 - Semantic Search (RAG)"
 ---
 
 sequenceDiagram
@@ -62,7 +62,7 @@ sequenceDiagram
     Note over OrchSvc: Include in LLM prompt<br/>as grounding info
 
 ---
-title: "Figure 8.15 - Detect and Redact PII"
+title: "Figure 7.2.15 - Detect and Redact PII"
 ---
 
 sequenceDiagram
@@ -106,7 +106,7 @@ sequenceDiagram
     GuardrailSvc-->>OrchSvc: PII processing complete
 
 ---
-title: "Figure 8.16 - Voice Activity Detection (VAD)"
+title: "Figure 7.2.16 - Voice Activity Detection (VAD)"
 ---
 
 sequenceDiagram
@@ -160,7 +160,7 @@ sequenceDiagram
     Note over VADSvc: Reduces STT processing<br/>and latency by only<br/>transcribing speech
 
 ---
-title: "Figure 8.17 - Handle Multi-Speaker Diarization"
+title: "Figure 7.2.17 - Handle Multi-Speaker Diarization"
 ---
 
 sequenceDiagram
@@ -202,7 +202,7 @@ sequenceDiagram
     DiarizeSvc-->>TranscribeSvc: Diarization complete
 
 ---
-title: "Figure 8.18 - Benchmark Tracking and Leaderboards"
+title: "Figure 7.2.18 - Benchmark Tracking and Leaderboards"
 ---
 
 sequenceDiagram
@@ -247,7 +247,7 @@ sequenceDiagram
     Note over Dashboard: Leaderboards:<br/>- Top performers by score<br/>- Most improved over time<br/>- Team comparison charts
 
 ---
-title: "Figure 8.19 - Stream LLM Response with SSE"
+title: "Figure 7.2.19 - Stream LLM Response with SSE"
 ---
 
 sequenceDiagram
@@ -266,7 +266,7 @@ sequenceDiagram
     Note over TurnCtrl: Establish SSE connection<br/>Keep connection open
 
     TurnCtrl->>OrchSvc: Process turn
-    Note over OrchSvc: Context assembly<br/>Retrieval<br/>Guardrails<br/>(as in Figure 8.3)
+    Note over OrchSvc: Context assembly<br/>Retrieval<br/>Guardrails<br/>(as in Figure 7.2.3)
 
     OrchSvc->>LLMSvc: Call LLM with streaming
     LLMSvc->>LLMAPI: Request streaming mode

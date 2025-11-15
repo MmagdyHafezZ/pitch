@@ -175,10 +175,29 @@ function createFilename(baseName, title, index, totalDiagrams) {
   }
 
   if (!title) {
-    return `${baseName}-${index}.mmd`
+    return `${index}-${baseName}.mmd`
   }
 
-  // Clean the title to create filename
+  // Extract figure number and description separately
+  // Pattern: "Figure X.X.X - Description" or "Figure X.X - Description"
+  const figureMatch = title.match(/^Figure\s+([\d.]+)\s*-\s*(.+)$/i)
+
+  if (figureMatch) {
+    const figureNum = figureMatch[1] // e.g., "7.2.1"
+    const description = figureMatch[2] // e.g., "Simulation Microservice Component Architecture"
+
+    // Clean the description
+    const cleanDescription = description
+      .replace(/[^\w\s-]/g, '')
+      .replace(/[-\s]+/g, '-')
+      .toLowerCase()
+      .replace(/^-+|-+$/g, '')
+
+    // Format: figure-7.2.1-baseName-description.mmd (version number first)
+    return `figure-${figureNum}-${baseName}-${cleanDescription}.mmd`
+  }
+
+  // Fallback: Clean the entire title if pattern doesn't match
   const cleanTitle = title
     .replace(/Figure\s+/gi, 'figure-')
     .replace(/[^\w\s-]/g, '')

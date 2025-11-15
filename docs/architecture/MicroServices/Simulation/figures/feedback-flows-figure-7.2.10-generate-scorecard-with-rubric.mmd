@@ -31,7 +31,8 @@ sequenceDiagram
     participant MessageRepo as Message Repository
     participant ScoringSvc as Scoring Service
     participant LLMSvc as LLM Service
-    participant ScoreRepo as Score Repository
+    participant ScoreRepo as Score Repository (PostgreSQL)
+    participant DocStoreSvc as Document Store Service (MongoDB)
     participant CoachingSvc as Coaching Service
     participant BenchmarkSvc as Benchmark Service
     participant BenchmarkRepo as Benchmark Repository
@@ -74,13 +75,19 @@ sequenceDiagram
 
         alt LLM-based scoring
             ScoringSvc->>LLMSvc: Generate score with reasoning
-            Note over LLMSvc: Analyze conversation<br/>Score 0-maxPoints
+            Note over LLMSvc: Analyze conversation<br/>Score 0-maxPoints<br/>(maxPoints from Criterion)
             LLMSvc-->>ScoringSvc: Score + reasoning
+
+            Note over ScoringSvc: Create EvalArtifact stub in PostgreSQL<br/>Create EvalArtifactData in MongoDB<br/>(same id, full reasoning & metrics)
+
+            ScoringSvc->>ScoreRepo: Create EvalArtifact stub<br/>{id, sessionId, turnId, kind, score}
+            ScoringSvc->>DocStoreSvc: Create EvalArtifactData<br/>{_id: same id, data: {llmJudge, reasoning}}
         else Rule-based scoring
             Note over ScoringSvc: Pattern matching<br/>Keyword detection
         end
 
-        ScoringSvc->>ScoreRepo: Create ScoreItem<br/>{criterionId, score, maxPoints, details}
+        Note over ScoringSvc: maxPoints derived from Criterion<br/>(not stored in ScoreItem)
+        ScoringSvc->>ScoreRepo: Create ScoreItem<br/>{criterionId, score, details}
     end
 
     Note over FeedbackSvc: Calculate totalScore<br/>(weighted sum)
