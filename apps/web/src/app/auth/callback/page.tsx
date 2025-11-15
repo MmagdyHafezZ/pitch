@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Container, Paper, Text, Loader, Alert, Stack, Button } from '@mantine/core'
 import { IconCheck, IconX } from '@tabler/icons-react'
@@ -12,6 +12,14 @@ import {
 } from '@/features/auth/utils/oauth.utils'
 
 export default function AuthCallbackPage() {
+  return (
+    <Suspense fallback={<AuthCallbackFallback />}>
+      <AuthCallbackContent />
+    </Suspense>
+  )
+}
+
+function AuthCallbackContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading')
@@ -123,6 +131,32 @@ export default function AuthCallbackPage() {
               </Button>
             </>
           )}
+        </Stack>
+      </Paper>
+    </Container>
+  )
+}
+
+function AuthCallbackFallback() {
+  return (
+    <Container
+      size="sm"
+      style={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+    >
+      <Paper withBorder shadow="md" p="xl" radius="md" style={{ width: '100%', maxWidth: '400px' }}>
+        <Stack align="center" gap="lg">
+          <Loader size="lg" />
+          <Text size="lg" fw={500}>
+            Preparing authentication...
+          </Text>
+          <Text size="sm" c="dimmed" ta="center">
+            Hang tight while we finalize your login
+          </Text>
         </Stack>
       </Paper>
     </Container>

@@ -4,33 +4,47 @@ A modern business management platform built with Next.js, NestJS microservices,
 and Turborepo. Features JWT authentication, multi-database architecture, and
 real-time communication via RabbitMQ.
 
+## 📚 Documentation
+
+**👉 [DEVELOPER_GUIDE.md](DEVELOPER_GUIDE.md)** - Complete developer
+documentation (START HERE)
+
+**Other Resources**:
+
+- [docs/](docs/README.md) - Additional documentation (CI/CD, contributing,
+  security)
+
 ## Architecture Overview
 
 PITCH follows a microservices architecture with an API Gateway pattern:
 
 - **API Gateway** - Centralized authentication and request routing
 - **User Microservice** - User management with PostgreSQL
-- **Business Microservice** - Business logic with MongoDB
+- **Support Microservice** - Support tickets with PostgreSQL
 - **Frontend Application** - React/Next.js with Mantine UI
 
 ### Key Features
 
-- 🔐 **JWT Authentication** - Access & refresh tokens with user claims
-  forwarding
-- 🎯 **API Gateway Pattern** - Centralized auth validation and routing
+- 🔐 **JWT Authentication** - Secure auth with 32+ char secrets
+- 🎯 **API Gateway Pattern** - Centralized validation & routing
 - 📨 **Message Queues** - RabbitMQ for inter-service communication
-- 🗄️ **Multi-Database** - PostgreSQL for users, MongoDB for business data
-- ⚡ **Real-time** - WebSocket support and event-driven architecture
+- 🗄️ **Multi-Database** - PostgreSQL for relational data
+- ⚡ **Real-time** - WebSocket support & event-driven architecture
 - 🎨 **Modern UI** - Mantine components with TypeScript
+- ✅ **Type Safe** - Full TypeScript with Prisma ORM
 
 ## Monorepo Structure
 
-This is a Turborepo monorepo containing:
-
-- **apps/web** - Next.js frontend with Mantine UI
-- **apps/api** - NestJS backend with microservices
-- **packages/shared** - Shared utilities and types
-- **packages/eslint-config** - Shared ESLint configuration
+```
+PITCH/
+├── apps/
+│   ├── web/                 # Next.js 15 frontend
+│   └── api/                 # NestJS microservices
+├── packages/
+│   ├── shared/              # Shared types & utilities
+│   └── eslint-config/       # Shared ESLint config
+└── docs/                    # Documentation
+```
 
 ## Quick Start
 
@@ -51,7 +65,7 @@ This is a Turborepo monorepo containing:
 2. **Start database services:**
 
    ```bash
-   docker-compose -f docker-compose.local.yml up -d postgres mongodb redis rabbitmq
+   docker-compose -f docker-compose.local.yml up -d
    ```
 
 3. **Run database migrations:**
@@ -286,3 +300,26 @@ Client → API Gateway → User Microservice (PostgreSQL)
 ## License
 
 ISC
+
+🔍 RECOMMENDATIONS
+
+Immediate removals (14 packages)
+
+# Web app
+
+pnpm remove @emotion/cache @emotion/react @emotion/server pnpm remove
+@tiptap/extension-link @tiptap/pm @tiptap/react @tiptap/starter-kit pnpm remove
+chroma-js date-fns embla-carousel embla-carousel-react pnpm remove lucide-react
+react-day-picker react-hook-form
+
+# API (if bcryptjs is used instead)
+
+pnpm remove bcrypt @types/bcrypt
+
+Consider removing (if no future plans)
+
+- @mantine unused packages (6 packages)
+- @trpc/server (unless tRPC implementation planned)
+- amqp packages (unless message queue planned)
+
+Potential savings: ~15-20MB bundle size reduction

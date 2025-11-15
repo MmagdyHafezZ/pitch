@@ -1,0 +1,222 @@
+import { Schema, Document } from 'mongoose';
+
+/**
+ * LLMTrace - MongoDB document
+ *
+ * Stores detailed LLM interaction traces including prompts, responses,
+ * token usage, latency, and model parameters.
+ *
+ * Used for debugging, prompt optimization, and cost analysis.
+ *
+ * Storage: MongoDB (authoritative for LLM trace data)
+ * Reference: Can be linked from Turn, ToolCall, or Message via metadata
+ */
+
+export interface ILLMMessage {
+  role: 'system' | 'user' | 'assistant' | 'tool';
+  content: string;
+  name?: string; // For tool/function calls
+  toolCallId?: string;
+}
+
+export interface ILLMTrace extends Document {
+  _id: string;
+  sessionId: string;
+  turnId?: string;
+  toolCallId?: string;
+  messageId?: string;
+
+  // LLM provider and model
+  provider: string; // "openai" | "anthropic" | "azure" | "custom"
+  model: string; // "gpt-4" | "claude-3-opus" | etc.
+  modelVersion?: string;
+
+  // Request data
+  request: {
+    messages: ILLMMessage[];
+    // Model parameters
+    temperature?: number;
+    maxTokens?: number;
+    topP?: number;
+    frequencyPenalty?: number;
+    presencePenalty?: number;
+    stop?: string[];
+    stream?: boolean;
+    tools?: Array<{
+      type: string;
+      function: {
+        name: string;
+        description?: string;
+        parameters?: Record<string, any>;
+      };
+    }>;
+    toolChoice?: string | Record<string, any>;
+  };
+
+  // Response data
+  response: {
+    content?: string;
+    role?: string;
+    finishReason?: string; // "stop" | "length" | "tool_calls" | "content_filter"
+    toolCalls?: Array<{
+      id: string;
+      type: string;
+      function: {
+        name: string;
+        arguments: string;
+      };
+    }>;
+  };
+
+  // Usage and performance
+  usage: {
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+    cost?: number; // Estimated cost in USD
+  };
+
+  performance: {
+    latencyMs: number;
+    timeToFirstTokenMs?: number;
+    tokensPerSecond?: number;
+    requestId?: string; // Provider request ID
+  };
+
+  // Context and metadata
+  context?: {
+    userId?: string;
+    orgId?: string;
+    traceId?: string;
+    purpose?: string; // "chat" | "tool_call" | "evaluation" | "enrichment"
+  };
+
+  // Error tracking
+  error?: {
+    occurred: boolean;
+    type?: string;
+    message?: string;
+    retryCount?: number;
+  };
+
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export const LLMTraceSchema = new Schema<ILLMTrace>(
+  {
+    _id: { type: String, required: true },
+    sessionId: { type: String, required: true, index: true },
+    turnId: { type: String, index: true },
+    toolCallId: { type: String, index: true },
+    messageId: { type: String, index: true },
+
+    provider: { type: String, required: true, index: true },
+    model: { type: String, required: true, index: true },
+    modelVersion: { type: String },
+
+    request: {
+      messages: [
+        {
+          role: {
+            type: String,
+            required: true,
+            enum: ['system', 'user', 'assistant', 'tool'],
+          },
+          content: { type: String, required: true },
+          name: { type: String },
+          toolCallId: { type: String },
+        },
+      ],
+      temperature: { type: Number },
+      maxTokens: { type: Number },
+      topP: { type: Number },
+      frequencyPenalty: { type: Number },
+      presencePenalty: { type: Number },
+      stop: [{ type: String }],
+      stream: { type: Boolean },
+      tools: [
+        {
+          type: { type: String },
+          function: {
+            name: { type: String, required: true },
+            description: { type: String },
+            parameters: { type: Schema.Types.Mixed },
+          },
+        },
+      ],
+      toolChoice: { type: Schema.Types.Mixed },
+    },
+
+    response: {
+      content: { type: String },
+      role: { type: String },
+      finishReason: {
+        type: String,
+        enum: ['stop', 'length', 'tool_calls', 'content_filter', 'error'],
+      },
+      toolCalls: [
+        {
+          id: { type: String, required: true },
+          type: { type: String, required: true },
+          function: {
+            name: { type: String, required: true },
+            arguments: { type: String, required: true },
+          },
+        },
+      ],
+    },
+
+    usage: {
+      promptTokens: { type: Number, required: true },
+      completionTokens: { type: Number, required: true },
+      totalTokens: { type: Number, required: true },
+      cost: { type: Number },
+    },
+
+    performance: {
+      latencyMs: { type: Number, required: true },
+      timeToFirstTokenMs: { type: Number },
+      tokensPerSecond: { type: Number },
+      requestId: { type: String },
+    },
+
+    context: {
+      userId: { type: String },
+      orgId: { type: String, index: true },
+      traceId: { type: String, index: true },
+      purpose: {
+        type: String,
+        enum: ['chat', 'tool_call', 'evaluation', 'enrichment', 'other'],
+      },
+    },
+
+    error: {
+      occurred: { type: Boolean, default: false },
+      type: { type: String },
+      message: { type: String },
+      retryCount: { type: Number, default: 0 },
+    },
+  },
+  {
+    timestamps: true,
+    collection: 'llmTraces',
+  },
+);
+
+// Indexes for common queries and analytics
+LLMTraceSchema.index({ sessionId: 1, createdAt: -1 });
+LLMTraceSchema.index({ provider: 1, model: 1 });
+LLMTraceSchema.index({ 'context.orgId': 1, createdAt: -1 });
+LLMTraceSchema.index({ 'context.purpose': 1 });
+LLMTraceSchema.index({ 'usage.totalTokens': -1 });
+LLMTraceSchema.index({ 'performance.latencyMs': -1 });
+LLMTraceSchema.index({ 'error.occurred': 1 });
+
+// TTL index - auto-delete traces older than 180 days
+LLMTraceSchema.index(
+  { createdAt: 1 },
+  { expireAfterSeconds: 180 * 24 * 60 * 60 },
+);
+
+export const LLMTraceModel = 'LLMTrace';

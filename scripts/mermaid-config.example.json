@@ -1,0 +1,7 @@
+{
+  "inputDir": "./docs/architecture/MicroServices/Simulation/figures",
+  "outputDir": "./docs/architecture/MicroServices/Simulation/figures/png",
+  "scale": 2,
+  "background": "transparent",
+  "verbose": true
+}
