@@ -1,0 +1,24 @@
+sequenceDiagram
+    participant ProducerService as Other Microservice
+    participant RabbitMQ
+    participant FileService
+    participant S3Repository
+    participant AWSS3 as AWS S3
+
+    %% Step 1: Delete request event
+    ProducerService->>RabbitMQ: Publish "delete_request" message<br/>with file key
+    RabbitMQ-->>FileService: Deliver delete_request message
+
+    %% Step 2: Generate pre-signed delete URL
+    FileService->>S3Repository: Generate pre-signed URL for deletion
+    S3Repository->>AWSS3: Request pre-signed URL (DELETE method)
+    AWSS3-->>S3Repository: Return pre-signed URL
+    S3Repository-->>FileService: Return URL
+
+    %% Step 3: Perform deletion
+    FileService->>AWSS3: DELETE file using pre-signed URL
+    AWSS3-->>FileService: 204 No Content — Deletion successful
+
+    %% Step 4: Publish completion event
+    FileService->>RabbitMQ: Publish "file_deleted" event<br/>with file details
+    RabbitMQ-->>ProducerService: Notify deletion completed

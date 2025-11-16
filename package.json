@@ -26,7 +26,12 @@
     "prepare": "husky install",
     "pre-commit": "lint-staged",
     "commit": "cz",
-    "compile:architecture": "cd docs/architecture/MicroServices && node compile-architecture.js"
+    "compile:architecture": "cd docs/architecture/MicroServices && node compile-architecture.js",
+    "diagrams:convert": "node scripts/mermaid-to-png.js",
+    "diagrams:simulation": "bash scripts/convert-mermaid.sh --simulation",
+    "diagrams:user": "bash scripts/convert-mermaid.sh --user",
+    "diagrams:support": "bash scripts/convert-mermaid.sh --support",
+    "diagrams:all": "pnpm run diagrams:simulation && pnpm run diagrams:user && pnpm run diagrams:support"
   },
   "keywords": [],
   "author": "",

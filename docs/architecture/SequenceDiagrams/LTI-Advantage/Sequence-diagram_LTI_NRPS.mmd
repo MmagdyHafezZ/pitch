@@ -1,0 +1,12 @@
+sequenceDiagram
+autonumber
+participant LS as LaunchService
+participant NRPS as NrpsService
+participant LMS as LMS
+participant Redis as Redis Cache
+
+LS->>NRPS: Request Roster for Context
+NRPS->>LMS: Fetch Names & Roles (NRPS Endpoint)
+LMS-->>NRPS: Return JSON Roster (Users + Roles)
+NRPS->>Redis: Cache Roster for Context
+NRPS-->>LS: Roster Data Ready

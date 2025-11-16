@@ -1,0 +1,16 @@
+sequenceDiagram
+autonumber
+participant Tool as PITCH UI
+participant LTIGW as LTI Gateway
+participant GC as GradeController
+participant GS as GradeService
+participant LMS as LMS
+
+Tool->>LTIGW: Submit Grade Update (Score, User)
+LTIGW->>GC: Forward Grade Request
+GC->>GS: Validate + Process Grade Update
+GS->>LMS: Send Grade via AGS Endpoint
+LMS-->>GS: Acknowledge Grade
+GS-->>GC: Success Response
+GC-->>LTIGW: Grade Synced
+LTIGW-->>Tool: Show Confirmation

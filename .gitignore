@@ -9,6 +9,8 @@ build/
 .next/
 out/
 
+CLAUDE.md
+
 # Development
 .turbo/
 .vercel/

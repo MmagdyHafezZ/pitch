@@ -1,0 +1,72 @@
+%%{init: {'theme':'base', 'themeVariables': {
+  'primaryColor':'#ffffff',
+  'primaryTextColor':'#0d1117',
+  'primaryBorderColor':'#1565c0',
+  'lineColor':'#1976d2',
+  'secondaryColor':'#fef3c7',
+  'secondaryTextColor':'#1f2937',
+  'secondaryBorderColor':'#d97706',
+  'tertiaryColor':'#f3e8ff',
+  'tertiaryTextColor':'#111827',
+  'actorTextColor':'#0d1117',
+  'noteBkgColor':'#fffde7',
+  'noteTextColor':'#374151',
+  'mainBkg':'#ffffff',
+  'secondBkg':'#ffffff',
+  'tertiaryBkg':'#ffffff',
+  'edgeLabelBackground':'#ffffff'
+}}}%%
+
+
+graph TD
+    Start([🚀 Start Here])
+
+    Start --> README[📖 README.md<br/>Quick overview]
+    README --> INDEX[📑 INDEX.md<br/>Main navigation hub]
+
+    INDEX --> Architecture[📘 SIMULATION_ARCHITECTURE.md<br/>Complete specification]
+    INDEX --> Schema[🗄️ prisma.schema.md<br/>Database models]
+    INDEX --> ArchDiagram[🔷 architecture.mmd<br/>Component diagram]
+    INDEX --> Figures[📊 figures/<br/>Sequence diagrams]
+
+    Architecture --> Features[Features<br/>• Orchestration<br/>• AI Chat<br/>• Voice/Video<br/>• Media Processing<br/>• Feedback]
+    Architecture --> Components[Components<br/>• Gateways<br/>• Controllers<br/>• Services<br/>• Repositories]
+    Architecture --> Flows[19 Sequence Flows<br/>Detailed explanations]
+    Architecture --> Technical[Technical Notes<br/>• Database config<br/>• Events<br/>• External APIs<br/>• Performance]
+    Architecture --> Roadmap[Implementation<br/>Roadmap<br/>6 Phases]
+
+    Schema --> CoreModels[Core Models<br/>Session, Turn,<br/>Message, Event]
+    Schema --> MediaModels[Media Models<br/>CallSession,<br/>Recording,<br/>MediaAsset]
+    Schema --> FeedbackModels[Feedback Models<br/>Rubric, Scorecard,<br/>CoachTip]
+    Schema --> OtherModels[27 Total Models<br/>Complete schema]
+
+    ArchDiagram --> LayeredArch[Layered Architecture<br/>Gateway → Controller<br/>→ Service → Repository<br/>→ Database]
+    ArchDiagram --> Dependencies[Service Dependencies<br/>External APIs<br/>Event Bus]
+
+    Figures --> FiguresREADME[📋 figures/README.md<br/>Diagram index]
+
+    FiguresREADME --> SessionFlows[session-flows.mmd<br/>Figures 7.2.2, 7.2.3, 7.2.7<br/>Session lifecycle]
+    FiguresREADME --> ToolFlows[tool-flows.mmd<br/>Figure 7.2.4<br/>Tool invocation]
+    FiguresREADME --> CallFlows[call-flows.mmd<br/>Figures 7.2.5, 7.2.6<br/>Voice/Video calls]
+    FiguresREADME --> MediaFlows[media-flows.mmd<br/>Figures 7.2.8, 7.2.9<br/>Media processing]
+    FiguresREADME --> FeedbackFlows[feedback-flows.mmd<br/>Figures 7.2.10-7.2.12<br/>Scoring & feedback]
+    FiguresREADME --> ReportFlows[report-flows.mmd<br/>Figure 7.2.14<br/>PDF generation]
+    FiguresREADME --> TechnicalFlows[technical-flows.mmd<br/>Figures 7.2.13-7.2.19<br/>RAG, PII, VAD, etc.]
+    FiguresREADME --> ComponentArch[component-architecture.mmd<br/>Figure 7.2.1<br/>High-level components]
+
+    Flows -.->|References| SessionFlows
+    Flows -.->|References| ToolFlows
+    Flows -.->|References| CallFlows
+    Flows -.->|References| MediaFlows
+    Flows -.->|References| FeedbackFlows
+    Flows -.->|References| ReportFlows
+    Flows -.->|References| TechnicalFlows
+
+    style Start fill:#4caf50,stroke:#2e7d32,stroke-width:3px,color:#fff
+    style README fill:#2196f3,stroke:#1565c0,stroke-width:2px,color:#fff
+    style INDEX fill:#ff9800,stroke:#e65100,stroke-width:3px,color:#fff
+    style Architecture fill:#9c27b0,stroke:#6a1b9a,stroke-width:2px,color:#fff
+    style Schema fill:#9c27b0,stroke:#6a1b9a,stroke-width:2px,color:#fff
+    style ArchDiagram fill:#9c27b0,stroke:#6a1b9a,stroke-width:2px,color:#fff
+    style Figures fill:#9c27b0,stroke:#6a1b9a,stroke-width:2px,color:#fff
+    style FiguresREADME fill:#ff9800,stroke:#e65100,stroke-width:2px,color:#fff

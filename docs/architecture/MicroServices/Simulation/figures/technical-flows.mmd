@@ -1,0 +1,297 @@
+%%{init: {'theme':'base', 'themeVariables': {
+  'primaryColor':'#ffffff',
+  'primaryTextColor':'#0d1117',
+  'primaryBorderColor':'#1565c0',
+  'lineColor':'#1976d2',
+  'secondaryColor':'#fef3c7',
+  'secondaryTextColor':'#1f2937',
+  'secondaryBorderColor':'#d97706',
+  'tertiaryColor':'#f3e8ff',
+  'tertiaryTextColor':'#111827',
+  'actorTextColor':'#0d1117',
+  'noteBkgColor':'#fffde7',
+  'noteTextColor':'#374151',
+  'mainBkg':'#ffffff',
+  'secondBkg':'#ffffff',
+  'tertiaryBkg':'#ffffff',
+  'edgeLabelBackground':'#ffffff'
+}}}%%
+
+---
+title: "Figure 7.2.13 - Semantic Search (RAG)"
+---
+
+sequenceDiagram
+    participant OrchSvc as Orchestrator Service
+    participant RetrievalSvc as Retrieval Service
+    participant EmbeddingSvc as Embedding Service
+    participant EmbeddingRepo as Embedding Repository (pgvector)
+    participant TranscriptRepo as Transcript Repository
+    participant MessageRepo as Message Repository
+    participant DocStore as Document Store
+
+    Note over RetrievalSvc: During simulation turn,<br/>need to find relevant context
+
+    OrchSvc->>RetrievalSvc: Find context<br/>{query, sessionId}
+
+    RetrievalSvc->>EmbeddingSvc: Generate query embedding
+    Note over EmbeddingSvc: Use sentence transformer<br/>(e.g., all-MiniLM-L6-v2)
+    EmbeddingSvc-->>RetrievalSvc: Query vector
+
+    RetrievalSvc->>EmbeddingRepo: Vector similarity search
+    Note over EmbeddingRepo: pgvector <-> operator<br/>Filter by namespace<br/>Limit to top-k (5-10)
+    EmbeddingRepo-->>RetrievalSvc: Matching EmbeddingRow records<br/>{refType, refId, score}
+
+    loop For each match
+        alt refType = "TranscriptSegment"
+            RetrievalSvc->>TranscriptRepo: Fetch segment content
+            TranscriptRepo-->>RetrievalSvc: Segment text + metadata
+        else refType = "Document"
+            RetrievalSvc->>DocStore: Fetch document
+            DocStore-->>RetrievalSvc: Document content
+        else refType = "Message"
+            RetrievalSvc->>MessageRepo: Fetch message
+            MessageRepo-->>RetrievalSvc: Message content
+        end
+    end
+
+    Note over RetrievalSvc: Assemble chunks with:<br/>- Source<br/>- Timestamp<br/>- Relevance score
+
+    RetrievalSvc-->>OrchSvc: Retrieved context chunks
+
+    Note over OrchSvc: Include in LLM prompt<br/>as grounding info
+
+---
+title: "Figure 7.2.15 - Detect and Redact PII"
+---
+
+sequenceDiagram
+    participant OrchSvc as Orchestrator Service
+    participant GuardrailSvc as Guardrail Service
+    participant NERModel as NER Model
+    participant RedactionRepo as RedactionSpan Repository
+    participant MessageRepo as Message Repository
+    participant EventBus as Event Bus
+
+    Note over OrchSvc: During message processing
+
+    OrchSvc->>GuardrailSvc: Scan message text
+    GuardrailSvc->>GuardrailSvc: Pattern matching
+    Note over GuardrailSvc: Detect:<br/>- Email addresses (regex)<br/>- Phone numbers<br/>- SSNs<br/>- Credit cards
+
+    GuardrailSvc->>NERModel: Named Entity Recognition
+    Note over NERModel: Detect entities<br/>that may be PII<br/>(names, addresses)
+    NERModel-->>GuardrailSvc: Entity spans
+
+    loop For each detected PII span
+        Note over GuardrailSvc: Record:<br/>- start position<br/>- end position<br/>- label (EMAIL, PHONE, etc.)
+
+        GuardrailSvc->>RedactionRepo: Create RedactionSpan<br/>{messageId, spans: [{start, end, label}]}
+    end
+
+    alt Configuration mode
+        Note over GuardrailSvc: Mask mode:<br/>Replace with [REDACTED]/[EMAIL]
+
+        Note over GuardrailSvc: Flag mode:<br/>Flag but don't modify
+
+        Note over GuardrailSvc: Audit mode:<br/>Log for compliance
+    end
+
+    GuardrailSvc->>MessageRepo: Store message<br/>- Original (authorized access)<br/>- Redacted (general display)
+
+    GuardrailSvc->>EventBus: Emit pii.detected<br/>{messageId, spans}
+
+    Note over MessageRepo: On retrieval:<br/>- Regular users: redacted<br/>- Admins with PII access: original
+
+    GuardrailSvc-->>OrchSvc: PII processing complete
+
+---
+title: "Figure 7.2.16 - Voice Activity Detection (VAD)"
+---
+
+sequenceDiagram
+    participant Client as User Client
+    participant WebRTCSvc as WebRTC Service
+    participant VADSvc as VAD Service
+    participant STTSvc as STT Service
+    participant OrchSvc as Orchestrator Service
+    participant TurnRepo as Turn Repository
+
+    Note over VADSvc: State machine states:<br/>Silence → Potential → Active → Trailing
+
+    loop During live voice call
+        Client->>WebRTCSvc: Audio chunk (20ms frame)
+        WebRTCSvc->>VADSvc: Forward audio frame
+
+        VADSvc->>VADSvc: Classify frame
+        Note over VADSvc: Use WebRTC VAD<br/>or Silero VAD
+
+        alt State: Silence
+            Note over VADSvc: No speech detected<br/>Buffering disabled
+        end
+
+        alt State: Potential Speech
+            Note over VADSvc: Short burst detected<br/>Start buffering
+        end
+
+        alt State: Active Speech
+            Note over VADSvc: Confirmed speech<br/>Buffer & forward to STT
+
+            VADSvc->>STTSvc: Signal speech start
+            VADSvc->>STTSvc: Stream audio buffers
+
+            Note over STTSvc: Real-time transcription
+
+            STTSvc-->>OrchSvc: Partial transcripts
+        end
+
+        alt State: Trailing Silence
+            Note over VADSvc: Silence > threshold (300ms)<br/>Speech ended
+
+            VADSvc->>STTSvc: Signal speech end
+            STTSvc-->>OrchSvc: Final transcription + timing
+
+            OrchSvc->>TurnRepo: Create Turn<br/>{text, audio ref}
+
+            Note over VADSvc: Return to Silence state
+        end
+    end
+
+    Note over VADSvc: Reduces STT processing<br/>and latency by only<br/>transcribing speech
+
+---
+title: "Figure 7.2.17 - Handle Multi-Speaker Diarization"
+---
+
+sequenceDiagram
+    participant TranscribeSvc as Transcribe Service
+    participant DiarizeSvc as Diarization Service
+    participant DiarizationAPI as pyannote/Azure API
+    participant SpeakerRepo as Speaker Repository
+    participant TranscriptRepo as Transcript Repository
+    participant EnrichSvc as Enrichment Service
+
+    Note over TranscribeSvc: After initial transcript<br/>is generated
+
+    TranscribeSvc->>DiarizeSvc: Analyze speakers<br/>{audioFile, transcript}
+
+    DiarizeSvc->>DiarizationAPI: Process audio waveform
+    Note over DiarizationAPI: Speaker diarization model<br/>(who spoke when)
+    DiarizationAPI-->>DiarizeSvc: Timeline with speaker labels<br/>{Speaker 1: [0-10s], Speaker 2: [10-15s], ...}
+
+    loop For each unique speaker
+        DiarizeSvc->>SpeakerRepo: Create Speaker<br/>{transcriptId, label: "Speaker 1", diarization}
+        SpeakerRepo-->>DiarizeSvc: Speaker created {speakerId}
+    end
+
+    DiarizeSvc->>TranscriptRepo: Update TranscriptSegment records<br/>Link each segment to speakerId
+
+    alt Speaker names known
+        Note over DiarizeSvc: Label as "Agent", "Customer"<br/>instead of "Speaker 1", "Speaker 2"
+        DiarizeSvc->>SpeakerRepo: Update labels
+    end
+
+    DiarizeSvc->>EnrichSvc: Perform per-speaker analysis
+
+    Note over EnrichSvc: Calculate:<br/>- Agent vs customer talk-time<br/>- Sentiment by speaker<br/>- Question frequency
+
+    Note over EnrichSvc: Use for feedback:<br/>- Agent dominating conversation?<br/>- Failed to ask discovery questions?
+
+    EnrichSvc-->>DiarizeSvc: Analysis complete
+
+    DiarizeSvc-->>TranscribeSvc: Diarization complete
+
+---
+title: "Figure 7.2.18 - Benchmark Tracking and Leaderboards"
+---
+
+sequenceDiagram
+    participant FeedbackSvc as Feedback Service
+    participant ScoreRepo as Score Repository
+    participant BenchmarkSvc as Benchmark Service
+    participant BenchmarkRepo as Benchmark Repository
+    participant EventBus as Event Bus
+    participant Dashboard as Admin Dashboard
+
+    Note over FeedbackSvc: After scorecard generated
+
+    FeedbackSvc->>BenchmarkSvc: Update benchmarks<br/>{scorecardId, orgId}
+
+    BenchmarkSvc->>ScoreRepo: Retrieve new scorecard
+    ScoreRepo-->>BenchmarkSvc: Scorecard data
+
+    loop For each tracked metric
+        Note over BenchmarkSvc: Metrics:<br/>- avg_score<br/>- discovery_questions<br/>- objection_handling<br/>- closing_effectiveness
+
+        BenchmarkSvc->>ScoreRepo: Retrieve recent scorecards<br/>(team/org, time window)
+        ScoreRepo-->>BenchmarkSvc: Historical scorecards
+
+        Note over BenchmarkSvc: Calculate:<br/>- Rolling average<br/>- Median<br/>- Percentile
+
+        BenchmarkSvc->>BenchmarkRepo: Update/Create Benchmark<br/>{orgId, metric, value, window}
+        BenchmarkRepo-->>BenchmarkSvc: Benchmark updated
+    end
+
+    alt Threshold crossed
+        Note over BenchmarkSvc: E.g., team average<br/>drops below target
+        BenchmarkSvc->>EventBus: Emit benchmark.updated<br/>{orgId, metric, threshold}
+    end
+
+    Note over Dashboard: User views scorecard
+
+    Dashboard->>BenchmarkRepo: Query benchmarks<br/>{orgId, metrics[]}
+    BenchmarkRepo-->>Dashboard: Benchmark data
+
+    Note over Dashboard: Display:<br/>- User's current score<br/>- Team average<br/>- Org average<br/>- Percentile ranking
+
+    Note over Dashboard: Leaderboards:<br/>- Top performers by score<br/>- Most improved over time<br/>- Team comparison charts
+
+---
+title: "Figure 7.2.19 - Stream LLM Response with SSE"
+---
+
+sequenceDiagram
+    participant User
+    participant SessionGW as Session Gateway
+    participant TurnCtrl as Turn Controller
+    participant OrchSvc as Orchestrator Service
+    participant LLMSvc as LLM Service
+    participant LLMAPI as Language Model API
+    participant TurnRepo as Turn Repository
+    participant MessageRepo as Message Repository
+
+    User->>SessionGW: POST /sessions/{id}/turns<br/>Accept: text/event-stream
+    SessionGW->>TurnCtrl: Forward request
+
+    Note over TurnCtrl: Establish SSE connection<br/>Keep connection open
+
+    TurnCtrl->>OrchSvc: Process turn
+    Note over OrchSvc: Context assembly<br/>Retrieval<br/>Guardrails<br/>(as in Figure 7.2.3)
+
+    OrchSvc->>LLMSvc: Call LLM with streaming
+    LLMSvc->>LLMAPI: Request streaming mode
+    Note over LLMAPI: Return delta chunks
+
+    loop For each token
+        LLMAPI-->>LLMSvc: Token delta
+        LLMSvc->>LLMSvc: Buffer token
+
+        LLMSvc->>TurnCtrl: Emit SSE event
+        Note over TurnCtrl: event: token<br/>data: {"text": "Hello", "delta": "Hello"}
+
+        TurnCtrl-->>User: Stream token (SSE)
+    end
+
+    Note over LLMSvc: Stream completes
+
+    LLMSvc->>OrchSvc: Full response ready
+    OrchSvc->>TurnRepo: Create Turn<br/>{role: "assistant", text}
+    OrchSvc->>MessageRepo: Create Message
+
+    OrchSvc->>TurnCtrl: Turn complete
+    TurnCtrl-->>User: SSE event
+    Note over TurnCtrl: event: done<br/>data: {"turnId": "...", "messageId": "..."}
+
+    Note over TurnCtrl: Close SSE connection
+
+    Note over User: Responsive UX:<br/>Text appears gradually<br/>vs waiting for full response

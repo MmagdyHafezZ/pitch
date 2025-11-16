@@ -1,0 +1,28 @@
+sequenceDiagram
+    participant Client
+    participant S3Gateway as API Gateway (S3Gateway)
+    participant FileController
+    participant FileService
+    participant S3Repository
+    participant AWSS3 as AWS S3
+
+    %% Step 1: Client requests pre-signed upload URL
+    Client->>S3Gateway: POST /s3/presigned/upload<br/>with file metadata
+    S3Gateway->>FileController: Forward request
+    FileController->>FileService: Request pre-signed upload URL
+    FileService->>S3Repository: Generate pre-signed upload URL
+    S3Repository->>AWSS3: Request pre-signed URL from storage provider
+    AWSS3-->>S3Repository: Return pre-signed URL
+    S3Repository-->>FileService: Return pre-signed URL
+    FileService-->>FileController: Return URL
+    FileController-->>S3Gateway: Send pre-signed URL
+    S3Gateway-->>Client: 200 OK — Pre-signed upload URL returned
+
+    %% Step 2: Client uploads file directly to S3
+    Client->>AWSS3: PUT file using pre-signed URL
+    AWSS3-->>Client: 200 OK — File uploaded successfully
+
+    %% Step 3: (Optional) Notify backend of upload completion
+    Client->>S3Gateway: POST /s3/notifyUploadComplete<br/>with file details
+    S3Gateway->>FileController: Forward notification
+    FileController->>FileService: Record metadata / publish "file_uploaded" event

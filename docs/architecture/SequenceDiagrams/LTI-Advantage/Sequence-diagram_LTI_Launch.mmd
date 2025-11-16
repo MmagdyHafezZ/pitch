@@ -1,0 +1,34 @@
+sequenceDiagram
+autonumber
+participant LMS as LMS (LTI Platform)
+participant LTIGW as LTI Gateway
+participant OIDC as OidcController
+participant TVS as TokenValidationService
+participant OIDCProv as OIDC Provider
+participant LS as LaunchService
+participant Redis as Redis Cache
+participant NRPS as NrpsService
+
+LMS->>LTIGW: Initiate Login Request (OIDC Auth)
+LTIGW->>OIDC: Forward Login Request
+OIDC->>TVS: Validate State + Nonce
+TVS->>OIDCProv: Retrieve OIDC Keys (JWKS)
+OIDCProv-->>TVS: Return Public Keys
+TVS-->>OIDC: Token Valid
+OIDC-->>LMS: Redirect with ID Token & Auth Code
+
+LMS->>LTIGW: LTI Launch Request (JWT + Claims)
+LTIGW->>LS: Forward Launch Request
+LS->>TVS: Validate Launch JWT & Signature
+TVS->>OIDCProv: Verify Issuer + Keys
+OIDCProv-->>TVS: Valid Issuer/Keys
+TVS-->>LS: Claims Verified
+
+LS->>Redis: Cache Launch Context (Roles, Course, User)
+LS->>NRPS: Request Roles & Roster
+NRPS->>LMS: Fetch Names & Roles
+LMS-->>NRPS: Return Roster
+NRPS-->>LS: Roster Synced
+
+LS-->>LTIGW: Launch Success Response
+LTIGW-->>LMS: Display Tool Content

@@ -1,0 +1,205 @@
+%%{init: {'theme':'base', 'themeVariables': {
+  'primaryColor':'#ffffff',
+  'primaryTextColor':'#0d1117',
+  'primaryBorderColor':'#1565c0',
+  'lineColor':'#1976d2',
+  'secondaryColor':'#fef3c7',
+  'secondaryTextColor':'#1f2937',
+  'secondaryBorderColor':'#d97706',
+  'tertiaryColor':'#f3e8ff',
+  'tertiaryTextColor':'#111827',
+  'actorTextColor':'#0d1117',
+  'noteBkgColor':'#fffde7',
+  'noteTextColor':'#374151',
+  'mainBkg':'#ffffff',
+  'secondBkg':'#ffffff',
+  'tertiaryBkg':'#ffffff',
+  'edgeLabelBackground':'#ffffff'
+}}}%%
+
+---
+title: "Figure 7.2.2 - Start Simulation Session"
+---
+
+sequenceDiagram
+    participant User
+    participant SessionGW as Session Gateway
+    participant SessionCtrl as Session Controller
+    participant OrchSvc as Orchestrator Service
+    participant ScenarioRepo as Scenario Repository
+    participant PersonaRepo as Persona Repository
+    participant SessionRepo as Session Repository
+    participant EventBus as Event Bus (RabbitMQ)
+    participant WebRTCSvc as WebRTC Service
+
+    User->>SessionGW: POST /sessions<br/>{userId, orgId, mode, scenarioId?, personaId?}
+    SessionGW->>SessionCtrl: Forward request
+    SessionCtrl->>OrchSvc: Initialize session
+
+    alt scenarioId provided
+        OrchSvc->>ScenarioRepo: Retrieve scenario
+        alt Scenario not found
+            ScenarioRepo-->>OrchSvc: Not found
+            OrchSvc-->>SessionCtrl: 404 Scenario Not Found
+            SessionCtrl-->>User: 404 Error
+        else Scenario found
+            ScenarioRepo-->>OrchSvc: Scenario config
+        end
+    end
+
+    alt personaId provided
+        OrchSvc->>PersonaRepo: Retrieve persona
+        alt Persona not found
+            PersonaRepo-->>OrchSvc: Not found
+            OrchSvc-->>SessionCtrl: 404 Persona Not Found
+            SessionCtrl-->>User: 404 Error
+        else Persona found
+            PersonaRepo-->>OrchSvc: Persona traits
+        end
+    end
+
+    Note over OrchSvc: Create user/org snapshot<br/>(name, email, team)
+    OrchSvc->>SessionRepo: Create session<br/>{status: "active", context}
+    SessionRepo-->>OrchSvc: Session created
+
+    OrchSvc->>EventBus: Emit simulation.started<br/>{sessionId, metadata}
+
+    alt mode is "voice" or "video"
+        OrchSvc->>WebRTCSvc: Initialize call infrastructure
+        WebRTCSvc-->>OrchSvc: Connection details
+    end
+
+    OrchSvc-->>SessionCtrl: Session data
+    SessionCtrl-->>User: 201 Created<br/>{sessionId, context}
+
+---
+title: "Figure 7.2.3 - Advance Turn - Text Chat"
+---
+
+sequenceDiagram
+    participant User
+    participant SessionGW as Session Gateway
+    participant TurnCtrl as Turn Controller
+    participant OrchSvc as Orchestrator Service
+    participant SessionRepo as Session Repository
+    participant TurnRepo as Turn Repository
+    participant GuardrailSvc as Guardrail Service
+    participant RedactionRepo as RedactionSpan Repository
+    participant ContextSvc as Context Service
+    participant RetrievalSvc as Retrieval Service
+    participant EmbeddingRepo as Embedding Repository
+    participant PromptSvc as Prompt Service
+    participant LLMSvc as LLM Service
+    participant MessageRepo as Message Repository
+    participant MetricSvc as Metric Service
+    participant MetricRepo as Metric Repository
+    participant EventBus as Event Bus
+
+    User->>SessionGW: POST /sessions/{id}/turns<br/>{text}
+    SessionGW->>TurnCtrl: Forward request
+
+    TurnCtrl->>SessionRepo: Validate session exists
+    alt Session not found or ended
+        SessionRepo-->>TurnCtrl: Not found/ended
+        TurnCtrl-->>User: 404/409 Error
+    end
+    SessionRepo-->>TurnCtrl: Session valid
+
+    TurnCtrl->>OrchSvc: Process turn
+    OrchSvc->>TurnRepo: Create Turn<br/>{role: "user", text, order}
+
+    OrchSvc->>GuardrailSvc: Scan for PII
+    GuardrailSvc->>GuardrailSvc: Detect PII spans
+    alt PII detected
+        GuardrailSvc->>RedactionRepo: Create RedactionSpan records
+    end
+
+    OrchSvc->>ContextSvc: Assemble conversation history
+    ContextSvc->>TurnRepo: Retrieve previous turns
+    TurnRepo-->>ContextSvc: Turn history
+    ContextSvc-->>OrchSvc: Context assembled
+
+    OrchSvc->>RetrievalSvc: Semantic search for context
+    RetrievalSvc->>EmbeddingRepo: Vector similarity search (pgvector)
+    EmbeddingRepo-->>RetrievalSvc: Relevant chunks
+    RetrievalSvc-->>OrchSvc: Retrieved context
+
+    OrchSvc->>PromptSvc: Build prompt
+    Note over PromptSvc: System instructions<br/>+ history + context<br/>+ guardrails
+    PromptSvc-->>OrchSvc: Full prompt
+
+    OrchSvc->>LLMSvc: Call LLM API (GPT-4o, streaming)
+    LLMSvc-->>TurnCtrl: Stream tokens (SSE)
+    TurnCtrl-->>User: Stream response
+
+    Note over OrchSvc: As tokens arrive
+    OrchSvc->>TurnRepo: Create assistant Turn
+    OrchSvc->>MessageRepo: Create Message record
+
+    OrchSvc->>MetricSvc: Log metrics
+    MetricSvc->>MetricRepo: Store token counts, latency, model
+
+    OrchSvc->>EventBus: Emit turn.completed<br/>{turnId, sessionId, metrics}
+
+    OrchSvc-->>TurnCtrl: Response complete
+    TurnCtrl-->>User: 200 OK
+
+---
+title: "Figure 7.2.7 - End Simulation Session"
+---
+
+sequenceDiagram
+    participant User
+    participant SessionGW as Session Gateway
+    participant SessionCtrl as Session Controller
+    participant OrchSvc as Orchestrator Service
+    participant SessionRepo as Session Repository
+    participant WebRTCSvc as WebRTC Service
+    participant CallRepo as Call Repository
+    participant RecordingSvc as Recording Service
+    participant StorageSvc as Storage Service
+    participant MediaRepo as Media Repository
+    participant RecordingRepo as Recording Repository
+    participant MetricRepo as Metric Repository
+    participant EventBus as Event Bus
+    participant FeedbackSvc as Feedback Service
+
+    User->>SessionGW: POST /sessions/{id}/end<br/>{reason?}
+    SessionGW->>SessionCtrl: Forward request
+
+    SessionCtrl->>SessionRepo: Validate session exists & active
+    alt Not found or already ended
+        SessionRepo-->>SessionCtrl: Error
+        SessionCtrl-->>User: 404/409 Error
+    end
+    SessionRepo-->>SessionCtrl: Session valid
+
+    SessionCtrl->>OrchSvc: End session
+    OrchSvc->>SessionRepo: Update session<br/>{status: "ended", endedReason, endedAt}
+
+    alt Call is active
+        OrchSvc->>WebRTCSvc: End call
+        WebRTCSvc->>CallRepo: Update CallSession<br/>{status: "ended"}
+
+        alt Recording was active
+            WebRTCSvc->>RecordingSvc: Stop recording
+            RecordingSvc->>RecordingSvc: Finalize media file
+            RecordingSvc->>StorageSvc: Upload to S3/MinIO
+            StorageSvc-->>RecordingSvc: Storage key
+
+            RecordingSvc->>MediaRepo: Create MediaAsset<br/>{storageKey, mimeType, size}
+            RecordingSvc->>RecordingRepo: Update Recording<br/>{assetId, duration}
+        end
+    end
+
+    OrchSvc->>MetricRepo: Calculate total tokens & duration
+    MetricRepo-->>OrchSvc: Usage summary
+
+    OrchSvc->>EventBus: Emit simulation.completed<br/>{sessionId, reason, duration, metrics}
+
+    alt Auto-feedback enabled
+        EventBus-->>FeedbackSvc: Trigger scorecard generation (async)
+    end
+
+    OrchSvc-->>SessionCtrl: Session summary
+    SessionCtrl-->>User: 200 OK<br/>{turns, duration, tokens}

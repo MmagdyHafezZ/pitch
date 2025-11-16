@@ -1,0 +1,69 @@
+%%{init: {'theme':'base', 'themeVariables': {
+  'primaryColor':'#ffffff',
+  'primaryTextColor':'#0d1117',
+  'primaryBorderColor':'#1565c0',
+  'lineColor':'#1976d2',
+  'secondaryColor':'#fef3c7',
+  'secondaryTextColor':'#1f2937',
+  'secondaryBorderColor':'#d97706',
+  'tertiaryColor':'#f3e8ff',
+  'tertiaryTextColor':'#111827',
+  'actorTextColor':'#0d1117',
+  'noteBkgColor':'#fffde7',
+  'noteTextColor':'#374151',
+  'mainBkg':'#ffffff',
+  'secondBkg':'#ffffff',
+  'tertiaryBkg':'#ffffff',
+  'edgeLabelBackground':'#ffffff'
+}}}%%
+
+
+sequenceDiagram
+    participant Client as User Client
+    participant WebRTCSvc as WebRTC Service
+    participant VADSvc as VAD Service
+    participant STTSvc as STT Service
+    participant OrchSvc as Orchestrator Service
+    participant TurnRepo as Turn Repository
+
+    Note over VADSvc: State machine states:<br/>Silence → Potential → Active → Trailing
+
+    loop During live voice call
+        Client->>WebRTCSvc: Audio chunk (20ms frame)
+        WebRTCSvc->>VADSvc: Forward audio frame
+
+        VADSvc->>VADSvc: Classify frame
+        Note over VADSvc: Use WebRTC VAD<br/>or Silero VAD
+
+        alt State: Silence
+            Note over VADSvc: No speech detected<br/>Buffering disabled
+        end
+
+        alt State: Potential Speech
+            Note over VADSvc: Short burst detected<br/>Start buffering
+        end
+
+        alt State: Active Speech
+            Note over VADSvc: Confirmed speech<br/>Buffer & forward to STT
+
+            VADSvc->>STTSvc: Signal speech start
+            VADSvc->>STTSvc: Stream audio buffers
+
+            Note over STTSvc: Real-time transcription
+
+            STTSvc-->>OrchSvc: Partial transcripts
+        end
+
+        alt State: Trailing Silence
+            Note over VADSvc: Silence > threshold (300ms)<br/>Speech ended
+
+            VADSvc->>STTSvc: Signal speech end
+            STTSvc-->>OrchSvc: Final transcription + timing
+
+            OrchSvc->>TurnRepo: Create Turn<br/>{text, audio ref}
+
+            Note over VADSvc: Return to Silence state
+        end
+    end
+
+    Note over VADSvc: Reduces STT processing<br/>and latency by only<br/>transcribing speech

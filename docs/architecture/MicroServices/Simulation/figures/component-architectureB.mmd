@@ -1,0 +1,115 @@
+%%{init: {'theme':'base', 'themeVariables': {
+  'primaryColor':'#ffffff',
+  'primaryTextColor':'#0d1117',
+  'primaryBorderColor':'#1565c0',
+  'lineColor':'#1976d2',
+  'secondaryColor':'#fef3c7',
+  'secondaryTextColor':'1f2937',
+  'secondaryBorderColor':'#d97706',
+  'tertiaryColor':'#f3e8ff',
+  'tertiaryTextColor':'#111827',
+  'actorTextColor':'0d1117',
+  'noteBkgColor':'#fffde7',
+  'noteTextColor':'374151',
+  'mainBkg':'#ffffff',
+  'secondBkg':'#ffffff',
+  'tertiaryBkg':'#ffffff',
+  'edgeLabelBackground':'#ffffff'
+}}}%%
+graph TB
+    %% Transcription & Enrichment (expands TranscriptionAnchor)
+    subgraph Transcription["Transcription & Enrichment"]
+        direction TB
+        TranscribeSvc[Transcribe Service<br/>Batch STT<br/>Diarization]
+        EnrichSvc[Enrichment Service<br/>NER, topics, sentiment]
+        IndexerSvc[Indexer Service<br/>Embeddings<br/>Vector indexing]
+    end
+
+    %% Feedback & Analytics (expands FeedbackAnchor)
+    subgraph Feedback["Feedback & Analytics"]
+        direction TB
+        FeedbackSvc[Feedback Service<br/>Auto-scoring<br/>Coaching tips]
+        RubricSvc[Rubric Service<br/>Criteria management<br/>Versioning]
+        BenchmarkSvc[Benchmark Service<br/>Team metrics<br/>Leaderboards]
+        ReportSvc[Report Service<br/>PDF generation<br/>Data export]
+    end
+
+    %% Data Access Layer (expands DataLayerAnchor)
+    subgraph DataLayer["Data Access Layer"]
+        direction LR
+        SessionRepo[(Session Repo)]
+        TurnRepo[(Turn Repo)]
+        MessageRepo[(Message Repo)]
+        TranscriptRepo[(Transcript Repo)]
+        ScoreRepo[(Score Repo)]
+        MediaRepo[(Media Repo)]
+        EmbeddingRepo[(Embedding Repo)]
+    end
+
+    %% Infrastructure Services (expands InfraAnchor)
+    subgraph Infrastructure["Infrastructure Services"]
+        direction TB
+        StorageSvc[Storage Service<br/>S3/MinIO<br/>Pre-signed URLs]
+        EventBus[Event Bus<br/>RabbitMQ<br/>Async workers]
+        CacheSvc[Cache Service<br/>Redis<br/>Session TTL]
+        DocStoreSvc[Document Store Service<br/>MongoDB<br/>Large artifacts<br/>Shared IDs]
+    end
+
+    %% Persistent Storage
+    subgraph Databases["Persistent Storage"]
+        direction LR
+        PostgresDB[(PostgreSQL + pgvector<br/><i>Relational spine</i>)]
+        MongoDB[(MongoDB<br/><i>Document & artifact views</i>)]
+        S3Storage[(S3/MinIO<br/><i>Media, large blobs</i>)]
+        RedisCache[(Redis<br/><i>Ephemeral cache</i>)]
+    end
+
+    %% External Providers used at this layer
+    subgraph ExternalAPIs["External AI / Media APIs"]
+        direction TB
+        OpenAI[OpenAI<br/>LLM]
+        WhisperAPI[Whisper<br/>STT]
+        ElevenLabs[ElevenLabs<br/>TTS]
+        AzureAPI[Azure Cognitive Services]
+    end
+
+    %% Wiring
+    Transcription --> DataLayer
+    Transcription --> Infrastructure
+    TranscribeSvc --> DocStoreSvc
+    EnrichSvc --> DocStoreSvc
+    IndexerSvc --> EmbeddingRepo
+
+    Feedback --> DataLayer
+    Feedback --> Infrastructure
+    FeedbackSvc --> DocStoreSvc
+    ReportSvc --> DocStoreSvc
+
+    DataLayer --> PostgresDB
+    DataLayer --> S3Storage
+    DataLayer --> RedisCache
+
+    StorageSvc --> S3Storage
+    DocStoreSvc --> MongoDB
+    CacheSvc --> RedisCache
+
+    EventBus -.-> Feedback
+    EventBus -.-> Transcription
+
+    %% External API usage at this tier (indirect from Orchestration/AI/Media)
+    Transcription -.-> WhisperAPI
+    Feedback -.-> OpenAI
+    Feedback -.-> AzureAPI
+    Transcription -.-> AzureAPI
+    Feedback -.-> ElevenLabs
+
+    %% Styles
+    classDef dataStyle fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px,color:#4a148c
+    classDef infraStyle fill:#e8f5e9,stroke:#43a047,stroke-width:2px,color:#2e7d32
+    classDef serviceStyle fill:#fff3e0,stroke:#fb8c00,stroke-width:2px,color:#e65100
+    classDef externalStyle fill:#fce4ec,stroke:#e91e63,stroke-width:2px,color:#880e4f
+
+    class TranscribeSvc,EnrichSvc,IndexerSvc,FeedbackSvc,RubricSvc,BenchmarkSvc,ReportSvc serviceStyle
+    class SessionRepo,TurnRepo,MessageRepo,TranscriptRepo,ScoreRepo,MediaRepo,EmbeddingRepo,PostgresDB,MongoDB,S3Storage,RedisCache dataStyle
+    class StorageSvc,EventBus,CacheSvc,DocStoreSvc infraStyle
+    class OpenAI,WhisperAPI,ElevenLabs,AzureAPI externalStyle

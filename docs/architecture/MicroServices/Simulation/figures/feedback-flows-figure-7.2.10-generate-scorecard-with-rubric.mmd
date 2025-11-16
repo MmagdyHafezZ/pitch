@@ -1,0 +1,110 @@
+%%{init: {'theme':'base', 'themeVariables': {
+  'primaryColor':'#ffffff',
+  'primaryTextColor':'#0d1117',
+  'primaryBorderColor':'#1565c0',
+  'lineColor':'#1976d2',
+  'secondaryColor':'#fef3c7',
+  'secondaryTextColor':'#1f2937',
+  'secondaryBorderColor':'#d97706',
+  'tertiaryColor':'#f3e8ff',
+  'tertiaryTextColor':'#111827',
+  'actorTextColor':'#0d1117',
+  'noteBkgColor':'#fffde7',
+  'noteTextColor':'#374151',
+  'mainBkg':'#ffffff',
+  'secondBkg':'#ffffff',
+  'tertiaryBkg':'#ffffff',
+  'edgeLabelBackground':'#ffffff'
+}}}%%
+
+
+
+sequenceDiagram
+    participant Admin as Admin Client
+    participant FeedbackGW as Feedback Gateway
+    participant FeedbackCtrl as Feedback Controller
+    participant SessionRepo as Session Repository
+    participant RubricSvc as Rubric Service
+    participant RubricRepo as Rubric Repository
+    participant FeedbackSvc as Feedback Service
+    participant TurnRepo as Turn Repository
+    participant MessageRepo as Message Repository
+    participant ScoringSvc as Scoring Service
+    participant LLMSvc as LLM Service
+    participant ScoreRepo as Score Repository (PostgreSQL)
+    participant DocStoreSvc as Document Store Service (MongoDB)
+    participant CoachingSvc as Coaching Service
+    participant BenchmarkSvc as Benchmark Service
+    participant BenchmarkRepo as Benchmark Repository
+    participant EventBus as Event Bus
+
+    Admin->>FeedbackGW: POST /feedback/score<br/>{sessionId, rubricId?}
+    FeedbackGW->>FeedbackCtrl: Forward request
+
+    FeedbackCtrl->>SessionRepo: Validate session ended
+    alt Session not ended
+        SessionRepo-->>FeedbackCtrl: Not complete
+        FeedbackCtrl-->>Admin: 409 Session Not Complete
+    end
+    SessionRepo-->>FeedbackCtrl: Session valid
+
+    alt rubricId provided
+        FeedbackCtrl->>RubricSvc: Retrieve rubric
+        RubricSvc->>RubricRepo: Get Rubric & Criterion records
+        alt Rubric not found
+            RubricRepo-->>RubricSvc: Not found
+            RubricSvc-->>FeedbackCtrl: 404 Rubric Not Found
+            FeedbackCtrl-->>Admin: 404 Error
+        end
+        RubricRepo-->>RubricSvc: Rubric & criteria
+    else No rubricId
+        FeedbackCtrl->>RubricSvc: Get default rubric for org
+        RubricSvc->>RubricRepo: Retrieve default
+        RubricRepo-->>RubricSvc: Default rubric
+    end
+    RubricSvc-->>FeedbackCtrl: Rubric ready
+
+    FeedbackCtrl->>FeedbackSvc: Generate scorecard
+    FeedbackSvc->>TurnRepo: Retrieve all turns
+    FeedbackSvc->>MessageRepo: Retrieve all messages
+    TurnRepo-->>FeedbackSvc: Turn history
+    MessageRepo-->>FeedbackSvc: Message history
+
+    loop For each Criterion
+        FeedbackSvc->>ScoringSvc: Evaluate session
+
+        alt LLM-based scoring
+            ScoringSvc->>LLMSvc: Generate score with reasoning
+            Note over LLMSvc: Analyze conversation<br/>Score 0-maxPoints<br/>(maxPoints from Criterion)
+            LLMSvc-->>ScoringSvc: Score + reasoning
+
+            Note over ScoringSvc: Create EvalArtifact stub in PostgreSQL<br/>Create EvalArtifactData in MongoDB<br/>(same id, full reasoning & metrics)
+
+            ScoringSvc->>ScoreRepo: Create EvalArtifact stub<br/>{id, sessionId, turnId, kind, score}
+            ScoringSvc->>DocStoreSvc: Create EvalArtifactData<br/>{_id: same id, data: {llmJudge, reasoning}}
+        else Rule-based scoring
+            Note over ScoringSvc: Pattern matching<br/>Keyword detection
+        end
+
+        Note over ScoringSvc: maxPoints derived from Criterion<br/>(not stored in ScoreItem)
+        ScoringSvc->>ScoreRepo: Create ScoreItem<br/>{criterionId, score, details}
+    end
+
+    Note over FeedbackSvc: Calculate totalScore<br/>(weighted sum)
+    FeedbackSvc->>ScoreRepo: Create Scorecard<br/>{sessionId, rubricId, totalScore, maxScore}
+    ScoreRepo-->>FeedbackSvc: Scorecard created {scorecardId}
+
+    FeedbackSvc->>CoachingSvc: Generate coaching tips
+    Note over CoachingSvc: Analyze low-scoring areas
+    CoachingSvc->>LLMSvc: Create coaching text
+    LLMSvc-->>CoachingSvc: Tips with excerpts
+
+    CoachingSvc->>ScoreRepo: Create CoachTip records<br/>{text, excerptRef, link}
+
+    FeedbackSvc->>BenchmarkSvc: Update team/org averages
+    BenchmarkSvc->>BenchmarkRepo: Update benchmarks
+
+    FeedbackSvc->>EventBus: Emit feedback.ready<br/>{scorecardId, sessionId}
+
+    FeedbackSvc-->>FeedbackCtrl: Scorecard complete
+    FeedbackCtrl-->>Admin: 200 OK<br/>{scorecardId, summary}

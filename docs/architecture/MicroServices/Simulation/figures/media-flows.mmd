@@ -1,0 +1,160 @@
+%%{init: {'theme':'base', 'themeVariables': {
+  'primaryColor':'#ffffff',
+  'primaryTextColor':'#0d1117',
+  'primaryBorderColor':'#1565c0',
+  'lineColor':'#1976d2',
+  'secondaryColor':'#fef3c7',
+  'secondaryTextColor':'#1f2937',
+  'secondaryBorderColor':'#d97706',
+  'tertiaryColor':'#f3e8ff',
+  'tertiaryTextColor':'#111827',
+  'actorTextColor':'#0d1117',
+  'noteBkgColor':'#fffde7',
+  'noteTextColor':'#374151',
+  'mainBkg':'#ffffff',
+  'secondBkg':'#ffffff',
+  'tertiaryBkg':'#ffffff',
+  'edgeLabelBackground':'#ffffff'
+}}}%%
+
+---
+title: "Figure 7.2.8 - Upload Real Call Recording"
+---
+
+sequenceDiagram
+    participant User
+    participant IngestGW as Ingestion Gateway
+    participant IngestCtrl as Ingest Controller
+    participant StorageSvc as Storage Service
+    participant MediaRepo as Media Repository
+    participant S3 as S3/MinIO Bucket
+    participant EventBus as Event Bus
+
+    User->>IngestGW: POST /ingest/upload/init<br/>{mimeType, sizeBytes}
+    IngestGW->>IngestCtrl: Forward request
+
+    IngestCtrl->>IngestCtrl: Validate file type & size
+    alt Invalid file
+        IngestCtrl-->>User: 400 Invalid File
+    end
+
+    IngestCtrl->>StorageSvc: Initialize upload
+    StorageSvc->>StorageSvc: Generate unique storageKey
+    StorageSvc->>MediaRepo: Create MediaAsset<br/>{status: "uploading"}
+    MediaRepo-->>StorageSvc: Asset created {assetId}
+
+    StorageSvc->>S3: Generate pre-signed multipart URLs
+    S3-->>StorageSvc: Upload URLs
+
+    StorageSvc-->>IngestCtrl: Upload details
+    IngestCtrl-->>User: 200 OK<br/>{assetId, uploadUrls[]}
+
+    loop For each part
+        User->>IngestGW: POST /ingest/upload/part<br/>{partNumber, contentRange}
+        IngestGW->>IngestCtrl: Forward part
+        IngestCtrl->>StorageSvc: Validate & store part
+        StorageSvc->>S3: Upload part
+        S3-->>StorageSvc: Part stored
+        StorageSvc-->>IngestCtrl: Part complete
+        IngestCtrl-->>User: 200 OK
+    end
+
+    User->>IngestGW: POST /ingest/upload/complete<br/>{assetId}
+    IngestGW->>IngestCtrl: Finalize upload
+
+    IngestCtrl->>StorageSvc: Complete multipart upload
+    StorageSvc->>S3: Combine all parts
+    S3-->>StorageSvc: File ready
+
+    StorageSvc->>MediaRepo: Update MediaAsset<br/>{status: "ready", generate signed URL}
+    MediaRepo-->>StorageSvc: Updated
+
+    StorageSvc->>EventBus: Emit media.ingested<br/>{assetId}
+
+    StorageSvc-->>IngestCtrl: Upload complete
+    IngestCtrl-->>User: 200 OK<br/>{assetId, confirmation}
+
+---
+title: "Figure 7.2.9 - Process Uploaded Recording (Transcription)"
+---
+
+sequenceDiagram
+    participant User
+    participant IngestGW as Ingestion Gateway
+    participant IngestCtrl as Ingest Controller
+    participant MediaRepo as Media Repository
+    participant JobRepo as IngestionJob Repository
+    participant Worker as Background Worker
+    participant StorageSvc as Storage Service
+    participant S3 as S3/MinIO
+    participant TranscribeSvc as Transcribe Service
+    participant STTAPI as Whisper/Azure STT
+    participant TranscriptRepo as Transcript Repository
+    participant DiarizeSvc as Diarization Service
+    participant SpeakerRepo as Speaker Repository
+    participant EnrichSvc as Enrichment Service
+    participant EnrichRepo as Enrichment Repository
+    participant IndexerSvc as Indexer Service
+    participant EmbeddingRepo as Embedding Repository (pgvector)
+    participant EventBus as Event Bus
+
+    User->>IngestGW: POST /ingest/jobs<br/>{assetId, pipeline: "transcribe_enrich"}
+    IngestGW->>IngestCtrl: Forward request
+
+    IngestCtrl->>MediaRepo: Validate asset exists
+    alt Asset not found
+        MediaRepo-->>IngestCtrl: Not found
+        IngestCtrl-->>User: 404 Asset Not Found
+    end
+    MediaRepo-->>IngestCtrl: Asset valid
+
+    IngestCtrl->>JobRepo: Create IngestionJob<br/>{status: "queued", pipeline}
+    JobRepo-->>IngestCtrl: Job created {jobId}
+
+    IngestCtrl-->>User: 200 OK (async)<br/>{jobId}
+
+    Note over Worker: Background worker picks up job
+
+    Worker->>JobRepo: Update job<br/>{status: "running", startedAt}
+
+    Worker->>StorageSvc: Retrieve media file
+    StorageSvc->>S3: Get file by storageKey
+    S3-->>StorageSvc: Media file
+    StorageSvc-->>Worker: File data
+
+    Worker->>TranscribeSvc: Process audio
+    TranscribeSvc->>STTAPI: Batch transcription<br/>(with diarization)
+    STTAPI-->>TranscribeSvc: Full transcript + speakers + timestamps
+
+    TranscribeSvc->>TranscriptRepo: Create Transcript<br/>{text, language}
+    TranscriptRepo-->>TranscribeSvc: Transcript created {transcriptId}
+
+    TranscribeSvc->>DiarizeSvc: Process speaker changes
+    DiarizeSvc->>SpeakerRepo: Create Speaker records
+    SpeakerRepo-->>DiarizeSvc: Speakers created
+
+    TranscribeSvc->>TranscriptRepo: Create TranscriptSegment records<br/>(linked to speakers)
+
+    alt Pipeline includes enrichment
+        Worker->>EnrichSvc: Process transcript
+
+        Note over EnrichSvc: NER: Extract entities<br/>(companies, products, people)
+
+        Note over EnrichSvc: Topic modeling:<br/>Extract main themes
+
+        Note over EnrichSvc: Sentiment analysis:<br/>Score emotional tone
+
+        EnrichSvc->>EnrichRepo: Create Enrichment<br/>{summary, topics, sentiment, entities}
+        EnrichRepo-->>EnrichSvc: Enrichment saved
+    end
+
+    Worker->>JobRepo: Update job<br/>{status: "completed", transcriptId, completedAt}
+
+    alt Pipeline is "full"
+        Worker->>IndexerSvc: Generate embeddings
+        Note over IndexerSvc: Use sentence transformer<br/>for each segment
+        IndexerSvc->>EmbeddingRepo: Store embeddings (pgvector)<br/>{namespace, refType, refId, vector}
+        EmbeddingRepo-->>IndexerSvc: Embeddings indexed
+    end
+
+    Worker->>EventBus: Emit analytics.updated<br/>{transcriptId, jobId}

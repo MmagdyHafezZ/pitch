@@ -10,14 +10,18 @@ import {
   getRabbitMQUrl,
   getQueueOptions,
 } from '../config/microservices.config';
+import {
+  getJwtSecret,
+  getJwtAccessExpiration,
+} from '../common/config/jwt.config';
 import { APP_GUARD } from '@nestjs/core';
 import { TeamGatewayController } from './controllers/userManagement/team-gateway.controller';
 
 @Module({
   imports: [
     JwtModule.register({
-      secret: process.env.JWT_SECRET || 'secret',
-      signOptions: { expiresIn: process.env.JWT_EXPIRES_IN || '15m' },
+      secret: getJwtSecret(),
+      signOptions: { expiresIn: getJwtAccessExpiration() },
     }),
     ClientsModule.register(
       MICROSERVICES_CONFIG.map(({ name, queue }) => ({
