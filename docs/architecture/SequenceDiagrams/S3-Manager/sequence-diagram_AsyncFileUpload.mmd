@@ -1,0 +1,24 @@
+sequenceDiagram
+    participant ProducerService as Other Microservice
+    participant RabbitMQ
+    participant FileService
+    participant S3Repository
+    participant AWSS3 as AWS S3
+
+    %% Step 1: Upload request event
+    ProducerService->>RabbitMQ: Publish "upload_request" message<br/>with file metadata
+    RabbitMQ-->>FileService: Deliver upload_request message
+
+    %% Step 2: Generate pre-signed upload URL
+    FileService->>S3Repository: Generate pre-signed URL for upload
+    S3Repository->>AWSS3: Request pre-signed URL
+    AWSS3-->>S3Repository: Return pre-signed URL
+    S3Repository-->>FileService: Return URL
+
+    %% Step 3: Perform upload
+    FileService->>AWSS3: PUT file using pre-signed URL
+    AWSS3-->>FileService: 200 OK — File uploaded successfully
+
+    %% Step 4: Publish completion event
+    FileService->>RabbitMQ: Publish "file_uploaded" event<br/>with file details
+    RabbitMQ-->>ProducerService: Notify upload completion
