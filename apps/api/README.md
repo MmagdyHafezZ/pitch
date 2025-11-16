@@ -7,7 +7,7 @@ The backend for the PITCH business management platform built with NestJS microse
 The API follows a microservices architecture with an API Gateway pattern:
 
 - **API Gateway** - Routes requests and handles JWT authentication (`src/gateway/`)
-- **User Microservice** - User management with PostgreSQL (`src/microservices/user/`)
+- **User Microservice** - User management with PostgreSQL (`src/microservices/userManagement/`)
 - **Business Microservice** - Business logic with MongoDB (`src/microservices/business/`)
 - **Authentication System** - JWT-based auth with access and refresh tokens
 
@@ -52,7 +52,7 @@ The API follows a microservices architecture with an API Gateway pattern:
 
    ```bash
    # User microservice (PostgreSQL)
-   cd src/microservices/user
+   cd src/microservices/userManagement
    npx prisma migrate dev
    npx prisma generate
 

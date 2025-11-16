@@ -67,7 +67,7 @@ cp .env.example .env
 # Edit database URLs and JWT secrets in .env
 
 # Run database migrations
-cd src/microservices/user
+cd src/microservices/userManagement
 npx prisma migrate dev
 npx prisma generate
 

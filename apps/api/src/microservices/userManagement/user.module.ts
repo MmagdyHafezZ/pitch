@@ -4,9 +4,11 @@ import { PassportModule } from '@nestjs/passport';
 import { UserController } from './controllers/user.controller';
 import { AuthController } from './controllers/auth.controller';
 import { OAuthController } from './controllers/oauth.controller';
+import { TeamController } from './controllers/team.controller';
 import { UserService } from './services/user.service';
 import { AuthService } from './services/auth.service';
 import { AuthApplicationService } from './services/auth-application.service';
+import { TeamService } from './services/team.service';
 import { UserPrismaService } from './prisma/user-prisma.service';
 import { UserRepository } from './repositories/user.repository';
 import { AuthRepository } from './repositories/auth.repository';
@@ -31,6 +33,7 @@ import { GoogleStrategy } from './strategies/google.strategy';
     // RPC Controllers (for gateway communication)
     UserController,
     AuthController,
+    TeamController,
     // HTTP Controllers (for OAuth callbacks only)
     OAuthController,
   ],
@@ -60,9 +63,12 @@ import { GoogleStrategy } from './strategies/google.strategy';
     // LinkedInStrategy,
     // MicrosoftStrategy,
     // DiscordStrategy,
+    TeamService,
+    TeamRepository,
   ],
   exports: [
     UserService,
+    TeamService,
     AuthService,
     AuthApplicationService,
     JwtAuthGuard,

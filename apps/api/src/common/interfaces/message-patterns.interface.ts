@@ -11,6 +11,14 @@ export const USER_SERVICE_PATTERNS = {
   VALIDATE_USER: 'auth.validateUser',
   OAUTH_GET_PROVIDERS: 'auth.oauth.getProviders',
   CHECK_EMAIL: 'auth.checkEmail',
+  CREATE_TEAM: 'create_team',
+  UPDATE_TEAM: 'update_team',
+  DELETE_TEAM: 'delete_team',
+  GET_TEAM: 'get_team',
+  GET_TEAMS: 'get_teams',
+  ADD_TEAM_MEMBER: 'add_team_member',
+  UPDATE_TEAM_MEMBER: 'update_team_member',
+  DELETE_TEAM_MEMBER: 'delete_team_member',
 } as const;
 
 export const BUSINESS_SERVICE_PATTERNS = {

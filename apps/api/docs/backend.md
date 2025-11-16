@@ -9,7 +9,7 @@ This guide covers the evolution from monolithic to microservices architecture in
 The PITCH API now follows a microservices architecture:
 
 - **API Gateway** - Centralized authentication and routing (`src/gateway/`)
-- **User Microservice** - PostgreSQL with Prisma (`src/microservices/user/`)
+- **User Microservice** - PostgreSQL with Prisma (`src/microservices/userManagement/`)
 - **Business Microservice** - MongoDB with Prisma (`src/microservices/business/`)
 - **RabbitMQ** - Message queue communication between services
 

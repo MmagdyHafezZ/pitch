@@ -66,7 +66,7 @@ All gateway controllers now require authentication:
 
 ### 4. Microservices with User Context
 
-**Location**: `src/microservices/user/` and `src/microservices/business/`
+**Location**: `src/microservices/userManagement/` and `src/microservices/business/`
 
 **Features**:
 

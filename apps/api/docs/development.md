@@ -7,7 +7,7 @@ This guide covers backend development for the PITCH application using NestJS mic
 The API is built using a microservices architecture with an API Gateway pattern:
 
 - **API Gateway** - Routes requests and handles authentication (`src/gateway/`)
-- **User Microservice** - User management (`src/microservices/user/`)
+- **User Microservice** - User management (`src/microservices/userManagement/`)
 - **Business Microservice** - Business logic (`src/microservices/business/`)
 - **Authentication System** - JWT-based auth with refresh tokens
 
@@ -137,7 +137,7 @@ Each microservice has its own Prisma schema:
 
 ```bash
 # User microservice migrations
-cd src/microservices/user
+cd src/microservices/userManagement
 npx prisma migrate dev
 npx prisma generate
 
@@ -152,7 +152,7 @@ npx prisma generate
 Each microservice includes a Prisma service:
 
 ```typescript
-// src/microservices/user/user-prisma.service.ts
+// src/microservices/userManagement/user-prisma.service.ts
 @Injectable()
 export class UserPrismaService extends PrismaClient implements OnModuleInit {
   async onModuleInit() {
@@ -453,7 +453,7 @@ curl http://localhost:8000/health
 
 ```bash
 # Test database connectivity
-npx prisma studio --schema=./src/microservices/user/prisma/schema.prisma
+npx prisma studio --schema=./src/microservices/userManagement/prisma/schema.prisma
 
 # Check migrations status
 npx prisma migrate status

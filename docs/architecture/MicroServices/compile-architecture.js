@@ -3,7 +3,7 @@
 const fs = require('fs')
 const path = require('path')
 
-const MICROSERVICES_DIR = '/Users/magdyhafez/Personal/PITCH/docs/architecture/MicroServices'
+const MICROSERVICES_DIR = './'
 const OUTPUT_FILE = path.join(MICROSERVICES_DIR, 'overall-architecture.mmd')
 const SIMPLE_OUTPUT_FILE = path.join(MICROSERVICES_DIR, 'simple-overall-architecture.mmd')
 

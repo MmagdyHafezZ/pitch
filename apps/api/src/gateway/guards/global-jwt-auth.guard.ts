@@ -8,7 +8,7 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
-import { IS_PUBLIC_KEY } from '../../microservices/user/decorators/public.decorator';
+import { IS_PUBLIC_KEY } from '../../microservices/userManagement/decorators/public.decorator';
 import { isWhitelistedRoute } from '../config/auth-whitelist.config';
 import type { ServiceError } from '../../common/interfaces/error.interface';
 import type {

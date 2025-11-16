@@ -72,7 +72,7 @@ PITCH/
 
    ```bash
    # User microservice (PostgreSQL)
-   cd apps/api/src/microservices/user
+   cd apps/api/src/microservices/userManagement
    npx prisma migrate dev
 
    # Business microservice (MongoDB)

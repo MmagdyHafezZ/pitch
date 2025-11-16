@@ -135,49 +135,94 @@ flowchart LR
 
             subgraph AnalyticsMS["🔬 Analytics"]
                 direction TB
-            %% Identity & Plans Microservice
-            subgraph IdentityPlans["Identity & Plans Microservice"]
+          subgraph Analytics["Analytics Microservice"]
+            direction TB
 
-                subgraph AnalyticsAPI["API Gateways"]
-
-                end
-
-                subgraph AnalyticsCTRL["Controllers"]
-
-                end
-
-                subgraph AnalyticsSVC["Services"]
-
-                end
-
-                subgraph AnalyticsREPO["Repositories"]
-
-                end
-
-                subgraph AnalyticsTable["Tables"]
-
-                end
+            subgraph AnalyticsAPI["API Gateways"]
+              G1[Managers API]
+              G2[Users API]
+              G3[Ingest/Webhooks API]
             end
 
-            %% External Event Bus
-            SharedRabbitMQ[RabbitMQ Event Bus]
+            subgraph AnalyticsCTRL["Controllers"]
+              C1[ManagerMetricsController]
+              C2[LeaderboardController]
+              C3[TokenController]
+              C4[UserMetricsController]
+              C5[IngestController]
+            end
 
-            %% Shared Cache Cluster
-            SharedRedis[(Shared Redis Cluster)]
+            subgraph AnalyticsSVC["Services"]
+              S1[Aggregation Service\nsessions, usage, scores]
+              S2[Leaderboard Service]
+              S3[Token Monitor Service\nmodel key expiry/usage]
+              S4[Sessionization Service]
+              S5[Usage Service\ntokens, costs]
+            end
 
-            %% Other Microservices
+            subgraph AnalyticsREPO["Repositories"]
+              R1[Metrics Repository]
+              R2[Leaderboard Repository]
+              R3[Token Repository]
+              R4[Session Repository]
+              R5[Directory Repository\norg/team/user mirror]
+            end
 
+            subgraph TBL["Tables"]
+              T1[dim_org]
+              T2[dim_team]
+              T3[dim_user]
+              T4[fact_session]
+              T5[fact_ai_usage]
+              T6[fact_scores]
+              T7[agg_daily_scope]
+              T8[agg_leaderboard]
+              T9[model_keys]
+            end
+          end
 
-            %% Internal Flows
-            %% Updated for automated compilation
+          %% Shared Infra (declare each on its own line)
+          MQ[[RabbitMQ Event Bus]]
+          REDIS[(Shared Redis Cluster)]
 
-            %% Redis Usage (namespaced keys per service)
+          %% Flows
+          G1-->C1
+          G1-->C2
+          G1-->C3
+          G2-->C4
+          G3-->C5
 
+          C1-->S1
+          C2-->S2
+          C3-->S3
+          C4-->S1
+          C5-->S4
+          C5-->S5
 
-            %% Event Publishing
+          S1-->R1
+          S2-->R2
+          S3-->R3
+          S4-->R4
+          S5-->R1
 
-            %% Event Consumption
+          R1-->T7
+          R2-->T8
+          R3-->T9
+          R4-->T4
+          R5-->T1
+          R5-->T2
+          R5-->T3
+          S5-->T5
+          S1-->T6
 
+          %% Caching & Events
+          S1---REDIS
+          S2---REDIS
+          S3---REDIS
+
+          MQ-->S4
+          MQ-->S5
+          S1-->MQ
 
             end
 
@@ -439,6 +484,9 @@ flowchart LR
     AnalyticsMS -.-> SharedRedis
     AnalyticsMS -.-> SharedRabbitMQ
     AnalyticsMS -.-> Logger
+    CRMMS -.-> SharedRedis
+    CRMMS -.-> SharedRabbitMQ
+    CRMMS -.-> Logger
     LTI-AdvantageMS -.-> SharedRedis
     LTI-AdvantageMS -.-> SharedRabbitMQ
     LTI-AdvantageMS -.-> Logger
