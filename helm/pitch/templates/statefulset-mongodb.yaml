@@ -1,0 +1,95 @@
+{{- if .Values.mongodb.enabled -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "pitch.fullname" . }}-mongodb
+  labels:
+    {{- include "pitch.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mongodb
+spec:
+  ports:
+  - port: {{ .Values.mongodb.service.port }}
+    name: mongodb
+  clusterIP: None
+  selector:
+    {{- include "pitch.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: mongodb
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "pitch.fullname" . }}-mongodb
+  labels:
+    {{- include "pitch.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mongodb
+spec:
+  serviceName: {{ include "pitch.fullname" . }}-mongodb
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "pitch.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: mongodb
+  template:
+    metadata:
+      labels:
+        {{- include "pitch.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: mongodb
+    spec:
+      containers:
+      - name: mongodb
+        image: {{ .Values.mongodb.image.registry }}/{{ .Values.mongodb.image.repository }}:{{ .Values.mongodb.image.tag }}
+        env:
+        - name: MONGO_INITDB_ROOT_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.secrets.existingSecret | default (printf "%s-secrets" (include "pitch.fullname" .)) }}
+              key: mongodb-root-user
+        - name: MONGO_INITDB_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.secrets.existingSecret | default (printf "%s-secrets" (include "pitch.fullname" .)) }}
+              key: mongodb-root-password
+        - name: MONGO_INITDB_DATABASE
+          value: {{ .Values.mongodb.auth.database | quote }}
+        ports:
+        - containerPort: {{ .Values.mongodb.service.port }}
+          name: mongodb
+        livenessProbe:
+          exec:
+            command:
+            - mongosh
+            - --eval
+            - "db.adminCommand('ping')"
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          exec:
+            command:
+            - mongosh
+            - --eval
+            - "db.adminCommand('ping')"
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        volumeMounts:
+        - name: data
+          mountPath: /data/db
+        resources:
+          {{- toYaml .Values.mongodb.resources | nindent 12 }}
+  {{- if .Values.mongodb.persistence.enabled }}
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      {{- if .Values.global.storageClass }}
+      storageClassName: {{ .Values.global.storageClass | quote }}
+      {{- end }}
+      resources:
+        requests:
+          storage: {{ .Values.mongodb.persistence.size }}
+  {{- else }}
+  volumes:
+  - name: data
+    emptyDir: {}
+  {{- end }}
+{{- end }}

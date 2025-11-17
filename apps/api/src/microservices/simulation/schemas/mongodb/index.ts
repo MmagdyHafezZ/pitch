@@ -19,6 +19,8 @@
 export {
   EnrichedTranscriptSchema,
   EnrichedTranscriptModel,
+} from './enriched-transcript.schema';
+export type {
   IEnrichedTranscript,
   ITranscriptSegment,
   ISpeaker,
@@ -28,20 +30,17 @@ export {
 export {
   EvalArtifactDataSchema,
   EvalArtifactDataModel,
-  IEvalArtifactData,
 } from './eval-artifact-data.schema';
+export type { IEvalArtifactData } from './eval-artifact-data.schema';
 
-export { EventLogSchema, EventLogModel, IEventLog } from './event-log.schema';
+export { EventLogSchema, EventLogModel } from './event-log.schema';
+export type { IEventLog } from './event-log.schema';
 
-export {
-  LLMTraceSchema,
-  LLMTraceModel,
-  ILLMTrace,
-  ILLMMessage,
-} from './llm-trace.schema';
+export { LLMTraceSchema, LLMTraceModel } from './llm-trace.schema';
+export type { ILLMTrace, ILLMMessage } from './llm-trace.schema';
 
 export {
   ReportSnapshotSchema,
   ReportSnapshotModel,
-  IReportSnapshot,
 } from './report-snapshot.schema';
+export type { IReportSnapshot } from './report-snapshot.schema';

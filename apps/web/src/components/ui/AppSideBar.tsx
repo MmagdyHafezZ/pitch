@@ -10,9 +10,12 @@ import {
   IconUserCog,
   IconHelp,
   IconSettings,
+  IconDoorExit,
+  IconDoorEnter,
 } from '@tabler/icons-react'
 import { Dispatch, SetStateAction } from 'react'
 import dayjs from 'dayjs'
+import { useAuth } from '@/features/auth'
 
 export type SidebarLink = { icon: React.ComponentType<{ size?: number }>; label: string }
 
@@ -36,6 +39,7 @@ const DEFAULT_MAIN: SidebarLink[] = [
 const DEFAULT_SECONDARY: SidebarLink[] = [
   { icon: IconHelp, label: 'Support' },
   { icon: IconSettings, label: 'Settings' },
+  { icon: IconDoorEnter, label: 'Logout' },
 ]
 function startOfWeek(d: Date) {
   const day = d.getDay()
@@ -74,6 +78,7 @@ export function AppSidebar({
   mainLinks = DEFAULT_MAIN,
   secondaryLinks = DEFAULT_SECONDARY,
 }: Props) {
+  const { logout } = useAuth()
   return (
     <Box
       style={{
@@ -184,6 +189,13 @@ export function AppSidebar({
           {secondaryLinks.map(({ icon: Icon, label }) => (
             <NavLink
               key={label}
+              onClick={async () => {
+                if (label === 'Logout') {
+                  await logout()
+                } else {
+                  setActive(label)
+                }
+              }}
               leftSection={<Icon size={18} />}
               label={
                 <Text size="sm" fw={600} style={{ fontSize: 14 }}>

@@ -71,13 +71,12 @@ export class AuthApplicationService {
         id: user.id,
         email: user.email,
         name: user.name,
-        avatar: user.avatar,
         isActive: user.isActive,
         createdAt: user.createdAt,
         updatedAt: user.updatedAt,
       },
-      access_token: tokens.access_token,
-      refresh_token: tokens.refresh_token,
+      token: tokens.access_token,
+      refreshToken: tokens.refresh_token,
     };
   }
 
@@ -122,13 +121,12 @@ export class AuthApplicationService {
         id: user.id,
         email: user.email,
         name: user.name,
-        avatar: user.avatar,
         isActive: user.isActive,
         createdAt: user.createdAt,
         updatedAt: user.updatedAt,
       },
-      access_token: tokens.access_token,
-      refresh_token: tokens.refresh_token,
+      token: tokens.access_token,
+      refreshToken: tokens.refresh_token,
     };
   }
 
@@ -311,13 +309,13 @@ export class AuthApplicationService {
         id: user.id,
         email: user.email,
         name: user.name,
-        avatar: user.avatar,
+        avatar: user.avatar ?? undefined,
         isActive: user.isActive,
         createdAt: user.createdAt,
         updatedAt: user.updatedAt,
       },
-      access_token: tokens.access_token,
-      refresh_token: tokens.refresh_token,
+      token: tokens.access_token,
+      refreshToken: tokens.refresh_token,
     };
   }
 

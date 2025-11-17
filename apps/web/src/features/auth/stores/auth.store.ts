@@ -100,6 +100,8 @@ export const useAuthStore = create<AuthStore>()(
         // Remove token from localStorage
         clearAuthToken()
 
+        window.location.href = '/auth/login'
+
         // Optionally call logout endpoint
         api.auth.logout().catch(() => {
           // Ignore logout errors

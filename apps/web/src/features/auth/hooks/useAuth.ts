@@ -87,6 +87,9 @@ export const useAuth = () => {
   const logout = async () => {
     try {
       await logoutMutation.mutateAsync()
+      setUser(null)
+      setToken(null)
+      clearError()
     } catch (error) {
       // Log error but don't prevent logout
       console.error('Logout error:', error)

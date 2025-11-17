@@ -28,7 +28,7 @@ export interface ILLMTrace extends Document {
 
   // LLM provider and model
   provider: string; // "openai" | "anthropic" | "azure" | "custom"
-  model: string; // "gpt-4" | "claude-3-opus" | etc.
+  llmModel: string; // "gpt-4" | "claude-3-opus" | etc.
   modelVersion?: string;
 
   // Request data
@@ -112,7 +112,7 @@ export const LLMTraceSchema = new Schema<ILLMTrace>(
     messageId: { type: String, index: true },
 
     provider: { type: String, required: true, index: true },
-    model: { type: String, required: true, index: true },
+    llmModel: { type: String, required: true, index: true },
     modelVersion: { type: String },
 
     request: {
@@ -206,7 +206,7 @@ export const LLMTraceSchema = new Schema<ILLMTrace>(
 
 // Indexes for common queries and analytics
 LLMTraceSchema.index({ sessionId: 1, createdAt: -1 });
-LLMTraceSchema.index({ provider: 1, model: 1 });
+LLMTraceSchema.index({ provider: 1, llmModel: 1 });
 LLMTraceSchema.index({ 'context.orgId': 1, createdAt: -1 });
 LLMTraceSchema.index({ 'context.purpose': 1 });
 LLMTraceSchema.index({ 'usage.totalTokens': -1 });

@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "pitch.fullname" . }}-config
+  labels:
+    {{- include "pitch.labels" . | nindent 4 }}
+data:
+  NODE_ENV: "production"
+  REDIS_URL: {{ include "pitch.redis.connectionString" . | quote }}
+  JWT_ACCESS_EXPIRATION: {{ .Values.secrets.jwtAccessExpiration | quote }}
+  JWT_REFRESH_EXPIRATION: {{ .Values.secrets.jwtRefreshExpiration | quote }}
+  AWS_REGION: {{ .Values.secrets.awsRegion | quote }}
