@@ -1,68 +1,83 @@
-# Build stage
-FROM node:20-alpine AS base
+# =============================================================================
+# Single Dockerfile for all PITCH Microservices
+# Builds once, runs any service via SERVICE_NAME environment variable
+# =============================================================================
 
-# Install dependencies only when needed
-FROM base AS deps
+# Base image
+FROM node:20-alpine AS base
 RUN apk add --no-cache libc6-compat openssl
 WORKDIR /app
-
-# Install pnpm
 RUN corepack enable pnpm
 
-# Copy workspace files
+# =============================================================================
+# Dependencies - Install all project dependencies
+# =============================================================================
+FROM base AS deps
+
+# Copy workspace configuration
 COPY pnpm-workspace.yaml ./
 COPY package.json pnpm-lock.yaml ./
+COPY turbo.json ./
+
+# Copy all package.json files
 COPY apps/api/package.json ./apps/api/
 COPY packages/*/package.json ./packages/
 
-# Install dependencies
+# Install all dependencies
 RUN pnpm install --frozen-lockfile
 
-# Rebuild the source code only when needed
+# =============================================================================
+# Builder - Generate Prisma clients and build all microservices
+# =============================================================================
 FROM base AS builder
-WORKDIR /app
 
-RUN apk add --no-cache openssl
-
-# Install pnpm
-RUN corepack enable pnpm
-
-# Copy node_modules from deps stage
+# Copy dependencies from deps stage
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/apps/api/node_modules ./apps/api/node_modules
 
-# Copy source code
+# Copy all source code
 COPY . .
 
-# Generate Prisma clients for all microservices
+# Generate all Prisma clients
 RUN cd apps/api && pnpm run db:generate:all
 
-# Build the application
+# Build all microservices (single build command)
 RUN cd apps/api && pnpm build
 
-# Production image
+# =============================================================================
+# Runner - Production image that can run any microservice
+# =============================================================================
 FROM base AS runner
-WORKDIR /app
-
-RUN apk add --no-cache openssl
 
 ENV NODE_ENV=production
 
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nestjs
+# Create non-root user
+RUN addgroup --system --gid 1001 nodejs && \
+    adduser --system --uid 1001 nestjs
 
-# Copy the built application
-COPY --from=builder --chown=nestjs:nodejs /app/apps/api/dist ./apps/api/dist
-COPY --from=builder --chown=nestjs:nodejs /app/apps/api/node_modules ./apps/api/node_modules
-COPY --from=builder --chown=nestjs:nodejs /app/apps/api/package.json ./apps/api/
-COPY --from=builder --chown=nestjs:nodejs /app/apps/api/src/microservices/*/prisma/generated ./apps/api/src/microservices/
-COPY --from=builder --chown=nestjs:nodejs /app/node_modules ./node_modules
+# Copy workspace files
 COPY --from=builder --chown=nestjs:nodejs /app/package.json ./
+COPY --from=builder --chown=nestjs:nodejs /app/node_modules ./node_modules
+
+# Copy API package
+COPY --from=builder --chown=nestjs:nodejs /app/apps/api/package.json ./apps/api/
+
+# Copy ALL built microservices (single dist folder)
+COPY --from=builder --chown=nestjs:nodejs /app/apps/api/dist ./apps/api/dist
+
+# Copy Prisma client generated files
+COPY --from=builder --chown=nestjs:nodejs /app/node_modules/@prisma ./node_modules/@prisma
+
+# Copy Prisma schemas (needed for migrations)
+COPY --from=builder --chown=nestjs:nodejs /app/apps/api/src/microservices/*/prisma ./apps/api/src/microservices/
 
 USER nestjs
-
-EXPOSE 8000
-
 WORKDIR /app/apps/api
 
-CMD ["node", "dist/main.js"]
+# Default to gateway if SERVICE_NAME not specified
+ENV SERVICE_NAME=gateway
+
+# Smart CMD that runs the appropriate entry point based on SERVICE_NAME
+# - gateway: dist/main.js
+# - user|simulation|support|analytics|lti|s3: dist/src/microservices/${SERVICE_NAME}/main.js
+CMD ["sh", "-c", "if [ \"$SERVICE_NAME\" = \"gateway\" ]; then node dist/main.js; else node dist/src/microservices/${SERVICE_NAME}/main.js; fi"]
