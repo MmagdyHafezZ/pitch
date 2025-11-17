@@ -1,0 +1,227 @@
+{{- if .Values.support.enabled -}}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "pitch.fullname" . }}-support
+  labels:
+    {{- include "pitch.labels" . | nindent 4 }}
+    app.kubernetes.io/component: support
+spec:
+  {{- if not .Values.support.autoscaling.enabled }}
+  replicas: {{ .Values.support.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "pitch.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: support
+  template:
+    metadata:
+      labels:
+        {{- include "pitch.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: support
+    spec:
+      serviceAccountName: {{ include "pitch.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+      - name: support
+        image: {{ include "pitch.image" . }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        env:
+        - name: SERVICE_NAME
+          value: {{ .Values.support.serviceName | quote }}
+        - name: SUPPORT_DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.secrets.existingSecret | default (printf "%s-secrets" (include "pitch.fullname" .)) }}
+              key: support-database-url
+        - name: REDIS_URL
+          value: {{ include "pitch.redis.connectionString" . | quote }}
+        - name: RABBITMQ_URL
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.secrets.existingSecret | default (printf "%s-secrets" (include "pitch.fullname" .)) }}
+              key: rabbitmq-url
+        resources:
+          {{- toYaml .Values.support.resources | nindent 12 }}
+{{- end }}
+
+{{- if .Values.analytics.enabled -}}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "pitch.fullname" . }}-analytics
+  labels:
+    {{- include "pitch.labels" . | nindent 4 }}
+    app.kubernetes.io/component: analytics
+spec:
+  {{- if not .Values.analytics.autoscaling.enabled }}
+  replicas: {{ .Values.analytics.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "pitch.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: analytics
+  template:
+    metadata:
+      labels:
+        {{- include "pitch.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: analytics
+    spec:
+      serviceAccountName: {{ include "pitch.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+      - name: analytics
+        image: {{ include "pitch.image" . }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        env:
+        - name: SERVICE_NAME
+          value: {{ .Values.analytics.serviceName | quote }}
+        - name: ANALYTICS_DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.secrets.existingSecret | default (printf "%s-secrets" (include "pitch.fullname" .)) }}
+              key: analytics-database-url
+        - name: REDIS_URL
+          value: {{ include "pitch.redis.connectionString" . | quote }}
+        - name: RABBITMQ_URL
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.secrets.existingSecret | default (printf "%s-secrets" (include "pitch.fullname" .)) }}
+              key: rabbitmq-url
+        resources:
+          {{- toYaml .Values.analytics.resources | nindent 12 }}
+{{- end }}
+
+{{- if .Values.lti.enabled -}}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "pitch.fullname" . }}-lti
+  labels:
+    {{- include "pitch.labels" . | nindent 4 }}
+    app.kubernetes.io/component: lti
+spec:
+  {{- if not .Values.lti.autoscaling.enabled }}
+  replicas: {{ .Values.lti.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "pitch.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: lti
+  template:
+    metadata:
+      labels:
+        {{- include "pitch.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: lti
+    spec:
+      serviceAccountName: {{ include "pitch.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+      - name: lti
+        image: {{ include "pitch.image" . }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        env:
+        - name: SERVICE_NAME
+          value: {{ .Values.lti.serviceName | quote }}
+        - name: LTI_DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.secrets.existingSecret | default (printf "%s-secrets" (include "pitch.fullname" .)) }}
+              key: lti-database-url
+        - name: REDIS_URL
+          value: {{ include "pitch.redis.connectionString" . | quote }}
+        - name: RABBITMQ_URL
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.secrets.existingSecret | default (printf "%s-secrets" (include "pitch.fullname" .)) }}
+              key: rabbitmq-url
+        - name: LTI_PLATFORM_URL
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.secrets.existingSecret | default (printf "%s-secrets" (include "pitch.fullname" .)) }}
+              key: lti-platform-url
+              optional: true
+        - name: LTI_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.secrets.existingSecret | default (printf "%s-secrets" (include "pitch.fullname" .)) }}
+              key: lti-client-id
+              optional: true
+        resources:
+          {{- toYaml .Values.lti.resources | nindent 12 }}
+{{- end }}
+
+{{- if .Values.s3.enabled -}}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "pitch.fullname" . }}-s3
+  labels:
+    {{- include "pitch.labels" . | nindent 4 }}
+    app.kubernetes.io/component: s3
+spec:
+  {{- if not .Values.s3.autoscaling.enabled }}
+  replicas: {{ .Values.s3.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "pitch.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: s3
+  template:
+    metadata:
+      labels:
+        {{- include "pitch.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: s3
+    spec:
+      serviceAccountName: {{ include "pitch.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+      - name: s3
+        image: {{ include "pitch.image" . }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        env:
+        - name: SERVICE_NAME
+          value: {{ .Values.s3.serviceName | quote }}
+        - name: S3_DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.secrets.existingSecret | default (printf "%s-secrets" (include "pitch.fullname" .)) }}
+              key: s3-database-url
+        - name: REDIS_URL
+          value: {{ include "pitch.redis.connectionString" . | quote }}
+        - name: RABBITMQ_URL
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.secrets.existingSecret | default (printf "%s-secrets" (include "pitch.fullname" .)) }}
+              key: rabbitmq-url
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.secrets.existingSecret | default (printf "%s-secrets" (include "pitch.fullname" .)) }}
+              key: aws-access-key-id
+              optional: true
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.secrets.existingSecret | default (printf "%s-secrets" (include "pitch.fullname" .)) }}
+              key: aws-secret-access-key
+              optional: true
+        - name: AWS_REGION
+          value: {{ .Values.secrets.awsRegion | quote }}
+        - name: AWS_S3_BUCKET
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.secrets.existingSecret | default (printf "%s-secrets" (include "pitch.fullname" .)) }}
+              key: aws-s3-bucket
+              optional: true
+        resources:
+          {{- toYaml .Values.s3.resources | nindent 12 }}
+{{- end }}

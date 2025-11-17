@@ -1,0 +1,132 @@
+████████████████████████████████████████████████████████████████████████████████
+█                                                                              █
+█   ██████╗ ██╗████████╗ ██████╗██╗  ██╗                                     █
+█   ██╔══██╗██║╚══██╔══╝██╔════╝██║  ██║                                     █
+█   ██████╔╝██║   ██║   ██║     ███████║                                     █
+█   ██╔═══╝ ██║   ██║   ██║     ██╔══██║                                     █
+█   ██║     ██║   ██║   ╚██████╗██║  ██║                                     █
+█   ╚═╝     ╚═╝   ╚═╝    ╚═════╝╚═╝  ╚═╝                                     █
+█                                                                              █
+█   AI-Powered Business Management & Simulation Platform                      █
+█                                                                              █
+████████████████████████████████████████████████████████████████████████████████
+
+Thank you for installing {{ .Chart.Name }} version {{ .Chart.Version }}!
+
+Your release is named: {{ .Release.Name }}
+Deployed to namespace: {{ .Release.Namespace }}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🚀 MICROSERVICES DEPLOYED
+
+The following microservices have been deployed:
+
+{{- if .Values.gateway.enabled }}
+  ✅ API Gateway         ({{ .Values.gateway.replicaCount }} replicas)
+{{- end }}
+{{- if .Values.user.enabled }}
+  ✅ User Service        ({{ .Values.user.replicaCount }} replicas)
+{{- end }}
+{{- if .Values.simulation.enabled }}
+  ✅ Simulation Service  ({{ .Values.simulation.replicaCount }} replicas)
+{{- end }}
+{{- if .Values.support.enabled }}
+  ✅ Support Service     ({{ .Values.support.replicaCount }} replicas)
+{{- end }}
+{{- if .Values.analytics.enabled }}
+  ✅ Analytics Service   ({{ .Values.analytics.replicaCount }} replicas)
+{{- end }}
+{{- if .Values.lti.enabled }}
+  ✅ LTI Service         ({{ .Values.lti.replicaCount }} replicas)
+{{- end }}
+{{- if .Values.s3.enabled }}
+  ✅ S3 Service          ({{ .Values.s3.replicaCount }} replicas)
+{{- end }}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🗄️  INFRASTRUCTURE
+
+{{- if .Values.postgresql.enabled }}
+  ✅ PostgreSQL databases (6 instances)
+{{- end }}
+{{- if .Values.mongodb.enabled }}
+  ✅ MongoDB (for Simulation service)
+{{- end }}
+{{- if .Values.redis.enabled }}
+  ✅ Redis (shared cache)
+{{- end }}
+{{- if .Values.rabbitmq.enabled }}
+  ✅ RabbitMQ (message broker)
+{{- end }}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📡 ACCESS YOUR SERVICES
+
+{{- if .Values.ingress.enabled }}
+{{- range .Values.ingress.hosts }}
+
+API Gateway:
+  https://{{ .host }}
+{{- end }}
+{{- else }}
+
+To access the API Gateway, run:
+  kubectl port-forward svc/{{ include "pitch.fullname" . }}-gateway {{ .Values.gateway.service.port }}:{{ .Values.gateway.service.port }} -n {{ .Release.Namespace }}
+
+Then visit: http://localhost:{{ .Values.gateway.service.port }}
+{{- end }}
+
+RabbitMQ Management UI:
+  kubectl port-forward svc/{{ include "pitch.fullname" . }}-rabbitmq 15672:15672 -n {{ .Release.Namespace }}
+  Then visit: http://localhost:15672
+  Username: {{ .Values.rabbitmq.auth.username }}
+  Password: <from secret>
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🔧 NEXT STEPS
+
+1. Check deployment status:
+   kubectl get pods -n {{ .Release.Namespace }}
+
+2. View logs for a specific service:
+   kubectl logs -f deployment/{{ include "pitch.fullname" . }}-gateway -n {{ .Release.Namespace }}
+
+3. Run database migrations:
+   kubectl exec -it deployment/{{ include "pitch.fullname" . }}-user -n {{ .Release.Namespace }} -- \
+     sh -c "cd apps/api && npx prisma migrate deploy"
+
+4. Monitor with:
+   kubectl get all -n {{ .Release.Namespace }}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📚 DOCUMENTATION
+
+  Helm Chart: https://github.com/yourorg/pitch/tree/main/helm/pitch
+  API Docs:    https://docs.pitch.com
+  Support:     https://support.pitch.com
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+⚠️  IMPORTANT REMINDERS
+
+{{- if not .Values.secrets.existingSecret }}
+  ⚠️  Using auto-generated secrets. For production, create a Kubernetes secret
+      and set secrets.existingSecret in values.yaml
+{{- end }}
+
+{{- if not .Values.ingress.tls }}
+  ⚠️  TLS is not configured. Enable ingress.tls for HTTPS
+{{- end }}
+
+{{- if not .Values.postgresql.user.persistence.enabled }}
+  ⚠️  PostgreSQL persistence is disabled. Data will be lost on pod restart!
+{{- end }}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Happy Building! 🚀

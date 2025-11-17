@@ -1,0 +1,101 @@
+{{- range $service := list "user" "simulation" "support" "analytics" "lti" "s3" }}
+{{- $config := index $.Values.postgresql $service }}
+{{- if $config.enabled }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "pitch.fullname" $ }}-postgres-{{ $service }}
+  labels:
+    {{- include "pitch.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: postgres-{{ $service }}
+spec:
+  ports:
+  - port: 5432
+    name: postgres
+  clusterIP: None
+  selector:
+    {{- include "pitch.selectorLabels" $ | nindent 4 }}
+    app.kubernetes.io/component: postgres-{{ $service }}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "pitch.fullname" $ }}-postgres-{{ $service }}
+  labels:
+    {{- include "pitch.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: postgres-{{ $service }}
+spec:
+  serviceName: {{ include "pitch.fullname" $ }}-postgres-{{ $service }}
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "pitch.selectorLabels" $ | nindent 6 }}
+      app.kubernetes.io/component: postgres-{{ $service }}
+  template:
+    metadata:
+      labels:
+        {{- include "pitch.selectorLabels" $ | nindent 8 }}
+        app.kubernetes.io/component: postgres-{{ $service }}
+    spec:
+      containers:
+      - name: postgres
+        image: {{ $.Values.postgresql.image.registry }}/{{ $.Values.postgresql.image.repository }}:{{ $.Values.postgresql.image.tag }}
+        env:
+        - name: POSTGRES_DB
+          value: {{ $config.database | quote }}
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              name: {{ $.Values.secrets.existingSecret | default (printf "%s-secrets" (include "pitch.fullname" $)) }}
+              key: postgres-username
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ $.Values.secrets.existingSecret | default (printf "%s-secrets" (include "pitch.fullname" $)) }}
+              key: postgres-password
+        - name: PGDATA
+          value: /var/lib/postgresql/data/pgdata
+        ports:
+        - containerPort: 5432
+          name: postgres
+        livenessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - pg_isready -U $(POSTGRES_USER) -d $(POSTGRES_DB)
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - pg_isready -U $(POSTGRES_USER) -d $(POSTGRES_DB)
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        volumeMounts:
+        - name: data
+          mountPath: /var/lib/postgresql/data
+        resources:
+          {{- toYaml $config.resources | nindent 12 }}
+  {{- if $config.persistence.enabled }}
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      {{- if $.Values.global.storageClass }}
+      storageClassName: {{ $.Values.global.storageClass | quote }}
+      {{- end }}
+      resources:
+        requests:
+          storage: {{ $config.persistence.size }}
+  {{- else }}
+  volumes:
+  - name: data
+    emptyDir: {}
+  {{- end }}
+{{- end }}
+{{- end }}

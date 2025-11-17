@@ -1,0 +1,103 @@
+{{- if .Values.gateway.autoscaling.enabled }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "pitch.fullname" . }}-gateway
+  labels:
+    {{- include "pitch.labels" . | nindent 4 }}
+    app.kubernetes.io/component: gateway
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "pitch.fullname" . }}-gateway
+  minReplicas: {{ .Values.gateway.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.gateway.autoscaling.maxReplicas }}
+  metrics:
+    {{- if .Values.gateway.autoscaling.targetCPUUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.gateway.autoscaling.targetCPUUtilizationPercentage }}
+    {{- end }}
+{{- end }}
+---
+{{- if .Values.user.autoscaling.enabled }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "pitch.fullname" . }}-user
+  labels:
+    {{- include "pitch.labels" . | nindent 4 }}
+    app.kubernetes.io/component: user
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "pitch.fullname" . }}-user
+  minReplicas: {{ .Values.user.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.user.autoscaling.maxReplicas }}
+  metrics:
+    {{- if .Values.user.autoscaling.targetCPUUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.user.autoscaling.targetCPUUtilizationPercentage }}
+    {{- end }}
+{{- end }}
+---
+{{- if .Values.simulation.autoscaling.enabled }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "pitch.fullname" . }}-simulation
+  labels:
+    {{- include "pitch.labels" . | nindent 4 }}
+    app.kubernetes.io/component: simulation
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "pitch.fullname" . }}-simulation
+  minReplicas: {{ .Values.simulation.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.simulation.autoscaling.maxReplicas }}
+  metrics:
+    {{- if .Values.simulation.autoscaling.targetCPUUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.simulation.autoscaling.targetCPUUtilizationPercentage }}
+    {{- end }}
+{{- end }}
+---
+{{- if .Values.analytics.autoscaling.enabled }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "pitch.fullname" . }}-analytics
+  labels:
+    {{- include "pitch.labels" . | nindent 4 }}
+    app.kubernetes.io/component: analytics
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "pitch.fullname" . }}-analytics
+  minReplicas: {{ .Values.analytics.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.analytics.autoscaling.maxReplicas }}
+  metrics:
+    {{- if .Values.analytics.autoscaling.targetCPUUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.analytics.autoscaling.targetCPUUtilizationPercentage }}
+    {{- end }}
+{{- end }}

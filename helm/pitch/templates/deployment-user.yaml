@@ -1,0 +1,110 @@
+{{- if .Values.user.enabled -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "pitch.fullname" . }}-user
+  labels:
+    {{- include "pitch.labels" . | nindent 4 }}
+    app.kubernetes.io/component: user
+spec:
+  {{- if not .Values.user.autoscaling.enabled }}
+  replicas: {{ .Values.user.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "pitch.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: user
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+      labels:
+        {{- include "pitch.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: user
+    spec:
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "pitch.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      initContainers:
+      - name: wait-for-postgres
+        image: busybox:1.35
+        command: ['sh', '-c', 'until nc -z {{ include "pitch.fullname" . }}-postgres-user 5432; do echo waiting for postgres; sleep 2; done;']
+      - name: wait-for-rabbitmq
+        image: busybox:1.35
+        command: ['sh', '-c', 'until nc -z {{ include "pitch.fullname" . }}-rabbitmq 5672; do echo waiting for rabbitmq; sleep 2; done;']
+      containers:
+      - name: user
+        securityContext:
+          {{- toYaml .Values.securityContext | nindent 12 }}
+        image: {{ include "pitch.image" . }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        env:
+        - name: SERVICE_NAME
+          value: {{ .Values.user.serviceName | quote }}
+        - name: NODE_ENV
+          value: "production"
+        - name: USER_DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.secrets.existingSecret | default (printf "%s-secrets" (include "pitch.fullname" .)) }}
+              key: user-database-url
+        - name: REDIS_URL
+          value: {{ include "pitch.redis.connectionString" . | quote }}
+        - name: RABBITMQ_URL
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.secrets.existingSecret | default (printf "%s-secrets" (include "pitch.fullname" .)) }}
+              key: rabbitmq-url
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.secrets.existingSecret | default (printf "%s-secrets" (include "pitch.fullname" .)) }}
+              key: jwt-secret
+        - name: JWT_ACCESS_EXPIRATION
+          value: {{ .Values.secrets.jwtAccessExpiration | quote }}
+        - name: JWT_REFRESH_EXPIRATION
+          value: {{ .Values.secrets.jwtRefreshExpiration | quote }}
+        - name: GOOGLE_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.secrets.existingSecret | default (printf "%s-secrets" (include "pitch.fullname" .)) }}
+              key: google-client-id
+              optional: true
+        - name: GOOGLE_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.secrets.existingSecret | default (printf "%s-secrets" (include "pitch.fullname" .)) }}
+              key: google-client-secret
+              optional: true
+        - name: MICROSOFT_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.secrets.existingSecret | default (printf "%s-secrets" (include "pitch.fullname" .)) }}
+              key: microsoft-client-id
+              optional: true
+        - name: MICROSOFT_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.secrets.existingSecret | default (printf "%s-secrets" (include "pitch.fullname" .)) }}
+              key: microsoft-client-secret
+              optional: true
+        resources:
+          {{- toYaml .Values.user.resources | nindent 12 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

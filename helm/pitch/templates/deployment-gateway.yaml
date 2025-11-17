@@ -1,0 +1,98 @@
+{{- if .Values.gateway.enabled -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "pitch.fullname" . }}-gateway
+  labels:
+    {{- include "pitch.labels" . | nindent 4 }}
+    app.kubernetes.io/component: gateway
+spec:
+  {{- if not .Values.gateway.autoscaling.enabled }}
+  replicas: {{ .Values.gateway.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "pitch.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: gateway
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+      labels:
+        {{- include "pitch.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: gateway
+    spec:
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "pitch.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+      - name: gateway
+        securityContext:
+          {{- toYaml .Values.securityContext | nindent 12 }}
+        image: {{ include "pitch.image" . }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        env:
+        - name: SERVICE_NAME
+          value: {{ .Values.gateway.serviceName | quote }}
+        - name: NODE_ENV
+          value: {{ .Values.gateway.env.NODE_ENV | quote }}
+        - name: PORT
+          value: {{ .Values.gateway.env.PORT | quote }}
+        - name: CORS_ORIGIN
+          value: {{ .Values.gateway.env.CORS_ORIGIN | quote }}
+        - name: REDIS_URL
+          value: {{ include "pitch.redis.connectionString" . | quote }}
+        - name: RABBITMQ_URL
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.secrets.existingSecret | default (printf "%s-secrets" (include "pitch.fullname" .)) }}
+              key: rabbitmq-url
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.secrets.existingSecret | default (printf "%s-secrets" (include "pitch.fullname" .)) }}
+              key: jwt-secret
+        - name: JWT_ACCESS_EXPIRATION
+          value: {{ .Values.secrets.jwtAccessExpiration | quote }}
+        - name: JWT_REFRESH_EXPIRATION
+          value: {{ .Values.secrets.jwtRefreshExpiration | quote }}
+        ports:
+        - name: http
+          containerPort: {{ .Values.gateway.service.targetPort }}
+          protocol: TCP
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        resources:
+          {{- toYaml .Values.gateway.resources | nindent 12 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

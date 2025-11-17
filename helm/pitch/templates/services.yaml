@@ -1,0 +1,145 @@
+{{- if .Values.gateway.enabled -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "pitch.fullname" . }}-gateway
+  labels:
+    {{- include "pitch.labels" . | nindent 4 }}
+    app.kubernetes.io/component: gateway
+spec:
+  type: {{ .Values.gateway.service.type }}
+  ports:
+  - port: {{ .Values.gateway.service.port }}
+    targetPort: {{ .Values.gateway.service.targetPort }}
+    protocol: TCP
+    name: http
+  selector:
+    {{- include "pitch.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: gateway
+{{- end }}
+
+{{- if .Values.user.enabled -}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "pitch.fullname" . }}-user
+  labels:
+    {{- include "pitch.labels" . | nindent 4 }}
+    app.kubernetes.io/component: user
+spec:
+  type: {{ .Values.user.service.type }}
+  ports:
+  - port: {{ .Values.user.service.port }}
+    targetPort: {{ .Values.user.service.targetPort }}
+    protocol: TCP
+    name: http
+  selector:
+    {{- include "pitch.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: user
+{{- end }}
+
+{{- if .Values.simulation.enabled -}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "pitch.fullname" . }}-simulation
+  labels:
+    {{- include "pitch.labels" . | nindent 4 }}
+    app.kubernetes.io/component: simulation
+spec:
+  type: {{ .Values.simulation.service.type }}
+  ports:
+  - port: {{ .Values.simulation.service.port }}
+    targetPort: {{ .Values.simulation.service.targetPort }}
+    protocol: TCP
+    name: http
+  selector:
+    {{- include "pitch.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: simulation
+{{- end }}
+
+{{- if .Values.support.enabled -}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "pitch.fullname" . }}-support
+  labels:
+    {{- include "pitch.labels" . | nindent 4 }}
+    app.kubernetes.io/component: support
+spec:
+  type: {{ .Values.support.service.type }}
+  ports:
+  - port: {{ .Values.support.service.port }}
+    targetPort: {{ .Values.support.service.targetPort }}
+    protocol: TCP
+    name: http
+  selector:
+    {{- include "pitch.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: support
+{{- end }}
+
+{{- if .Values.analytics.enabled -}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "pitch.fullname" . }}-analytics
+  labels:
+    {{- include "pitch.labels" . | nindent 4 }}
+    app.kubernetes.io/component: analytics
+spec:
+  type: {{ .Values.analytics.service.type }}
+  ports:
+  - port: {{ .Values.analytics.service.port }}
+    targetPort: {{ .Values.analytics.service.targetPort }}
+    protocol: TCP
+    name: http
+  selector:
+    {{- include "pitch.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: analytics
+{{- end }}
+
+{{- if .Values.lti.enabled -}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "pitch.fullname" . }}-lti
+  labels:
+    {{- include "pitch.labels" . | nindent 4 }}
+    app.kubernetes.io/component: lti
+spec:
+  type: {{ .Values.lti.service.type }}
+  ports:
+  - port: {{ .Values.lti.service.port }}
+    targetPort: {{ .Values.lti.service.targetPort }}
+    protocol: TCP
+    name: http
+  selector:
+    {{- include "pitch.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: lti
+{{- end }}
+
+{{- if .Values.s3.enabled -}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "pitch.fullname" . }}-s3
+  labels:
+    {{- include "pitch.labels" . | nindent 4 }}
+    app.kubernetes.io/component: s3
+spec:
+  type: {{ .Values.s3.service.type }}
+  ports:
+  - port: {{ .Values.s3.service.port }}
+    targetPort: {{ .Values.s3.service.targetPort }}
+    protocol: TCP
+    name: http
+  selector:
+    {{- include "pitch.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: s3
+{{- end }}

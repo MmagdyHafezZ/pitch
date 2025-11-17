@@ -1,0 +1,19 @@
+apiVersion: v2
+name: pitch
+description: PITCH - AI-powered business management and simulation platform
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+keywords:
+  - microservices
+  - nestjs
+  - ai
+  - simulation
+  - lti
+home: https://github.com/yourusername/pitch
+sources:
+  - https://github.com/yourusername/pitch
+maintainers:
+  - name: PITCH Team
+    email: team@pitch.com
+dependencies: []

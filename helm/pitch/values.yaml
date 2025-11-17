@@ -1,0 +1,564 @@
+# =============================================================================
+# PITCH Helm Chart - Default Values
+# =============================================================================
+
+# Global configuration
+global:
+  imageRegistry: ""
+  imagePullSecrets: []
+  storageClass: ""
+
+# Docker image configuration (single image for all microservices)
+image:
+  registry: docker.io
+  repository: yourorg/pitch-api
+  tag: "latest"
+  pullPolicy: IfNotPresent
+
+# =============================================================================
+# API Gateway
+# =============================================================================
+gateway:
+  enabled: true
+  replicaCount: 2
+  serviceName: gateway
+
+  service:
+    type: ClusterIP
+    port: 8000
+    targetPort: 8000
+    annotations: {}
+
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 250m
+      memory: 256Mi
+
+  autoscaling:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 80
+
+  env:
+    PORT: "8000"
+    NODE_ENV: "production"
+    CORS_ORIGIN: "https://yourapp.com"
+
+# =============================================================================
+# User Microservice
+# =============================================================================
+user:
+  enabled: true
+  replicaCount: 2
+  serviceName: user
+
+  service:
+    type: ClusterIP
+    port: 3001
+    targetPort: 3001
+
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 250m
+      memory: 256Mi
+
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 80
+
+# =============================================================================
+# Simulation Microservice
+# =============================================================================
+simulation:
+  enabled: true
+  replicaCount: 3
+  serviceName: simulation
+
+  service:
+    type: ClusterIP
+    port: 3002
+    targetPort: 3002
+
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+    requests:
+      cpu: 500m
+      memory: 512Mi
+
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+
+# =============================================================================
+# Support Microservice
+# =============================================================================
+support:
+  enabled: true
+  replicaCount: 2
+  serviceName: support
+
+  service:
+    type: ClusterIP
+    port: 3003
+    targetPort: 3003
+
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 250m
+      memory: 256Mi
+
+  autoscaling:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 80
+
+# =============================================================================
+# Analytics Microservice
+# =============================================================================
+analytics:
+  enabled: true
+  replicaCount: 2
+  serviceName: analytics
+
+  service:
+    type: ClusterIP
+    port: 3004
+    targetPort: 3004
+
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 250m
+      memory: 256Mi
+
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 8
+    targetCPUUtilizationPercentage: 75
+
+# =============================================================================
+# LTI Microservice
+# =============================================================================
+lti:
+  enabled: true
+  replicaCount: 2
+  serviceName: lti
+
+  service:
+    type: ClusterIP
+    port: 3005
+    targetPort: 3005
+
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 250m
+      memory: 256Mi
+
+  autoscaling:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 80
+
+# =============================================================================
+# S3 Microservice
+# =============================================================================
+s3:
+  enabled: true
+  replicaCount: 2
+  serviceName: s3
+
+  service:
+    type: ClusterIP
+    port: 3006
+    targetPort: 3006
+
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 250m
+      memory: 256Mi
+
+  autoscaling:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 80
+
+# =============================================================================
+# PostgreSQL Databases (one per microservice)
+# =============================================================================
+postgresql:
+  enabled: true
+  image:
+    registry: docker.io
+    repository: postgres
+    tag: "16-alpine"
+
+  # User service database
+  user:
+    enabled: true
+    database: pitch_user
+    port: 5432
+    persistence:
+      enabled: true
+      size: 10Gi
+    resources:
+      limits:
+        cpu: 500m
+        memory: 512Mi
+      requests:
+        cpu: 250m
+        memory: 256Mi
+
+  # Simulation service database
+  simulation:
+    enabled: true
+    database: pitch_simulation
+    port: 5432
+    persistence:
+      enabled: true
+      size: 10Gi
+    resources:
+      limits:
+        cpu: 500m
+        memory: 512Mi
+      requests:
+        cpu: 250m
+        memory: 256Mi
+
+  # Support service database
+  support:
+    enabled: true
+    database: pitch_support
+    port: 5432
+    persistence:
+      enabled: true
+      size: 5Gi
+    resources:
+      limits:
+        cpu: 250m
+        memory: 256Mi
+      requests:
+        cpu: 100m
+        memory: 128Mi
+
+  # Analytics service database
+  analytics:
+    enabled: true
+    database: pitch_analytics
+    port: 5432
+    persistence:
+      enabled: true
+      size: 20Gi
+    resources:
+      limits:
+        cpu: 500m
+        memory: 512Mi
+      requests:
+        cpu: 250m
+        memory: 256Mi
+
+  # LTI service database
+  lti:
+    enabled: true
+    database: pitch_lti
+    port: 5432
+    persistence:
+      enabled: true
+      size: 5Gi
+    resources:
+      limits:
+        cpu: 250m
+        memory: 256Mi
+      requests:
+        cpu: 100m
+        memory: 128Mi
+
+  # S3 service database
+  s3:
+    enabled: true
+    database: pitch_s3
+    port: 5432
+    persistence:
+      enabled: true
+      size: 10Gi
+    resources:
+      limits:
+        cpu: 250m
+        memory: 256Mi
+      requests:
+        cpu: 100m
+        memory: 128Mi
+
+  # Shared PostgreSQL credentials
+  auth:
+    username: pitch_user
+    password: ""  # Set via --set or secret
+    existingSecret: ""  # Name of existing secret
+
+# =============================================================================
+# MongoDB (for Simulation service chat/session data)
+# =============================================================================
+mongodb:
+  enabled: true
+  image:
+    registry: docker.io
+    repository: mongo
+    tag: "7-jammy"
+
+  auth:
+    enabled: true
+    rootUser: admin
+    rootPassword: ""  # Set via --set or secret
+    database: pitch_simulation
+    existingSecret: ""
+
+  service:
+    type: ClusterIP
+    port: 27017
+
+  persistence:
+    enabled: true
+    size: 20Gi
+
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 250m
+      memory: 256Mi
+
+# =============================================================================
+# Redis (shared cache)
+# =============================================================================
+redis:
+  enabled: true
+  image:
+    registry: docker.io
+    repository: redis
+    tag: "7-alpine"
+
+  service:
+    type: ClusterIP
+    port: 6379
+
+  persistence:
+    enabled: true
+    size: 2Gi
+
+  resources:
+    limits:
+      cpu: 250m
+      memory: 256Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+  configuration:
+    maxmemory: "256mb"
+    maxmemory-policy: "allkeys-lru"
+    appendonly: "yes"
+
+# =============================================================================
+# RabbitMQ (message broker)
+# =============================================================================
+rabbitmq:
+  enabled: true
+  image:
+    registry: docker.io
+    repository: rabbitmq
+    tag: "3.13-management-alpine"
+
+  auth:
+    username: admin
+    password: ""  # Set via --set or secret
+    vhost: pitch
+    existingSecret: ""
+
+  service:
+    type: ClusterIP
+    ports:
+      amqp: 5672
+      management: 15672
+      metrics: 15692
+
+  persistence:
+    enabled: true
+    size: 5Gi
+
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 250m
+      memory: 256Mi
+
+  # Enable management plugin and metrics
+  plugins: "rabbitmq_management rabbitmq_prometheus"
+
+# =============================================================================
+# Ingress Configuration
+# =============================================================================
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+
+  hosts:
+    - host: api.pitch.com
+      paths:
+        - path: /
+          pathType: Prefix
+          service: gateway
+
+  tls:
+    - secretName: pitch-api-tls
+      hosts:
+        - api.pitch.com
+
+# =============================================================================
+# Secrets Configuration (stored in Kubernetes Secret)
+# =============================================================================
+secrets:
+  # Create secret from values (not recommended for production)
+  create: false
+
+  # Use existing secret
+  existingSecret: "pitch-secrets"
+
+  # JWT secrets
+  jwtSecret: ""
+  jwtAccessExpiration: "15m"
+  jwtRefreshExpiration: "7d"
+
+  # OAuth providers
+  googleClientId: ""
+  googleClientSecret: ""
+  microsoftClientId: ""
+  microsoftClientSecret: ""
+
+  # AI/LLM API keys
+  openaiApiKey: ""
+  anthropicApiKey: ""
+
+  # Voice/Video API keys
+  deepgramApiKey: ""
+  elevenlabsApiKey: ""
+
+  # AWS credentials
+  awsAccessKeyId: ""
+  awsSecretAccessKey: ""
+  awsS3Bucket: ""
+  awsRegion: "us-east-1"
+
+  # LTI configuration
+  ltiPlatformUrl: ""
+  ltiClientId: ""
+  ltiDeploymentId: ""
+
+# =============================================================================
+# Service Account
+# =============================================================================
+serviceAccount:
+  create: true
+  annotations: {}
+  name: "pitch-sa"
+
+# =============================================================================
+# Pod Security
+# =============================================================================
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1001
+  fsGroup: 1001
+
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+  readOnlyRootFilesystem: false
+
+# =============================================================================
+# Network Policies
+# =============================================================================
+networkPolicy:
+  enabled: false
+  policyTypes:
+    - Ingress
+    - Egress
+
+# =============================================================================
+# Monitoring & Observability
+# =============================================================================
+monitoring:
+  enabled: false
+  serviceMonitor:
+    enabled: false
+    interval: 30s
+
+  prometheusRule:
+    enabled: false
+
+# =============================================================================
+# Pod Disruption Budget
+# =============================================================================
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+# =============================================================================
+# Priority Class
+# =============================================================================
+priorityClassName: ""
+
+# =============================================================================
+# Node Selector, Tolerations, Affinity
+# =============================================================================
+nodeSelector: {}
+
+tolerations: []
+
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values:
+                  - pitch
+          topologyKey: kubernetes.io/hostname
