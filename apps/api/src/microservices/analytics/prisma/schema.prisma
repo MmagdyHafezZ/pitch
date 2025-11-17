@@ -1,0 +1,169 @@
+// Analytics Microservice Database Schema
+// Database: PostgreSQL
+// Client: @prisma/analytics-client
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../../../../../../node_modules/@prisma/analytics-client"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("ANALYTICS_DATABASE_URL")
+}
+
+// ============================================================================
+// Core Analytics Models
+// ============================================================================
+
+/// Dashboard metrics and statistics
+model Dashboard {
+  id        String   @id @default(cuid())
+  orgId     String
+  userId    String?
+  name      String
+  type      String // "org", "user", "team", "custom"
+  config    Json // Dashboard configuration
+  layout    Json? // Widget layout configuration
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  widgets Widget[]
+  reports Report[]
+
+  @@index([orgId])
+  @@index([userId])
+  @@map("dashboards")
+}
+
+/// Dashboard widgets
+model Widget {
+  id          String   @id @default(cuid())
+  dashboardId String
+  dashboard   Dashboard @relation(fields: [dashboardId], references: [id], onDelete: Cascade)
+  type        String // "chart", "table", "metric", "gauge"
+  title       String
+  config      Json // Widget-specific configuration
+  position    Json // Grid position {x, y, w, h}
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([dashboardId])
+  @@map("widgets")
+}
+
+/// Usage metrics tracking
+model Metric {
+  id         String   @id @default(cuid())
+  orgId      String
+  userId     String?
+  sessionId  String?
+  metricType String // "simulation", "call", "upload", "api_call"
+  category   String // "usage", "performance", "quality"
+  name       String
+  value      Float
+  unit       String? // "count", "seconds", "bytes", "score"
+  metadata   Json?
+  timestamp  DateTime @default(now())
+  createdAt  DateTime @default(now())
+
+  @@index([orgId, metricType, timestamp])
+  @@index([userId, timestamp])
+  @@index([sessionId])
+  @@map("metrics")
+}
+
+/// Aggregated statistics
+model Statistic {
+  id         String   @id @default(cuid())
+  orgId      String
+  period     String // "hour", "day", "week", "month", "quarter", "year"
+  periodKey  String // "2024-01-15", "2024-W03", "2024-01"
+  metricType String
+  category   String
+  aggregates Json // {count, sum, avg, min, max, p50, p95, p99}
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([orgId, period, periodKey, metricType, category])
+  @@index([orgId, period, periodKey])
+  @@map("statistics")
+}
+
+/// Custom reports
+model Report {
+  id          String    @id @default(cuid())
+  dashboardId String?
+  dashboard   Dashboard? @relation(fields: [dashboardId], references: [id], onDelete: SetNull)
+  orgId       String
+  userId      String
+  name        String
+  description String?
+  type        String // "usage", "performance", "custom"
+  query       Json // Report query configuration
+  schedule    String? // Cron expression for scheduled reports
+  format      String @default("json") // "json", "csv", "pdf"
+  status      String @default("draft") // "draft", "active", "archived"
+  lastRunAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  executions ReportExecution[]
+
+  @@index([orgId])
+  @@index([userId])
+  @@index([status, schedule])
+  @@map("reports")
+}
+
+/// Report execution history
+model ReportExecution {
+  id         String   @id @default(cuid())
+  reportId   String
+  report     Report   @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  status     String // "running", "completed", "failed"
+  resultData Json? // Report result data
+  error      String?
+  duration   Int? // Execution time in milliseconds
+  startedAt  DateTime @default(now())
+  completedAt DateTime?
+
+  @@index([reportId, startedAt])
+  @@map("report_executions")
+}
+
+/// Event tracking for analytics
+model Event {
+  id         String   @id @default(cuid())
+  orgId      String
+  userId     String?
+  sessionId  String?
+  eventType  String // "page_view", "button_click", "feature_use", etc.
+  eventName  String
+  properties Json? // Event-specific properties
+  context    Json? // Browser, device, location context
+  timestamp  DateTime @default(now())
+
+  @@index([orgId, eventType, timestamp])
+  @@index([userId, timestamp])
+  @@index([sessionId])
+  @@map("events")
+}
+
+/// Performance monitoring
+model PerformanceLog {
+  id         String   @id @default(cuid())
+  service    String // "user", "simulation", "support", etc.
+  endpoint   String
+  method     String // "GET", "POST", etc.
+  statusCode Int
+  duration   Int // Response time in milliseconds
+  userId     String?
+  orgId      String?
+  metadata   Json? // Request details, errors, etc.
+  timestamp  DateTime @default(now())
+
+  @@index([service, endpoint, timestamp])
+  @@index([orgId, timestamp])
+  @@map("performance_logs")
+}

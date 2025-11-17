@@ -1,52 +1,10 @@
-# PITCH
+# PITCH Platform
 
-A modern business management platform built with Next.js, NestJS microservices,
-and Turborepo. Features JWT authentication, multi-database architecture, and
-real-time communication via RabbitMQ.
+A modern business simulation and management platform built with Next.js, NestJS
+microservices, and Turborepo. Features AI-powered simulations, JWT
+authentication, multi-database architecture, and real-time communication.
 
-## 📚 Documentation
-
-**👉 [DEVELOPER_GUIDE.md](DEVELOPER_GUIDE.md)** - Complete developer
-documentation (START HERE)
-
-**Other Resources**:
-
-- [docs/](docs/README.md) - Additional documentation (CI/CD, contributing,
-  security)
-
-## Architecture Overview
-
-PITCH follows a microservices architecture with an API Gateway pattern:
-
-- **API Gateway** - Centralized authentication and request routing
-- **User Microservice** - User management with PostgreSQL
-- **Support Microservice** - Support tickets with PostgreSQL
-- **Frontend Application** - React/Next.js with Mantine UI
-
-### Key Features
-
-- 🔐 **JWT Authentication** - Secure auth with 32+ char secrets
-- 🎯 **API Gateway Pattern** - Centralized validation & routing
-- 📨 **Message Queues** - RabbitMQ for inter-service communication
-- 🗄️ **Multi-Database** - PostgreSQL for relational data
-- ⚡ **Real-time** - WebSocket support & event-driven architecture
-- 🎨 **Modern UI** - Mantine components with TypeScript
-- ✅ **Type Safe** - Full TypeScript with Prisma ORM
-
-## Monorepo Structure
-
-```
-PITCH/
-├── apps/
-│   ├── web/                 # Next.js 15 frontend
-│   └── api/                 # NestJS microservices
-├── packages/
-│   ├── shared/              # Shared types & utilities
-│   └── eslint-config/       # Shared ESLint config
-└── docs/                    # Documentation
-```
-
-## Quick Start
+## 🚀 Quick Start
 
 ### Prerequisites
 
@@ -54,272 +12,302 @@ PITCH/
 - pnpm 9+
 - Docker & Docker Compose
 
-### Setup
+### Installation
 
-1. **Install dependencies:**
+```bash
+# Install dependencies
+pnpm install
 
-   ```bash
-   pnpm install
-   ```
+# Start infrastructure (databases, Redis, RabbitMQ)
+docker-compose up -d
 
-2. **Start database services:**
+# Generate Prisma clients
+cd apps/api
+pnpm db:generate:all
 
-   ```bash
-   docker-compose -f docker-compose.local.yml up -d
-   ```
+# Run migrations
+pnpm db:migrate:all
 
-3. **Run database migrations:**
-
-   ```bash
-   # User microservice (PostgreSQL)
-   cd apps/api/src/microservices/userManagement
-   npx prisma migrate dev
-
-   # Business microservice (MongoDB)
-   cd ../business
-   npx prisma db push
-   ```
-
-4. **Start development servers:**
-   ```bash
-   pnpm dev
-   ```
+# Start development
+pnpm dev
+```
 
 ### Access Points
 
 - **Frontend:** [http://localhost:3000](http://localhost:3000)
 - **API Gateway:** [http://localhost:8000](http://localhost:8000)
-- **API docs:** [http://localhost:8000/docs](http://localhost:8000/docs)
+- **API Docs:** [http://localhost:8000/docs](http://localhost:8000/docs)
+- **RabbitMQ UI:** [http://localhost:15672](http://localhost:15672)
 
-## Tech Stack
+## 📚 Documentation
 
-### Frontend (apps/web)
+- **[DEPLOYMENT.md](DEPLOYMENT.md)** - Complete deployment guide (Docker,
+  databases, Redis, production setup)
+- **[CONTRIBUTING.md](CONTRIBUTING.md)** - Development workflow, code
+  guidelines, testing
+
+## 🏗️ Architecture
+
+PITCH follows a microservices architecture with database-per-service pattern:
+
+### Microservices
+
+| Service             | Port | Database             | Description                                   |
+| ------------------- | ---- | -------------------- | --------------------------------------------- |
+| **Gateway**         | 8000 | -                    | API Gateway, JWT validation, routing          |
+| **User Management** | -    | PostgreSQL           | Authentication, users, teams, organizations   |
+| **Simulation**      | -    | PostgreSQL + MongoDB | AI-powered simulations, voice/video, feedback |
+| **Support**         | -    | PostgreSQL           | FAQ, tickets, chat support                    |
+| **Analytics**       | -    | PostgreSQL           | Metrics, dashboards, reporting                |
+| **CRM**             | -    | PostgreSQL           | Customer relationship management              |
+| **LTI**             | -    | -                    | LMS integration (LTI 1.3)                     |
+| **S3**              | -    | -                    | File storage management                       |
+
+### Infrastructure
+
+- **PostgreSQL** (6 instances) - ACID-compliant relational data
+- **MongoDB** - Flexible schema for simulation chat logs
+- **Redis** - Distributed caching and session storage
+- **RabbitMQ** - Message queue for inter-service communication
+
+## 🛠️ Tech Stack
+
+### Frontend (`apps/web`)
 
 - **Next.js 15** with App Router
 - **React 19** with TypeScript
 - **Mantine UI** - Modern component library
 - **TanStack Query** - Server state management
 - **Zustand** - Client state management
-- **NextAuth** - Authentication integration
+- **NextAuth** - Authentication
 
-### Backend (apps/api)
+### Backend (`apps/api`)
 
 - **NestJS** - Microservices framework
 - **Prisma ORM** - Type-safe database operations
-- **RabbitMQ** - Message queue for inter-service communication
-- **JWT Authentication** - Access & refresh tokens
-- **PostgreSQL** - User data storage
-- **MongoDB** - Business data storage
-- **Redis** - Caching and sessions
-- **TypeScript** - Type safety across services
+- **RabbitMQ** - Message bus
+- **Redis** - Global caching layer
+- **JWT** - Authentication tokens
+- **PostgreSQL** - Primary databases
+- **MongoDB** - Simulation data
+- **TypeScript** - End-to-end type safety
 
-### DevOps & Tools
+### AI/ML Services
+
+- **OpenAI GPT-4** - Conversational AI
+- **Anthropic Claude** - Advanced reasoning
+- **Deepgram** - Speech-to-text
+- **ElevenLabs** - Text-to-speech
+- **WebRTC** - Real-time video/voice
+
+### DevOps
 
 - **Turborepo** - Monorepo management
-- **Docker & Docker Compose** - Development databases
-- **pnpm** - Fast package management
-- **ESLint** - Code linting
-- **Jest** - Unit testing
-- **Playwright** - E2E testing
+- **Docker & Docker Compose** - Containerization
+- **pnpm** - Package management
+- **Prisma Accelerate** - Connection pooling (production)
+- **Kubernetes** - Production orchestration (Helm charts included)
 
-## Development Workflow
-
-### Environment Variables
-
-Each app requires its own environment configuration:
-
-```bash
-# Frontend (.env.local in apps/web)
-NEXT_PUBLIC_API_URL=http://localhost:8000
-NEXTAUTH_SECRET=your-secret-here
-NEXTAUTH_URL=http://localhost:3000
-
-# Backend (.env in apps/api)
-NODE_ENV=development
-PORT=8000
-DATABASE_URL="postgresql://username:password@localhost:5432/pitch_dev"
-MONGODB_URL="mongodb://localhost:27017/pitch_business"
-REDIS_URL="redis://localhost:6380"
-RABBITMQ_URL="amqp://admin:admin123@localhost:5672"
-JWT_SECRET="your-super-secure-secret-key"
-JWT_ACCESS_EXPIRATION="15m"
-JWT_REFRESH_EXPIRATION="7d"
-```
-
-### Available Scripts
-
-```bash
-# Development
-pnpm dev                    # Start all development servers
-pnpm --filter web dev      # Start frontend only
-pnpm --filter api dev      # Start backend only
-
-# Building
-pnpm build                  # Build all applications
-pnpm --filter web build    # Build frontend
-pnpm --filter api build    # Build backend
-
-# Testing
-pnpm test                   # Run all tests
-pnpm test:unit             # Run unit tests
-pnpm test:e2e              # Run end-to-end tests
-pnpm test:cov              # Run tests with coverage
-
-# Linting & Formatting
-pnpm lint                   # Lint all packages
-pnpm lint:fix              # Fix linting issues
-pnpm type-check            # TypeScript checking
-
-# Database
-pnpm db:migrate            # Run database migrations
-pnpm db:seed               # Seed development data
-pnpm db:studio             # Open Prisma Studio
-```
-
-## Project Structure
+## 📁 Monorepo Structure
 
 ```
 PITCH/
 ├── apps/
-│   ├── web/                    # Next.js Frontend
+│   ├── web/                      # Next.js frontend
 │   │   ├── src/
-│   │   │   ├── app/           # Next.js App Router (pages)
-│   │   │   ├── features/      # Feature-based architecture
-│   │   │   │   └── auth/      # Authentication feature
-│   │   │   │       ├── components/  # Auth UI components
-│   │   │   │       ├── hooks/       # Auth hooks
-│   │   │   │       ├── services/    # Auth API services
-│   │   │   │       └── stores/      # Zustand auth store
-│   │   │   ├── components/    # Shared UI components
-│   │   │   └── lib/           # Utilities & configurations
-│   │   │       ├── providers.tsx    # App providers
-│   │   │       └── client.ts        # API client
-│   │   └── docs/         # docs
-│   └── api/                   # NestJS Backend
+│   │   │   ├── app/             # Next.js App Router
+│   │   │   ├── features/        # Feature-based modules
+│   │   │   ├── components/      # Shared UI components
+│   │   │   └── lib/             # Utilities & configs
+│   │   └── docs/                # Frontend documentation
+│   │
+│   └── api/                      # NestJS backend
 │       ├── src/
-│       │   ├── gateway/       # API Gateway
-│       │   │   ├── controllers/     # Gateway controllers
-│       │   │   ├── guards/          # JWT guards
-│       │   │   └── interceptors/    # Request interceptors
-│       │   ├── microservices/ # Microservices
-│       │   │   ├── user/            # User service (PostgreSQL)
-│       │   │   │   ├── prisma/      # Database schema
-│       │   │   │   ├── user.controller.ts
-│       │   │   │   ├── user.service.ts
-│       │   │   │   └── user-prisma.service.ts
-│       │   │   └── business/        # Business service (MongoDB)
-│       │   │       ├── prisma/
-│       │   │       ├── business.controller.ts
-│       │   │       ├── business.service.ts
-│       │   │       └── business-prisma.service.ts
-│       │   └── common/        # Shared modules
-│       │       ├── filters/         # Exception filters
-│       │       ├── helpers/         # Utility functions
-│       │       └── interfaces/      # Type definitions
-│       └── docs/              # API docs
+│       │   ├── gateway/         # API Gateway
+│       │   ├── microservices/   # All microservices
+│       │   │   ├── userManagement/
+│       │   │   ├── simulation/
+│       │   │   ├── support/
+│       │   │   ├── analytics/
+│       │   │   ├── crm/
+│       │   │   ├── lti/
+│       │   │   └── s3/
+│       │   └── common/          # Shared modules (Redis, filters, etc.)
+│       └── Dockerfile           # Single image for all services
+│
 ├── packages/
-│   ├── shared/                # Shared types & utilities
-│   └── eslint-config/         # Shared ESLint config
-├── docker/                    # Docker configurations
-│   ├── rabbitmq/             # RabbitMQ config
-│   └── docker-compose files
-└── docs/                      # Project docs
+│   ├── shared/                  # Shared types & utilities
+│   └── eslint-config/           # Shared ESLint config
+│
+├── docker-compose.yml           # Local development
+├── docker-compose.staging.yml   # Staging environment
+├── helm/                        # Kubernetes Helm charts
+└── docs/                        # Documentation
 ```
 
-## Authentication Architecture
+## 🔑 Key Features
 
-### JWT Flow
+### Core Platform
 
-1. **User Authentication** - Login via API Gateway
-2. **Token Generation** - JWT access & refresh tokens issued
-3. **Gateway Validation** - All requests validated at gateway level
-4. **Claims Forwarding** - User claims sent to microservices
-5. **Service Context** - Microservices receive authenticated user context
+- ✅ **Microservices Architecture** - Independent, scalable services
+- ✅ **API Gateway Pattern** - Centralized auth & routing
+- ✅ **Database per Service** - Isolated data storage
+- ✅ **Message-Driven** - RabbitMQ for async communication
+- ✅ **Global Redis Cache** - Shared caching layer across all services
+- ✅ **JWT Authentication** - Secure access & refresh tokens
+- ✅ **Multi-tenancy** - Organization-based isolation
+- ✅ **Type Safety** - Full TypeScript coverage
 
-### API Gateway Pattern
+### AI-Powered Simulations
 
+- ✅ **Conversational AI** - GPT-4 & Claude integration
+- ✅ **Voice Chat** - Real-time speech-to-text & text-to-speech
+- ✅ **Video Sessions** - WebRTC for live simulations
+- ✅ **Intelligent Feedback** - AI-generated performance analysis
+- ✅ **Persona Management** - Configurable AI characters
+- ✅ **Session Recording** - MongoDB-backed chat history
+
+### Developer Experience
+
+- ✅ **Single Build** - One Docker image for all services
+- ✅ **Hot Reload** - Fast development iteration
+- ✅ **Type-Safe APIs** - Prisma + TypeScript
+- ✅ **Health Checks** - Built-in service monitoring
+- ✅ **API Documentation** - Swagger/OpenAPI
+- ✅ **Comprehensive Testing** - Unit, integration, e2e tests
+
+## 🚢 Deployment
+
+### Local Development
+
+```bash
+# Use Docker Compose
+docker-compose up -d
+
+# Or run services individually
+pnpm dev:gateway
+pnpm dev:user
+pnpm dev:simulation
 ```
-Client → API Gateway → User Microservice (PostgreSQL)
-           ↓
-       Business Microservice (MongoDB)
+
+### Production
+
+```bash
+# Build single Docker image
+docker build -f apps/api/Dockerfile -t pitch-api:latest .
+
+# Deploy with Docker Compose
+docker-compose -f docker-compose.prod.yml up -d
+
+# Or deploy to Kubernetes
+helm install pitch ./helm/pitch -f values.prod.yaml
 ```
 
-## docs
+See **[DEPLOYMENT.md](DEPLOYMENT.md)** for detailed deployment instructions.
 
-### Quick References
+## 🧪 Development
 
-- **[Frontend README](./apps/web/README.md)** - Web app setup and features
-- **[API README](./apps/api/README.md)** - Backend architecture and setup
-- **[Frontend Guide](./apps/web/docs/frontend.md)** - Mantine UI development
-- **[Components Guide](./apps/web/docs/components.md)** - Component patterns
+### Available Commands
 
-### Development Guides
+```bash
+# Development
+pnpm dev                        # Start all services
+pnpm dev:gateway                # Start gateway only
+pnpm dev:user                   # Start user service
 
-- **[Backend Development](./apps/api/docs/development.md)** - Microservices
-  patterns
-- **[Database Guide](./apps/api/docs/database.md)** - Multi-database setup
-- **[API Endpoints](./apps/api/docs/development.md#api-endpoints)** - Available
-  endpoints
+# Building
+pnpm build                      # Build all apps
+pnpm --filter api build         # Build backend only
 
-## Contributing
+# Testing
+pnpm test                       # Run all tests
+pnpm test:unit                  # Unit tests
+pnpm test:integration           # Integration tests
+pnpm test:e2e                   # End-to-end tests
+pnpm test:cov                   # Coverage report
 
-1. **Feature Development** - Use feature-based architecture
-2. **Database Changes** - Run migrations in correct microservice
-3. **Testing** - Write tests for both unit and integration
-4. **docs** - Update relevant docs for changes
-5. **Type Safety** - Maintain TypeScript across the stack
+# Database
+pnpm db:generate:all            # Generate all Prisma clients
+pnpm db:migrate:all             # Run all migrations
+pnpm db:push:all                # Push schema changes (dev only)
+pnpm db:studio:user             # Open Prisma Studio
 
-## Technology Decisions
+# Docker
+pnpm docker:up                  # Start containers
+pnpm docker:down                # Stop containers
+pnpm docker:logs                # View logs
+pnpm docker:build               # Build image
 
-### Why Microservices?
+# Code Quality
+pnpm lint                       # Lint all packages
+pnpm lint:fix                   # Fix linting issues
+pnpm type-check                 # TypeScript check
+pnpm format                     # Format code
+```
 
-- **Scalability** - Independent scaling of services
-- **Domain Separation** - Clear business domain boundaries
-- **Technology Flexibility** - Different databases per service
-- **Team Independence** - Teams can work on services independently
+### Environment Configuration
 
-### Why Multi-Database?
+```bash
+# Backend (.env in apps/api)
+cp apps/api/.env.example apps/api/.env
 
-- **PostgreSQL** - ACID compliance for user data
-- **MongoDB** - Flexible schema for business docs
-- **Redis** - Fast caching and session storage
+# Frontend (.env.local in apps/web)
+cp apps/web/.env.example apps/web/.env.local
+```
 
-### Why API Gateway?
+See **[CONTRIBUTING.md](CONTRIBUTING.md)** for development guidelines.
 
-- **Centralized Auth** - Single authentication point
-- **Request Routing** - Route to appropriate microservice
-- **Cross-Cutting Concerns** - Logging, monitoring, rate limiting
+## 🔐 Security
 
-## Getting Help
+- JWT secrets must be 32+ characters
+- All database passwords should be strong and unique
+- Production uses Prisma Accelerate for connection pooling
+- SSL/TLS required for production databases
+- Environment variables never committed to version control
+- Regular security audits recommended
 
-- **Frontend Issues** - Check [frontend docs](./apps/web/docs/frontend.md)
-- **Backend Issues** - Check [development guide](./apps/api/docs/development.md)
-- **Database Issues** - Check [database guide](./apps/api/docs/database.md)
-- **Environment Setup** - Verify Docker services are running
+## 📊 Monitoring & Observability
 
-## License
+- **Health Checks** - Built into each microservice
+- **Redis Health Indicator** - Cache monitoring
+- **Prisma Query Logging** - Database performance
+- **RabbitMQ Management UI** - Message queue metrics
+- **Sentry Integration** - Error tracking (configurable)
+- **Grafana/Prometheus** - Metrics (production setup)
+
+## 🤝 Contributing
+
+We welcome contributions! Please see **[CONTRIBUTING.md](CONTRIBUTING.md)** for:
+
+- Development workflow
+- Code style guidelines
+- Testing requirements
+- Pull request process
+- Architecture decisions
+
+## 📄 License
 
 ISC
 
-🔍 RECOMMENDATIONS
+## 🆘 Getting Help
 
-Immediate removals (14 packages)
+- Check **[DEPLOYMENT.md](DEPLOYMENT.md)** for infrastructure issues
+- Check **[CONTRIBUTING.md](CONTRIBUTING.md)** for development questions
+- Review service-specific README files in `apps/` directories
+- Check Docker logs: `docker-compose logs -f [service]`
+- Verify environment variables are set correctly
 
-# Web app
+## 🎯 Roadmap
 
-pnpm remove @emotion/cache @emotion/react @emotion/server pnpm remove
-@tiptap/extension-link @tiptap/pm @tiptap/react @tiptap/starter-kit pnpm remove
-chroma-js date-fns embla-carousel embla-carousel-react pnpm remove lucide-react
-react-day-picker react-hook-form
+- [ ] GraphQL API option
+- [ ] Websocket support for real-time features
+- [ ] Advanced analytics dashboards
+- [ ] Multi-language support (i18n)
+- [ ] Mobile app (React Native)
+- [ ] Enhanced AI features
+- [ ] Performance optimizations
+- [ ] Extended LMS integrations
 
-# API (if bcryptjs is used instead)
+---
 
-pnpm remove bcrypt @types/bcrypt
-
-Consider removing (if no future plans)
-
-- @mantine unused packages (6 packages)
-- @trpc/server (unless tRPC implementation planned)
-- amqp packages (unless message queue planned)
-
-Potential savings: ~15-20MB bundle size reduction
+**Built with ❤️ using modern web technologies**

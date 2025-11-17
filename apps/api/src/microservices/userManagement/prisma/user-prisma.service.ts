@@ -1,29 +1,46 @@
 import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { PrismaClient as UserPrismaClient } from '@prisma/user-client';
+import { withAccelerate } from '@prisma/extension-accelerate';
 
-/**
- * User Prisma Service
- *
- * Manages database connection lifecycle for the user microservice.
- * Connects on module initialization and disconnects on module destruction.
- */
 @Injectable()
-export class UserPrismaService
-  extends UserPrismaClient
-  implements OnModuleInit, OnModuleDestroy
-{
-  /**
-   * Connects to the database when the module is initialized
-   */
-  async onModuleInit() {
-    await this.$connect();
+export class UserPrismaService implements OnModuleInit, OnModuleDestroy {
+  private readonly prisma: UserPrismaClient;
+
+  constructor() {
+    this.prisma = new UserPrismaClient().$extends(
+      withAccelerate(),
+    ) as unknown as UserPrismaClient;
   }
 
-  /**
-   * Disconnects from the database when the module is destroyed
-   * Ensures proper cleanup of database connections
-   */
+  get client(): UserPrismaClient {
+    return this.prisma;
+  }
+
+  get user(): UserPrismaClient['user'] {
+    return this.prisma.user;
+  }
+
+  get oAuthAccount(): UserPrismaClient['oAuthAccount'] {
+    return this.prisma.oAuthAccount;
+  }
+
+  get refreshToken(): UserPrismaClient['refreshToken'] {
+    return this.prisma.refreshToken;
+  }
+
+  get team(): UserPrismaClient['team'] {
+    return this.prisma.team;
+  }
+
+  get teamMembership(): UserPrismaClient['teamMembership'] {
+    return this.prisma.teamMembership;
+  }
+
+  async onModuleInit() {
+    await this.prisma.$connect();
+  }
+
   async onModuleDestroy() {
-    await this.$disconnect();
+    await this.prisma.$disconnect();
   }
 }

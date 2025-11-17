@@ -12,6 +12,7 @@ import { TeamService } from './services/team.service';
 import { UserPrismaService } from './prisma/user-prisma.service';
 import { UserRepository } from './repositories/user.repository';
 import { AuthRepository } from './repositories/auth.repository';
+import { TeamRepository } from './repositories/team.repository';
 import { OAuthProviderFactory } from './factories/oauth-provider.factory';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { JwtStrategy } from './strategies/jwt.strategy';
