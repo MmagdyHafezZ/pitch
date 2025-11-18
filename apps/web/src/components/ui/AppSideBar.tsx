@@ -1,7 +1,6 @@
 'use client'
 
 import { Box, Stack, NavLink, Text, Divider, rem, Group } from '@mantine/core'
-import { Calendar } from '@mantine/dates'
 import {
   IconHome,
   IconCalendar,
@@ -16,6 +15,7 @@ import {
 import { Dispatch, SetStateAction } from 'react'
 import dayjs from 'dayjs'
 import { useAuth } from '@/features/auth'
+import { WeekCalendar } from '@/components/ui/WeekCalendar'
 
 export type SidebarLink = { icon: React.ComponentType<{ size?: number }>; label: string }
 
@@ -31,9 +31,8 @@ type Props = {
 const DEFAULT_MAIN: SidebarLink[] = [
   { icon: IconHome, label: 'Home' },
   { icon: IconCalendar, label: 'Sessions' },
-  { icon: IconUsers, label: 'Organization' },
   { icon: IconChartBar, label: 'Analytics' },
-  { icon: IconUserCog, label: 'User Management' },
+  { icon: IconUserCog, label: 'Team Config' },
 ]
 
 const DEFAULT_SECONDARY: SidebarLink[] = [
@@ -125,7 +124,9 @@ export function AppSidebar({
                   paddingRight: rem(8),
                   color: 'var(--mantine-color-gray-3)',
                   transition: 'background 120ms, color 120ms',
-                  '&:hover': { background: 'rgba(255,255,255,0.04)' },
+
+                  '&:hover': { background: '#3B3B3B' },
+
                   '&[dataActive]': {
                     background: 'rgba(255,255,255,0.08)',
                     color: 'var(--mantine-color-blue-4)',
@@ -147,39 +148,16 @@ export function AppSidebar({
           <Box
             mt="auto"
             pt="lg"
-            mx="auto"
+            mx={0}
             style={{
+              width: '100%',
               background: 'var(--mantine-color-dark-7)',
               borderRadius: 12,
               border: '1px solid rgba(255,255,255,0.08)',
               overflow: 'hidden',
             }}
           >
-            <Calendar
-              hideOutsideDates
-              firstDayOfWeek={1}
-              getDayProps={(date) => {
-                const isToday = dayjs(date).isSame(dayjs(), 'day')
-                return { selected: isToday }
-              }}
-              styles={{
-                calendarHeader: { padding: rem(6) },
-                calendarHeaderLevel: { fontSize: rem(12), fontWeight: 600 },
-                weekday: { fontSize: rem(10), fontWeight: 600 },
-                month: { padding: rem(6) },
-                day: {
-                  height: rem(26),
-                  fontSize: rem(12),
-                  fontWeight: 600,
-                  borderRadius: rem(8),
-                  '&[dataSelected]': {
-                    background: 'var(--mantine-color-blue-6)',
-                    color: 'white',
-                  },
-                  '&:hover': { background: 'rgba(255,255,255,0.05)' },
-                },
-              }}
-            />
+            <WeekCalendar value={selectedDate} onChange={(date) => setSelectedDate(date)} />
           </Box>
         </Stack>
 
@@ -211,7 +189,7 @@ export function AppSidebar({
                   paddingLeft: rem(10),
                   paddingRight: rem(8),
                   color: 'var(--mantine-color-gray-4)',
-                  '&:hover': { background: 'rgba(255,255,255,0.04)' },
+                  '&:hover': { background: '#3B3B3B' },
                 },
                 section: { color: 'var(--mantine-color-gray-4)' },
               }}
