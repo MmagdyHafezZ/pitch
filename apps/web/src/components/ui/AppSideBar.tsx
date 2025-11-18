@@ -126,7 +126,7 @@ export function AppSidebar({
                   color: 'var(--mantine-color-gray-3)',
                   transition: 'background 120ms, color 120ms',
                   '&:hover': { background: 'rgba(255,255,255,0.04)' },
-                  '&[data-active]': {
+                  '&[dataActive]': {
                     background: 'rgba(255,255,255,0.08)',
                     color: 'var(--mantine-color-blue-4)',
                   },
@@ -172,7 +172,7 @@ export function AppSidebar({
                   fontSize: rem(12),
                   fontWeight: 600,
                   borderRadius: rem(8),
-                  '&[data-selected]': {
+                  '&[dataSelected]': {
                     background: 'var(--mantine-color-blue-6)',
                     color: 'white',
                   },
