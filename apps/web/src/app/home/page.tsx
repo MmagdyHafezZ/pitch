@@ -14,27 +14,32 @@ import {
 } from '@mantine/core'
 import { LineChart } from '@mantine/charts'
 import { IconUsers, IconUsersGroup, IconBulb } from '@tabler/icons-react'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/features/auth'
 
 import { AppLayout } from '@/components/layout/AppLayout'
 import { AppSidebar } from '@/components/ui/AppSideBar'
-import { TeamSideBar, TeamInfo } from '@/components/ui/TeamSideBar'
+import { TeamSideBar } from '@/components/ui/TeamSideBar'
 import { AppTopBar } from '@/components/ui/AppTopBar'
+import { useTeams } from '@/features/teams/hooks/useTeams'
 
 export default function DashboardHome() {
   const { logout } = useAuth()
   const router = useRouter()
   const [active, setActive] = useState('Home')
   const [selectedDate, setSelectedDate] = useState<Date | null>(new Date())
-  const teams: TeamInfo[] = [
-    { id: 'sales', name: 'Sales Team' },
-    { id: 'product', name: 'Product Team' },
-  ] // Dummy data to simulate different teams
 
-  const [activeTeamId, setActiveTeamId] = useState<string | null>(teams[0]?.id ?? null)
-  const activeTeam = teams.find((t) => t.id === activeTeamId)
+  const { teams, activeTeamId, loading, error, fetchTeams, setActiveTeamId } = useTeams()
+
+  useEffect(() => {
+    fetchTeams()
+  }, [fetchTeams])
+
+  const activeTeam = useMemo(
+    () => teams.find((t) => t.id === activeTeamId) ?? null,
+    [teams, activeTeamId]
+  )
 
   const handleLogout = async () => {
     await logout()
@@ -66,7 +71,11 @@ export default function DashboardHome() {
       navbar={
         <Box h="100%" style={{ display: 'flex', flexDirection: 'row' }}>
           {teams.length > 1 && (
-            <TeamSideBar teams={teams} activeTeamId={activeTeamId} onSelectTeam={setActiveTeamId} />
+            <TeamSideBar
+              teams={teams.map((t) => ({ id: t.id, name: t.name }))}
+              activeTeamId={activeTeamId}
+              onSelectTeam={setActiveTeamId}
+            />
           )}
           <AppSidebar
             active={active}

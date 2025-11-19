@@ -7,18 +7,13 @@ import { AppLayout } from '@/components/layout/AppLayout'
 import { AppSidebar } from '@/components/ui/AppSideBar'
 import { AppTopBar } from '@/components/ui/AppTopBar'
 import { TeamSideBar, TeamInfo } from '@/components/ui/TeamSideBar'
+import { useTeams } from '@/features/teams/hooks/useTeams'
 
 export default function TeamsPage() {
   const [active, setActive] = useState('Teams')
   const [selectedDate, setSelectedDate] = useState<Date | null>(new Date())
 
-  const teams: TeamInfo[] = [
-    { id: 'sales', name: 'Sales Team' },
-    { id: 'product', name: 'Product Team' },
-  ] // Dummy data to simulate different teams
-
-  const [activeTeamId, setActiveTeamId] = useState<string | null>(teams[0]?.id ?? null)
-  const activeTeam = teams.find((t) => t.id === activeTeamId)
+  const { teams, activeTeamId, setActiveTeamId } = useTeams()
 
   return (
     <AppLayout

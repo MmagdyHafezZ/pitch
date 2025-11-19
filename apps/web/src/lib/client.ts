@@ -182,4 +182,39 @@ export const api = {
         body: JSON.stringify({ refresh_token: refreshToken }),
       }),
   },
+
+  // Teams endpoints
+  teams: {
+    getAll: () => apiRequest<any[]>('/teams'),
+    getById: (id: string) => apiRequest<any>(`/teams/${id}`),
+    create: (data: any) =>
+      apiRequest<any>('/teams', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    update: (id: string, data: any) =>
+      apiRequest<any>(`/teams/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      }),
+    delete: (id: string) =>
+      apiRequest<any>(`/teams/${id}`, {
+        method: 'DELETE',
+      }),
+    addMember: (id: string, data: any) =>
+      apiRequest<any>(`/teams/${id}/members`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    updateMember: (id: string, userId: string, data: any) =>
+      apiRequest<any>(`/teams/${id}/members/${userId}`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      }),
+    deleteMember: (id: string, userId: string, data: any) =>
+      apiRequest<any>(`/teams/${id}/members/${userId}`, {
+        method: 'DELETE',
+        body: JSON.stringify(data),
+      }),
+  },
 }

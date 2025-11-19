@@ -1,4 +1,5 @@
 import { ActionIcon, Box, Stack, Tooltip, Text, Menu } from '@mantine/core'
+import { useTeams } from '@/features/teams/hooks/useTeams'
 
 export type TeamInfo = {
   id: string
@@ -29,6 +30,21 @@ function deriveInitials(name: string, max = 2): string {
 }
 
 export function TeamSideBar({ teams, activeTeamId, onSelectTeam }: TeamSideBarProps) {
+  const { createTeam, fetchTeamById, setActiveTeamId } = useTeams()
+
+  const handleTeamClick = async (id: string) => {
+    setActiveTeamId(id)
+    await fetchTeamById(id)
+    onSelectTeam(id)
+  }
+
+  const handleCreateTeam = async () => {
+    const name = window.prompt('Enter a name for the new team:')
+    if (!name || !name.trim()) return
+
+    await createTeam(name.trim())
+  }
+
   return (
     <Box
       style={{
@@ -63,7 +79,7 @@ export function TeamSideBar({ teams, activeTeamId, onSelectTeam }: TeamSideBarPr
                 size="lg"
                 variant={isActive ? 'filled' : 'light'}
                 color={isActive ? 'blue' : 'white'}
-                onClick={() => onSelectTeam(team.id)}
+                onClick={() => handleTeamClick(team.id)}
                 style={{
                   width: 36,
                   height: 36,
@@ -109,13 +125,7 @@ export function TeamSideBar({ teams, activeTeamId, onSelectTeam }: TeamSideBarPr
             >
               Sign in to another team
             </Menu.Item>
-            <Menu.Item
-              onClick={() => {
-                // TODO: "create new team"
-              }}
-            >
-              Create a new team
-            </Menu.Item>
+            <Menu.Item onClick={handleCreateTeam}>Create a new team</Menu.Item>
           </Menu.Dropdown>
         </Menu>
       </Stack>
