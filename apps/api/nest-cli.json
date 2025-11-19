@@ -21,9 +21,9 @@
     },
     "user": {
       "type": "application",
-      "root": "src/microservices/user",
+      "root": "src/microservices/userManagement",
       "entryFile": "main",
-      "sourceRoot": "src/microservices/user",
+      "sourceRoot": "src/microservices/userManagement",
       "compilerOptions": {
         "tsConfigPath": "tsconfig.json"
       }

@@ -52,7 +52,7 @@ services:
       - "15692:15692" # Prometheus metrics port
     volumes:
       - rabbitmq_data_local:/var/lib/rabbitmq
-      - ./docker/rabbitmq/enabled_plugins:/etc/rabbitmq/enabled_plugins:ro
+      - ./rabbitmq/enabled_plugins:/etc/rabbitmq/enabled_plugins
     networks:
       - pitch-network
     healthcheck:

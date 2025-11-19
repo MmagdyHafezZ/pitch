@@ -45,6 +45,7 @@ export function TeamSideBar({ teams, activeTeamId, onSelectTeam }: TeamSideBarPr
     >
       <Stack
         gap={6}
+        pt={11}
         style={{
           flex: 1,
           width: '100%',

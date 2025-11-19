@@ -12,10 +12,11 @@ import {
   IconDoorExit,
   IconDoorEnter,
 } from '@tabler/icons-react'
-import { Dispatch, SetStateAction } from 'react'
+import { Dispatch, SetStateAction, useState } from 'react'
 import dayjs from 'dayjs'
 import { useAuth } from '@/features/auth'
 import { WeekCalendar } from '@/components/ui/WeekCalendar'
+import { SettingsModal } from './SettingsModal'
 
 export type SidebarLink = { icon: React.ComponentType<{ size?: number }>; label: string }
 
@@ -38,36 +39,7 @@ const DEFAULT_MAIN: SidebarLink[] = [
 const DEFAULT_SECONDARY: SidebarLink[] = [
   { icon: IconHelp, label: 'Support' },
   { icon: IconSettings, label: 'Settings' },
-  { icon: IconDoorEnter, label: 'Logout' },
 ]
-function startOfWeek(d: Date) {
-  const day = d.getDay()
-  const diff = (day === 0 ? -6 : 1) - day
-  return dayjs(d).add(diff, 'day').startOf('day').toDate()
-}
-
-function endOfWeek(d: Date) {
-  return dayjs(startOfWeek(d)).add(6, 'day').endOf('day').toDate()
-}
-
-function isInThisWeek(date: string, anchor: Date) {
-  const s = startOfWeek(anchor)
-  const e = endOfWeek(anchor)
-  return (
-    (dayjs(date).isAfter(s) && dayjs(date).isBefore(e)) ||
-    dayjs(date).isSame(s) ||
-    dayjs(date).isSame(e)
-  )
-}
-function Brand() {
-  return (
-    <Group gap="xs" align="center" px="xs" pt="xs" pb="sm">
-      <Text fw={700} size="xl" style={{ letterSpacing: 0.5, color: 'var(--mantine-color-blue-6)' }}>
-        PITCH
-      </Text>
-    </Group>
-  )
-}
 
 export function AppSidebar({
   active,
@@ -77,129 +49,122 @@ export function AppSidebar({
   mainLinks = DEFAULT_MAIN,
   secondaryLinks = DEFAULT_SECONDARY,
 }: Props) {
-  const { logout } = useAuth()
+  const [settingsOpened, setSettingsOpened] = useState(false)
+
   return (
-    <Box
-      style={{
-        height: '100%',
-        width: '100%',
-        background: 'transparent',
-        display: 'flex',
-      }}
-    >
+    <>
+      <SettingsModal opened={settingsOpened} onClose={() => setSettingsOpened(false)} />
       <Box
         style={{
-          background: 'var(--mantine-color-dark-8)',
-          borderRadius: rem(16),
-          borderTopLeftRadius: 0,
-          borderTopRightRadius: 0,
-          borderBottomLeftRadius: 0,
-          padding: rem(10),
-          display: 'flex',
-          flexDirection: 'column',
-          gap: rem(8),
-          width: '100%',
           height: '100%',
+          width: '100%',
+          background: 'transparent',
+          display: 'flex',
         }}
       >
-        <Brand />
-
-        <Stack gap={6} mt="xs" flex={1}>
-          {mainLinks.map(({ icon: Icon, label }) => (
-            <NavLink
-              key={label}
-              active={active === label}
-              onClick={() => setActive(label)}
-              leftSection={<Icon size={18} />}
-              href={`/${label.toLowerCase().replace(/\s+/g, '-')}`}
-              label={
-                <Text size="sm" fw={active === label ? 700 : 600} style={{ fontSize: 14 }}>
-                  {label}
-                </Text>
-              }
-              variant="subtle"
-              styles={{
-                root: {
-                  borderRadius: rem(10),
-                  paddingTop: rem(8),
-                  paddingBottom: rem(8),
-                  paddingLeft: rem(10),
-                  paddingRight: rem(8),
-                  color: 'var(--mantine-color-gray-3)',
-                  transition: 'background 120ms, color 120ms',
-
-                  '&:hover': { background: '#3B3B3B' },
-
-                  '&[dataActive]': {
-                    background: 'rgba(255,255,255,0.08)',
-                    color: 'var(--mantine-color-blue-4)',
-                  },
-                },
-                section: {
-                  color:
-                    active === label
-                      ? 'var(--mantine-color-blue-4)'
-                      : 'var(--mantine-color-gray-4)',
-                },
-                body: {
-                  color: active === label ? 'var(--mantine-color-blue-4)' : 'inherit',
-                },
-                label: { fontSize: 14 },
-              }}
-            />
-          ))}
-          <Box
-            mt="auto"
-            pt="lg"
-            mx={0}
-            style={{
-              width: '100%',
-              background: 'var(--mantine-color-dark-7)',
-              borderRadius: 12,
-              border: '1px solid rgba(255,255,255,0.08)',
-              overflow: 'hidden',
-            }}
-          >
-            <WeekCalendar value={selectedDate} onChange={(date) => setSelectedDate(date)} />
-          </Box>
-        </Stack>
-
-        <Divider my="md" color="dark.6" />
-
-        <Stack gap={6} mt="auto">
-          {secondaryLinks.map(({ icon: Icon, label }) => (
-            <NavLink
-              key={label}
-              onClick={async () => {
-                if (label === 'Logout') {
-                  await logout()
-                } else {
-                  setActive(label)
+        <Box
+          style={{
+            background: 'var(--mantine-color-dark-8)',
+            borderRadius: rem(16),
+            borderTopLeftRadius: 0,
+            borderTopRightRadius: 0,
+            borderBottomLeftRadius: 0,
+            padding: rem(10),
+            display: 'flex',
+            flexDirection: 'column',
+            gap: rem(8),
+            width: '100%',
+            height: '100%',
+          }}
+        >
+          <Stack gap={6} mt="xs" flex={1}>
+            {mainLinks.map(({ icon: Icon, label }) => (
+              <NavLink
+                key={label}
+                active={active === label}
+                onClick={() => setActive(label)}
+                leftSection={<Icon size={18} />}
+                href={`/${label.toLowerCase().replace(/\s+/g, '-')}`}
+                label={
+                  <Text size="sm" fw={active === label ? 700 : 600} style={{ fontSize: 14 }}>
+                    {label}
+                  </Text>
                 }
+                variant="subtle"
+                styles={{
+                  root: {
+                    borderRadius: rem(10),
+                    paddingTop: rem(8),
+                    paddingBottom: rem(8),
+                    paddingLeft: rem(10),
+                    paddingRight: rem(8),
+                    color: 'var(--mantine-color-gray-3)',
+                    transition: 'background 120ms, color 120ms',
+                    '&:hover': { background: 'rgba(255,255,255,0.04)' },
+                    '&[data-active="true"]': {
+                      background: 'rgba(255,255,255,0.08)',
+                      color: 'var(--mantine-color-blue-4)',
+                    },
+                  },
+                  section: {
+                    color:
+                      active === label
+                        ? 'var(--mantine-color-blue-4)'
+                        : 'var(--mantine-color-gray-4)',
+                  },
+                  body: {
+                    color: active === label ? 'var(--mantine-color-blue-4)' : 'inherit',
+                  },
+                  label: { fontSize: 14 },
+                }}
+              />
+            ))}
+            <Box
+              mt="auto"
+              pt="lg"
+              mx="0" // was auto
+              style={{
+                width: '100%', // delete
+                background: 'var(--mantine-color-dark-7)',
+                borderRadius: 12,
+                border: '1px solid rgba(255,255,255,0.08)',
+                overflow: 'hidden',
               }}
-              leftSection={<Icon size={18} />}
-              label={
-                <Text size="sm" fw={600} style={{ fontSize: 14 }}>
-                  {label}
-                </Text>
-              }
-              variant="subtle"
-              styles={{
-                root: {
-                  borderRadius: rem(10),
-                  paddingTop: rem(8),
-                  paddingBottom: rem(8),
-                  paddingLeft: rem(10),
-                  paddingRight: rem(8),
-                  color: 'var(--mantine-color-gray-4)',
-                  '&:hover': { background: '#3B3B3B' },
-                },
-                section: { color: 'var(--mantine-color-gray-4)' },
-              }}
-            />
-          ))}
-        </Stack>
+            >
+              <WeekCalendar value={selectedDate} onChange={(date) => setSelectedDate(date)} />
+            </Box>
+          </Stack>
+
+          <Divider my="md" color="dark.6" />
+
+          <Stack gap={6} mt="auto">
+            {secondaryLinks.map(({ icon: Icon, label }) => (
+              <NavLink
+                key={label}
+                leftSection={<Icon size={18} />}
+                label={
+                  <Text size="sm" fw={600} style={{ fontSize: 14 }}>
+                    {label}
+                  </Text>
+                }
+                variant="subtle"
+                styles={{
+                  root: {
+                    borderRadius: rem(10),
+                    paddingTop: rem(8),
+                    paddingBottom: rem(8),
+                    paddingLeft: rem(10),
+                    paddingRight: rem(8),
+                    color: 'var(--mantine-color-gray-4)',
+                    '&:hover': { background: 'rgba(255,255,255,0.04)' },
+                  },
+                  section: { color: 'var(--mantine-color-gray-4)' },
+                }}
+              />
+            ))}
+          </Stack>
+        </Box>
       </Box>
-    </Box>
+    </>
   )
 }
