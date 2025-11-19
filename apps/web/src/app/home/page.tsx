@@ -70,13 +70,11 @@ export default function DashboardHome() {
       }
       navbar={
         <Box h="100%" style={{ display: 'flex', flexDirection: 'row' }}>
-          {teams.length > 1 && (
-            <TeamSideBar
-              teams={teams.map((t) => ({ id: t.id, name: t.name }))}
-              activeTeamId={activeTeamId}
-              onSelectTeam={setActiveTeamId}
-            />
-          )}
+          <TeamSideBar
+            teams={teams.map((t) => ({ id: t.id, name: t.name }))}
+            activeTeamId={activeTeamId}
+            onSelectTeam={setActiveTeamId}
+          />
           <AppSidebar
             active={active}
             setActive={setActive}

@@ -48,14 +48,19 @@ export function AppTopBar({
           }}
         >
           <Group justify="space-between" align="center" w="100%" gap={rem(8)}>
+            {teamName && (
+              <Text
+                size="m"
+                fw={700}
+                c="var(--mantine-color-blue-4)"
+                style={{ whiteSpace: 'nowrap' }}
+              >
+                {teamName}
+              </Text>
+            )}
             {rightSlot ??
               (showSearch && (
                 <Group gap={rem(12)} align="center" style={{ flex: 1, minWidth: 0 }}>
-                  {teamName && (
-                    <Text size="sm" fw={700} c="gray.1" style={{ whiteSpace: 'nowrap' }}>
-                      {teamName}
-                    </Text>
-                  )}
                   <TextInput
                     value={value}
                     onChange={(e) => onChange?.(e.currentTarget.value)}

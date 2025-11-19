@@ -9,6 +9,11 @@ export function useTeams() {
   const fetchTeams = useTeamsStore((s) => s.fetchTeams)
   const fetchTeamById = useTeamsStore((s) => s.fetchTeamById)
   const createTeam = useTeamsStore((s) => s.createTeam)
+  const updateTeam = useTeamsStore((s) => s.updateTeam)
+  const deleteTeam = useTeamsStore((s) => s.deleteTeam)
+  const addMember = useTeamsStore((s) => s.addMember)
+  const updateMember = useTeamsStore((s) => s.updateMember)
+  const deleteMember = useTeamsStore((s) => s.deleteMember)
   const setActiveTeamId = useTeamsStore((s) => s.setActiveTeamId)
 
   return {
@@ -20,6 +25,11 @@ export function useTeams() {
     fetchTeams,
     fetchTeamById,
     createTeam,
+    updateTeam,
+    deleteTeam,
+    addMember,
+    updateMember,
+    deleteMember,
     setActiveTeamId,
   }
 }

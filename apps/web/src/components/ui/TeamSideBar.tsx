@@ -1,10 +1,12 @@
+'use client'
+
 import { ActionIcon, Box, Stack, Tooltip, Text, Menu } from '@mantine/core'
+import { useRouter } from 'next/navigation'
 import { useTeams } from '@/features/teams/hooks/useTeams'
 
 export type TeamInfo = {
   id: string
   name: string
-  initials?: string
 }
 
 type TeamSideBarProps = {
@@ -30,7 +32,8 @@ function deriveInitials(name: string, max = 2): string {
 }
 
 export function TeamSideBar({ teams, activeTeamId, onSelectTeam }: TeamSideBarProps) {
-  const { createTeam, fetchTeamById, setActiveTeamId } = useTeams()
+  const router = useRouter()
+  const { fetchTeamById, setActiveTeamId } = useTeams()
 
   const handleTeamClick = async (id: string) => {
     setActiveTeamId(id)
@@ -38,11 +41,8 @@ export function TeamSideBar({ teams, activeTeamId, onSelectTeam }: TeamSideBarPr
     onSelectTeam(id)
   }
 
-  const handleCreateTeam = async () => {
-    const name = window.prompt('Enter a name for the new team:')
-    if (!name || !name.trim()) return
-
-    await createTeam(name.trim())
+  const handleCreateTeam = () => {
+    router.push('/new-team')
   }
 
   return (
@@ -70,7 +70,6 @@ export function TeamSideBar({ teams, activeTeamId, onSelectTeam }: TeamSideBarPr
       >
         {teams.map((team) => {
           const isActive = team.id === activeTeamId
-          const initials = team.initials ?? deriveInitials(team.name)
 
           return (
             <Tooltip key={team.id} label={team.name} position="right" withArrow>
@@ -90,44 +89,30 @@ export function TeamSideBar({ teams, activeTeamId, onSelectTeam }: TeamSideBarPr
                 }}
               >
                 <Text fw={700} size="sm">
-                  {initials}
+                  {deriveInitials(team.name)}
                 </Text>
               </ActionIcon>
             </Tooltip>
           )
         })}
 
-        <Menu position="right-start" offset={4} shadow="md" withArrow>
-          <Menu.Target>
-            <ActionIcon
-              radius="xl"
-              size="lg"
-              variant="light"
-              color="dark"
-              style={{
-                width: 36,
-                height: 36,
-                border: '1px solid #444',
-                background: 'var(--mantine-color-dark-7)',
-              }}
-            >
-              <Text fw={700} size="sm" c="white">
-                +
-              </Text>
-            </ActionIcon>
-          </Menu.Target>
-
-          <Menu.Dropdown>
-            <Menu.Item
-              onClick={() => {
-                // TODO: "sign in to another team"
-              }}
-            >
-              Sign in to another team
-            </Menu.Item>
-            <Menu.Item onClick={handleCreateTeam}>Create a new team</Menu.Item>
-          </Menu.Dropdown>
-        </Menu>
+        <ActionIcon
+          radius="xl"
+          size="lg"
+          variant="light"
+          color="dark"
+          style={{
+            width: 36,
+            height: 36,
+            border: '1px solid #444',
+            background: 'var(--mantine-color-dark-7)',
+          }}
+          onClick={handleCreateTeam}
+        >
+          <Text fw={700} size="sm" c="white">
+            +
+          </Text>
+        </ActionIcon>
       </Stack>
     </Box>
   )

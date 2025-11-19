@@ -1,11 +1,3 @@
-export type JsonValue =
-  | string
-  | number
-  | boolean
-  | null
-  | JsonValue[]
-  | { [key: string]: JsonValue | undefined }
-
 export type TeamRole = 'OWNER' | 'ADMIN' | 'MEMBER' | string
 
 /* ---------- READ MODELS (API responses) ---------- */
@@ -37,7 +29,7 @@ export interface Team {
   slug: string
   isActive: boolean
   billingEmail?: string | null
-  billingAddress?: JsonValue | undefined
+  billingAddress?: Address | undefined
   createdAt: string
   updatedAt: string
   deletedAt?: string | null
@@ -49,8 +41,7 @@ export interface CreateTeamInput {
   slug?: string
   isActive?: boolean
   billingEmail?: string | null
-  billingAddress?: JsonValue | undefined
-  metadata?: JsonValue
+  billingAddress?: Address | undefined
 }
 
 export interface UpdateTeamInput {
@@ -58,8 +49,7 @@ export interface UpdateTeamInput {
   slug?: string
   isActive?: boolean
   billingEmail?: string | null
-  billingAddress?: JsonValue | undefined
-  metadata?: JsonValue
+  billingAddress?: Address
 }
 
 export interface AddMemberInput {
@@ -74,4 +64,12 @@ export interface UpdateMemberInput {
   tokenLimit?: number
   isActive?: boolean
   acceptedAt?: string | null
+}
+
+interface Address {
+  street: string
+  city: string
+  stateProvince: string
+  postalCode: string
+  country: string
 }
