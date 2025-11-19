@@ -42,7 +42,7 @@ export function TeamSideBar({ teams, activeTeamId, onSelectTeam }: TeamSideBarPr
   }
 
   const handleCreateTeam = () => {
-    router.push('/new-team')
+    router.push('/team-config?mode=create')
   }
 
   return (
