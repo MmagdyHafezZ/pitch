@@ -101,7 +101,7 @@ export function AppSidebar({
                     color: 'var(--mantine-color-gray-3)',
                     transition: 'background 120ms, color 120ms',
                     '&:hover': { background: 'rgba(255,255,255,0.04)' },
-                    '&[data-active="true"]': {
+                    '&[dataActive="true"]': {
                       background: 'rgba(255,255,255,0.08)',
                       color: 'var(--mantine-color-blue-4)',
                     },
