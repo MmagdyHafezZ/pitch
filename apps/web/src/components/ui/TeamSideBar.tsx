@@ -1,6 +1,6 @@
 'use client'
 
-import { ActionIcon, Box, Stack, Tooltip, Text, Menu } from '@mantine/core'
+import { ActionIcon, Box, Stack, Tooltip, Text } from '@mantine/core'
 import { useRouter } from 'next/navigation'
 import { useTeams } from '@/features/teams/hooks/useTeams'
 
@@ -55,65 +55,78 @@ export function TeamSideBar({ teams, activeTeamId, onSelectTeam }: TeamSideBarPr
         borderTopLeftRadius: 0,
         display: 'flex',
         flexDirection: 'column',
-        alignItems: 'center',
         padding: '8px 4px',
       }}
     >
-      <Stack
-        gap={6}
-        pt={11}
+      {/* Scrollable content area (teams + plus) */}
+      <Box
         style={{
           flex: 1,
           width: '100%',
+          overflowY: 'auto',
+          overflowX: 'hidden',
+          paddingTop: 11,
+          display: 'flex',
+          flexDirection: 'column',
           alignItems: 'center',
         }}
       >
-        {teams.map((team) => {
-          const isActive = team.id === activeTeamId
-
-          return (
-            <Tooltip key={team.id} label={team.name} position="right" withArrow>
-              <ActionIcon
-                radius="xl"
-                size="lg"
-                variant={isActive ? 'filled' : 'light'}
-                color={isActive ? 'blue' : 'white'}
-                onClick={() => handleTeamClick(team.id)}
-                style={{
-                  width: 36,
-                  height: 36,
-                  border: isActive ? '2px solid var(--mantine-color-blue-4)' : '1px solid #444',
-                  background: isActive
-                    ? 'var(--mantine-color-blue-6)'
-                    : 'var(--mantine-color-dark-7)',
-                }}
-              >
-                <Text fw={700} size="sm">
-                  {deriveInitials(team.name)}
-                </Text>
-              </ActionIcon>
-            </Tooltip>
-          )
-        })}
-
-        <ActionIcon
-          radius="xl"
-          size="lg"
-          variant="light"
-          color="dark"
+        <Stack
+          gap={6}
           style={{
-            width: 36,
-            height: 36,
-            border: '1px solid #444',
-            background: 'var(--mantine-color-dark-7)',
+            width: '100%',
+            alignItems: 'center', // center horizontally
+            justifyContent: 'flex-start', // start at top
           }}
-          onClick={handleCreateTeam}
         >
-          <Text fw={700} size="sm" c="white">
-            +
-          </Text>
-        </ActionIcon>
-      </Stack>
+          {teams.map((team) => {
+            const isActive = team.id === activeTeamId
+
+            return (
+              <Tooltip key={team.id} label={team.name} position="right" withArrow>
+                <ActionIcon
+                  radius="xl"
+                  size="lg"
+                  variant={isActive ? 'filled' : 'light'}
+                  color={isActive ? 'blue' : 'white'}
+                  onClick={() => handleTeamClick(team.id)}
+                  style={{
+                    width: 36,
+                    height: 36,
+                    border: isActive ? '2px solid var(--mantine-color-blue-4)' : '1px solid #444',
+                    background: isActive
+                      ? 'var(--mantine-color-blue-6)'
+                      : 'var(--mantine-color-dark-7)',
+                  }}
+                >
+                  <Text fw={700} size="sm">
+                    {deriveInitials(team.name)}
+                  </Text>
+                </ActionIcon>
+              </Tooltip>
+            )
+          })}
+
+          <ActionIcon
+            radius="xl"
+            size="lg"
+            variant="light"
+            color="dark"
+            style={{
+              width: 36,
+              height: 36,
+              border: '1px solid #444',
+              background: 'var(--mantine-color-dark-7)',
+              marginTop: 8,
+            }}
+            onClick={handleCreateTeam}
+          >
+            <Text fw={700} size="sm" c="white">
+              +
+            </Text>
+          </ActionIcon>
+        </Stack>
+      </Box>
     </Box>
   )
 }
