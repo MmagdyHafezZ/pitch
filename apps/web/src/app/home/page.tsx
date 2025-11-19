@@ -20,6 +20,7 @@ import { useAuth } from '@/features/auth'
 
 import { AppLayout } from '@/components/layout/AppLayout'
 import { AppSidebar } from '@/components/ui/AppSideBar'
+import { TeamSideBar, TeamInfo } from '@/components/ui/TeamSideBar'
 import { AppTopBar } from '@/components/ui/AppTopBar'
 
 export default function DashboardHome() {
@@ -27,6 +28,13 @@ export default function DashboardHome() {
   const router = useRouter()
   const [active, setActive] = useState('Home')
   const [selectedDate, setSelectedDate] = useState<Date | null>(new Date())
+  const teams: TeamInfo[] = [
+    { id: 'sales', name: 'Sales Team' },
+    { id: 'product', name: 'Product Team' },
+  ] // Dummy data to simulate different teams
+
+  const [activeTeamId, setActiveTeamId] = useState<string | null>(teams[0]?.id ?? null)
+  const activeTeam = teams.find((t) => t.id === activeTeamId)
 
   const handleLogout = async () => {
     await logout()
@@ -47,14 +55,26 @@ export default function DashboardHome() {
 
   return (
     <AppLayout
-      header={<AppTopBar onLogout={handleLogout} showSearch searchPlaceholder="Search" />}
-      navbar={
-        <AppSidebar
-          active={active}
-          setActive={setActive}
-          selectedDate={selectedDate}
-          setSelectedDate={setSelectedDate}
+      header={
+        <AppTopBar
+          onLogout={handleLogout}
+          showSearch
+          searchPlaceholder="Search"
+          teamName={activeTeam?.name ?? 'PITCH'}
         />
+      }
+      navbar={
+        <Box h="100%" style={{ display: 'flex', flexDirection: 'row' }}>
+          {teams.length > 1 && (
+            <TeamSideBar teams={teams} activeTeamId={activeTeamId} onSelectTeam={setActiveTeamId} />
+          )}
+          <AppSidebar
+            active={active}
+            setActive={setActive}
+            selectedDate={selectedDate}
+            setSelectedDate={setSelectedDate}
+          />
+        </Box>
       }
     >
       <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="lg">

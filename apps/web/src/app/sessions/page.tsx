@@ -1,7 +1,6 @@
 'use client'
 
 import {
-  AppShell,
   Group,
   TextInput,
   Button,
@@ -20,6 +19,7 @@ import { useState } from 'react'
 import { AppLayout } from '@/components/layout/AppLayout'
 import { AppSidebar } from '@/components/ui/AppSideBar'
 import { AppTopBar } from '@/components/ui/AppTopBar'
+import { TeamSideBar, TeamInfo } from '@/components/ui/TeamSideBar'
 
 type Status = 'Upcoming' | 'Pending' | 'Overdue' | 'Completed'
 const statusColor: Record<Status, string> = {
@@ -157,6 +157,14 @@ export default function SessionsPage() {
     },
   ]
 
+  const teams: TeamInfo[] = [
+    { id: 'sales', name: 'Sales Team' },
+    { id: 'product', name: 'Product Team' },
+  ] // Dummy data to simulate different teams
+
+  const [activeTeamId, setActiveTeamId] = useState<string | null>(teams[0]?.id ?? null)
+  const activeTeam = teams.find((t) => t.id === activeTeamId)
+
   return (
     <AppLayout
       header={
@@ -198,12 +206,17 @@ export default function SessionsPage() {
         />
       }
       navbar={
-        <AppSidebar
-          active={active}
-          setActive={setActive}
-          selectedDate={selectedDate}
-          setSelectedDate={setSelectedDate}
-        />
+        <Box h="100%" style={{ display: 'flex', flexDirection: 'row' }}>
+          {teams.length > 1 && (
+            <TeamSideBar teams={teams} activeTeamId={activeTeamId} onSelectTeam={setActiveTeamId} />
+          )}
+          <AppSidebar
+            active={active}
+            setActive={setActive}
+            selectedDate={selectedDate}
+            setSelectedDate={setSelectedDate}
+          />
+        </Box>
       }
     >
       <Box>

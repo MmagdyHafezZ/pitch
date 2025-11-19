@@ -91,6 +91,9 @@ export function AppSidebar({
         style={{
           background: 'var(--mantine-color-dark-8)',
           borderRadius: rem(16),
+          borderTopLeftRadius: 0,
+          borderTopRightRadius: 0,
+          borderBottomLeftRadius: 0,
           padding: rem(10),
           display: 'flex',
           flexDirection: 'column',

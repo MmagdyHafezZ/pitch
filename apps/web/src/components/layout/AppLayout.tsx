@@ -15,15 +15,14 @@ export function AppLayout({ header, navbar, children }: Props) {
 
   return (
     <AppShell
-      layout="alt"
       withBorder={false}
       header={{ height: 60 }}
-      footer={{ height: 60 }}
+      footer={{ height: 20 }}
       navbar={{ width: 300, breakpoint: 'sm', collapsed: { mobile: !opened } }}
       padding="md"
     >
       <AppShell.Header>{header}</AppShell.Header>
-      <AppShell.Navbar p="sm">{navbar}</AppShell.Navbar>
+      <AppShell.Navbar px="md">{navbar}</AppShell.Navbar>
       <AppShell.Main>{children}</AppShell.Main>
     </AppShell>
   )
