@@ -122,6 +122,20 @@ export class TeamController {
     }
   }
 
+  @MessagePattern(USER_SERVICE_PATTERNS.GET_USER_TEAMS)
+  async getUserTeams(
+    @Payload() data: userClaimsInterface.MessageWithUserClaims,
+  ) {
+    try {
+      this.logger.log(
+        `Getting teams for user ${data.userClaims.id} - Requested by: ${data.userClaims.email} (${data.userClaims.id})`,
+      );
+      return await this.teamService.findUserTeams(data.userClaims.id);
+    } catch (error) {
+      throw toRpcException(error);
+    }
+  }
+
   @MessagePattern(USER_SERVICE_PATTERNS.ADD_TEAM_MEMBER)
   @UsePipes(new ValidationPipe({ transform: true }))
   async addTeamMember(

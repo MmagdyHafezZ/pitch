@@ -136,6 +136,10 @@ export class TeamService {
     return team;
   }
 
+  async findUserTeams(userId: string): Promise<Team[]> {
+    return this.teamRepository.findUserTeams(userId);
+  }
+
   async findByName(name: string): Promise<Team | null> {
     return this.teamRepository.findByName(name);
   }

@@ -146,6 +146,25 @@ export class TeamGatewayController {
       );
   }
 
+  @Get('user-teams')
+  @ApiOperation({ summary: 'Get all teams' })
+  @ApiResponse({ status: 200, description: 'Teams retrieved successfully' })
+  getUserTeams(@UserClaims() userClaims: UserClaimsType) {
+    return this.teamService
+      .send(USER_SERVICE_PATTERNS.GET_USER_TEAMS, {
+        userClaims,
+      })
+      .pipe(
+        timeout(5000),
+        catchError((err: unknown) => {
+          const error = err as ServiceError;
+          const message = error.message ?? 'Failed to get teams';
+          const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
+          return throwError(() => new HttpException(message, status));
+        }),
+      );
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Get team by ID' })
   @ApiResponse({ status: 200, description: 'Team retrieved successfully' })
