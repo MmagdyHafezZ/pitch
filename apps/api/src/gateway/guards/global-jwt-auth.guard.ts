@@ -1,4 +1,4 @@
-// global-jwt-auth.guard.ts
+/* eslint-disable */
 import {
   Injectable,
   CanActivate,
@@ -10,11 +10,11 @@ import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import { IS_PUBLIC_KEY } from '../../microservices/userManagement/decorators/public.decorator';
 import { isWhitelistedRoute } from '../config/auth-whitelist.config';
-import type { ServiceError } from '../../common/interfaces/error.interface';
+import type { ServiceError } from '@pitch/shared-backend/interfaces/error.interface';
 import type {
   RequestWithHeaders,
   RequestWithUser,
-} from '../../common/interfaces/request.interface';
+} from '@pitch/shared-backend/interfaces/request.interface';
 
 export interface JwtPayload {
   sub: string;

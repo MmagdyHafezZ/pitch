@@ -39,25 +39,21 @@ export class AuthApplicationService {
   async register(dto: RegisterDto): Promise<AuthResponseDto> {
     this.logger.log(`Processing registration for: ${dto.email}`);
 
-    // Check if user already exists
     const existingUser = await this.userRepository.findByEmail(dto.email);
     if (existingUser) {
       throw new ConflictException('User with this email already exists');
     }
 
-    // Create user (in a real app, hash password here)
     const user = await this.userRepository.create({
       email: dto.email,
       name: dto.name,
       avatar: dto.avatar,
     });
 
-    // Generate tokens
     const tokens = this.generateTokens(user);
 
-    // Store refresh token
     const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 7); // 7 days
+    expiresAt.setDate(expiresAt.getDate() + 7);
     await this.authRepository.createRefreshToken(
       user.id,
       tokens.refresh_token,
@@ -87,14 +83,11 @@ export class AuthApplicationService {
   async login(dto: LoginDto): Promise<AuthResponseDto> {
     this.logger.log(`Processing login for: ${dto.email}`);
 
-    // Find user by email
     const user = await this.userRepository.findByEmail(dto.email);
     if (!user) {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    // In a real app with passwords, validate password here
-    // For OAuth-only, we just check if user has OAuth accounts
     const oauthAccounts = await this.authRepository.getOAuthAccounts(user.id);
     if (oauthAccounts.length === 0) {
       throw new UnauthorizedException(
@@ -102,10 +95,8 @@ export class AuthApplicationService {
       );
     }
 
-    // Generate tokens
     const tokens = this.generateTokens(user);
 
-    // Store refresh token
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7);
     await this.authRepository.createRefreshToken(
@@ -147,11 +138,8 @@ export class AuthApplicationService {
         this.logger.warn(
           `Failed to delete refresh token during logout: ${error}`,
         );
-        // Continue logout even if token deletion fails
       }
     }
-
-    // Could also: Delete all refresh tokens for user, update last seen, etc.
 
     this.logger.log(`User logged out successfully: ${userId}`);
     return { message: 'Logged out successfully' };
@@ -165,10 +153,8 @@ export class AuthApplicationService {
     this.logger.log('Processing token refresh');
 
     try {
-      // Verify JWT signature
       const payload = this.jwtService.verify<{ sub: string }>(refreshToken);
 
-      // Find user and validate refresh token exists in DB
       const user =
         await this.authRepository.findUserByRefreshToken(refreshToken);
       if (!user) {
@@ -179,10 +165,8 @@ export class AuthApplicationService {
         throw new UnauthorizedException('Token user mismatch');
       }
 
-      // Generate new tokens
       const tokens = this.generateTokens(user);
 
-      // Rotate refresh token: delete old, create new
       await this.authRepository.deleteRefreshToken(refreshToken);
       const expiresAt = new Date();
       expiresAt.setDate(expiresAt.getDate() + 7);
@@ -212,6 +196,42 @@ export class AuthApplicationService {
   }
 
   /**
+   * Check if email exists and return associated OAuth provider
+   * Used for redirect-based login flow
+   */
+  async checkEmail(email: string) {
+    this.logger.log(`Checking email: ${email}`);
+
+    const user = await this.userRepository.findByEmail(email);
+
+    if (!user) {
+      return {
+        exists: false,
+        message: 'No account found with this email. Please sign up first.',
+      };
+    }
+
+    const oauthAccounts = await this.authRepository.getOAuthAccounts(user.id);
+
+    if (oauthAccounts.length === 0) {
+      return {
+        exists: true,
+        requiresOAuth: false,
+        message: 'Please use password login',
+      };
+    }
+
+    const primaryProvider = oauthAccounts[0];
+
+    return {
+      exists: true,
+      provider: primaryProvider.provider.toLowerCase(),
+      requiresOAuth: true,
+      message: `Please continue with ${primaryProvider.provider} to sign in`,
+    };
+  }
+
+  /**
    * Validate OAuth user and create/update
    * Orchestration: Find or create user → Link OAuth account → Generate tokens
    */
@@ -227,18 +247,15 @@ export class AuthApplicationService {
       `Processing OAuth validation for ${profile.provider}: ${profile.email}`,
     );
 
-    // Try to find user by OAuth account
     let user = await this.userRepository.findByOAuthAccount(
       profile.provider,
       profile.id,
     );
 
     if (!user) {
-      // Check if user with this email already exists
       const existingUser = await this.userRepository.findByEmail(profile.email);
 
       if (existingUser) {
-        // Link OAuth account to existing user
         await this.authRepository.createOAuthAccount({
           provider: profile.provider,
           providerId: profile.id,
@@ -255,7 +272,6 @@ export class AuthApplicationService {
           `Linked OAuth account to existing user: ${existingUser.id}`,
         );
       } else {
-        // Create new user with OAuth account
         user = await this.userRepository.createWithOAuth(
           {
             email: profile.email,
@@ -276,7 +292,6 @@ export class AuthApplicationService {
         this.logger.log(`Created new user via OAuth: ${user.id}`);
       }
     } else {
-      // Update existing OAuth tokens
       await this.authRepository.updateOAuthAccount(
         profile.provider,
         profile.id,
@@ -292,10 +307,8 @@ export class AuthApplicationService {
       this.logger.log(`Updated OAuth tokens for user: ${user.id}`);
     }
 
-    // Generate our JWT tokens
     const tokens = this.generateTokens(user);
 
-    // Store refresh token
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7);
     await this.authRepository.createRefreshToken(

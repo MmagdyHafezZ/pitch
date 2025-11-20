@@ -3,6 +3,15 @@
 /node_modules
 /build
 
+# Compiled output in source directories
+src/**/*.js
+src/**/*.js.map
+src/**/*.d.ts
+!src/**/*.d.ts.map
+
+# Exception: keep dist folder compiled files
+!dist/**/*
+
 # Logs
 logs
 *.log

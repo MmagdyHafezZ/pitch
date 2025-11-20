@@ -3,9 +3,9 @@ import {
   CreateUserDto,
   UpdateUserDto,
   User,
-} from '../../../common/interfaces/user.interface';
+} from '@pitch/shared-backend/interfaces/user.interface';
 import { UserRepository } from '../repositories/user.repository';
-import type { PrismaError } from '../../../common/interfaces/error.interface';
+import type { PrismaError } from '@pitch/shared-backend/interfaces/error.interface';
 import { AuthProvider } from '../factories/oauth-provider.factory';
 
 export interface EmailCheckResult {

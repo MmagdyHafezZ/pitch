@@ -79,6 +79,7 @@ export function AppSidebar({
   secondaryLinks = DEFAULT_SECONDARY,
 }: Props) {
   const [settingsOpened, setSettingsOpened] = useState(false)
+  const { logout } = useAuth()
 
   return (
     <>
@@ -193,6 +194,15 @@ export function AppSidebar({
               <NavLink
                 key={label}
                 leftSection={<Icon size={18} />}
+                onClick={() => {
+                  if (label === 'Settings') {
+                    setSettingsOpened(true)
+                  } else if (label === 'Logout') {
+                    logout()
+                  } else {
+                    setActive(label)
+                  }
+                }}
                 label={
                   <Text size="sm" fw={600} style={{ fontSize: 14 }}>
                     {label}

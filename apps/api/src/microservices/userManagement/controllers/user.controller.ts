@@ -1,11 +1,11 @@
 import { Controller, ValidationPipe, UsePipes, Logger } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
 import { UserService } from '../services/user.service';
-import { USER_SERVICE_PATTERNS } from '../../../common/interfaces/message-patterns.interface';
+import { USER_SERVICE_PATTERNS } from '@pitch/shared-backend/interfaces/message-patterns.interface';
 import { OAuthProviderFactory } from '../factories/oauth-provider.factory';
-import * as userInterface from '../../../common/interfaces/user.interface';
-import * as userClaimsInterface from '../../../common/interfaces/user-claims.interface';
-import { toRpcException } from 'src/common/helpers/exceptions';
+import * as userInterface from '@pitch/shared-backend/interfaces/user.interface';
+import * as userClaimsInterface from '@pitch/shared-backend/interfaces/user-claims.interface';
+import { toRpcException } from '@pitch/shared-backend/helpers/exceptions';
 
 @Controller()
 export class UserController {
@@ -112,7 +112,6 @@ export class UserController {
     try {
       this.logger.log(`Checking email: ${data.email}`);
 
-      // Check if user exists with this email
       const user = await this.userService.findByEmail(data.email);
 
       if (!user) {
@@ -122,7 +121,6 @@ export class UserController {
         };
       }
 
-      // User exists, find their OAuth provider
       const oauthAccounts = await this.userService.getOAuthAccountsByUserId(
         user.id,
       );
@@ -136,7 +134,6 @@ export class UserController {
         };
       }
 
-      // Return the primary OAuth provider (first one)
       const primaryProvider = oauthAccounts[0];
 
       return {

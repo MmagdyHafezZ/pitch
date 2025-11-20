@@ -5,7 +5,7 @@ import { S3Repository } from '../repositories/s3.repository';
 export class S3Service {
   constructor(private readonly repository: S3Repository) {}
 
-  async healthCheck() {
+  healthCheck() {
     return { status: 'healthy' };
   }
 }

@@ -1,0 +1,71 @@
+version: "3.8"
+
+services:
+  postgres-user:
+    image: postgres:16-alpine
+    container_name: pitch-postgres-user-local
+    environment:
+      POSTGRES_DB: pitch_user
+      POSTGRES_USER: ${POSTGRES_USER:-pitch_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pitch_admin}
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_user_data_local:/var/lib/postgresql/data
+    networks:
+      - pitch-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pitch_user -d pitch_user"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: pitch-redis-local
+    ports:
+      - "6380:6380"
+    volumes:
+      - redis_data_local:/data
+    networks:
+      - pitch-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    command: redis-server --appendonly yes
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: pitch-rabbitmq-local
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-admin}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-admin123}
+      RABBITMQ_DEFAULT_VHOST: ${RABBITMQ_VHOST:-pitch_local}
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+      - "15692:15692"
+    volumes:
+      - rabbitmq_data_local:/var/lib/rabbitmq
+      - ./rabbitmq/enabled_plugins:/etc/rabbitmq/enabled_plugins
+      - ./rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      - ./rabbitmq/definitions.json:/etc/rabbitmq/definitions.json:ro
+    networks:
+      - pitch-network
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_port_connectivity"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  postgres_user_data_local:
+  redis_data_local:
+  rabbitmq_data_local:
+
+networks:
+  pitch-network:
+    driver: bridge

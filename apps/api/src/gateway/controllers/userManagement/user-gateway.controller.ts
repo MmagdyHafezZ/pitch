@@ -21,16 +21,16 @@ import {
 } from '@nestjs/swagger';
 import { catchError, timeout } from 'rxjs/operators';
 import { throwError } from 'rxjs';
-import { USER_SERVICE_PATTERNS } from '../../../common/interfaces/message-patterns.interface';
+import { USER_SERVICE_PATTERNS } from '@pitch/shared-backend/interfaces/message-patterns.interface';
 import type {
   CreateUserDto,
   UpdateUserDto,
-} from '../../../common/interfaces/user.interface';
+} from '@pitch/shared-backend/interfaces/user.interface';
 import { GlobalJwtAuthGuard } from '../../guards/global-jwt-auth.guard';
 import { UserClaimsInterceptor } from '../../interceptors/user-claims.interceptor';
 import { UserClaims } from '../../decorators/user-claims.decorator';
-import type { UserClaims as UserClaimsType } from '../../../common/interfaces/user-claims.interface';
-import type { ServiceError } from '../../../common/interfaces/error.interface';
+import type { UserClaims as UserClaimsType } from '@pitch/shared-backend/interfaces/user-claims.interface';
+import type { ServiceError } from '@pitch/shared-backend/interfaces/error.interface';
 
 @ApiTags('users')
 @Controller({ path: 'users', version: '1' })

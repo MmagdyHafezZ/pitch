@@ -1,81 +1,152 @@
+import 'dotenv/config';
 import { NestFactory } from '@nestjs/core';
-import { ValidationPipe } from '@nestjs/common';
+import { Logger, ValidationPipe, VersioningType } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import helmet from 'helmet';
+import compression from 'compression';
+import morgan from 'morgan';
 import { AppModule } from './app.module';
+import { MicroserviceExceptionFilter } from '@pitch/shared-backend/filters/microservice-exception.filter';
+import { PrismaClientExceptionFilter } from '@pitch/shared-backend/filters/prisma-exception.filter';
+import { runStartupHealthChecks } from '@pitch/shared-backend/utils/startup-health-checks';
+import {
+  createMicroserviceOptions,
+  getRabbitMQUrl,
+  MICROSERVICES_CONFIG,
+} from './config/microservices.config';
+import { PrismaClient } from '@prisma/user-client';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const logger = new Logger('Bootstrap');
 
-  // Global prefix for all routes
-  app.setGlobalPrefix('api/v1');
+  try {
+    const rabbitmqUrl = getRabbitMQUrl();
+    const prisma = new PrismaClient();
+    await runStartupHealthChecks(rabbitmqUrl, prisma);
+  } catch {
+    logger.error('Startup health checks failed. Exiting...');
+    process.exit(1);
+  }
 
-  // Enable CORS
-  const corsOrigins = process.env.CORS_ORIGIN?.split(',') || [
-    'http://localhost:3000',
-  ];
+  const app = await NestFactory.create(AppModule, { bufferLogs: true });
+  app.useLogger(logger);
+
+  app.use(helmet());
+  app.use(compression());
+  app.use(morgan(process.env.MORGAN_FORMAT ?? 'combined'));
+
   app.enableCors({
-    origin: corsOrigins,
+    origin: [
+      'http://localhost:3000',
+      'http://localhost:3001',
+      process.env.FRONTEND_URL || 'http://localhost:3000',
+    ],
     credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
   });
 
-  // Global validation pipe
+  app.setGlobalPrefix('api');
+  app.enableVersioning({
+    type: VersioningType.URI,
+    defaultVersion: '1',
+  });
+
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
-      forbidNonWhitelisted: true,
+      forbidNonWhitelisted: false,
       transform: true,
-      transformOptions: {
-        enableImplicitConversion: true,
-      },
+      transformOptions: { enableImplicitConversion: true },
+      validationError: { target: false },
     }),
   );
 
-  // Swagger documentation
-  const swaggerConfig = new DocumentBuilder()
-    .setTitle(process.env.SWAGGER_TITLE || 'PITCH Microservices API')
-    .setDescription(
-      process.env.SWAGGER_DESCRIPTION ||
-        'Microservices REST API for PITCH application',
-    )
-    .setVersion(process.env.SWAGGER_VERSION || '1.0.0')
+  app.useGlobalFilters(
+    new MicroserviceExceptionFilter(),
+    new PrismaClientExceptionFilter(),
+  );
+
+  const config = new DocumentBuilder()
+    .setTitle(process.env.SWAGGER_TITLE ?? 'My API')
+    .setDescription(process.env.SWAGGER_DESCRIPTION ?? 'REST API documentation')
+    .setVersion(process.env.SWAGGER_VERSION ?? '1.0.0')
     .addBearerAuth(
-      {
-        type: 'http',
-        scheme: 'bearer',
-        bearerFormat: 'JWT',
-        name: 'JWT',
-        description: 'Enter JWT token',
-        in: 'header',
-      },
-      'JWT-auth',
+      { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' },
+      'bearer',
     )
     .build();
 
-  const document = SwaggerModule.createDocument(app, swaggerConfig);
-  SwaggerModule.setup(process.env.SWAGGER_PATH || 'docs', app, document, {
-    customSiteTitle: process.env.SWAGGER_SITE_TITLE || 'PITCH API Docs',
-    swaggerOptions: {
-      persistAuthorization: true,
-    },
+  const document = SwaggerModule.createDocument(app, config);
+  SwaggerModule.setup(process.env.SWAGGER_PATH ?? 'docs', app, document, {
+    swaggerOptions: { persistAuthorization: true },
+    customSiteTitle: process.env.SWAGGER_SITE_TITLE ?? 'API Docs',
   });
 
-  // Start the application
-  const port = process.env.PORT || 8000;
-  await app.listen(port);
+  const microserviceName = process.env.MICROSERVICE;
 
-  console.log(`
-╔═══════════════════════════════════════════════════════════╗
-║                                                           ║
-║   🚀  PITCH API Gateway is running!                      ║
-║                                                           ║
-║   📍  URL: http://localhost:${port}                         ║
-║   📚  API Docs: http://localhost:${port}/${process.env.SWAGGER_PATH || 'docs'}              ║
-║   🌍  Environment: ${process.env.NODE_ENV || 'development'}                       ║
-║                                                           ║
-╔═══════════════════════════════════════════════════════════╗
-  `);
+  try {
+    if (microserviceName) {
+      const cfg =
+        MICROSERVICES_CONFIG.find((c) => c.name === microserviceName) ??
+        MICROSERVICES_CONFIG.find(
+          (c) => c.name.toLowerCase() === microserviceName.toLowerCase(),
+        );
+
+      if (!cfg) {
+        logger.error(
+          `❌ MICROSERVICE="${microserviceName}" not found in MICROSERVICES_CONFIG`,
+        );
+        process.exit(1);
+      }
+
+      logger.log(
+        `🚀 Starting single microservice: ${cfg.name} (queue=${cfg.queue})`,
+      );
+
+      app.connectMicroservice(createMicroserviceOptions(cfg.queue));
+      await app.startAllMicroservices();
+    } else {
+      logger.log('🚀 Starting ALL microservices');
+      for (const cfg of MICROSERVICES_CONFIG) {
+        logger.log(
+          `📡 Connecting microservice: ${cfg.name} (queue=${cfg.queue})`,
+        );
+        app.connectMicroservice(createMicroserviceOptions(cfg.queue));
+      }
+      await app.startAllMicroservices();
+    }
+
+    logger.log('✅ Microservices started successfully');
+    const microservices = app.getMicroservices();
+    logger.log(`📊 Number of connected microservices: ${microservices.length}`);
+  } catch (error) {
+    logger.error('❌ Failed to start microservices', error);
+    logger.error('Error details:', JSON.stringify(error, null, 2));
+    throw error;
+  }
+
+  app.enableShutdownHooks();
+  const port = parseInt(process.env.PORT ?? '8000', 10);
+  await app.listen(port, '0.0.0.0');
+
+  const baseUrl = await app.getUrl();
+  logger.log(`🚀 Server running at ${baseUrl}`);
+  logger.log(
+    `📘 Swagger UI at ${baseUrl}/${process.env.SWAGGER_PATH ?? 'docs'}`,
+  );
+  logger.log(`🌐 RabbitMQ URL: ${getRabbitMQUrl()}`);
+  logger.log(
+    `📦 Microservice: ${microserviceName || 'ALL'} started successfully`,
+  );
+  logger.log(
+    ` Frontend URL: ${process.env.FRONTEND_URL || 'http://localhost:3000'}`,
+  );
+  logger.log(`📊 Connected microservices: ${app.getMicroservices().length}`);
 }
 
-bootstrap();
+bootstrap().catch((error) => {
+  const logger = new Logger('Bootstrap');
+  logger.error('Failed to start application', error);
+  process.exit(1);
+});

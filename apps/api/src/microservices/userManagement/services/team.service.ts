@@ -1,4 +1,3 @@
-// team.service.ts
 import {
   Injectable,
   NotFoundException,
@@ -12,7 +11,7 @@ import {
   UpdateTeamDto,
   AddMemberDto,
   UpdateMemberDto,
-} from '../../../common/interfaces/user.interface';
+} from '@pitch/shared-backend/interfaces/user.interface';
 import { TeamRepository } from '../repositories/team.repository';
 
 @Injectable()
@@ -27,7 +26,7 @@ export class TeamService {
       name: createTeamDto.name,
       slug: createTeamDto.slug,
     });
-    const metadata = { temp: 'data' }; // this is temporary, will replace with actual logic
+    const metadata = { temp: 'data' };
 
     return this.teamRepository.createTeam(
       {
@@ -67,9 +66,9 @@ export class TeamService {
       slug = await this.createSlug({ name: dto.name, slug: undefined });
     }
 
-    const metadata = { temp: 'data' }; // this is temporary, will replace with actual logic
+    const metadata = { temp: 'data' };
 
-    this.teamRepository.confirmAuthorityOrThrow(requesterId, teamId);
+    await this.teamRepository.confirmAuthorityOrThrow(requesterId, teamId);
 
     return this.teamRepository.updateTeam(teamId, {
       ...dto,
@@ -82,7 +81,7 @@ export class TeamService {
     teamId: string,
     requesterId: string,
   ): Promise<{ message: string }> {
-    this.teamRepository.confirmAuthorityOrThrow(requesterId, teamId);
+    await this.teamRepository.confirmAuthorityOrThrow(requesterId, teamId);
     await this.teamRepository.deleteTeam(teamId);
     return { message: `Team with ID ${teamId} has been deleted` };
   }
@@ -91,7 +90,7 @@ export class TeamService {
     addMemberDto: AddMemberDto,
     requesterId: string,
   ): Promise<TeamMembership> {
-    this.teamRepository.confirmAuthorityOrThrow(
+    await this.teamRepository.confirmAuthorityOrThrow(
       requesterId,
       addMemberDto.teamId,
     );
@@ -104,7 +103,7 @@ export class TeamService {
     updateMemberDto: UpdateMemberDto,
     requesterId: string,
   ): Promise<TeamMembership> {
-    this.teamRepository.confirmAuthorityOrThrow(
+    await this.teamRepository.confirmAuthorityOrThrow(
       requesterId,
       updateMemberDto.teamId,
     );
@@ -119,7 +118,7 @@ export class TeamService {
     userId: string,
     requesterId: string,
   ): Promise<{ message: string }> {
-    this.teamRepository.confirmAuthorityOrThrow(requesterId, teamId);
+    await this.teamRepository.confirmAuthorityOrThrow(requesterId, teamId);
     await this.teamRepository.deleteTeamMember(teamId, userId);
     return {
       message: `User with ID ${userId} has been removed from team with ID: ${teamId}`,

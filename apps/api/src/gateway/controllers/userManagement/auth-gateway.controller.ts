@@ -20,7 +20,7 @@ import { catchError, timeout, retry, delay } from 'rxjs/operators';
 import { throwError } from 'rxjs';
 import { Public } from '../../../microservices/userManagement/decorators/public.decorator';
 import { CurrentUser } from '../../../microservices/userManagement/decorators/current-user.decorator';
-import { USER_SERVICE_PATTERNS } from '../../../common/interfaces/message-patterns.interface';
+import { USER_SERVICE_PATTERNS } from '@pitch/shared-backend/interfaces/message-patterns.interface';
 import { getWhitelistedRoutes } from '../../config/auth-whitelist.config';
 import {
   RegisterDto,
@@ -29,7 +29,9 @@ import {
   AuthResponseDto,
   UserResponseDto,
 } from '../../../microservices/userManagement/dto/auth.dto';
-import type { ServiceError } from '../../../common/interfaces/error.interface';
+import type { ServiceError } from '@pitch/shared-backend/interfaces/error.interface';
+import { UserClaims } from '../../decorators/user-claims.decorator';
+import type { UserClaims as UserClaimsType } from '@pitch/shared-backend/interfaces/user-claims.interface';
 
 @ApiTags('authentication')
 @Controller({ path: 'auth', version: '1' })
@@ -57,12 +59,12 @@ export class AuthGatewayController {
         timeout(10000),
         retry({
           count: 2,
-          delay: (error, retryCount) => {
+          delay: (_error: Error, retryCount) => {
             this.logger.warn(
               `Retry attempt ${retryCount} for registration: ${registerDto.email}`,
             );
             return delay(Math.min(1000 * retryCount, 3000))(
-              throwError(() => error),
+              throwError(() => _error),
             );
           },
         }),
@@ -169,11 +171,14 @@ export class AuthGatewayController {
   })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'User not found' })
-  getProfile(@CurrentUser('id') userId: string) {
+  getProfile(
+    @CurrentUser('id') userId: string,
+    @UserClaims() userClaims: UserClaimsType,
+  ) {
     this.logger.log(`Profile request for user: ${userId}`);
 
     return this.userService
-      .send(USER_SERVICE_PATTERNS.GET_USER, { userId })
+      .send(USER_SERVICE_PATTERNS.GET_USER, { id: userId, userClaims })
       .pipe(
         timeout(10000),
         catchError((err: unknown) => {
@@ -228,21 +233,24 @@ export class AuthGatewayController {
     ],
   })
   getOAuthProviders() {
-    this.logger.log('Fetching OAuth providers');
+    this.logger.log('Gateway: Fetching OAuth providers');
+    const pattern = USER_SERVICE_PATTERNS.OAUTH_GET_PROVIDERS;
+    this.logger.debug(
+      `📤 Sending RabbitMQ message: pattern="${pattern}" to queue="user_queue"`,
+    );
 
-    return this.userService
-      .send(USER_SERVICE_PATTERNS.OAUTH_GET_PROVIDERS, {})
-      .pipe(
-        timeout(10000),
-        catchError((err: unknown) => {
-          const error = err as ServiceError;
-          const stack = error.stack ?? JSON.stringify(err);
-          this.logger.error('Failed to get OAuth providers', stack);
-          const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
-          const message = error.message ?? 'Failed to get OAuth providers';
-          return throwError(() => new HttpException(message, status));
-        }),
-      );
+    return this.userService.send(pattern, {}).pipe(
+      timeout(10000),
+      catchError((err: unknown) => {
+        const error = err as ServiceError;
+        const stack = error.stack ?? JSON.stringify(err);
+        this.logger.error('Gateway: Failed to get OAuth providers', stack);
+        const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
+        const message =
+          error.message ?? 'Gateway: Failed to get OAuth providers';
+        return throwError(() => new HttpException(message, status));
+      }),
+    );
   }
 
   @Get('whitelist')

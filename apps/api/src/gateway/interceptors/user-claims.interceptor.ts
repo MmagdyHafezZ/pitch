@@ -10,7 +10,7 @@ import type {
   RequestWithUser,
   RequestWithBody,
   RequestWithUserClaims,
-} from '../../common/interfaces/request.interface';
+} from '@pitch/shared-backend/interfaces/request.interface';
 
 export interface UserClaims {
   id: string;
@@ -29,10 +29,8 @@ export class UserClaimsInterceptor implements NestInterceptor {
     const user = req.user;
 
     if (user) {
-      // Expose on request for local use
       req.userClaims = user;
 
-      // **Forward to microservices** by merging into body
       if (req.method !== 'GET' && req.body && typeof req.body === 'object') {
         req.body = {
           ...req.body,

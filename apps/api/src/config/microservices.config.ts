@@ -7,7 +7,13 @@ export interface MicroserviceConfig {
 
 export const MICROSERVICES_CONFIG: MicroserviceConfig[] = [
   { name: 'USER_SERVICE', queue: 'user_queue' },
-  { name: 'TEAM_SERVICE', queue: 'team_queue' },
+  { name: 'SIMULATION_SERVICE', queue: 'simulation_queue' },
+  { name: 'ANALYTICS_SERVICE', queue: 'analytics_queue' },
+  { name: 'SUPPORT_SERVICE', queue: 'support_queue' },
+  { name: 'LTI_SERVICE', queue: 'lti_queue' },
+  { name: 'S3_SERVICE', queue: 's3_queue' },
+  { name: 'CRM_SERVICE', queue: 'crm_queue' },
+  { name: 'GATEWAY_SERVICE', queue: 'gateway_queue' },
 ];
 
 /**
@@ -29,7 +35,7 @@ export function createMicroserviceOptions(queue: string): MicroserviceOptions {
       urls: [url],
       queue,
       noAck: false,
-      prefetchCount: 1,
+      prefetchCount: 10,
       queueOptions: {
         durable: true,
       },

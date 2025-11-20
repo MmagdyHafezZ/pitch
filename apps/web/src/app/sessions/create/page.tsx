@@ -82,7 +82,7 @@ export default function CreateSessionPage() {
                 label="Due Date:"
                 placeholder="Pick date"
                 value={dueDate}
-                onChange={setDueDate}
+                onChange={(value) => setDueDate(value ? new Date(value) : null)}
                 size="md"
                 rightSection={<IconX size={16} />}
                 styles={{ label: { fontSize: 18, fontWeight: 500, marginBottom: 8 } }}

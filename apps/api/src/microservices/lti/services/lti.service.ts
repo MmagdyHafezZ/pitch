@@ -5,7 +5,7 @@ import { LtiRepository } from '../repositories/lti.repository';
 export class LtiService {
   constructor(private readonly repository: LtiRepository) {}
 
-  async healthCheck() {
+  healthCheck() {
     return { status: 'healthy' };
   }
 }

@@ -29,17 +29,6 @@ export interface TokenPayload {
   name?: string | null;
 }
 
-/**
- * Auth Service (Legacy/Domain Service)
- *
- * IMPORTANT: This service is being REFACTORED.
- * - OAuth validation should use AuthApplicationService.validateOAuthUser()
- * - This service now only contains domain logic and token generation
- * - All orchestration moved to AuthApplicationService
- * - All data access moved to repositories
- *
- * @deprecated Use AuthApplicationService for orchestration
- */
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
@@ -49,19 +38,10 @@ export class AuthService {
     private readonly authRepository: AuthRepository,
     private readonly jwtService: JwtService,
   ) {}
-
-  /**
-   * @deprecated Use AuthApplicationService.validateOAuthUser() instead
-   * This method is kept for backward compatibility with OAuth strategies
-   */
   async validateOAuthUser(
     profile: OAuthProfile,
     tokenData?: ITokenData,
   ): Promise<any> {
-    this.logger.warn(
-      'DEPRECATED: Use AuthApplicationService.validateOAuthUser() instead',
-    );
-
     let user = await this.userRepository.findByOAuthAccount(
       profile.provider,
       profile.id,
@@ -172,14 +152,7 @@ export class AuthService {
     return { message: `${provider} account unlinked successfully` };
   }
 
-  /**
-   * @deprecated Use AuthApplicationService.refreshToken() instead
-   */
   async refreshToken(refreshToken: string): Promise<TokenPair> {
-    this.logger.warn(
-      'DEPRECATED: Use AuthApplicationService.refreshToken() instead',
-    );
-
     try {
       const payload = this.jwtService.verify<{ sub: string }>(refreshToken);
       const user = await this.userRepository.findById(payload.sub);

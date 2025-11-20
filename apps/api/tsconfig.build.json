@@ -1,12 +1,16 @@
 {
   "extends": "./tsconfig.json",
-  "exclude": ["node_modules", "test", "dist", "**/*spec.ts"],
   "compilerOptions": {
     "outDir": "./dist",
-    "rootDir": ".",
-    "baseUrl": ".",
+    "rootDir": "./src",
+    "baseUrl": "./src",
     "paths": {
-      "@pitch/shared/*": ["../../packages/shared/src/*"]
+      "@pitch/shared/*": ["../../packages/shared/src/*"],
+      "@pitch/shared-backend": ["../../packages/shared-backend/src"],
+      "@pitch/shared-backend/*": ["../../packages/shared-backend/src/*"],
+      "@gateway/*": ["gateway/*"],
+      "@microservices/*": ["microservices/*"]
     }
-  }
+  },
+  "exclude": ["node_modules", "test", "dist", "**/*spec.ts"]
 }
