@@ -1,4 +1,5 @@
 import { QueryClient } from '@tanstack/react-query'
+import { get } from 'http'
 
 // API configuration
 export const API_CONFIG = {
@@ -187,6 +188,7 @@ export const api = {
   teams: {
     getAll: () => apiRequest<any[]>('/teams'),
     getById: (id: string) => apiRequest<any>(`/teams/${id}`),
+    getUserTeams: () => apiRequest<any[]>('/teams/user-teams'),
     create: (data: any) =>
       apiRequest<any>('/teams', {
         method: 'POST',

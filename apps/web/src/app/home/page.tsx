@@ -30,12 +30,11 @@ export default function DashboardHome() {
   const [active, setActive] = useState('Home')
   const [selectedDate, setSelectedDate] = useState<Date | null>(new Date())
 
-  const { teams, activeTeamId, loading, error, fetchTeams, setActiveTeamId } = useTeams()
+  const { teams, activeTeamId, loading, error, fetchUserTeams, setActiveTeamId } = useTeams()
 
   useEffect(() => {
-    fetchTeams()
-  }, [fetchTeams])
-
+    fetchUserTeams()
+  }, [fetchUserTeams])
   const activeTeam = useMemo(
     () => teams.find((t) => t.id === activeTeamId) ?? null,
     [teams, activeTeamId]

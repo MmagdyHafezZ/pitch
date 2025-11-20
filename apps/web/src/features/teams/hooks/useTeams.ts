@@ -8,6 +8,7 @@ export function useTeams() {
   const error = useTeamsStore((s) => s.error)
   const fetchTeams = useTeamsStore((s) => s.fetchTeams)
   const fetchTeamById = useTeamsStore((s) => s.fetchTeamById)
+  const fetchUserTeams = useTeamsStore((s) => s.fetchUserTeams)
   const createTeam = useTeamsStore((s) => s.createTeam)
   const updateTeam = useTeamsStore((s) => s.updateTeam)
   const deleteTeam = useTeamsStore((s) => s.deleteTeam)
@@ -24,6 +25,7 @@ export function useTeams() {
     error,
     fetchTeams,
     fetchTeamById,
+    fetchUserTeams,
     createTeam,
     updateTeam,
     deleteTeam,

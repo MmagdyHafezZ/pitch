@@ -19,6 +19,11 @@ export const TeamService = {
     return api.teams.getById(id)
   },
 
+  // GET /v1/teams/user-teams
+  getUserTeams(): Promise<Team[]> {
+    return api.teams.getUserTeams()
+  },
+
   // POST /v1/teams
   create(payload: CreateTeamInput): Promise<Team> {
     return api.teams.create(payload)

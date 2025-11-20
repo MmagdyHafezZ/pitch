@@ -17,6 +17,7 @@ type TeamsState = {
 
   fetchTeams: () => Promise<void>
   fetchTeamById: (id: string) => Promise<void>
+  fetchUserTeams: () => Promise<void>
   createTeam: (input: CreateTeamInput) => Promise<void>
   updateTeam: (id: string, input: UpdateTeamInput) => Promise<void>
   deleteTeam: (id: string) => Promise<void>
@@ -44,6 +45,27 @@ export const useTeamsStore = create<TeamsState>((set, get) => ({
     set({ loading: true, error: null })
     try {
       const data = await TeamService.getAll()
+      set({
+        teams: data,
+        activeTeamId: data[0]?.id ?? null,
+        currentTeam: data[0] ?? null,
+        loading: false,
+      })
+    } catch (err) {
+      set({
+        loading: false,
+        error: err instanceof Error ? err.message : 'Failed to load teams',
+      })
+    }
+  },
+
+  fetchUserTeams: async () => {
+    const { loading, teams } = get()
+    if (loading || teams.length > 0) return
+
+    set({ loading: true, error: null })
+    try {
+      const data = await TeamService.getUserTeams()
       set({
         teams: data,
         activeTeamId: data[0]?.id ?? null,
