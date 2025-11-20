@@ -1,11 +1,15 @@
+import { config } from 'dotenv';
+import { join } from 'path';
+config({ path: join(__dirname, '../../../../.env') });
+
 import { NestFactory } from '@nestjs/core';
 import { MicroserviceOptions, Transport } from '@nestjs/microservices';
 import { ValidationPipe } from '@nestjs/common';
-import { UserModule } from './user.module';
+import { UserMicroserviceModule } from './user-microservice.module';
 
 async function bootstrap() {
   const app = await NestFactory.createMicroservice<MicroserviceOptions>(
-    UserModule,
+    UserMicroserviceModule,
     {
       transport: Transport.RMQ,
       options: {
@@ -29,9 +33,6 @@ async function bootstrap() {
   );
 
   await app.listen();
-  console.log(
-    '🚀 User Management Microservice is listening on RabbitMQ (user_queue)',
-  );
 }
 
-bootstrap();
+void bootstrap();

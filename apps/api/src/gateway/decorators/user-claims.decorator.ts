@@ -1,5 +1,5 @@
 import { createParamDecorator, ExecutionContext } from '@nestjs/common';
-import type { RequestWithUser } from '../../common/interfaces/request.interface';
+import type { RequestWithUser } from '@pitch/shared-backend/interfaces/request.interface';
 
 export interface UserClaims {
   id: string;

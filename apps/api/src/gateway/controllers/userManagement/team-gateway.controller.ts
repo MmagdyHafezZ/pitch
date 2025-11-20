@@ -23,18 +23,18 @@ import {
 } from '@nestjs/swagger';
 import { catchError, timeout } from 'rxjs/operators';
 import { throwError } from 'rxjs';
-import { USER_SERVICE_PATTERNS } from '../../../common/interfaces/message-patterns.interface';
+import { USER_SERVICE_PATTERNS } from '@pitch/shared-backend/interfaces/message-patterns.interface';
 import { GlobalJwtAuthGuard } from '../../guards/global-jwt-auth.guard';
 import { UserClaimsInterceptor } from '../../interceptors/user-claims.interceptor';
 import { UserClaims } from '../../decorators/user-claims.decorator';
-import type { UserClaims as UserClaimsType } from '../../../common/interfaces/user-claims.interface';
-import type { ServiceError } from '../../../common/interfaces/error.interface';
+import type { UserClaims as UserClaimsType } from '@pitch/shared-backend/interfaces/user-claims.interface';
+import type { ServiceError } from '@pitch/shared-backend/interfaces/error.interface';
 import {
   CreateTeamRequestDto,
   UpdateTeamRequestDto,
   AddMemberRequestDTO,
   UpdateMemberRequestDto,
-} from 'src/microservices/userManagement/dto/team.dto';
+} from '@microservices/userManagement/dto/team.dto';
 
 @UsePipes(
   new ValidationPipe({
@@ -49,13 +49,13 @@ import {
 @ApiTags('teams')
 @Controller({ path: 'teams', version: '1' })
 export class TeamGatewayController {
-  constructor(@Inject('TEAM_SERVICE') private teamService: ClientProxy) {}
+  constructor(@Inject('USER_SERVICE') private teamService: ClientProxy) {}
 
   @Post()
   @ApiOperation({ summary: 'Create new team' })
   @ApiResponse({ status: 201, description: 'Team created successfully' })
   @ApiResponse({ status: 400, description: 'Invalid input data' })
-  async createTeam(
+  createTeam(
     @Body() createTeamDto: CreateTeamRequestDto,
     @UserClaims() userClaims: UserClaimsType,
   ) {

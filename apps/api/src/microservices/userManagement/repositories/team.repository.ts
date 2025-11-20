@@ -1,9 +1,9 @@
-// team.repository.ts
 import {
   ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/user-client';
 import { UserPrismaService } from '../prisma/user-prisma.service';
 import {
   CreateTeamDto,
@@ -11,7 +11,7 @@ import {
   Team,
   AddMemberDto,
   UpdateMemberDto,
-} from 'src/common/interfaces/user.interface';
+} from '@pitch/shared-backend/interfaces/user.interface';
 import { Role, TeamMembership } from '@prisma/user-client/client';
 
 @Injectable()
@@ -19,17 +19,18 @@ export class TeamRepository {
   constructor(private readonly prisma: UserPrismaService) {}
 
   async createTeam(data: CreateTeamDto, ownerId: string): Promise<Team> {
+    const slug = await this.ensureUniqueSlug(data.slug ?? data.name);
+
     return this.prisma.team.create({
       data: {
         name: data.name,
-        slug: data.slug ?? '',
+        slug,
         isActive: data.isActive ?? true,
         availableTokens: 0,
         usedTokens: 0,
         billingEmail: data.billingEmail ?? null,
-        billingAddress: data.billingAddress ?? undefined,
-        metadata: data.metadata ?? undefined,
-
+        billingAddress: (data.billingAddress ?? null) as Prisma.InputJsonValue,
+        metadata: (data.metadata ?? {}) as Prisma.InputJsonValue,
         memberships: {
           create: {
             userId: ownerId,
@@ -39,11 +40,10 @@ export class TeamRepository {
           },
         },
       },
-      include: { memberships: true },
     });
   }
 
-  async updateTeam(id: string, data: Partial<UpdateTeamDto>): Promise<Team> {
+  updateTeam(id: string, data: Partial<UpdateTeamDto>): Promise<Team> {
     return this.prisma.team.update({
       where: { id },
       data: {
@@ -51,8 +51,12 @@ export class TeamRepository {
         slug: data.slug,
         isActive: data.isActive,
         billingEmail: data.billingEmail ?? null,
-        billingAddress: data.billingAddress ?? undefined,
-        metadata: data.metadata ?? undefined,
+        billingAddress: (data.billingAddress ?? undefined) as
+          | Prisma.InputJsonValue
+          | undefined,
+        metadata: (data.metadata ?? undefined) as
+          | Prisma.InputJsonValue
+          | undefined,
       },
     });
   }
@@ -100,7 +104,7 @@ export class TeamRepository {
     });
   }
 
-  async findMany(): Promise<Team[]> {
+  findMany(): Promise<Team[]> {
     return this.prisma.team.findMany({
       where: { deletedAt: null },
       include: {
@@ -119,10 +123,10 @@ export class TeamRepository {
           orderBy: [{ role: 'asc' }, { invitedAt: 'asc' }],
         },
       },
-    });
+    }) as unknown as Promise<Team[]>;
   }
 
-  async findById(id: string): Promise<Team | null> {
+  findById(id: string): Promise<Team | null> {
     return this.prisma.team.findFirst({
       where: { id, deletedAt: null },
       include: {
@@ -141,7 +145,7 @@ export class TeamRepository {
           orderBy: [{ role: 'asc' }, { invitedAt: 'asc' }],
         },
       },
-    }) as unknown as Team | null;
+    }) as unknown as Promise<Team | null>;
   }
 
   async findUserTeams(userId: string): Promise<Team[]> {

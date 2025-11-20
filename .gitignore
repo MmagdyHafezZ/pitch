@@ -85,6 +85,11 @@ next-env.d.ts
 # TypeScript
 *.tsbuildinfo
 
+# TypeScript build artifacts in packages
+packages/shared-backend/src/**/*.js
+packages/shared-backend/src/**/*.d.ts
+packages/shared-backend/src/**/*.js.map
+
 # ESLint
 .eslintcache
 

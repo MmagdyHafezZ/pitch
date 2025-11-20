@@ -1,16 +1,107 @@
 import { Injectable } from '@nestjs/common';
+import { Prisma } from '@prisma/analytics-client';
 import { PrismaService } from '../services/prisma.service';
+
+interface MetricData {
+  orgId: string;
+  userId?: string;
+  sessionId?: string;
+  metricType: string;
+  category: string;
+  name: string;
+  value: number;
+  unit?: string;
+  metadata?: Prisma.InputJsonValue;
+}
+
+interface MetricFilters {
+  orgId: string;
+  userId?: string;
+  metricType?: string;
+  category?: string;
+  startDate?: Date;
+  endDate?: Date;
+}
+
+interface AggregateData {
+  orgId: string;
+  period: string;
+  periodKey: string;
+  metricType: string;
+  category: string;
+  aggregates?: Prisma.InputJsonValue;
+}
+
+interface StatisticFilters {
+  orgId: string;
+  period: string;
+  periodKey: string;
+  metricType?: string;
+}
+
+interface EventData {
+  orgId: string;
+  userId?: string;
+  sessionId?: string;
+  eventType: string;
+  eventName: string;
+  properties?: Prisma.InputJsonValue;
+  context?: Prisma.InputJsonValue;
+}
+
+interface EventFilters {
+  orgId: string;
+  userId?: string;
+  eventType?: string;
+  startDate?: Date;
+  endDate?: Date;
+}
+
+interface DashboardData {
+  orgId: string;
+  userId?: string;
+  name: string;
+  type: string;
+  config: Prisma.InputJsonValue;
+  layout?: Prisma.InputJsonValue;
+}
+
+interface ReportData {
+  orgId: string;
+  userId: string;
+  name: string;
+  type: string;
+  query: Prisma.InputJsonValue;
+  format?: string;
+}
+
+interface ReportExecutionData {
+  reportId: string;
+  status: string;
+  result?: Prisma.InputJsonValue;
+  error?: string;
+}
+
+interface PerformanceLogData {
+  service: string;
+  endpoint: string;
+  method: string;
+  statusCode: number;
+  duration: number;
+  userId?: string;
+  orgId?: string;
+  metadata?: Prisma.InputJsonValue;
+}
 
 @Injectable()
 export class AnalyticsRepository {
   constructor(private readonly prisma: PrismaService) {}
 
-  // ===== Metrics =====
-  async createMetric(data: any) {
+  async createMetric(data: MetricData) {
     return this.prisma.metric.create({ data });
   }
 
-  async queryMetrics(filters: any) {
+  async queryMetrics(filters: MetricFilters) {
     return this.prisma.metric.findMany({
       where: {
         orgId: filters.orgId,
@@ -29,7 +120,7 @@ export class AnalyticsRepository {
     });
   }
 
-  async aggregateMetrics(data: any) {
+  async aggregateMetrics(data: AggregateData) {
     return this.prisma.statistic.upsert({
       where: {
         orgId_period_periodKey_metricType_category: {
@@ -54,7 +145,7 @@ export class AnalyticsRepository {
     });
   }
 
-  async getStatistics(filters: any) {
+  async getStatistics(filters: StatisticFilters) {
     return this.prisma.statistic.findMany({
       where: {
         orgId: filters.orgId,
@@ -65,12 +156,11 @@ export class AnalyticsRepository {
     });
   }
 
-  // ===== Events =====
-  async trackEvent(data: any) {
+  async trackEvent(data: EventData) {
     return this.prisma.event.create({ data });
   }
 
-  async getEvents(filters: any) {
+  async getEvents(filters: EventFilters) {
     return this.prisma.event.findMany({
       where: {
         orgId: filters.orgId,
@@ -88,8 +178,7 @@ export class AnalyticsRepository {
     });
   }
 
-  // ===== Dashboards =====
-  async createDashboard(data: any) {
+  async createDashboard(data: DashboardData) {
     return this.prisma.dashboard.create({ data });
   }
 
@@ -110,7 +199,10 @@ export class AnalyticsRepository {
     });
   }
 
-  async updateDashboard(dashboardId: string, data: any) {
+  async updateDashboard(
+    dashboardId: string,
+    data: Partial<Omit<DashboardData, 'orgId'>>,
+  ) {
     return this.prisma.dashboard.update({
       where: { id: dashboardId },
       data,
@@ -123,8 +215,7 @@ export class AnalyticsRepository {
     });
   }
 
-  // ===== Reports =====
-  async createReport(data: any) {
+  async createReport(data: ReportData) {
     return this.prisma.report.create({ data });
   }
 
@@ -144,19 +235,18 @@ export class AnalyticsRepository {
     });
   }
 
-  async updateReport(reportId: string, data: any) {
+  async updateReport(reportId: string, data: Partial<ReportData>) {
     return this.prisma.report.update({
       where: { id: reportId },
       data,
     });
   }
 
-  async createReportExecution(data: any) {
+  async createReportExecution(data: ReportExecutionData) {
     return this.prisma.reportExecution.create({ data });
   }
 
-  // ===== Performance Logs =====
-  async createPerformanceLog(data: any) {
+  async createPerformanceLog(data: PerformanceLogData) {
     return this.prisma.performanceLog.create({ data });
   }
 }

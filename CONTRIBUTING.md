@@ -23,38 +23,627 @@ contributions.
 
 ### Prerequisites
 
-- **Node.js** 18+
-- **pnpm** 9+
-- **Docker** & Docker Compose
-- **Git**
-- **VS Code** (recommended)
+Before you begin, you'll need to install the following tools:
+
+#### 1. Install Node.js
+
+**macOS (using Homebrew):**
+
+```bash
+# Install Homebrew if you don't have it
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+# Install Node.js (version 18 or higher)
+brew install node@20
+```
+
+**macOS/Linux (using asdf - recommended for version management):**
+
+```bash
+# Install asdf
+git clone https://github.com/asdf-vm/asdf.git ~/.asdf --branch v0.13.1
+
+# Add to shell (for bash)
+echo '. "$HOME/.asdf/asdf.sh"' >> ~/.bashrc
+echo '. "$HOME/.asdf/completions/asdf.bash"' >> ~/.bashrc
+
+# Or for zsh
+echo '. "$HOME/.asdf/asdf.sh"' >> ~/.zshrc
+
+# Restart your shell
+exec $SHELL
+
+# Install Node.js plugin
+asdf plugin add nodejs
+
+# Install Node.js 20
+asdf install nodejs 20.11.0
+asdf global nodejs 20.11.0
+
+# Verify installation
+node --version  # Should show v20.x.x
+```
+
+**Windows:**
+
+```powershell
+# Download and install from official website
+# https://nodejs.org/en/download/
+
+# Or use winget
+winget install OpenJS.NodeJS.LTS
+
+# Verify installation
+node --version
+```
+
+#### 2. Install pnpm
+
+**All platforms:**
+
+```bash
+# Using npm (comes with Node.js)
+npm install -g pnpm@9
+
+# Or using Homebrew (macOS)
+brew install pnpm
+
+# Or using standalone script
+curl -fsSL https://get.pnpm.io/install.sh | sh -
+
+# Verify installation
+pnpm --version  # Should show 9.x.x
+```
+
+#### 3. Install Docker (Rancher Desktop or Docker Desktop)
+
+**Option A: Rancher Desktop (Recommended - Free & Open Source)**
+
+Rancher Desktop provides Kubernetes and container management with Docker CLI
+compatibility.
+
+**macOS:**
+
+```bash
+# Using Homebrew
+brew install --cask rancher
+
+# Or download from https://rancherdesktop.io/
+```
+
+**Linux:**
+
+```bash
+# Download the .deb or .rpm package from
+# https://github.com/rancher-sandbox/rancher-desktop/releases
+
+# For Ubuntu/Debian
+wget https://github.com/rancher-sandbox/rancher-desktop/releases/download/v1.12.0/rancher-desktop-1.12.0-amd64.deb
+sudo dpkg -i rancher-desktop-1.12.0-amd64.deb
+```
+
+**Windows:**
+
+```powershell
+# Using winget
+winget install rancher-sandbox.rancher-desktop
+
+# Or download installer from https://rancherdesktop.io/
+```
+
+**After Installing Rancher Desktop:**
+
+1. Launch Rancher Desktop
+2. Go to **Preferences** → **Container Engine** → Select **dockerd (moby)**
+3. Enable **Kubernetes** (optional for local development)
+4. Wait for initialization to complete
+
+**Option B: Docker Desktop**
+
+**macOS:**
+
+```bash
+brew install --cask docker
+```
+
+**Windows/Linux:** Download from
+[https://www.docker.com/products/docker-desktop/](https://www.docker.com/products/docker-desktop/)
+
+**Verify Docker Installation:**
+
+```bash
+docker --version
+docker-compose --version
+
+# Test Docker is running
+docker run hello-world
+```
+
+#### 4. Install Git
+
+**macOS:**
+
+```bash
+brew install git
+```
+
+**Linux (Ubuntu/Debian):**
+
+```bash
+sudo apt-get update
+sudo apt-get install git
+```
+
+**Windows:**
+
+```powershell
+winget install Git.Git
+```
+
+**Verify:**
+
+```bash
+git --version
+```
+
+#### 5. Install VS Code (Optional but Recommended)
+
+**All platforms:** Download from
+[https://code.visualstudio.com/](https://code.visualstudio.com/)
+
+Or using package managers:
+
+```bash
+# macOS
+brew install --cask visual-studio-code
+
+# Windows
+winget install Microsoft.VisualStudioCode
+
+# Linux (Ubuntu/Debian)
+sudo snap install code --classic
+```
+
+---
 
 ### Initial Setup
 
+Once you have all prerequisites installed, follow these steps:
+
+#### 1. Clone the Repository
+
 ```bash
-# 1. Clone repository
 git clone https://github.com/your-org/pitch.git
 cd pitch
+```
 
-# 2. Install dependencies
+#### 2. Install Dependencies
+
+```bash
+# Install all dependencies for all packages
 pnpm install
+```
 
-# 3. Set up environment
+This will install dependencies for:
+
+- Frontend (`apps/web`)
+- Backend (`apps/api`)
+- Shared packages (`packages/shared`, `packages/shared-backend`)
+
+#### 3. Set Up Environment Variables
+
+If you are a PITCH developer, Ask @MmagdyHafezZ for .env file and skip the
+following steps
+
+**Backend Environment (.env):**
+
+```bash
+# Copy the example file
 cp apps/api/.env.example apps/api/.env
+
+# Edit the file with your settings
+nano apps/api/.env  # or use your preferred editor
+```
+
+**Required environment variables for `apps/api/.env`:**
+
+```bash
+# Database URLs - PostgreSQL instances
+DATABASE_URL_USER="postgresql://pitch:pitch123@localhost:5432/pitch_user"
+DATABASE_URL_SIMULATION="postgresql://pitch:pitch123@localhost:5433/pitch_simulation"
+DATABASE_URL_SUPPORT="postgresql://pitch:pitch123@localhost:5434/pitch_support"
+DATABASE_URL_ANALYTICS="postgresql://pitch:pitch123@localhost:5435/pitch_analytics"
+DATABASE_URL_CRM="postgresql://pitch:pitch123@localhost:5436/pitch_crm"
+
+# MongoDB
+MONGODB_URI="mongodb://pitch:pitch123@localhost:27017/pitch_simulation?authSource=admin"
+
+# Redis
+REDIS_URL="redis://localhost:6379"
+
+# RabbitMQ
+RABBITMQ_URL="amqp://guest:guest@localhost:5672"
+
+# JWT Secrets (generate strong random strings)
+JWT_ACCESS_SECRET="your-secret-key-min-32-characters-long"
+JWT_REFRESH_SECRET="your-refresh-secret-key-min-32-characters"
+
+# API Configuration
+PORT=8000
+NODE_ENV=development
+
+# OAuth - Google (optional for development)
+GOOGLE_CLIENT_ID="your-google-client-id"
+GOOGLE_CLIENT_SECRET="your-google-client-secret"
+GOOGLE_CALLBACK_URL="http://localhost:8000/auth/oauth/google/callback"
+
+# Frontend URL
+FRONTEND_URL="http://localhost:3000"
+```
+
+**Frontend Environment (.env.local):**
+
+```bash
+# Copy the example file
 cp apps/web/.env.example apps/web/.env.local
 
-# 4. Start infrastructure
-docker-compose up -d
+# Edit the file
+nano apps/web/.env.local
+```
 
-# 5. Generate Prisma clients
+**Required environment variables for `apps/web/.env.local`:**
+
+```bash
+# API URL
+NEXT_PUBLIC_API_URL=http://localhost:8000
+
+# NextAuth
+NEXTAUTH_URL=http://localhost:3000
+NEXTAUTH_SECRET="your-nextauth-secret-min-32-characters"
+
+# OAuth - Google (optional)
+GOOGLE_CLIENT_ID="your-google-client-id"
+GOOGLE_CLIENT_SECRET="your-google-client-secret"
+```
+
+**Generate secure secrets:**
+
+```bash
+# On macOS/Linux, generate random secrets
+openssl rand -base64 32
+
+# Or use Node.js
+node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+```
+
+#### 4. Start Infrastructure Services
+
+Start all required services (PostgreSQL, MongoDB, Redis, RabbitMQ):
+
+```bash
+docker-compose up -d
+```
+
+**Verify services are running:**
+
+```bash
+docker-compose ps
+
+# You should see:
+# - pitch-postgres-user-local
+# - pitch-rabbitmq-local
+# - pitch-redis-local
+
+```
+
+**To check for service logs:**
+
+```bash
+# All services
+docker-compose logs -f
+
+# Specific service
+docker-compose logs -f pitch-postgres-user-local
+```
+
+#### 5. Generate Prisma Clients
+
+Generate TypeScript clients for all databases:
+
+```bash
 cd apps/api
 pnpm db:generate:all
+```
 
-# 6. Run migrations
+This generates Prisma clients for:
+
+- `@prisma/user-client`
+- `@prisma/simulation-client`
+- `@prisma/support-client`
+- `@prisma/analytics-client`
+- `@prisma/crm-client`
+
+#### 6. Run Database Migrations
+
+Create database tables and initial schema:
+
+```bash
+# Still in apps/api directory
 pnpm db:migrate:all
+```
 
-# 7. Start development
+This runs migrations for all microservices.
+
+**Troubleshooting migrations:**
+
+```bash
+# If migrations fail, check database connectivity
+docker-compose ps
+
+# Reset a specific database (development only!)
+pnpm db:reset:userManagement
+
+# Or reset all databases
+pnpm db:reset:all
+```
+
+#### 7. Start Development Servers
+
+**Option A: Start All Services**
+
+```bash
+# From project root
 pnpm dev
+```
+
+This starts:
+
+- Frontend at [http://localhost:3000](http://localhost:3000)
+- API Gateway at [http://localhost:8000](http://localhost:8000)
+- All microservices
+
+**Option B: Start Services Individually**
+
+```bash
+# Terminal 1 - Frontend
+pnpm --filter web dev
+
+# Terminal 2 - Backend
+pnpm --filter api dev
+
+# Or specific microservices
+pnpm dev:gateway
+pnpm dev:user
+pnpm dev:simulation
+```
+
+#### 8. Verify Installation
+
+**Check Frontend:** Open [http://localhost:3000](http://localhost:3000) in your
+browser.
+
+**Check API:**
+
+```bash
+# Health check
+curl http://localhost:8000/health
+
+# API Documentation
+# Open http://localhost:8000/docs in browser
+```
+
+**Check RabbitMQ Management UI:** Open
+[http://localhost:15672](http://localhost:15672)
+
+- Username: `guest`
+- Password: `guest`
+
+**Database Tools:** Install [sqlelectron](https://sqlectron.github.io/) or
+similar apps
+
+### Useful Commands
+
+#### Development
+
+```bash
+# Start all services
+pnpm dev
+
+# Start frontend only
+pnpm --filter web dev
+
+# Start backend only
+pnpm --filter api dev
+
+# Start specific microservice
+pnpm dev:gateway
+pnpm dev:user
+pnpm dev:simulation
+pnpm dev:support
+pnpm dev:analytics
+pnpm dev:crm
+pnpm dev:lti
+pnpm dev:s3
+```
+
+#### Building
+
+```bash
+# Build all packages
+pnpm build
+
+# Build specific package
+pnpm --filter api build
+pnpm --filter web build
+pnpm --filter @pitch/shared-backend build
+
+# Clean build artifacts
+pnpm clean
+```
+
+#### Testing
+
+```bash
+# Run all tests
+pnpm test
+
+# Run tests in watch mode
+pnpm test:watch
+
+# Run specific test file
+pnpm test user.service.spec.ts
+
+# Run tests with coverage
+pnpm test:cov
+
+# Run E2E tests
+pnpm test:e2e
+
+# Frontend tests
+pnpm --filter web test
+```
+
+#### Database Operations
+
+```bash
+# Generate Prisma clients
+pnpm db:generate:all              # All databases
+pnpm db:generate:userManagement   # Specific database
+
+# Run migrations
+pnpm db:migrate:all               # All databases
+pnpm db:migrate:userManagement    # Specific database
+
+# Push schema (development only)
+pnpm db:push:all                  # All databases
+pnpm db:push:userManagement       # Specific database
+
+# Reset database (⚠️ deletes all data)
+pnpm db:reset:all
+pnpm db:reset:userManagement
+
+# Deploy migrations (production)
+pnpm db:deploy:all
+pnpm db:deploy:userManagement
+
+# Prisma Studio (GUI for database)
+pnpm db:studio:user
+pnpm db:studio:simulation
+pnpm db:studio:support
+pnpm db:studio:analytics
+pnpm db:studio:crm
+
+# Create a new migration
+cd apps/api
+pnpm prisma migrate dev --schema=./src/microservices/userManagement/prisma/schema.prisma
+```
+
+#### Docker Operations
+
+```bash
+# Start all services
+docker-compose up -d
+
+# Stop all services
+docker-compose down
+
+# Stop and remove volumes (⚠️ deletes all data)
+docker-compose down -v
+
+# View logs
+docker-compose logs -f
+
+# View logs for specific service
+docker-compose logs -f postgres_user
+docker-compose logs -f rabbitmq
+
+# Restart specific service
+docker-compose restart postgres_user
+
+# Rebuild and start services
+docker-compose up -d --build
+
+# Check service status
+docker-compose ps
+
+# Execute command in container
+docker-compose exec postgres_user psql -U pitch -d pitch_user
+docker-compose exec redis redis-cli
+docker-compose exec mongodb mongosh
+```
+
+#### Code Quality
+
+```bash
+# Lint all packages
+pnpm lint
+
+# Lint specific package
+pnpm --filter api lint
+pnpm --filter web lint
+
+# Fix linting issues
+pnpm lint:fix
+
+# Format code with Prettier
+pnpm format
+
+# Type check
+pnpm type-check
+```
+
+#### Package Management
+
+```bash
+# Install dependency for specific app
+pnpm --filter api add package-name
+pnpm --filter web add package-name
+
+# Install dev dependency
+pnpm --filter api add -D package-name
+
+# Install workspace dependency
+pnpm add -w package-name
+
+# Update dependencies
+pnpm update
+
+# Update specific package
+pnpm --filter api update package-name
+
+# Remove dependency
+pnpm --filter api remove package-name
+```
+
+#### Troubleshooting Commands
+
+```bash
+# Clear all node_modules and reinstall
+pnpm clean:modules
+pnpm install
+
+# Clear Turbo cache
+rm -rf .turbo
+
+# Regenerate Prisma clients
+pnpm db:generate:all
+
+# Check Docker resource usage
+docker stats
+
+# View Docker disk usage
+docker system df
+
+# Clean Docker system
+docker system prune -a
+
+# Reset entire development environment
+docker-compose down -v
+rm -rf node_modules apps/*/node_modules packages/*/node_modules
+pnpm install
+pnpm db:generate:all
+docker-compose up -d
+pnpm db:migrate:all
 ```
 
 ### VS Code Setup
@@ -90,43 +679,6 @@ Settings (`.vscode/settings.json`):
 ## Project Structure
 
 ### Monorepo Organization
-
-```
-PITCH/
-├── apps/
-│   ├── web/                    # Next.js Frontend
-│   │   ├── src/
-│   │   │   ├── app/           # Next.js App Router pages
-│   │   │   ├── features/      # Feature modules
-│   │   │   │   ├── auth/
-│   │   │   │   ├── dashboard/
-│   │   │   │   └── simulation/
-│   │   │   ├── components/    # Shared UI components
-│   │   │   └── lib/           # Utilities
-│   │   └── docs/
-│   │
-│   └── api/                    # NestJS Backend
-│       ├── src/
-│       │   ├── gateway/        # API Gateway
-│       │   ├── microservices/  # All microservices
-│       │   │   ├── userManagement/
-│       │   │   │   ├── controllers/
-│       │   │   │   ├── services/
-│       │   │   │   ├── repositories/
-│       │   │   │   ├── prisma/
-│       │   │   │   └── *.module.ts
-│       │   │   └── ...
-│       │   └── common/         # Shared modules
-│       │       ├── redis/      # Global Redis
-│       │       ├── filters/    # Exception filters
-│       │       ├── helpers/    # Utilities
-│       │       └── interfaces/ # Types
-│       └── docs/
-│
-└── packages/
-    ├── shared/                 # Shared types
-    └── eslint-config/          # ESLint config
-```
 
 ### Directory Conventions
 
@@ -716,329 +1268,6 @@ Closes #123 Related to #456
 - **Squash and merge** for feature branches
 - **Merge commit** for important milestones
 - Delete branch after merge
-
----
-
-## Architecture Patterns
-
-### Layered Architecture
-
-```
-Controller → Service → Repository → Database
-              ↓
-           Redis Cache
-```
-
-**Controller Layer:**
-
-- Handle HTTP/RPC requests
-- Validate input (DTOs)
-- Return responses
-
-**Service Layer:**
-
-- Business logic
-- Orchestration
-- Error handling
-
-**Repository Layer:**
-
-- Data access
-- Database operations
-- No business logic
-
-### Microservices Communication
-
-**RabbitMQ Patterns:**
-
-```typescript
-// Publisher
-@Injectable()
-export class UserService {
-  constructor(@Inject('RABBITMQ_SERVICE') private client: ClientProxy) {}
-
-  async createUser(dto: CreateUserDto) {
-    const user = await this.userRepository.create(dto)
-
-    // Emit event
-    this.client.emit('user.created', {
-      userId: user.id,
-      email: user.email,
-    })
-
-    return user
-  }
-}
-
-// Subscriber
-@Controller()
-export class AnalyticsController {
-  @EventPattern('user.created')
-  handleUserCreated(@Payload() data: any) {
-    console.log('User created:', data)
-    // Track analytics
-  }
-}
-```
-
-### Error Handling
-
-```typescript
-// Custom exceptions
-export class UserNotFoundException extends NotFoundException {
-  constructor(userId: string) {
-    super(`User with ID ${userId} not found`)
-  }
-}
-
-// Global exception filter
-@Catch()
-export class AllExceptionsFilter implements ExceptionFilter {
-  catch(exception: unknown, host: ArgumentsHost) {
-    // Log error
-    // Return formatted response
-  }
-}
-```
-
----
-
-## API Guidelines
-
-### REST Conventions
-
-```typescript
-// Resources - plural nouns
-GET    /users           # List users
-GET    /users/:id       # Get user
-POST   /users           # Create user
-PATCH  /users/:id       # Update user
-DELETE /users/:id       # Delete user
-
-// Nested resources
-GET    /users/:id/teams
-POST   /users/:id/teams
-```
-
-### Response Format
-
-```typescript
-// Success
-{
-  "data": { ... },
-  "meta": {
-    "page": 1,
-    "limit": 10,
-    "total": 100
-  }
-}
-
-// Error
-{
-  "statusCode": 404,
-  "message": "User not found",
-  "error": "Not Found",
-  "timestamp": "2024-01-01T00:00:00.000Z",
-  "path": "/users/123"
-}
-```
-
-### Swagger Documentation
-
-```typescript
-@ApiTags('users')
-@Controller('users')
-export class UserController {
-  @ApiOperation({ summary: 'Get user by ID' })
-  @ApiResponse({ status: 200, description: 'User found', type: UserDto })
-  @ApiResponse({ status: 404, description: 'User not found' })
-  @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.userService.findOne(id)
-  }
-}
-```
-
----
-
-## Database Migrations
-
-### Creating Migrations
-
-```bash
-# Development - interactive
-cd apps/api
-pnpm db:migrate:userManagement
-
-# Name your migration descriptively
-# Example: "add_email_verification_fields"
-```
-
-### Migration Best Practices
-
-1. **Test migrations locally first**
-2. **Make migrations reversible when possible**
-3. **Separate schema and data migrations**
-4. **Review generated SQL**
-5. **Test rollback scenarios**
-
-### Example Migration
-
-```prisma
-// Add new field
-model User {
-  id        String   @id
-  email     String   @unique
-  verified  Boolean  @default(false) // New field
-  createdAt DateTime @default(now())
-}
-```
-
-```bash
-# Generate migration
-pnpm db:migrate:userManagement
-
-# Generates:
-# 20240101000000_add_email_verification/
-#   └── migration.sql
-```
-
-### Production Migrations
-
-```bash
-# Generate clients
-pnpm db:generate:all
-
-# Deploy migrations
-pnpm db:deploy:all
-
-# Or per service
-pnpm db:deploy:userManagement
-```
-
----
-
-## Redis Integration
-
-### Adding Redis to a Microservice
-
-```typescript
-// 1. Import RedisModule
-import { RedisModule } from '@/common/redis'
-
-@Module({
-  imports: [
-    RedisModule.forRoot({
-      url: process.env.REDIS_URL,
-      keyPrefix: 'myservice:',
-      defaultTTL: 3600,
-    }),
-  ],
-})
-export class MyServiceModule {}
-
-// 2. Inject RedisService
-@Injectable()
-export class MyService {
-  constructor(private readonly redis: RedisService) {}
-
-  async cacheData(key: string, data: any) {
-    await this.redis.set(key, data, { ttl: 3600 })
-  }
-
-  async getData(key: string) {
-    return await this.redis.get(key)
-  }
-}
-```
-
-### Cache Patterns
-
-**Cache-Aside:**
-
-```typescript
-async getUser(userId: string): Promise<User> {
-  // Try cache
-  const cached = await this.redis.get<User>(`user:${userId}`);
-  if (cached) return cached;
-
-  // Cache miss - fetch from DB
-  const user = await this.userRepository.findById(userId);
-
-  // Cache for next time
-  if (user) {
-    await this.redis.set(`user:${userId}`, user, { ttl: 3600 });
-  }
-
-  return user;
-}
-```
-
-**Write-Through:**
-
-```typescript
-async updateUser(userId: string, data: UpdateUserDto): Promise<User> {
-  // Update DB
-  const user = await this.userRepository.update(userId, data);
-
-  // Update cache
-  await this.redis.set(`user:${userId}`, user, { ttl: 3600 });
-
-  return user;
-}
-```
-
----
-
-## Common Tasks
-
-### Adding a New Microservice
-
-```bash
-# 1. Create directory structure
-mkdir -p apps/api/src/microservices/newservice/{controllers,services,repositories,dto,prisma}
-
-# 2. Create module
-touch apps/api/src/microservices/newservice/newservice.module.ts
-
-# 3. Create Prisma schema
-touch apps/api/src/microservices/newservice/prisma/schema.prisma
-
-# 4. Add to nest-cli.json
-# 5. Create main.ts entry point
-# 6. Add database scripts to package.json
-# 7. Update docker-compose.yml
-```
-
-### Adding Dependencies
-
-```bash
-# Add to specific app
-pnpm --filter api add package-name
-pnpm --filter web add package-name
-
-# Add to workspace root
-pnpm add -w package-name
-
-# Dev dependency
-pnpm add -D package-name
-```
-
-### Debugging
-
-**VS Code Launch Config:**
-
-```json
-{
-  "type": "node",
-  "request": "launch",
-  "name": "Debug NestJS",
-  "runtimeExecutable": "pnpm",
-  "runtimeArgs": ["dev:user"],
-  "console": "integratedTerminal",
-  "restart": true
-}
-```
 
 ---
 

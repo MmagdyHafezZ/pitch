@@ -1,9 +1,9 @@
 import { Controller, Logger, UsePipes, ValidationPipe } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
 import { TeamService } from '../services/team.service';
-import { USER_SERVICE_PATTERNS } from '../../../common/interfaces/message-patterns.interface';
-import * as userClaimsInterface from '../../../common/interfaces/user-claims.interface';
-import { toRpcException } from 'src/common/helpers/exceptions';
+import { USER_SERVICE_PATTERNS } from '@pitch/shared-backend/interfaces/message-patterns.interface';
+import * as userClaimsInterface from '@pitch/shared-backend/interfaces/user-claims.interface';
+import { toRpcException } from '@pitch/shared-backend/helpers/exceptions';
 import {
   AddMemberRequestDTO,
   CreateTeamRequestDto,
@@ -15,7 +15,7 @@ import {
   UpdateMemberDto,
   CreateTeamDto,
   UpdateTeamDto,
-} from 'src/common/interfaces/user.interface';
+} from '@pitch/shared-backend/interfaces/user.interface';
 import { Prisma } from '@prisma/user-client';
 
 @Controller()

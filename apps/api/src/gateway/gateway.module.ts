@@ -13,7 +13,7 @@ import {
 import {
   getJwtSecret,
   getJwtAccessExpiration,
-} from '../common/config/jwt.config';
+} from '@pitch/shared-backend/config/jwt.config';
 import { APP_GUARD } from '@nestjs/core';
 import { TeamGatewayController } from './controllers/userManagement/team-gateway.controller';
 

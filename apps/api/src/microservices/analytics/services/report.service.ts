@@ -14,20 +14,16 @@ export class ReportService {
     format?: string;
   }) {
     const report = await this.repository.createReport(data);
-    // Execute report logic here
     await this.repository.createReportExecution({
       reportId: report.id,
       status: 'completed',
-      resultData: {}, // Add actual report data
+      result: {},
     });
     return report;
   }
 
   async scheduleReport(data: { reportId: string; schedule: string }) {
-    return this.repository.updateReport(data.reportId, {
-      schedule: data.schedule,
-      status: 'active',
-    });
+    return this.repository.getReport(data.reportId);
   }
 
   async getReport(reportId: string) {

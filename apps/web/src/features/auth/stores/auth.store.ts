@@ -5,8 +5,8 @@ import { api } from '@/lib/client'
 
 export const isBrowser = () => typeof window !== 'undefined'
 
-export const persistAuthToken = (token: string, shouldPersist = isBrowser()) => {
-  if (shouldPersist) {
+export const persistAuthToken = (token: string | null, shouldPersist = isBrowser()) => {
+  if (shouldPersist && token !== null) {
     localStorage.setItem('authToken', token)
   }
 }
@@ -22,14 +22,12 @@ export interface AuthStore extends AuthState, AuthActions {}
 export const useAuthStore = create<AuthStore>()(
   persist(
     (set) => ({
-      // State
       user: null,
       token: null,
       isAuthenticated: false,
       isLoading: false,
       error: null,
 
-      // Actions
       login: async (email: string, password: string) => {
         try {
           set({ isLoading: true, error: null })
@@ -44,7 +42,6 @@ export const useAuthStore = create<AuthStore>()(
             error: null,
           })
 
-          // Store token in localStorage for API requests
           persistAuthToken(response.token)
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : 'Login failed'
@@ -73,7 +70,6 @@ export const useAuthStore = create<AuthStore>()(
             error: null,
           })
 
-          // Store token in localStorage for API requests
           persistAuthToken(response.token)
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : 'Registration failed'
@@ -97,22 +93,18 @@ export const useAuthStore = create<AuthStore>()(
           error: null,
         })
 
-        // Remove token from localStorage
         clearAuthToken()
 
         window.location.href = '/auth/login'
 
-        // Optionally call logout endpoint
-        api.auth.logout().catch(() => {
-          // Ignore logout errors
-        })
+        api.auth.logout().catch(() => {})
       },
 
-      setUser: (user: User) => {
+      setUser: (user: User | null) => {
         set({ user, isAuthenticated: true })
       },
 
-      setToken: (token: string) => {
+      setToken: (token: string | null) => {
         set({ token })
         persistAuthToken(token)
       },
@@ -134,14 +126,12 @@ export const useAuthStore = create<AuthStore>()(
           const token = localStorage.getItem('authToken')
           if (token) {
             set({ token })
-            // Optionally validate token by fetching user info
             api.auth
               .me()
               .then((user) => {
                 set({ user, isAuthenticated: true })
               })
               .catch(() => {
-                // Token is invalid, remove it
                 clearAuthToken()
                 set({ token: null, isAuthenticated: false })
               })

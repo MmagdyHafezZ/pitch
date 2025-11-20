@@ -1,4 +1,3 @@
-// auth/strategies/google.strategy.ts
 import { Injectable } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { Strategy, Profile } from 'passport-google-oauth20';
@@ -18,8 +17,28 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
       callbackURL: `${process.env.GOOGLE_CALLBACK_URL || 'http://localhost:3001/api/v1/auth/oauth/google/callback'}`,
       scope: ['email', 'profile'],
       passReqToCallback: true,
-      state: false, // Enable state parameter for CSRF protection
+      state: false,
     });
+  }
+
+  /**
+   * Override authorizationParams to add login_hint from the request
+   * This allows pre-filling the Google login with a specific email address
+   *
+   * @param options - Options passed from GoogleOAuthGuard containing login_hint
+   * @returns Parameters to be added to the Google OAuth authorization URL
+   */
+  authorizationParams(
+    options: Record<string, unknown>,
+  ): Record<string, string> {
+    const params: Record<string, string> = {};
+
+    const loginHint = options?.login_hint;
+    if (loginHint && typeof loginHint === 'string') {
+      params.login_hint = loginHint;
+    }
+
+    return params;
   }
 
   async validate(
@@ -28,49 +47,41 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
     refreshToken: string,
     profile: Profile,
   ): Promise<any> {
-    try {
-      void _req;
-      console.log('Google profile received:', JSON.stringify(profile, null, 2));
-
-      // Check if profile exists and has required properties
-      if (!profile?.id || !profile.emails?.[0]?.value) {
-        throw new Error('Invalid profile data received from Google');
-      }
-
-      const primaryEmail = profile.emails[0].value;
-      const fallbackName =
-        profile.displayName ||
-        (profile.name
-          ? `${profile.name.givenName || ''} ${profile.name.familyName || ''}`.trim()
-          : '') ||
-        primaryEmail.split('@')[0];
-
-      const oauthProfile: OAuthProfile = {
-        id: profile.id,
-        email: primaryEmail,
-        name: fallbackName,
-        firstName: profile.name?.givenName || '',
-        lastName: profile.name?.familyName || '',
-        avatar: profile.photos?.[0]?.value ?? undefined,
-        provider: AuthProvider.GOOGLE,
-        providerData: (profile as GoogleProfile)._json || profile,
-      };
-
-      const tokenData: ITokenData = {
-        accessToken,
-        refreshToken,
-        expiresAt: new Date(Date.now() + 3600 * 1000), // 1 hour
-      };
-
-      const user: unknown = await this.authService.validateOAuthUser(
-        oauthProfile,
-        tokenData,
-      );
-
-      return user;
-    } catch (error) {
-      console.error('Google OAuth validation error:', error);
-      throw error;
+    void _req;
+    if (!profile?.id || !profile.emails?.[0]?.value) {
+      throw new Error('Invalid profile data received from Google');
     }
+
+    const primaryEmail = profile.emails[0].value;
+    const fallbackName =
+      profile.displayName ||
+      (profile.name
+        ? `${profile.name.givenName || ''} ${profile.name.familyName || ''}`.trim()
+        : '') ||
+      primaryEmail.split('@')[0];
+
+    const oauthProfile: OAuthProfile = {
+      id: profile.id,
+      email: primaryEmail,
+      name: fallbackName,
+      firstName: profile.name?.givenName || '',
+      lastName: profile.name?.familyName || '',
+      avatar: profile.photos?.[0]?.value ?? undefined,
+      provider: AuthProvider.GOOGLE,
+      providerData: (profile as GoogleProfile)._json || profile,
+    };
+
+    const tokenData: ITokenData = {
+      accessToken,
+      refreshToken,
+      expiresAt: new Date(Date.now() + 3600 * 1000),
+    };
+
+    const user: unknown = await this.authService.validateOAuthUser(
+      oauthProfile,
+      tokenData,
+    );
+
+    return user;
   }
 }

@@ -1,0 +1,56 @@
+{
+  "name": "@pitch/shared-backend",
+  "version": "1.0.0",
+  "description": "Shared backend utilities and common code for PITCH microservices",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "require": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./*": {
+      "import": "./dist/*.js",
+      "require": "./dist/*.js",
+      "types": "./dist/*.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "clean": "rm -rf dist"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "peerDependencies": {
+    "@nestjs/common": "^11.0.0",
+    "@nestjs/core": "^11.0.0",
+    "@nestjs/microservices": "^11.0.0",
+    "@nestjs/terminus": "^11.0.0",
+    "@prisma/client": "^6.0.0",
+    "express": "^4.0.0 || ^5.0.0",
+    "ioredis": "^5.0.0",
+    "rxjs": "^7.0.0"
+  },
+  "peerDependenciesMeta": {
+    "amqplib": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@nestjs/common": "^11.0.1",
+    "@nestjs/core": "^11.0.1",
+    "@nestjs/microservices": "^11.0.1",
+    "@nestjs/terminus": "^11.0.0",
+    "@prisma/client": "^6.19.0",
+    "@types/amqplib": "^0.10.0",
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.10.7",
+    "express": "^5.0.0",
+    "ioredis": "^5.8.2",
+    "rxjs": "^7.8.1",
+    "typescript": "^5.7.3"
+  }
+}
