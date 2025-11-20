@@ -96,7 +96,7 @@
     "db:deploy:support": "pnpm --filter api db:deploy:support",
     "db:deploy:analytics": "pnpm --filter api db:deploy:analytics",
     "db:deploy:crm": "pnpm --filter api db:deploy:crm",
-    "docker:build": "docker build -f apps/api/Dockerfile -t pitch-api:latest .",
+    "docker:build": "bash ./scripts/docker-build-all.sh",
     "docker:up": "docker-compose up -d",
     "docker:down": "docker-compose down",
     "docker:logs": "docker-compose logs -f",

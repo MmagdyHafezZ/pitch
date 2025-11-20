@@ -101,7 +101,6 @@ export function LoginForm({ onSwitchToRegister }: LoginFormProps) {
     error: providersError,
   } = useOAuthProvidersQuery()
 
-  // Show error if providers query fails
   React.useEffect(() => {
     if (providersError) {
       setErrorMessage('Unable to load authentication providers')
@@ -122,9 +121,8 @@ export function LoginForm({ onSwitchToRegister }: LoginFormProps) {
       if (!result.exists) {
         setErrorMessage(result.message)
         setShowError(true)
-        setShowProviderSelection(true) // Show signup options
+        setShowProviderSelection(true)
       } else if (result.requiresOAuth && result.provider) {
-        // User exists, redirect to their provider
         setDetectedProvider(result.provider)
         const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1'
 
@@ -134,13 +132,12 @@ export function LoginForm({ onSwitchToRegister }: LoginFormProps) {
           color: 'blue',
         })
 
-        redirectToOAuthProvider(baseUrl, result.provider)
+        redirectToOAuthProvider(baseUrl, result.provider, email.trim())
       } else {
         setErrorMessage(result.message)
         setShowError(true)
       }
     } catch (error) {
-      console.error('Email check error:', error)
       setErrorMessage('Failed to check email. Please try again.')
       setShowError(true)
     } finally {
@@ -150,8 +147,6 @@ export function LoginForm({ onSwitchToRegister }: LoginFormProps) {
 
   const handleOAuthLogin = (provider: OAuthProvider) => {
     try {
-      console.log('Initiating OAuth with provider:', provider.name)
-
       const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1'
 
       notifications.show({
@@ -160,10 +155,8 @@ export function LoginForm({ onSwitchToRegister }: LoginFormProps) {
         color: 'blue',
       })
 
-      // Use utility function to redirect to OAuth provider
-      redirectToOAuthProvider(baseUrl, provider.name)
+      redirectToOAuthProvider(baseUrl, provider.name, email.trim() || undefined)
     } catch (error) {
-      console.error('OAuth login error:', error)
       setErrorMessage(`Failed to initiate ${provider.displayName} login`)
       setShowError(true)
     }

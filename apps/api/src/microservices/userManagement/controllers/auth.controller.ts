@@ -1,9 +1,10 @@
 import { Controller, ValidationPipe, UsePipes, Logger } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
-import { USER_SERVICE_PATTERNS } from '../../../common/interfaces/message-patterns.interface';
+import { USER_SERVICE_PATTERNS } from '@pitch/shared-backend/interfaces/message-patterns.interface';
 import { AuthApplicationService } from '../services/auth-application.service';
-import { toRpcException } from '../../../common/helpers/exceptions';
-import { RegisterDto, LoginDto, RefreshTokenDto } from '../dto/auth.dto';
+import { toRpcException } from '@pitch/shared-backend/helpers/exceptions';
+import { RegisterDto, LoginDto } from '../dto/auth.dto';
+import { OAuthProviderFactory } from '../factories/oauth-provider.factory';
 
 /**
  * Auth RPC Controller
@@ -19,6 +20,7 @@ export class AuthController {
 
   constructor(
     private readonly authApplicationService: AuthApplicationService,
+    private readonly oauthProviderFactory: OAuthProviderFactory,
   ) {}
 
   /**
@@ -94,10 +96,48 @@ export class AuthController {
   async validateUser(@Payload() data: { email: string; password?: string }) {
     try {
       this.logger.log(`User validation request for: ${data.email}`);
-      // Note: Current implementation uses OAuth only, no password validation
       return await this.authApplicationService.validateUser(data.email);
     } catch (error) {
       this.logger.error(`User validation failed for ${data.email}`, error);
+      throw toRpcException(error);
+    }
+  }
+
+  /**
+   * Get available OAuth providers
+   * Pattern: auth.oauth.getProviders
+   */
+  @MessagePattern(USER_SERVICE_PATTERNS.OAUTH_GET_PROVIDERS)
+  getOAuthProviders() {
+    try {
+      this.logger.log(
+        '📥 UserMicroservice: Received RabbitMQ message on user_queue - Fetching OAuth providers',
+      );
+      const providers = this.oauthProviderFactory.getEnabledProviders();
+      this.logger.log(
+        `✅ UserMicroservice: Returning ${providers.length} enabled OAuth providers via RabbitMQ`,
+      );
+      return providers;
+    } catch (error) {
+      this.logger.error(
+        '❌ UserMicroservice: Failed to get OAuth providers',
+        error,
+      );
+      throw toRpcException(error);
+    }
+  }
+
+  /**
+   * Check if email exists and return associated OAuth provider
+   * Pattern: auth.checkEmail
+   */
+  @MessagePattern(USER_SERVICE_PATTERNS.CHECK_EMAIL)
+  async checkEmail(@Payload() data: { email: string }) {
+    try {
+      this.logger.log(`Email check request for: ${data.email}`);
+      return await this.authApplicationService.checkEmail(data.email);
+    } catch (error) {
+      this.logger.error(`Email check failed for ${data.email}`, error);
       throw toRpcException(error);
     }
   }

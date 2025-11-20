@@ -34,8 +34,6 @@ export class SimulationRedisService {
 
   constructor(private readonly redis: Redis) {}
 
-  // ===== Session Cache =====
-
   async setSessionCache(sessionId: string, data: ISessionCache): Promise<void> {
     const key = RedisKeys.session(sessionId);
     await this.redis.setex(key, RedisTTL.SESSION_CACHE, JSON.stringify(data));
@@ -59,8 +57,6 @@ export class SimulationRedisService {
     const key = RedisKeys.session(sessionId);
     await this.redis.expire(key, RedisTTL.SESSION_CACHE);
   }
-
-  // ===== Session Context =====
 
   async setSessionContext(
     sessionId: string,
@@ -86,11 +82,9 @@ export class SimulationRedisService {
     await this.redis.del(key);
   }
 
-  // ===== Persona & Scenario Cache =====
-
   async setPersonaCache(
     personaId: string,
-    data: Record<string, any>,
+    data: Record<string, unknown>,
   ): Promise<void> {
     const key = RedisKeys.persona(personaId);
     await this.redis.setex(key, RedisTTL.PERSONA_CACHE, JSON.stringify(data));
@@ -98,16 +92,16 @@ export class SimulationRedisService {
 
   async getPersonaCache(
     personaId: string,
-  ): Promise<Record<string, any> | null> {
+  ): Promise<Record<string, unknown> | null> {
     const key = RedisKeys.persona(personaId);
     const data = await this.redis.get(key);
     if (!data) return null;
-    return JSON.parse(data);
+    return JSON.parse(data) as Record<string, unknown>;
   }
 
   async setScenarioCache(
     scenarioId: string,
-    data: Record<string, any>,
+    data: Record<string, unknown>,
   ): Promise<void> {
     const key = RedisKeys.scenario(scenarioId);
     await this.redis.setex(key, RedisTTL.SCENARIO_CACHE, JSON.stringify(data));
@@ -115,14 +109,12 @@ export class SimulationRedisService {
 
   async getScenarioCache(
     scenarioId: string,
-  ): Promise<Record<string, any> | null> {
+  ): Promise<Record<string, unknown> | null> {
     const key = RedisKeys.scenario(scenarioId);
     const data = await this.redis.get(key);
     if (!data) return null;
-    return JSON.parse(data);
+    return JSON.parse(data) as Record<string, unknown>;
   }
-
-  // ===== SSE State =====
 
   async setSSEChannelState(
     sessionId: string,
@@ -150,8 +142,6 @@ export class SimulationRedisService {
     const key = RedisKeys.sseLastEventId(sessionId);
     return await this.redis.get(key);
   }
-
-  // ===== WebRTC Signaling =====
 
   async setWebRTCState(callId: string, state: IWebRTCState): Promise<void> {
     const key = RedisKeys.webrtcState(callId);
@@ -194,8 +184,6 @@ export class SimulationRedisService {
     await this.redis.del(...keys);
   }
 
-  // ===== STT Partials =====
-
   async setSTTPartial(callId: string, partial: ISTTPartial): Promise<void> {
     const key = RedisKeys.sttPartial(callId);
     await this.redis.setex(key, RedisTTL.STT_PARTIAL, JSON.stringify(partial));
@@ -213,8 +201,6 @@ export class SimulationRedisService {
     await this.redis.del(key);
   }
 
-  // ===== Rate Limiting =====
-
   async incrementRateLimitOrg(
     orgId: string,
     window: string,
@@ -226,7 +212,6 @@ export class SimulationRedisService {
 
     const count = await this.redis.incr(key);
     if (count === 1) {
-      // First increment, set TTL
       await this.redis.expire(key, ttl);
     }
 
@@ -268,8 +253,6 @@ export class SimulationRedisService {
     };
   }
 
-  // ===== Idempotency =====
-
   async setIdempotencyKey(
     key: string,
     record: IIdempotencyRecord,
@@ -289,8 +272,6 @@ export class SimulationRedisService {
     return JSON.parse(data) as IIdempotencyRecord;
   }
 
-  // ===== Job Locks =====
-
   async acquireJobLock(
     jobType: string,
     jobId: string,
@@ -309,7 +290,6 @@ export class SimulationRedisService {
       heartbeatAt: now,
     };
 
-    // SET NX (set if not exists) with expiration
     const result = await this.redis.set(
       key,
       JSON.stringify(lock),
@@ -338,7 +318,7 @@ export class SimulationRedisService {
 
     const lock = JSON.parse(data) as IJobLock;
     if (lock.lockedBy !== workerId) {
-      return false; // Lock owned by another worker
+      return false;
     }
 
     lock.heartbeatAt = new Date().toISOString();
@@ -346,8 +326,6 @@ export class SimulationRedisService {
 
     return true;
   }
-
-  // ===== Turn Context =====
 
   async setTurnContext(
     sessionId: string,
@@ -373,8 +351,6 @@ export class SimulationRedisService {
     await this.redis.del(key);
   }
 
-  // ===== LLM Streaming State =====
-
   async setLLMStreamState(
     sessionId: string,
     turnId: string,
@@ -399,8 +375,6 @@ export class SimulationRedisService {
     await this.redis.del(key);
   }
 
-  // ===== VAD State =====
-
   async setVADState(callId: string, state: IVADState): Promise<void> {
     const key = RedisKeys.vadState(callId);
     await this.redis.setex(key, RedisTTL.VAD_STATE, JSON.stringify(state));
@@ -417,8 +391,6 @@ export class SimulationRedisService {
     const key = RedisKeys.vadState(callId);
     await this.redis.del(key);
   }
-
-  // ===== Utility Methods =====
 
   /**
    * Clear all session-related keys (cache, context, SSE, etc.)

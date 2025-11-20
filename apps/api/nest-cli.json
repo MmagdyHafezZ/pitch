@@ -2,85 +2,10 @@
   "$schema": "https://json.schemastore.org/nest-cli",
   "collection": "@nestjs/schematics",
   "sourceRoot": "src",
+  "entryFile": "main",
   "compilerOptions": {
     "deleteOutDir": true,
     "webpack": false,
-    "tsConfigPath": "tsconfig.json"
-  },
-  "monorepo": true,
-  "root": "src",
-  "projects": {
-    "gateway": {
-      "type": "application",
-      "root": "src",
-      "entryFile": "main",
-      "sourceRoot": "src",
-      "compilerOptions": {
-        "tsConfigPath": "tsconfig.json"
-      }
-    },
-    "user": {
-      "type": "application",
-      "root": "src/microservices/userManagement",
-      "entryFile": "main",
-      "sourceRoot": "src/microservices/userManagement",
-      "compilerOptions": {
-        "tsConfigPath": "tsconfig.json"
-      }
-    },
-    "simulation": {
-      "type": "application",
-      "root": "src/microservices/simulation",
-      "entryFile": "main",
-      "sourceRoot": "src/microservices/simulation",
-      "compilerOptions": {
-        "tsConfigPath": "tsconfig.json"
-      }
-    },
-    "support": {
-      "type": "application",
-      "root": "src/microservices/support",
-      "entryFile": "main",
-      "sourceRoot": "src/microservices/support",
-      "compilerOptions": {
-        "tsConfigPath": "tsconfig.json"
-      }
-    },
-    "analytics": {
-      "type": "application",
-      "root": "src/microservices/analytics",
-      "entryFile": "main",
-      "sourceRoot": "src/microservices/analytics",
-      "compilerOptions": {
-        "tsConfigPath": "tsconfig.json"
-      }
-    },
-    "lti": {
-      "type": "application",
-      "root": "src/microservices/lti",
-      "entryFile": "main",
-      "sourceRoot": "src/microservices/lti",
-      "compilerOptions": {
-        "tsConfigPath": "tsconfig.json"
-      }
-    },
-    "s3": {
-      "type": "application",
-      "root": "src/microservices/s3",
-      "entryFile": "main",
-      "sourceRoot": "src/microservices/s3",
-      "compilerOptions": {
-        "tsConfigPath": "tsconfig.json"
-      }
-    },
-    "crm": {
-      "type": "application",
-      "root": "src/microservices/crm",
-      "entryFile": "main",
-      "sourceRoot": "src/microservices/crm",
-      "compilerOptions": {
-        "tsConfigPath": "tsconfig.json"
-      }
-    }
+    "tsConfigPath": "tsconfig.build.json"
   }
 }

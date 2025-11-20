@@ -1,12 +1,20 @@
 import { Injectable } from '@nestjs/common';
 import { LtiRepository } from '../repositories/lti.repository';
 
+interface GradeData {
+  userId: string;
+  lineItemId: string;
+  score: number;
+  maxScore?: number;
+  comment?: string;
+  [key: string]: unknown;
+}
+
 @Injectable()
 export class GradeService {
   constructor(private readonly repository: LtiRepository) {}
 
-  async syncGrade(data: any) {
-    // Grade sync logic
+  syncGrade(_data: GradeData) {
     return { success: true };
   }
 }

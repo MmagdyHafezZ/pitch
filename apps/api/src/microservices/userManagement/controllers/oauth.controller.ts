@@ -23,6 +23,7 @@ import {
   ApiParam,
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../guards/jwt-auth.guard';
+import { GoogleOAuthGuard } from '../guards/google-oauth.guard';
 import { AuthService } from '../services/auth.service';
 import {
   OAuthProviderFactory,
@@ -61,18 +62,15 @@ export class OAuthController {
     private oauthProviderFactory: OAuthProviderFactory,
   ) {}
 
-  // Google OAuth
   @Get('google')
   @Public()
-  @UseGuards(AuthGuard('google'))
+  @UseGuards(GoogleOAuthGuard)
   @ApiOperation({ summary: 'Initiate Google OAuth login' })
-  googleAuth() {
-    // Passport handles the redirect
-  }
+  googleAuth() {}
 
   @Get('google/callback')
   @Public()
-  @UseGuards(AuthGuard('google'))
+  @UseGuards(GoogleOAuthGuard)
   @ApiOperation({ summary: 'Google OAuth callback' })
   googleCallback(@Req() req: express.Request, @Res() res: express.Response) {
     try {
@@ -89,9 +87,7 @@ export class OAuthController {
   @Public()
   @UseGuards(AuthGuard('linkedin'))
   @ApiOperation({ summary: 'Initiate LinkedIn OAuth login' })
-  linkedinAuth() {
-    // Passport handles the redirect
-  }
+  linkedinAuth() {}
 
   @Get('linkedin/callback')
   @Public()
@@ -108,14 +104,11 @@ export class OAuthController {
     }
   }
 
-  // GitHub OAuth
   @Get('github')
   @Public()
   @UseGuards(AuthGuard('github'))
   @ApiOperation({ summary: 'Initiate GitHub OAuth login' })
-  githubAuth() {
-    // Passport handles the redirect
-  }
+  githubAuth() {}
 
   @Get('github/callback')
   @Public()
@@ -132,14 +125,11 @@ export class OAuthController {
     }
   }
 
-  // Microsoft OAuth
   @Get('microsoft')
   @Public()
   @UseGuards(AuthGuard('microsoft'))
   @ApiOperation({ summary: 'Initiate Microsoft OAuth login' })
-  microsoftAuth() {
-    // Passport handles the redirect
-  }
+  microsoftAuth() {}
 
   @Get('microsoft/callback')
   @Public()
@@ -156,14 +146,11 @@ export class OAuthController {
     }
   }
 
-  // Discord OAuth
   @Get('discord')
   @Public()
   @UseGuards(AuthGuard('discord'))
   @ApiOperation({ summary: 'Initiate Discord OAuth login' })
-  discordAuth() {
-    // Passport handles the redirect
-  }
+  discordAuth() {}
 
   @Get('discord/callback')
   @Public()
@@ -180,7 +167,6 @@ export class OAuthController {
     }
   }
 
-  // Account linking endpoints
   @Get('linked-accounts')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('JWT-auth')
@@ -215,7 +201,6 @@ export class OAuthController {
     return await this.authService.unlinkOAuthAccount(id, provider);
   }
 
-  // Link additional OAuth accounts (when user is already logged in)
   @Get('link/:provider')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('JWT-auth')
@@ -232,8 +217,6 @@ export class OAuthController {
     @Param('provider') provider: AuthProvider,
     @Query('user_id') userId?: string,
   ) {
-    // This would redirect to the OAuth provider with a "link" state
-    // Implementation depends on your specific linking flow
     const providerConfig = this.oauthProviderFactory.getProvider(provider);
     if (!providerConfig) {
       throw new BadRequestException('Unsupported OAuth provider');
@@ -246,7 +229,6 @@ export class OAuthController {
     };
   }
 
-  // Refresh token endpoint
   @Post('refresh')
   @ApiOperation({ summary: 'Refresh access token' })
   @ApiResponse({

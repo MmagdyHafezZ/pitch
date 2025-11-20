@@ -1,3 +1,7 @@
+import { config } from 'dotenv';
+import { join } from 'path';
+config({ path: join(__dirname, '../../../../.env') });
+
 import { NestFactory } from '@nestjs/core';
 import { MicroserviceOptions, Transport } from '@nestjs/microservices';
 import { ValidationPipe } from '@nestjs/common';
@@ -29,9 +33,6 @@ async function bootstrap() {
   );
 
   await app.listen();
-  console.log(
-    '🚀 Simulation Microservice is listening on RabbitMQ (simulation_queue)',
-  );
 }
 
-bootstrap();
+void bootstrap();

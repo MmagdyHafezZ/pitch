@@ -53,8 +53,12 @@ export function isAuthenticated(): boolean {
 /**
  * Builds OAuth authorization URL
  */
-export function buildOAuthUrl(baseUrl: string, provider: string): string {
-  return `${baseUrl}/auth/oauth/${provider.toLowerCase()}`
+export function buildOAuthUrl(baseUrl: string, provider: string, loginHint?: string): string {
+  const url = `${baseUrl}/auth/oauth/${provider.toLowerCase()}`
+  if (loginHint) {
+    return `${url}?login_hint=${encodeURIComponent(loginHint)}`
+  }
+  return url
 }
 
 /**
@@ -74,9 +78,16 @@ export function parseOAuthCallback(searchParams: URLSearchParams): {
 
 /**
  * Redirects to OAuth provider
+ * @param baseUrl - The base API URL
+ * @param provider - The OAuth provider name (e.g., 'google', 'github')
+ * @param loginHint - Optional email to pre-fill and skip account picker
  */
-export function redirectToOAuthProvider(baseUrl: string, provider: string): void {
-  const oauthUrl = buildOAuthUrl(baseUrl, provider)
+export function redirectToOAuthProvider(
+  baseUrl: string,
+  provider: string,
+  loginHint?: string
+): void {
+  const oauthUrl = buildOAuthUrl(baseUrl, provider, loginHint)
   window.location.href = oauthUrl
 }
 
@@ -86,7 +97,6 @@ export function redirectToOAuthProvider(baseUrl: string, provider: string): void
 export function handleOAuthSuccess(tokens: OAuthTokens, redirectUrl: string = '/home'): void {
   storeOAuthTokens(tokens)
 
-  // Use Next.js router if available, otherwise fallback to window.location
   if (typeof window !== 'undefined') {
     window.location.href = redirectUrl
   }
@@ -96,10 +106,8 @@ export function handleOAuthSuccess(tokens: OAuthTokens, redirectUrl: string = '/
  * Handles OAuth callback error
  */
 export function handleOAuthError(error: string, redirectUrl: string = '/auth/login'): void {
-  console.error('OAuth error:', error)
   clearOAuthTokens()
 
-  // Use Next.js router if available, otherwise fallback to window.location
   if (typeof window !== 'undefined') {
     window.location.href = `${redirectUrl}?error=${encodeURIComponent(error)}`
   }

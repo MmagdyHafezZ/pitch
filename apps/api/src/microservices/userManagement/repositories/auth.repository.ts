@@ -44,8 +44,6 @@ export interface UpdateOAuthAccountData {
 export class AuthRepository {
   constructor(private readonly prisma: UserPrismaService) {}
 
-  // ==================== OAuth Account Operations ====================
-
   async getOAuthAccounts(userId: string): Promise<OAuthAccount[]> {
     return await this.prisma.oAuthAccount.findMany({
       where: { userId },
@@ -112,8 +110,6 @@ export class AuthRepository {
     });
   }
 
-  // ==================== Refresh Token Operations ====================
-
   async createRefreshToken(
     userId: string,
     token: string,
@@ -171,8 +167,6 @@ export class AuthRepository {
     return result.count;
   }
 
-  // ==================== Combined Operations ====================
-
   /**
    * Get user with all OAuth accounts
    * Useful for OAuth validation flows
@@ -192,11 +186,10 @@ export class AuthRepository {
    */
   async canUnlinkOAuthAccount(
     userId: string,
-    provider: AuthProvider,
+    _provider: AuthProvider,
   ): Promise<boolean> {
     const count = await this.countOAuthAccountsForUser(userId);
 
-    // Can only unlink if user has more than one OAuth account
     return count > 1;
   }
 }
