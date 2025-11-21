@@ -40,7 +40,7 @@ describe('microservices.config', () => {
       options: {
         urls: ['amqp://custom'],
         queue: 'sample_queue',
-        noAck: false,
+        noAck: true,
         prefetchCount: 10,
         queueOptions: { durable: true },
       },
