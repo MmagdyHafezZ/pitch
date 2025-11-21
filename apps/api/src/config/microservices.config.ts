@@ -34,7 +34,7 @@ export function createMicroserviceOptions(queue: string): MicroserviceOptions {
     options: {
       urls: [url],
       queue,
-      noAck: false,
+      noAck: true,
       prefetchCount: 10,
       queueOptions: {
         durable: true,
