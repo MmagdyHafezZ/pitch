@@ -16,19 +16,12 @@ authentication, multi-database architecture, and real-time communication.
 
 ```bash
 # Install dependencies
-pnpm install
+chmod +x start.sh
 
-# Start infrastructure (databases, Redis, RabbitMQ)
-docker-compose up -d
+# run it
+./start.sh
 
-# Generate Prisma clients
-cd apps/api
-pnpm db:generate:all
-
-# Run migrations
-pnpm db:migrate:all
-
-# Start development
+# For quick dev
 pnpm dev
 ```
 
