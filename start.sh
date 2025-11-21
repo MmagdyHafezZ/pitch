@@ -56,6 +56,7 @@ pnpm db:migrate:all
 echo "🏗️ Building the project..."
 pnpm -w build
 
+pnpm dev
 echo ""
-echo "🎉 Setup complete! Now just run:"
-echo "   ./start.sh"
+echo "Setup completed! Everything is live... go to localhost:3000 and localhost:8000/docs"
+
