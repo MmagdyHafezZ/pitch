@@ -28,7 +28,7 @@ import { GlobalJwtAuthGuard } from '../../guards/global-jwt-auth.guard';
 import { UserClaimsInterceptor } from '../../interceptors/user-claims.interceptor';
 import { UserClaims } from '../../decorators/user-claims.decorator';
 import type { UserClaims as UserClaimsType } from '@pitch/shared-backend/interfaces/user-claims.interface';
-import type { ServiceError } from '@pitch/shared-backend/interfaces/error.interface';
+import { normalizeError } from '@pitch/shared-backend/helpers/exceptions';
 import {
   CreateTeamRequestDto,
   UpdateTeamRequestDto,
@@ -69,7 +69,7 @@ export class TeamGatewayController {
       .pipe(
         timeout(5000),
         catchError((err: unknown) => {
-          const error = err as ServiceError;
+          const error = normalizeError(err);
           const message = error.message ?? 'Failed to create team';
           const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
           return throwError(() => new HttpException(message, status));
@@ -95,7 +95,7 @@ export class TeamGatewayController {
       .pipe(
         timeout(5000),
         catchError((err: unknown) => {
-          const error = err as ServiceError;
+          const error = normalizeError(err);
           const message = error.message ?? 'Failed to update team';
           const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
           return throwError(() => new HttpException(message, status));
@@ -119,7 +119,7 @@ export class TeamGatewayController {
       .pipe(
         timeout(5000),
         catchError((err: unknown) => {
-          const error = err as ServiceError;
+          const error = normalizeError(err);
           const message = error.message ?? 'Failed to delete team';
           const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
           return throwError(() => new HttpException(message, status));
@@ -138,7 +138,7 @@ export class TeamGatewayController {
       .pipe(
         timeout(5000),
         catchError((err: unknown) => {
-          const error = err as ServiceError;
+          const error = normalizeError(err);
           const message = error.message ?? 'Failed to get teams';
           const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
           return throwError(() => new HttpException(message, status));
@@ -157,7 +157,7 @@ export class TeamGatewayController {
       .pipe(
         timeout(5000),
         catchError((err: unknown) => {
-          const error = err as ServiceError;
+          const error = normalizeError(err);
           const message = error.message ?? 'Failed to get teams';
           const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
           return throwError(() => new HttpException(message, status));
@@ -181,7 +181,7 @@ export class TeamGatewayController {
       .pipe(
         timeout(5000),
         catchError((err: unknown) => {
-          const error = err as ServiceError;
+          const error = normalizeError(err);
           const message = error.message ?? 'Failed to get team';
           const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
           return throwError(() => new HttpException(message, status));
@@ -209,7 +209,7 @@ export class TeamGatewayController {
       .pipe(
         timeout(5000),
         catchError((err: unknown) => {
-          const error = err as ServiceError;
+          const error = normalizeError(err);
           const message = error.message ?? 'Failed to add Team Member';
           const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
           return throwError(() => new HttpException(message, status));
@@ -238,7 +238,7 @@ export class TeamGatewayController {
       .pipe(
         timeout(5000),
         catchError((err: unknown) => {
-          const error = err as ServiceError;
+          const error = normalizeError(err);
           const message = error.message ?? 'Failed to update Team Member';
           const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
           return throwError(() => new HttpException(message, status));
@@ -265,7 +265,7 @@ export class TeamGatewayController {
       .pipe(
         timeout(5000),
         catchError((err: unknown) => {
-          const error = err as ServiceError;
+          const error = normalizeError(err);
           const message = error.message ?? 'Failed to delete team';
           const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
           return throwError(() => new HttpException(message, status));

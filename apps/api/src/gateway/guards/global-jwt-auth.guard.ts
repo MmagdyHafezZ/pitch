@@ -10,7 +10,7 @@ import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import { IS_PUBLIC_KEY } from '../../microservices/userManagement/decorators/public.decorator';
 import { isWhitelistedRoute } from '../config/auth-whitelist.config';
-import type { ServiceError } from '@pitch/shared-backend/interfaces/error.interface';
+import { normalizeError } from '@pitch/shared-backend/helpers/exceptions';
 import type {
   RequestWithHeaders,
   RequestWithUser,
