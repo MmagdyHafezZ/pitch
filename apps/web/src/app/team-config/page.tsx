@@ -12,7 +12,7 @@ import {
   SimpleGrid,
   Paper,
 } from '@mantine/core'
-import { useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 
 import { AppLayout } from '@/components/layout/AppLayout'
@@ -24,7 +24,15 @@ import { useAuth } from '@/features/auth'
 import { useCreateTeamForm } from '@/features/teams/hooks/useTeamForm'
 import { TeamMembersPanel } from '@/components/ui/TeamMembersPanel'
 
-export default function TeamConfig() {
+export default function TeamConfigPage() {
+  return (
+    <Suspense fallback={<div>Loading team configuration…</div>}>
+      <TeamConfigInner />
+    </Suspense>
+  )
+}
+
+function TeamConfigInner() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const isCreateMode = searchParams.get('mode') === 'create'
@@ -110,7 +118,6 @@ export default function TeamConfig() {
     }
   }
 
-  // choose which form state to use based on mode
   const formValues = isCreateMode ? values : editValues
   const formErrors = isCreateMode ? errors : ({} as typeof errors)
   const bannerError = isCreateMode ? apiError : editError
