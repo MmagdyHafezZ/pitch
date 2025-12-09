@@ -11,6 +11,7 @@ import { JwtService } from '@nestjs/jwt';
 import { IS_PUBLIC_KEY } from '../../microservices/userManagement/decorators/public.decorator';
 import { isWhitelistedRoute } from '../config/auth-whitelist.config';
 import { normalizeError } from '@pitch/shared-backend/helpers/exceptions';
+import type { ServiceError } from '@pitch/shared-backend/interfaces/error.interface';
 import type {
   RequestWithHeaders,
   RequestWithUser,
@@ -72,14 +73,19 @@ export class GlobalJwtAuthGuard implements CanActivate {
       );
       return Promise.resolve(true);
     } catch (error: unknown) {
-      const e = error as ServiceError & { name?: string };
+      const normalized = normalizeError(error) as ServiceError & {
+        name?: string;
+      };
       this.logger.warn(
-        `JWT validation failed: ${e.message ?? 'Unknown error'}`,
+        `JWT validation failed: ${normalized.message ?? 'Unknown error'}`,
       );
-      if (e.name === 'TokenExpiredError')
+
+      if (normalized.name === 'TokenExpiredError') {
         throw new UnauthorizedException('Access token has expired');
-      if (e.name === 'JsonWebTokenError')
+      }
+      if (normalized.name === 'JsonWebTokenError') {
         throw new UnauthorizedException('Invalid access token');
+      }
       throw new UnauthorizedException('Token validation failed');
     }
   }
