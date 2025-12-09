@@ -15,14 +15,18 @@ import {
   Box,
   Collapse,
   UnstyledButton,
+  Loader,
+  Alert,
+  Center,
 } from '@mantine/core'
-import { IconSearch, IconChevronDown, IconChevronUp } from '@tabler/icons-react'
+import { IconSearch, IconChevronDown, IconChevronUp, IconAlertCircle } from '@tabler/icons-react'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 
 import { AppLayout } from '@/components/layout/AppLayout'
 import { AppSidebar } from '@/components/ui/AppSideBar'
 import { AppTopBar } from '@/components/ui/AppTopBar'
+import { useSessions } from '@/features/sessions/hooks/useSessions'
 
 type Status = 'Upcoming' | 'Pending' | 'Overdue' | 'Completed'
 const statusColor: Record<Status, string> = {
@@ -33,10 +37,11 @@ const statusColor: Record<Status, string> = {
 }
 
 interface SessionType {
+  id?: string
   title: string
   date: string
-  tags: string[]
-  status: Status
+  tags?: string[]
+  status: string
   score?: number
   description?: string
 }
@@ -52,8 +57,8 @@ function SessionCard({
 }: {
   title: string
   date: string
-  tags: string[]
-  status: Status
+  tags?: string[]
+  status: string
   score?: number
   onClick: () => void
   isSelected?: boolean
@@ -75,7 +80,7 @@ function SessionCard({
       <Stack gap="xs">
         <Group justify="space-between" align="center">
           <Title order={5}>{title}</Title>
-          <Badge color={statusColor[status]} radius="sm" variant="light">
+          <Badge color={statusColor[status as Status] || 'gray'} radius="sm" variant="light">
             {status}
           </Badge>
         </Group>
@@ -83,7 +88,7 @@ function SessionCard({
           {date}
         </Text>
         <Group gap={6} wrap="wrap">
-          {tags.map((t, idx) => (
+          {tags?.map((t, idx) => (
             <Badge key={`${t}-${idx}`} variant="outline" color="gray" radius="sm">
               {t}
             </Badge>
@@ -135,7 +140,7 @@ function SessionDetailPanel({ session }: { session: SessionType }) {
             <Text size="sm" c="dimmed">
               •
             </Text>
-            <Badge color={statusColor[session.status]} radius="sm" variant="light">
+            <Badge color={statusColor[session.status as Status] || 'gray'} radius="sm" variant="light">
               {session.status}
             </Badge>
           </Group>
@@ -147,7 +152,7 @@ function SessionDetailPanel({ session }: { session: SessionType }) {
             Tags
           </Title>
           <Group gap="xs">
-            {session.tags.map((tag, idx) => (
+            {session.tags?.map((tag, idx) => (
               <Badge
                 key={`detail-${tag}-${idx}`}
                 variant="filled"
@@ -252,88 +257,12 @@ export default function SessionsPage() {
   const [createdExpanded, setCreatedExpanded] = useState(false)
   const [selectedSession, setSelectedSession] = useState<SessionType | null>(null)
 
-  const assigned: SessionType[] = [
-    {
-      title: 'Product Intro Practice',
-      date: 'October 13, 2025',
-      tags: ['Tag', 'Tag', 'Tag', 'Tag', 'Tag', '+7 more'],
-      status: 'Upcoming' as const,
-      description: 'Practice session for product introduction',
-    },
-    {
-      title: 'Product Intro Practice',
-      date: 'October 11, 2025',
-      tags: ['Tag', 'Tag', 'Tag', 'Tag', 'Tag', '+7 more'],
-      status: 'Upcoming' as const,
-    },
-    {
-      title: 'Product Intro Practice',
-      date: 'October 10, 2025',
-      tags: ['Tag', 'Tag', 'Tag', 'Tag', 'Tag', '+7 more'],
-      status: 'Upcoming' as const,
-    },
-    {
-      title: 'Product Intro Practice',
-      date: 'October 8, 2025',
-      tags: ['Tag', 'Tag', 'Tag', 'Tag', 'Tag', '+7 more'],
-      status: 'Pending' as const,
-    },
-    {
-      title: 'Product Intro Practice',
-      date: 'October 7, 2025',
-      tags: ['Tag', 'Tag', 'Tag', 'Tag', 'Tag', '+7 more'],
-      status: 'Overdue' as const,
-    },
-    {
-      title: 'Product Intro Practice',
-      date: 'October 5, 2025',
-      tags: ['Tag', 'Tag', 'Tag', 'Tag', 'Tag', '+7 more'],
-      status: 'Overdue' as const,
-    },
-    {
-      title: 'Product Intro Practice',
-      date: 'October 4, 2025',
-      tags: ['Tag', 'Tag', 'Tag', '+9 more'],
-      status: 'Completed' as const,
-      score: 8.2,
-    },
-    {
-      title: 'Product Intro Practice',
-      date: 'October 4, 2025',
-      tags: ['Tag', 'Tag', 'Tag', '+9 more'],
-      status: 'Completed' as const,
-      score: 6.5,
-    },
-    {
-      title: 'Product Intro Practice',
-      date: 'October 3, 2025',
-      tags: ['Tag', 'Tag', 'Tag', '+9 more'],
-      status: 'Completed' as const,
-      score: 3.7,
-    },
-  ]
+  // Fetch sessions from API
+  const { data: sessions, isLoading, isError } = useSessions()
 
-  const created: SessionType[] = [
-    {
-      title: 'Sales Pitch 101',
-      date: 'September 20, 2025',
-      tags: ['Tag', 'Tag', 'Tag', '+7 more'],
-      status: 'Upcoming' as const,
-    },
-    {
-      title: 'Pricing Objection Handling',
-      date: 'September 18, 2025',
-      tags: ['Tag', 'Tag', 'Tag', '+7 more'],
-      status: 'Pending' as const,
-    },
-    {
-      title: 'Competitive Intel Brief',
-      date: 'September 08, 2025',
-      tags: ['Tag', 'Tag', 'Tag', '+9 more'],
-      status: 'Completed' as const,
-      score: 7.9,
-    },
-  ]
+  // Filter sessions by category (temporarily using all sessions for both until backend implements categories)
+  const assigned = sessions || []
+  const created: SessionType[] = []
 
   return (
     <AppLayout
@@ -386,99 +315,139 @@ export default function SessionsPage() {
         />
       }
     >
-      <Group align="start" gap="xl" wrap="nowrap">
-        {/* Left side - Sessions list */}
-        <Box style={{ flex: selectedSession ? '0 0 65%' : '1 1 100%' }}>
-          <Stack gap="xl">
-            {/* Assigned to you section */}
-            <Box>
-              <UnstyledButton
-                onClick={() => setAssignedExpanded(!assignedExpanded)}
-                style={{
-                  width: '100%',
-                  padding: '16px 20px',
-                  backgroundColor: 'var(--mantine-color-dark-8)',
-                  borderRadius: '8px',
-                  marginBottom: '16px',
-                }}
-              >
-                <Group justify="space-between" wrap="nowrap">
-                  <Title order={3} c="white" style={{ fontWeight: 600 }}>
-                    Assigned to you
-                  </Title>
-                  {assignedExpanded ? (
-                    <IconChevronDown size={24} color="white" />
-                  ) : (
-                    <IconChevronUp size={24} color="white" />
-                  )}
-                </Group>
-              </UnstyledButton>
-
-              <Collapse in={assignedExpanded}>
-                <SimpleGrid cols={{ base: 1, sm: 2, lg: selectedSession ? 2 : 3 }} spacing="lg">
-                  {assigned.map((s, i) => (
-                    <SessionCard
-                      key={`${s.title}-${i}`}
-                      {...s}
-                      onClick={() => setSelectedSession(s)}
-                      isSelected={
-                        selectedSession?.title === s.title && selectedSession?.date === s.date
-                      }
-                    />
-                  ))}
-                </SimpleGrid>
-              </Collapse>
-            </Box>
-
-            {/* Created by you section */}
-            <Box>
-              <UnstyledButton
-                onClick={() => setCreatedExpanded(!createdExpanded)}
-                style={{
-                  width: '100%',
-                  padding: '16px 20px',
-                  backgroundColor: 'var(--mantine-color-dark-8)',
-                  borderRadius: '8px',
-                  marginBottom: '16px',
-                }}
-              >
-                <Group justify="space-between" wrap="nowrap">
-                  <Title order={3} c="white" style={{ fontWeight: 600 }}>
-                    Created by you
-                  </Title>
-                  {createdExpanded ? (
-                    <IconChevronDown size={24} color="white" />
-                  ) : (
-                    <IconChevronUp size={24} color="white" />
-                  )}
-                </Group>
-              </UnstyledButton>
-
-              <Collapse in={createdExpanded}>
-                <SimpleGrid cols={{ base: 1, sm: 2, lg: selectedSession ? 2 : 3 }} spacing="lg">
-                  {created.map((s, i) => (
-                    <SessionCard
-                      key={`${s.title}-created-${i}`}
-                      {...s}
-                      onClick={() => setSelectedSession(s)}
-                      isSelected={
-                        selectedSession?.title === s.title && selectedSession?.date === s.date
-                      }
-                    />
-                  ))}
-                </SimpleGrid>
-              </Collapse>
-            </Box>
+      {/* Loading State */}
+      {isLoading && (
+        <Center style={{ minHeight: '400px' }}>
+          <Stack align="center" gap="md">
+            <Loader size="xl" type="dots" />
+            <Text size="lg" c="dimmed">
+              Loading sessions...
+            </Text>
           </Stack>
-        </Box>
+        </Center>
+      )}
 
-        {/* Right side - Session details */}
-        {selectedSession && (
-          <Box style={{ flex: '0 0 35%', minWidth: 0 }}>
-            <SessionDetailPanel session={selectedSession} />
+      {/* Error State */}
+      {isError && (
+        <Center style={{ minHeight: '400px', padding: '2rem' }}>
+          <Alert
+            icon={<IconAlertCircle size={24} />}
+            title="Error Loading Sessions"
+            color="red"
+            variant="light"
+            style={{ maxWidth: '500px' }}
+          >
+            Failed to load sessions. Please try again later or contact support if the problem
+            persists.
+          </Alert>
+        </Center>
+      )}
+
+      {/* Empty State */}
+      {!isLoading && !isError && assigned.length === 0 && created.length === 0 && (
+        <Center style={{ minHeight: '400px' }}>
+          <Text size="lg" c="dimmed">
+            No sessions found.
+          </Text>
+        </Center>
+      )}
+
+      {/* Session List Content */}
+      {!isLoading && !isError && (assigned.length > 0 || created.length > 0) && (
+        <Group align="start" gap="xl" wrap="nowrap">
+          {/* Left side - Sessions list */}
+          <Box style={{ flex: selectedSession ? '0 0 65%' : '1 1 100%' }}>
+            <Stack gap="xl">
+              {/* Assigned to you section */}
+              <Box>
+                <UnstyledButton
+                  onClick={() => setAssignedExpanded(!assignedExpanded)}
+                  style={{
+                    width: '100%',
+                    padding: '16px 20px',
+                    backgroundColor: 'var(--mantine-color-dark-8)',
+                    borderRadius: '8px',
+                    marginBottom: '16px',
+                  }}
+                >
+                  <Group justify="space-between" wrap="nowrap">
+                    <Title order={3} c="white" style={{ fontWeight: 600 }}>
+                      Assigned to you
+                    </Title>
+                    {assignedExpanded ? (
+                      <IconChevronDown size={24} color="white" />
+                    ) : (
+                      <IconChevronUp size={24} color="white" />
+                    )}
+                  </Group>
+                </UnstyledButton>
+
+                <Collapse in={assignedExpanded}>
+                  <SimpleGrid cols={{ base: 1, sm: 2, lg: selectedSession ? 2 : 3 }} spacing="lg">
+                    {assigned.map((s, i) => (
+                      <SessionCard
+                        key={`${s.title}-${i}`}
+                        {...s}
+                        onClick={() => setSelectedSession(s)}
+                        isSelected={
+                          selectedSession?.title === s.title && selectedSession?.date === s.date
+                        }
+                      />
+                    ))}
+                  </SimpleGrid>
+                </Collapse>
+              </Box>
+
+              {/* Created by you section */}
+              <Box>
+                <UnstyledButton
+                  onClick={() => setCreatedExpanded(!createdExpanded)}
+                  style={{
+                    width: '100%',
+                    padding: '16px 20px',
+                    backgroundColor: 'var(--mantine-color-dark-8)',
+                    borderRadius: '8px',
+                    marginBottom: '16px',
+                  }}
+                >
+                  <Group justify="space-between" wrap="nowrap">
+                    <Title order={3} c="white" style={{ fontWeight: 600 }}>
+                      Created by you
+                    </Title>
+                    {createdExpanded ? (
+                      <IconChevronDown size={24} color="white" />
+                    ) : (
+                      <IconChevronUp size={24} color="white" />
+                    )}
+                  </Group>
+                </UnstyledButton>
+
+                <Collapse in={createdExpanded}>
+                  <SimpleGrid cols={{ base: 1, sm: 2, lg: selectedSession ? 2 : 3 }} spacing="lg">
+                    {created.map((s, i) => (
+                      <SessionCard
+                        key={`${s.title}-created-${i}`}
+                        {...s}
+                        onClick={() => setSelectedSession(s)}
+                        isSelected={
+                          selectedSession?.title === s.title && selectedSession?.date === s.date
+                        }
+                      />
+                    ))}
+                  </SimpleGrid>
+                </Collapse>
+              </Box>
+            </Stack>
           </Box>
-        )}
-      </Group>
+
+          {/* Right side - Session details */}
+          {selectedSession && (
+            <Box style={{ flex: '0 0 35%', minWidth: 0 }}>
+              <SessionDetailPanel session={selectedSession} />
+            </Box>
+          )}
+        </Group>
+      )}
     </AppLayout>
   )
 }
