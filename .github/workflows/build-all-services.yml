@@ -7,7 +7,7 @@ on:
     tags:
       - "*"
     paths:
-      - "packages/shared-backend/src/**"
+      - "packages/shared-backend/**"
       - "apps/api/**"
       - "apps/web/**"
       - "package.json"
