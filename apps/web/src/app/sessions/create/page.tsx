@@ -33,11 +33,13 @@ import { AppTopBar } from '@/components/ui/AppTopBar'
 import { useUsers } from '@/features/sessions/hooks/useUsers'
 import { useTeams } from '@/features/sessions/hooks/useTeams'
 import { useCreateSession } from '@/features/sessions/hooks/useCreateSession'
+import { useAuth } from '@/features/auth'
 import { useMemo } from 'react'
 
 
 export default function CreateSessionPage() {
   const router = useRouter()
+  const { user: currentUser } = useAuth()
   const [active, setActive] = useState(0)
   const [sessionName, setSessionName] = useState('')
   const [dueDate, setDueDate] = useState<Date | null>(null)
@@ -76,6 +78,9 @@ export default function CreateSessionPage() {
   const filteredUsers = useMemo(() => {
     if (!users) return []
     return users.filter((user) => {
+      // Exclude current user (they use "Assign to yourself" option instead)
+      if (currentUser && user.id === currentUser.id) return false
+
       const matchesSearch =
         !searchQuery ||
         user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -85,7 +90,7 @@ export default function CreateSessionPage() {
 
       return matchesSearch && matchesTeam
     })
-  }, [users, searchQuery, teamMemberIds])
+  }, [users, searchQuery, teamMemberIds, currentUser])
 
   const teamOptions = useMemo(() => {
     if (!teams) return []
@@ -565,53 +570,96 @@ export default function CreateSessionPage() {
 
           <Stepper.Step label="Review" description="Confirm">
             <Stack gap="xl" mt="xl">
-              <Title order={3}>Session Settings</Title>
-              <SimpleGrid cols={1} spacing="md">
-                {[1, 2, 3].map((i) => (
-                  <Paper
-                    key={i}
-                    p="md"
-                    withBorder
-                    radius="md"
-                    style={{ backgroundColor: 'var(--mantine-color-gray-1)' }}
-                  >
-                    <Stack gap="xs">
-                      <Box h={8} bg="gray.4" style={{ borderRadius: 4, width: '80%' }} />
-                      <Box h={8} bg="gray.4" style={{ borderRadius: 4, width: '60%' }} />
-                      <Box h={8} bg="gray.4" style={{ borderRadius: 4, width: '90%' }} />
-                    </Stack>
-                  </Paper>
-                ))}
-              </SimpleGrid>
+              <Title order={3}>General Information</Title>
+              <Paper p="md" withBorder radius="md">
+                <SimpleGrid cols={2} spacing="md">
+                  <Box>
+                    <Text size="sm" c="dimmed">Session Name</Text>
+                    <Text fw={500}>{sessionName || <Text c="dimmed" component="span">Not set</Text>}</Text>
+                  </Box>
+                  <Box>
+                    <Text size="sm" c="dimmed">Due Date</Text>
+                    <Text fw={500}>{dueDate ? dueDate.toLocaleDateString() : <Text c="dimmed" component="span">Not set</Text>}</Text>
+                  </Box>
+                  <Box>
+                    <Text size="sm" c="dimmed">Session Type</Text>
+                    <Text fw={500}>{sessionType || <Text c="dimmed" component="span">Not set</Text>}</Text>
+                  </Box>
+                  <Box>
+                    <Text size="sm" c="dimmed">Tags</Text>
+                    <Group gap="xs">
+                      {tags.length > 0 ? tags.map((tag) => (
+                        <Badge key={tag} variant="light">{tag}</Badge>
+                      )) : <Text c="dimmed">None</Text>}
+                    </Group>
+                  </Box>
+                </SimpleGrid>
+              </Paper>
 
-              <Title order={3} mt="xl">
-                Persona Details
-              </Title>
+              <Title order={3}>Configuration</Title>
+              <Paper p="md" withBorder radius="md">
+                <SimpleGrid cols={3} spacing="md">
+                  <Box>
+                    <Text size="sm" c="dimmed">Multi-turn</Text>
+                    <Badge color={multiTurnEnabled ? 'green' : 'gray'} variant="light">
+                      {multiTurnEnabled ? 'Enabled' : 'Disabled'}
+                    </Badge>
+                  </Box>
+                  <Box>
+                    <Text size="sm" c="dimmed">Difficulty</Text>
+                    <Text fw={500}>{difficulty} / 10</Text>
+                  </Box>
+                  <Box>
+                    <Text size="sm" c="dimmed">Language</Text>
+                    <Text fw={500}>{language}</Text>
+                  </Box>
+                  <Box>
+                    <Text size="sm" c="dimmed">Accent</Text>
+                    <Text fw={500}>{accent}</Text>
+                  </Box>
+                  <Box>
+                    <Text size="sm" c="dimmed">Speech Rate</Text>
+                    <Text fw={500}>{speechRate}</Text>
+                  </Box>
+                  <Box>
+                    <Text size="sm" c="dimmed">Tone</Text>
+                    <Text fw={500}>{tone}</Text>
+                  </Box>
+                </SimpleGrid>
+              </Paper>
+
+              <Title order={3}>Selected Persona</Title>
               <Card withBorder padding="lg" radius="md">
                 <Group>
                   <Avatar size={100} radius="md" />
                   <Stack gap={4}>
                     <Text fw={600} size="lg">
-                      Joe Rogan
+                      {personas[selectedPersonaIndex]?.name}
                     </Text>
                     <Text size="sm" c="dimmed">
-                      Technical Knowledge: Expert
+                      {personas[selectedPersonaIndex]?.tech}
                     </Text>
                     <Text size="sm" c="dimmed">
-                      Language: Expert
+                      {personas[selectedPersonaIndex]?.lang}
                     </Text>
                   </Stack>
                 </Group>
               </Card>
 
-              <Title order={3} mt="xl">
-                People Selected
+              <Title order={3}>
+                Assigned People ({selectedPeople.length + (assignToSelf ? 1 : 0)})
               </Title>
+              {assignToSelf && (
+                <Text size="sm" c="dimmed" mb={-10}>
+                  ✓ You will be assigned to this session
+                </Text>
+              )}
               <Table striped>
                 <Table.Thead style={{ backgroundColor: 'var(--mantine-color-blue-6)' }}>
                   <Table.Tr>
                     <Table.Th style={{ color: 'white' }}>Name</Table.Th>
                     <Table.Th style={{ color: 'white' }}>Email</Table.Th>
+                    <Table.Th style={{ color: 'white' }}>Team</Table.Th>
                     <Table.Th style={{ color: 'white' }}>Status</Table.Th>
                   </Table.Tr>
                 </Table.Thead>
@@ -623,12 +671,22 @@ export default function CreateSessionPage() {
                         <Table.Td>{user.name}</Table.Td>
                         <Table.Td>{user.email}</Table.Td>
                         <Table.Td>
+                          {userTeamsMap.get(user.id)?.join(', ') || <Text c="dimmed" size="sm">—</Text>}
+                        </Table.Td>
+                        <Table.Td>
                           <Badge color={user.isActive ? 'green' : 'gray'} variant="light">
                             {user.isActive ? 'Active' : 'Inactive'}
                           </Badge>
                         </Table.Td>
                       </Table.Tr>
                     ))}
+                  {selectedPeople.length === 0 && !assignToSelf && (
+                    <Table.Tr>
+                      <Table.Td colSpan={4}>
+                        <Text c="dimmed" ta="center">No people selected</Text>
+                      </Table.Td>
+                    </Table.Tr>
+                  )}
                 </Table.Tbody>
               </Table>
             </Stack>
