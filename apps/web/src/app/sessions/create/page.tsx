@@ -300,76 +300,103 @@ export default function CreateSessionPage() {
               </Title>
 
               <SimpleGrid cols={2} spacing="xl">
-                <Group>
-                  <IconInfoCircle size={20} />
-                  <Text>Multi-turn enabled:</Text>
+                <Box>
+                  <Group gap="xs" mb={8}>
+                    <Text size="lg" fw={500}>Multi-turn Enabled</Text>
+                    <Tooltip label="Enable back-and-forth conversation during the session">
+                      <IconInfoCircle size={18} style={{ color: 'var(--mantine-color-dimmed)' }} />
+                    </Tooltip>
+                  </Group>
                   <Switch
                     checked={multiTurnEnabled}
                     onChange={(e) => setMultiTurnEnabled(e.currentTarget.checked)}
                     size="lg"
                   />
-                </Group>
+                </Box>
 
-                <Group>
-                  <IconInfoCircle size={20} />
-                  <Text>Accent:</Text>
-                  <Select
-                    data={['British', 'American', 'Australian']}
-                    value={accent}
-                    onChange={(val) => setAccent(val || '')}
-                    style={{ flex: 1 }}
+                <Box>
+                  <Group gap="xs" mb={8}>
+                    <Text size="lg" fw={500}>Difficulty</Text>
+                    <Tooltip label="Difficulty level of the session (1-10)">
+                      <IconInfoCircle size={18} style={{ color: 'var(--mantine-color-dimmed)' }} />
+                    </Tooltip>
+                  </Group>
+                  <Slider
+                    value={difficulty}
+                    onChange={setDifficulty}
+                    min={1}
+                    max={10}
+                    marks={[...Array(10)].map((_, i) => ({
+                      value: i + 1,
+                      label: (i + 1).toString(),
+                    }))}
+                    mt="md"
                   />
-                </Group>
+                </Box>
 
-                <Group>
-                  <IconInfoCircle size={20} />
-                  <Text>Language:</Text>
+                <Box>
+                  <Group gap="xs" mb={8}>
+                    <Text size="lg" fw={500}>Language</Text>
+                    <Tooltip label="Primary language for the session">
+                      <IconInfoCircle size={18} style={{ color: 'var(--mantine-color-dimmed)' }} />
+                    </Tooltip>
+                  </Group>
                   <Select
+                    placeholder="Select language"
                     data={['English', 'Spanish', 'French']}
                     value={language}
                     onChange={(val) => setLanguage(val || '')}
-                    style={{ flex: 1 }}
+                    size="md"
                   />
-                </Group>
+                </Box>
 
-                <Group>
-                  <IconInfoCircle size={20} />
-                  <Text>Tone:</Text>
+                <Box>
+                  <Group gap="xs" mb={8}>
+                    <Text size="lg" fw={500}>Accent</Text>
+                    <Tooltip label="Select the accent for AI speech synthesis">
+                      <IconInfoCircle size={18} style={{ color: 'var(--mantine-color-dimmed)' }} />
+                    </Tooltip>
+                  </Group>
                   <Select
-                    data={['Formal', 'Casual', 'Friendly']}
-                    value={tone}
-                    onChange={(val) => setTone(val || '')}
-                    style={{ flex: 1 }}
+                    placeholder="Select accent"
+                    data={['British', 'American', 'Australian']}
+                    value={accent}
+                    onChange={(val) => setAccent(val || '')}
+                    size="md"
                   />
-                </Group>
+                </Box>
 
-                <Group>
-                  <IconInfoCircle size={20} />
-                  <Text>Speech Rate:</Text>
+                <Box>
+                  <Group gap="xs" mb={8}>
+                    <Text size="lg" fw={500}>Speech Rate</Text>
+                    <Tooltip label="How fast the AI speaks during the session">
+                      <IconInfoCircle size={18} style={{ color: 'var(--mantine-color-dimmed)' }} />
+                    </Tooltip>
+                  </Group>
                   <Select
+                    placeholder="Select speech rate"
                     data={['Slow', 'Normal', 'Fast']}
                     value={speechRate}
                     onChange={(val) => setSpeechRate(val || '')}
-                    style={{ flex: 1 }}
+                    size="md"
                   />
-                </Group>
+                </Box>
 
-                <Group align="start">
-                  <IconInfoCircle size={20} style={{ marginTop: 8 }} />
-                  <Box style={{ flex: 1 }}>
-                    <Text mb="xs">Difficulty:</Text>
-                    <Slider
-                      value={difficulty}
-                      onChange={setDifficulty}
-                      min={1}
-                      max={10}
-                      marks={[...Array(10)].map((_, i) => ({
-                        value: i + 1,
-                        label: (i + 1).toString(),
-                      }))}
-                    />
-                  </Box>
-                </Group>
+                <Box>
+                  <Group gap="xs" mb={8}>
+                    <Text size="lg" fw={500}>Tone</Text>
+                    <Tooltip label="Conversational tone for the AI persona">
+                      <IconInfoCircle size={18} style={{ color: 'var(--mantine-color-dimmed)' }} />
+                    </Tooltip>
+                  </Group>
+                  <Select
+                    placeholder="Select tone"
+                    data={['Formal', 'Casual', 'Friendly']}
+                    value={tone}
+                    onChange={(val) => setTone(val || '')}
+                    size="md"
+                  />
+                </Box>
               </SimpleGrid>
             </Stack>
           </Stepper.Step>
