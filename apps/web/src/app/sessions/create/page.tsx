@@ -57,6 +57,7 @@ export default function CreateSessionPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedTeamFilter, setSelectedTeamFilter] = useState<string | null>(null)
   const [sessionNameError, setSessionNameError] = useState('')
+  const [dueDateError, setDueDateError] = useState('')
   const [selectedPersonaIndex, setSelectedPersonaIndex] = useState(0)
 
   const personas = [
@@ -78,7 +79,6 @@ export default function CreateSessionPage() {
   const filteredUsers = useMemo(() => {
     if (!users) return []
     return users.filter((user) => {
-      // Exclude current user (they use "Assign to yourself" option instead)
       if (currentUser && user.id === currentUser.id) return false
 
       const matchesSearch =
@@ -116,11 +116,20 @@ export default function CreateSessionPage() {
 
   const nextStep = () => {
     if (active === 0) {
+      let hasError = false
       if (!sessionName.trim()) {
         setSessionNameError('Session name is required')
-        return
+        hasError = true
+      } else {
+        setSessionNameError('')
       }
-      setSessionNameError('')
+      if (!dueDate) {
+        setDueDateError('Due date is required')
+        hasError = true
+      } else {
+        setDueDateError('')
+      }
+      if (hasError) return
     }
     setActive((current) => (current < 3 ? current + 1 : current))
   }
@@ -132,25 +141,30 @@ export default function CreateSessionPage() {
       return
     }
     if (active === 0 && step > 0) {
+      let hasError = false
       if (!sessionName.trim()) {
         setSessionNameError('Session name is required')
-        return
+        hasError = true
+      } else {
+        setSessionNameError('')
       }
-      setSessionNameError('')
+      if (!dueDate) {
+        setDueDateError('Due date is required')
+        hasError = true
+      } else {
+        setDueDateError('')
+      }
+      if (hasError) return
     }
     setActive(step)
   }
 
   const handleSubmit = () => {
-    if (!dueDate) {
-      alert('Please select a due date')
-      return
-    }
 
     createSession(
       {
         title: sessionName,
-        dueDate: dueDate.toISOString(),
+        dueDate: dueDate!.toISOString(),
         type: sessionType,
         tags,
         assignedUserIds: selectedPeople,
@@ -201,7 +215,7 @@ export default function CreateSessionPage() {
 
               <Box>
                 <Group gap="xs" mb={8}>
-                  <Text size="lg" fw={500}>Due Date</Text>
+                  <Text size="lg" fw={500}>Due Date <Text component="span" c="red">*</Text></Text>
                   <Tooltip label="The deadline by which participants should complete this session">
                     <IconInfoCircle size={18} style={{ color: 'var(--mantine-color-dimmed)' }} />
                   </Tooltip>
@@ -209,9 +223,14 @@ export default function CreateSessionPage() {
                 <DatePickerInput
                   placeholder="Select a due date"
                   value={dueDate}
-                  onChange={(value) => setDueDate(value ? new Date(value) : null)}
+                  onChange={(value) => {
+                    setDueDate(value ? new Date(value) : null)
+                    if (dueDateError) setDueDateError('')
+                  }}
                   size="md"
+                  minDate={new Date()}
                   clearable
+                  error={dueDateError}
                 />
               </Box>
 
