@@ -20,24 +20,19 @@ import {
   Slider,
   SimpleGrid,
   Paper,
+  Loader,
+  Alert,
+  Center,
 } from '@mantine/core'
 import { DatePickerInput } from '@mantine/dates'
-import { IconX, IconSearch, IconInfoCircle } from '@tabler/icons-react'
+import { IconX, IconSearch, IconInfoCircle, IconAlertCircle } from '@tabler/icons-react'
 import { useRouter } from 'next/navigation'
 import { AppTopBar } from '@/components/ui/AppTopBar'
+import { useUsers } from '@/features/sessions/hooks/useUsers'
+import { useTeams } from '@/features/sessions/hooks/useTeams'
+import { useCreateSession } from '@/features/sessions/hooks/useCreateSession'
+import { useMemo } from 'react'
 
-const people = [
-  { name: 'John Doe', email: 'john.doe16@ibm.com', sessions: 2, team: 'placeholder' },
-  { name: 'Sarah Lin', email: 'sarah.lin@ibm.com', sessions: 1, team: 'placeholder' },
-  { name: 'Joe Rogan', email: 'joe.rogan@ibm.com', sessions: 0, team: 'placeholder' },
-  {
-    name: 'Khabib Nurmagomedov',
-    email: 'khabib.nurmagomedov@ibm.com',
-    sessions: 3,
-    team: 'placeholder',
-  },
-  { name: 'Lewis Hamilton', email: 'lewis.hamilton@ibm.com', sessions: 0, team: 'placeholder' },
-]
 
 export default function CreateSessionPage() {
   const router = useRouter()
@@ -46,11 +41,7 @@ export default function CreateSessionPage() {
   const [dueDate, setDueDate] = useState<Date | null>(null)
   const [sessionType, setSessionType] = useState('')
   const [tags, setTags] = useState<string[]>([])
-  const [selectedPeople, setSelectedPeople] = useState<string[]>([
-    'John Doe',
-    'Khabib Nurmagomedov',
-    'Joe Rogan',
-  ])
+  const [selectedPeople, setSelectedPeople] = useState<string[]>([])
   const [assignToSelf, setAssignToSelf] = useState(true)
   const [multiTurnEnabled, setMultiTurnEnabled] = useState(true)
   const [language, setLanguage] = useState('English')
@@ -59,8 +50,87 @@ export default function CreateSessionPage() {
   const [speechRate, setSpeechRate] = useState('Normal')
   const [difficulty, setDifficulty] = useState(5)
 
+  const [searchQuery, setSearchQuery] = useState('')
+  const [selectedTeamFilter, setSelectedTeamFilter] = useState<string | null>(null)
+  const { data: users, isLoading: usersLoading, isError: usersError } = useUsers()
+  const { data: teams } = useTeams()
+
+  const teamMemberIds = useMemo(() => {
+    if (!selectedTeamFilter || !teams) return null
+    const team = teams.find((t) => t.id === selectedTeamFilter)
+    if (!team) return null
+    return new Set(team.memberships?.map((m) => m.user?.id).filter(Boolean) || [])
+  }, [selectedTeamFilter, teams])
+
+  const filteredUsers = useMemo(() => {
+    if (!users) return []
+    return users.filter((user) => {
+      const matchesSearch =
+        !searchQuery ||
+        user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        user.email.toLowerCase().includes(searchQuery.toLowerCase())
+
+      const matchesTeam = !teamMemberIds || teamMemberIds.has(user.id)
+
+      return matchesSearch && matchesTeam
+    })
+  }, [users, searchQuery, teamMemberIds])
+
+  const teamOptions = useMemo(() => {
+    if (!teams) return []
+    return teams.map((team) => ({ value: team.id, label: team.name }))
+  }, [teams])
+
+  const userTeamsMap = useMemo(() => {
+    if (!teams) return new Map<string, string[]>()
+    const map = new Map<string, string[]>()
+    teams.forEach((team) => {
+      team.memberships?.forEach((membership) => {
+        if (membership.user?.id) {
+          const existing = map.get(membership.user.id) || []
+          existing.push(team.name)
+          map.set(membership.user.id, existing)
+        }
+      })
+    })
+    return map
+  }, [teams])
+
+  const { mutate: createSession, isPending, isError: submitError, error } = useCreateSession()
+
   const nextStep = () => setActive((current) => (current < 3 ? current + 1 : current))
   const prevStep = () => setActive((current) => (current > 0 ? current - 1 : current))
+
+  const handleSubmit = () => {
+    if (!dueDate) {
+      alert('Please select a due date')
+      return
+    }
+
+    createSession(
+      {
+        title: sessionName,
+        dueDate: dueDate.toISOString(),
+        type: sessionType,
+        tags,
+        assignedUserIds: selectedPeople,
+        assignToSelf,
+        config: {
+          multiTurnEnabled,
+          language,
+          accent,
+          tone,
+          speechRate,
+          difficulty,
+        },
+      },
+      {
+        onSuccess: (session) => {
+          router.push(`/sessions/live/${session.id}`)
+        },
+      },
+    )
+  }
 
   return (
     <Box style={{ height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
@@ -250,11 +320,23 @@ export default function CreateSessionPage() {
           <Stepper.Step label="People" description="Assign">
             <Stack gap="xl" mt="xl">
               <Group justify="space-between">
-                <TextInput
-                  placeholder="Search by team or by person name"
-                  leftSection={<IconSearch size={18} />}
-                  style={{ flex: 1 }}
-                />
+                <Group style={{ flex: 1 }} gap="md">
+                  <TextInput
+                    placeholder="Search by name or email"
+                    leftSection={<IconSearch size={18} />}
+                    style={{ flex: 1 }}
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                  <Select
+                    placeholder="Filter by team"
+                    data={teamOptions}
+                    value={selectedTeamFilter}
+                    onChange={setSelectedTeamFilter}
+                    clearable
+                    style={{ minWidth: 200 }}
+                  />
+                </Group>
                 <Group>
                   <Checkbox
                     checked={assignToSelf}
@@ -267,26 +349,82 @@ export default function CreateSessionPage() {
                 </Group>
               </Group>
 
-              <Table striped highlightOnHover>
-                <Table.Thead style={{ backgroundColor: 'var(--mantine-color-blue-6)' }}>
-                  <Table.Tr>
-                    <Table.Th style={{ color: 'white' }}>Name</Table.Th>
-                    <Table.Th style={{ color: 'white' }}>Email</Table.Th>
-                    <Table.Th style={{ color: 'white' }}># of Assigned Sessions</Table.Th>
-                    <Table.Th style={{ color: 'white' }}>Team</Table.Th>
-                  </Table.Tr>
-                </Table.Thead>
-                <Table.Tbody>
-                  {people.map((person) => (
-                    <Table.Tr key={person.email}>
-                      <Table.Td>{person.name}</Table.Td>
-                      <Table.Td>{person.email}</Table.Td>
-                      <Table.Td>{person.sessions}</Table.Td>
-                      <Table.Td>{person.team}</Table.Td>
+              {/* Loading State */}
+              {usersLoading && (
+                <Center py="xl">
+                  <Stack align="center" gap="md">
+                    <Loader size="lg" />
+                    <Text c="dimmed">Loading users...</Text>
+                  </Stack>
+                </Center>
+              )}
+
+              {/* Error State - Only for API errors */}
+              {usersError && (
+                <Alert
+                  icon={<IconAlertCircle size={24} />}
+                  title="Error Loading Users"
+                  color="red"
+                  variant="light"
+                >
+                  Failed to load users. Please try again later.
+                </Alert>
+              )}
+
+              {/* Users Table - Show even when empty */}
+              {!usersLoading && !usersError && (
+                <Table striped highlightOnHover>
+                  <Table.Thead style={{ backgroundColor: 'var(--mantine-color-blue-6)' }}>
+                    <Table.Tr>
+                      <Table.Th style={{ color: 'white' }}>Select</Table.Th>
+                      <Table.Th style={{ color: 'white' }}>Name</Table.Th>
+                      <Table.Th style={{ color: 'white' }}>Email</Table.Th>
+                      <Table.Th style={{ color: 'white' }}>Team</Table.Th>
+                      <Table.Th style={{ color: 'white' }}>Status</Table.Th>
                     </Table.Tr>
-                  ))}
-                </Table.Tbody>
-              </Table>
+                  </Table.Thead>
+                  <Table.Tbody>
+                    {filteredUsers && filteredUsers.length > 0 ? (
+                      filteredUsers.map((user) => (
+                        <Table.Tr key={user.id}>
+                          <Table.Td>
+                            <Checkbox
+                              checked={selectedPeople.includes(user.id)}
+                              onChange={(e) => {
+                                if (e.currentTarget.checked) {
+                                  setSelectedPeople([...selectedPeople, user.id])
+                                } else {
+                                  setSelectedPeople(selectedPeople.filter((id) => id !== user.id))
+                                }
+                              }}
+                            />
+                          </Table.Td>
+                          <Table.Td>{user.name}</Table.Td>
+                          <Table.Td>{user.email}</Table.Td>
+                          <Table.Td>
+                            {userTeamsMap.get(user.id)?.join(', ') || <Text c="dimmed" size="sm">—</Text>}
+                          </Table.Td>
+                          <Table.Td>
+                            <Badge color={user.isActive ? 'green' : 'gray'} variant="light">
+                              {user.isActive ? 'Active' : 'Inactive'}
+                            </Badge>
+                          </Table.Td>
+                        </Table.Tr>
+                      ))
+                    ) : (
+                      <Table.Tr>
+                        <Table.Td colSpan={5} style={{ textAlign: 'center', padding: '2rem' }}>
+                          <Text c="dimmed" size="sm">
+                            {searchQuery || selectedTeamFilter
+                              ? 'No users match your filters.'
+                              : 'No people found in your organization.'}
+                          </Text>
+                        </Table.Td>
+                      </Table.Tr>
+                    )}
+                  </Table.Tbody>
+                </Table>
+              )}
 
               <Text ta="center" mt="xl">
                 Need to add someone? No problem add them{' '}
@@ -346,19 +484,21 @@ export default function CreateSessionPage() {
                   <Table.Tr>
                     <Table.Th style={{ color: 'white' }}>Name</Table.Th>
                     <Table.Th style={{ color: 'white' }}>Email</Table.Th>
-                    <Table.Th style={{ color: 'white' }}># of Assigned Sessions</Table.Th>
-                    <Table.Th style={{ color: 'white' }}>Team</Table.Th>
+                    <Table.Th style={{ color: 'white' }}>Status</Table.Th>
                   </Table.Tr>
                 </Table.Thead>
                 <Table.Tbody>
-                  {people
-                    .filter((p) => selectedPeople.includes(p.name))
-                    .map((person) => (
-                      <Table.Tr key={person.email}>
-                        <Table.Td>{person.name}</Table.Td>
-                        <Table.Td>{person.email}</Table.Td>
-                        <Table.Td>{person.sessions}</Table.Td>
-                        <Table.Td>{person.team}</Table.Td>
+                  {users
+                    ?.filter((u) => selectedPeople.includes(u.id))
+                    .map((user) => (
+                      <Table.Tr key={user.id}>
+                        <Table.Td>{user.name}</Table.Td>
+                        <Table.Td>{user.email}</Table.Td>
+                        <Table.Td>
+                          <Badge color={user.isActive ? 'green' : 'gray'} variant="light">
+                            {user.isActive ? 'Active' : 'Inactive'}
+                          </Badge>
+                        </Table.Td>
                       </Table.Tr>
                     ))}
                 </Table.Tbody>
@@ -367,9 +507,22 @@ export default function CreateSessionPage() {
           </Stepper.Step>
         </Stepper>
 
+        {/* Submit Error Display */}
+        {submitError && (
+          <Alert
+            icon={<IconAlertCircle size={24} />}
+            title="Error Creating Session"
+            color="red"
+            variant="light"
+            mt="xl"
+          >
+            {error?.message || 'Failed to create session. Please try again.'}
+          </Alert>
+        )}
+
         <Group justify="center" mt="xl">
           {active > 0 && (
-            <Button variant="default" onClick={prevStep} size="lg">
+            <Button variant="default" onClick={prevStep} size="lg" disabled={isPending}>
               Back
             </Button>
           )}
@@ -379,11 +532,13 @@ export default function CreateSessionPage() {
             </Button>
           ) : (
             <Button
-              onClick={() => router.push('/sessions/live')}
+              onClick={handleSubmit}
               size="lg"
               style={{ minWidth: 200 }}
+              loading={isPending}
+              disabled={isPending}
             >
-              Next
+              {isPending ? 'Creating Session...' : 'Create Session'}
             </Button>
           )}
         </Group>
