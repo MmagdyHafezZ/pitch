@@ -27,7 +27,7 @@ import {
   Center,
 } from '@mantine/core'
 import { DatePickerInput } from '@mantine/dates'
-import { IconX, IconSearch, IconInfoCircle, IconAlertCircle } from '@tabler/icons-react'
+import { IconX, IconSearch, IconInfoCircle, IconAlertCircle, IconChevronLeft, IconChevronRight } from '@tabler/icons-react'
 import { useRouter } from 'next/navigation'
 import { AppTopBar } from '@/components/ui/AppTopBar'
 import { useUsers } from '@/features/sessions/hooks/useUsers'
@@ -55,6 +55,14 @@ export default function CreateSessionPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedTeamFilter, setSelectedTeamFilter] = useState<string | null>(null)
   const [sessionNameError, setSessionNameError] = useState('')
+  const [selectedPersonaIndex, setSelectedPersonaIndex] = useState(0)
+
+  const personas = [
+    { id: '1', name: 'John Doe', tech: 'Technical Knowledge: Expert', lang: 'Language: Expert' },
+    { id: '2', name: 'Sarah Lin', tech: 'Technical Knowledge: Expert', lang: 'Language: Expert' },
+    { id: '3', name: 'Joe Rogan', tech: 'Technical Knowledge: Expert', lang: 'Language: Expert' },
+    { id: '4', name: 'Khabib Nurmagomedov', tech: 'Technical Knowledge: Expert', lang: 'Language: Expert' },
+  ]
   const { data: users, isLoading: usersLoading, isError: usersError } = useUsers()
   const { data: teams } = useTeams()
 
@@ -243,57 +251,93 @@ export default function CreateSessionPage() {
 
           <Stepper.Step label="Settings" description="Configuration">
             <Stack gap="xl" mt="xl">
-              <SimpleGrid cols={4} spacing="lg">
-                {[
-                  {
-                    name: 'John Doe',
-                    tech: 'Technical Knowledge: Expert',
-                    lang: 'Language: Expert',
-                  },
-                  {
-                    name: 'Sarah Lin',
-                    tech: 'Technical Knowledge: Expert',
-                    lang: 'Language: Expert',
-                  },
-                  {
-                    name: 'Joe Rogan',
-                    tech: 'Technical Knowledge: Expert',
-                    lang: 'Language: Expert',
-                  },
-                  {
-                    name: 'Khabib Nurmagomedov',
-                    tech: 'Technical Knowledge: Expert',
-                    lang: 'Language: Expert',
-                  },
-                ].map((person) => (
-                  <Card key={person.name} withBorder padding="md" radius="md">
-                    <Stack gap="xs" align="center">
-                      <Box pos="relative">
-                        <Avatar size={100} radius="md" color="gray" />
-                        <IconX
-                          size={20}
+              <Box>
+                <Group gap="xs" mb={8}>
+                  <Text size="lg" fw={500}>Select AI Persona</Text>
+                  <Tooltip label="Choose the AI persona that will conduct the session">
+                    <IconInfoCircle size={18} style={{ color: 'var(--mantine-color-dimmed)' }} />
+                  </Tooltip>
+                </Group>
+
+                <Group justify="center" align="center" gap="md">
+                  <Button
+                    variant="subtle"
+                    size="lg"
+                    onClick={() => setSelectedPersonaIndex((prev) => (prev > 0 ? prev - 1 : personas.length - 1))}
+                    style={{ padding: '0.5rem' }}
+                  >
+                    <IconChevronLeft size={32} />
+                  </Button>
+
+                  <Group gap="md" justify="center" style={{ overflow: 'hidden' }}>
+                    {personas.map((persona, index) => {
+                      const isSelected = index === selectedPersonaIndex
+                      const distance = Math.abs(index - selectedPersonaIndex)
+                      const isVisible = distance <= 1
+
+                      if (!isVisible) return null
+
+                      return (
+                        <Card
+                          key={persona.id}
+                          withBorder
+                          padding="md"
+                          radius="md"
+                          onClick={() => setSelectedPersonaIndex(index)}
                           style={{
-                            position: 'absolute',
-                            top: -8,
-                            right: -8,
-                            background: 'black',
-                            borderRadius: '50%',
-                            padding: 2,
                             cursor: 'pointer',
+                            transform: isSelected ? 'scale(1.1)' : 'scale(0.85)',
+                            opacity: isSelected ? 1 : 0.5,
+                            transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
+                            minWidth: 250,
+                            minHeight: 250,
+
                           }}
-                        />
-                      </Box>
-                      <Text fw={600}>{person.name}</Text>
-                      <Text size="xs" c="dimmed" ta="center">
-                        {person.tech}
-                      </Text>
-                      <Text size="xs" c="dimmed" ta="center">
-                        {person.lang}
-                      </Text>
-                    </Stack>
-                  </Card>
-                ))}
-              </SimpleGrid>
+                        >
+                          <Stack gap="xs" align="center">
+                            <Avatar size={isSelected ? 100 : 80} radius="md" color="gray" />
+                            <Text fw={600} size={isSelected ? 'md' : 'sm'}>{persona.name}</Text>
+                            {isSelected && (
+                              <>
+                                <Text size="xs" c="dimmed" ta="center">{persona.tech}</Text>
+                                <Text size="xs" c="dimmed" ta="center">{persona.lang}</Text>
+                              </>
+                            )}
+                          </Stack>
+                        </Card>
+                      )
+                    })}
+                  </Group>
+
+                  <Button
+                    variant="subtle"
+                    size="lg"
+                    onClick={() => setSelectedPersonaIndex((prev) => (prev < personas.length - 1 ? prev + 1 : 0))}
+                    style={{ padding: '0.5rem' }}
+                  >
+                    <IconChevronRight size={32} />
+                  </Button>
+                </Group>
+
+                <Group justify="center" gap="xs" mt="md">
+                  {personas.map((_, index) => (
+                    <Box
+                      key={index}
+                      onClick={() => setSelectedPersonaIndex(index)}
+                      style={{
+                        width: index === selectedPersonaIndex ? 12 : 8,
+                        height: index === selectedPersonaIndex ? 12 : 8,
+                        borderRadius: '50%',
+                        backgroundColor: index === selectedPersonaIndex
+                          ? 'var(--mantine-color-blue-6)'
+                          : 'var(--mantine-color-gray-4)',
+                        cursor: 'pointer',
+                        transition: 'all 0.3s ease',
+                      }}
+                    />
+                  ))}
+                </Group>
+              </Box>
 
               <Title order={2} mt="xl">
                 Configuration
