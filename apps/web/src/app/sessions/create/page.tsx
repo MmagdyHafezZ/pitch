@@ -7,6 +7,8 @@ import {
   Group,
   TextInput,
   Select,
+  TagsInput,
+  Tooltip,
   Stack,
   Box,
   Title,
@@ -52,6 +54,7 @@ export default function CreateSessionPage() {
 
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedTeamFilter, setSelectedTeamFilter] = useState<string | null>(null)
+  const [sessionNameError, setSessionNameError] = useState('')
   const { data: users, isLoading: usersLoading, isError: usersError } = useUsers()
   const { data: teams } = useTeams()
 
@@ -98,8 +101,32 @@ export default function CreateSessionPage() {
 
   const { mutate: createSession, isPending, isError: submitError, error } = useCreateSession()
 
-  const nextStep = () => setActive((current) => (current < 3 ? current + 1 : current))
+  const nextStep = () => {
+    if (active === 0) {
+      if (!sessionName.trim()) {
+        setSessionNameError('Session name is required')
+        return
+      }
+      setSessionNameError('')
+    }
+    setActive((current) => (current < 3 ? current + 1 : current))
+  }
   const prevStep = () => setActive((current) => (current > 0 ? current - 1 : current))
+
+  const handleStepClick = (step: number) => {
+    if (step < active) {
+      setActive(step)
+      return
+    }
+    if (active === 0 && step > 0) {
+      if (!sessionName.trim()) {
+        setSessionNameError('Session name is required')
+        return
+      }
+      setSessionNameError('')
+    }
+    setActive(step)
+  }
 
   const handleSubmit = () => {
     if (!dueDate) {
@@ -136,51 +163,81 @@ export default function CreateSessionPage() {
     <Box style={{ height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       <AppTopBar showSearch={true} />
       <Box p="xl" style={{ flex: 1, overflow: 'auto' }}>
-        <Stepper active={active} onStepClick={setActive} size="lg" mb="xl">
+        <Stepper active={active} onStepClick={handleStepClick} size="lg" mb="xl">
           <Stepper.Step label="General Info" description="Basic details">
             <Stack gap="xl" mt="xl">
-              <TextInput
-                label="Session Name:"
-                placeholder="Placeholder text"
-                size="md"
-                value={sessionName}
-                onChange={(e) => setSessionName(e.target.value)}
-                styles={{ label: { fontSize: 18, fontWeight: 500, marginBottom: 8 } }}
-              />
+              <Box>
+                <Group gap="xs" mb={8}>
+                  <Text size="lg" fw={500}>Session Name <Text component="span" c="red">*</Text></Text>
+                  <Tooltip label="Give your session a descriptive name that participants will recognize">
+                    <IconInfoCircle size={18} style={{ color: 'var(--mantine-color-dimmed)' }} />
+                  </Tooltip>
+                </Group>
+                <TextInput
+                  placeholder="e.g., Q4 Sales Pitch Practice"
+                  size="md"
+                  value={sessionName}
+                  onChange={(e) => {
+                    setSessionName(e.target.value)
+                    if (sessionNameError) setSessionNameError('')
+                  }}
+                  required
+                  error={sessionNameError}
+                />
+              </Box>
 
-              <DatePickerInput
-                label="Due Date:"
-                placeholder="Pick date"
-                value={dueDate}
-                onChange={(value) => setDueDate(value ? new Date(value) : null)}
-                size="md"
-                rightSection={<IconX size={16} />}
-                styles={{ label: { fontSize: 18, fontWeight: 500, marginBottom: 8 } }}
-              />
+              <Box>
+                <Group gap="xs" mb={8}>
+                  <Text size="lg" fw={500}>Due Date</Text>
+                  <Tooltip label="The deadline by which participants should complete this session">
+                    <IconInfoCircle size={18} style={{ color: 'var(--mantine-color-dimmed)' }} />
+                  </Tooltip>
+                </Group>
+                <DatePickerInput
+                  placeholder="Select a due date"
+                  value={dueDate}
+                  onChange={(value) => setDueDate(value ? new Date(value) : null)}
+                  size="md"
+                  clearable
+                />
+              </Box>
 
-              <Select
-                label="Session Type:"
-                placeholder="Placeholder text"
-                size="md"
-                data={['Type 1', 'Type 2', 'Type 3']}
-                value={sessionType}
-                onChange={(val) => setSessionType(val || '')}
-                styles={{ label: { fontSize: 18, fontWeight: 500, marginBottom: 8 } }}
-              />
+              <Box>
+                <Group gap="xs" mb={8}>
+                  <Text size="lg" fw={500}>Session Type</Text>
+                  <Tooltip label="to be updated">
+                    <IconInfoCircle size={18} style={{ color: 'var(--mantine-color-dimmed)' }} />
+                  </Tooltip>
+                </Group>
+                <Select
+                  placeholder="Select session type"
+                  size="md"
+                  data={[
+                    { value: 'type1', label: 'Type 1' },
+                    { value: 'type2', label: 'Type 2' },
+                    { value: 'type3', label: 'Type 3' }
+                  ]}
+                  value={sessionType}
+                  onChange={(val) => setSessionType(val || '')}
+                />
+              </Box>
 
-              <Select
-                label="Tags:"
-                placeholder="Placeholder"
-                size="md"
-                data={['Tag 1', 'Tag 2', 'Tag 3']}
-                styles={{ label: { fontSize: 18, fontWeight: 500, marginBottom: 8 } }}
-              />
-
-              <Group justify="center" mt={100}>
-                <Text size="xl" c="dimmed">
-                  • • •
-                </Text>
-              </Group>
+              <Box>
+                <Group gap="xs" mb={8}>
+                  <Text size="lg" fw={500}>Tags</Text>
+                  <Tooltip label="Add tags to categorize and organize your sessions">
+                    <IconInfoCircle size={18} style={{ color: 'var(--mantine-color-dimmed)' }} />
+                  </Tooltip>
+                </Group>
+                <TagsInput
+                  placeholder="Select or type to add tags"
+                  size="md"
+                  data={['Sales', 'Marketing', 'Product', 'Onboarding', 'Training']}
+                  value={tags}
+                  onChange={setTags}
+                  clearable
+                />
+              </Box>
             </Stack>
           </Stepper.Step>
 
