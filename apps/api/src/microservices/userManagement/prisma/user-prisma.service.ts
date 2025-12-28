@@ -36,6 +36,14 @@ export class UserPrismaService implements OnModuleInit, OnModuleDestroy {
     return this.prisma.teamMembership;
   }
 
+  get plan(): UserPrismaClient['plan'] {
+    return this.prisma.plan;
+  }
+
+  get subscription(): UserPrismaClient['subscription'] {
+    return this.prisma.subscription;
+  }
+
   async onModuleInit() {
     await this.prisma.$connect();
   }

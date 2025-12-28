@@ -16,6 +16,8 @@ import {
 } from '@pitch/shared-backend/config/jwt.config';
 import { APP_GUARD } from '@nestjs/core';
 import { TeamGatewayController } from './controllers/userManagement/team-gateway.controller';
+import { PlanGatewayController } from './controllers/userManagement/plans.controller';
+import { SubscriptionGatewayController } from './controllers/userManagement/subscription.controller';
 
 @Module({
   imports: [
@@ -39,6 +41,8 @@ import { TeamGatewayController } from './controllers/userManagement/team-gateway
     UserGatewayController,
     AuthGatewayController,
     TeamGatewayController,
+    PlanGatewayController,
+    SubscriptionGatewayController,
   ],
   providers: [
     { provide: APP_GUARD, useClass: GlobalJwtAuthGuard },

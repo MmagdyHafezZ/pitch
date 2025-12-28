@@ -1,6 +1,9 @@
 /* ---------- ENUMS ---------- */
 
 export type Role = 'OWNER' | 'ADMIN' | 'MEMBER'
+export type PlanLevel = 'FREE' | 'PRO' | 'TEAM' | 'ENTERPRISE'
+export type BillingInterval = 'MONTH' | 'YEAR'
+export type SubscriptionStatus = 'ACTIVE' | 'CANCELED'
 
 /* ---------- READ MODELS ---------- */
 
@@ -62,6 +65,36 @@ export interface TeamMembership {
   user?: UserSummary
 }
 
+export interface Plan {
+  id: string
+  name: string
+  description?: string | null
+  planLevel: PlanLevel
+  interval: BillingInterval
+  maxTokens: number
+  limits?: unknown
+  isActive: boolean
+  createdAt: Date
+  updatedAt: Date
+  subscriptions?: Subscription[]
+}
+
+export interface Subscription {
+  id: string
+  teamId: string
+  planId: string
+  status: SubscriptionStatus
+  currentPeriodStart: Date
+  currentPeriodEnd: Date
+  cancelAtPeriodEnd: boolean
+  metadata?: unknown
+  createdAt: Date
+  updatedAt: Date
+  canceledAt?: Date | null
+  team?: Team
+  plan?: Plan
+}
+
 /* ---------- Write MODELS ---------- */
 
 export interface CreateUserDto {
@@ -112,4 +145,45 @@ export interface UpdateMemberDto {
   tokenLimit?: number
   isActive?: boolean
   acceptedAt?: Date | null
+}
+
+export interface CreatePlanDto {
+  name: string
+  description?: string | null
+  planLevel: PlanLevel
+  interval: BillingInterval
+  maxTokens: number
+  limits?: unknown
+  isActive?: boolean
+}
+
+export interface UpdatePlanDto {
+  name?: string
+  description?: string | null
+  planLevel?: PlanLevel
+  interval?: BillingInterval
+  maxTokens?: number
+  limits?: unknown
+  isActive?: boolean
+}
+
+export interface CreateSubscriptionDto {
+  teamId: string
+  planId: string
+  status?: SubscriptionStatus
+  currentPeriodStart: Date
+  currentPeriodEnd: Date
+  cancelAtPeriodEnd?: boolean
+  metadata?: unknown
+}
+
+export interface UpdateSubscriptionDto {
+  teamId?: string
+  planId?: string
+  status?: SubscriptionStatus
+  currentPeriodStart?: Date
+  currentPeriodEnd?: Date
+  cancelAtPeriodEnd?: boolean
+  metadata?: unknown
+  canceledAt?: Date | null
 }

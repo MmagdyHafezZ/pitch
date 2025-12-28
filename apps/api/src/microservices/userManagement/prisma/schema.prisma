@@ -145,7 +145,7 @@ model TeamMembership {
 model Plan {
   // plans are constant
   id           String          @id @default(cuid())
-  name         String
+  name         String          @unique
   description  String?
   planLevel    PlanLevel       @default(FREE)
   interval     BillingInterval @default(MONTH)
