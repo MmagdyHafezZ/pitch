@@ -1,5 +1,5 @@
 import { Metadata } from 'next'
-import { AuthPage } from '@/features/auth/components/AuthPage'
+import { LoginPageClient } from './LoginPageClient'
 
 export const metadata: Metadata = {
   title: 'Sign In | PITCH',
@@ -7,5 +7,5 @@ export const metadata: Metadata = {
 }
 
 export default function LoginPage() {
-  return <AuthPage defaultMode="login" />
+  return <LoginPageClient />
 }
