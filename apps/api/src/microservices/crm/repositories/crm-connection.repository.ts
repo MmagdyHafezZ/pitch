@@ -1,34 +1,40 @@
 import { Injectable } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { CrmConnection } from '../entities/crm-connection.entity';
+import { PrismaService } from '../services/prisma.service';
 
 @Injectable()
 export class CrmConnectionRepository {
-    constructor(
-        @InjectRepository(CrmConnection)
-        private readonly repository: Repository<CrmConnection>,
-    ) {}
+  constructor(private prisma: PrismaService) {}
 
-    async findAll(): Promise<CrmConnection[]> {
-        return this.repository.find();
-    }
+  // TODO: Implement repository methods for CRM connections
+  // This may require adding a CrmConnection model to schema.prisma
 
-    async findById(id: number): Promise<CrmConnection | null> {
-        return this.repository.findOne({ where: { id } });
-    }
+  async findAll(orgId: string) {
+    // Implement: return connections for this organization
+    throw new Error('Not implemented');
+  }
 
-    async create(data: Partial<CrmConnection>): Promise<CrmConnection> {
-        const entity = this.repository.create(data);
-        return this.repository.save(entity);
-    }
+  async findByProvider(orgId: string, provider: string) {
+    // Implement: find connection by provider
+    throw new Error('Not implemented');
+  }
 
-    async update(id: number, data: Partial<CrmConnection>): Promise<CrmConnection | null> {
-        await this.repository.update(id, data);
-        return this.findById(id);
-    }
+  async create(orgId: string, data: any) {
+    // Implement: create new CRM connection
+    throw new Error('Not implemented');
+  }
 
-    async delete(id: number): Promise<void> {
-        await this.repository.delete(id);
-    }
+  async update(orgId: string, provider: string, data: any) {
+    // Implement: update CRM connection
+    throw new Error('Not implemented');
+  }
+
+  async delete(orgId: string, provider: string) {
+    // Implement: delete CRM connection
+    throw new Error('Not implemented');
+  }
+
+  async updateSyncStatus(orgId: string, provider: string, status: any) {
+    // Implement: update sync status
+    throw new Error('Not implemented');
+  }
 }

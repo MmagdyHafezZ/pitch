@@ -1,33 +1,45 @@
 import { Injectable } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model, FilterQuery } from 'mongoose';
-import { CrmContact, CrmContactDocument } from '../schemas/crm-contact.schema';
+import { PrismaService } from '../services/prisma.service';
 
 @Injectable()
 export class CrmContactRepository {
-    constructor(
-        @InjectModel(CrmContact.name)
-        private readonly crmContactModel: Model<CrmContactDocument>,
-    ) {}
+  constructor(private prisma: PrismaService) {}
 
-    async create(contact: Partial<CrmContact>): Promise<CrmContact> {
-        const createdContact = new this.crmContactModel(contact);
-        return createdContact.save();
-    }
+  // TODO: Implement repository methods using Prisma
+  // These methods will interact with the Contact model from schema.prisma
 
-    async findAll(filter: FilterQuery<CrmContactDocument> = {}): Promise<CrmContact[]> {
-        return this.crmContactModel.find(filter).exec();
-    }
+  async findAll(orgId: string, query: any) {
+    // Implement: return this.prisma.contact.findMany({ where: { orgId }, ...query });
+    throw new Error('Not implemented');
+  }
 
-    async findById(id: string): Promise<CrmContact | null> {
-        return this.crmContactModel.findById(id).exec();
-    }
+  async findById(id: string, orgId: string) {
+    // Implement: return this.prisma.contact.findFirst({ where: { id, orgId } });
+    throw new Error('Not implemented');
+  }
 
-    async update(id: string, update: Partial<CrmContact>): Promise<CrmContact | null> {
-        return this.crmContactModel.findByIdAndUpdate(id, update, { new: true }).exec();
-    }
+  async findByEmail(email: string, orgId: string) {
+    // Implement: return this.prisma.contact.findFirst({ where: { email, orgId } });
+    throw new Error('Not implemented');
+  }
 
-    async delete(id: string): Promise<CrmContact | null> {
-        return this.crmContactModel.findByIdAndDelete(id).exec();
-    }
+  async create(orgId: string, data: any) {
+    // Implement: return this.prisma.contact.create({ data: { ...data, orgId } });
+    throw new Error('Not implemented');
+  }
+
+  async update(id: string, orgId: string, data: any) {
+    // Implement: return this.prisma.contact.updateMany({ where: { id, orgId }, data });
+    throw new Error('Not implemented');
+  }
+
+  async delete(id: string, orgId: string) {
+    // Implement: return this.prisma.contact.deleteMany({ where: { id, orgId } });
+    throw new Error('Not implemented');
+  }
+
+  async assignTags(id: string, orgId: string, tagIds: string[]) {
+    // Implement tag assignment using ContactTag model
+    throw new Error('Not implemented');
+  }
 }
