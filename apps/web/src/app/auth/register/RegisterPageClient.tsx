@@ -34,27 +34,13 @@ export function RegisterPageClient() {
             />
           </Box>
           <Box className={styles.heroText}>
-            <Box className={styles.eyebrow}>
-              <Box className={styles.eyebrowDot} />
-              PITCH Workspace
-            </Box>
+            
             <Title order={2} fw={700} c="white" className={styles.title}>
-              Welcome back
+              Get started.
             </Title>
             <Text size="sm" className={styles.supporting} style={{ maxWidth: '360px' }}>
-              Create your account and bring structure, clarity, and momentum to every
-              assessment.
+              A good place to begin. We will take it step by step.
             </Text>
-            <Box className={styles.metaRow}>
-              <Box className={styles.metaItem}>
-                <Box className={styles.metaDot} />
-                Clear, professional flow
-              </Box>
-              <Box className={styles.metaItem}>
-                <Box className={styles.metaDot} />
-                Designed for focus
-              </Box>
-            </Box>
           </Box>
         </Box>
       </Box>

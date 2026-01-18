@@ -35,7 +35,7 @@ export function LoginPageClient() {
           </Box>
           <Box className={styles.heroText}>
             <Title order={2} fw={700} c="white" className={styles.title}>
-              Welcome back
+              Welcome back.
             </Title>
             <Text size="sm" className={styles.supporting} style={{ maxWidth: '360px' }}>
               Everything is ready when you are. Your progress is right where you left it.
