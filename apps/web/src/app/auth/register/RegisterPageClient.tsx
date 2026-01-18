@@ -12,41 +12,57 @@ export function RegisterPageClient() {
     <Box
       className={styles.page}
       style={{
-        background: 'linear-gradient(135deg, #0b1a52 0%, #112374 45%, #1c3a9a 100%)',
+        background:
+          'linear-gradient(135deg, #0b1a52 0%, #112374 45%, #1c3a9a 100%), radial-gradient(380px 380px at 15% 20%, rgba(255, 255, 255, 0.5) 0%, rgba(255, 255, 255, 0) 70%), radial-gradient(420px 420px at 85% 75%, rgba(255, 255, 255, 0.5) 0%, rgba(255, 255, 255, 0) 72%)',
       }}
     >
-      <Box className={styles.column}>
+      <Box className={styles.brand}>P.IT.C.H.</Box>
+      <Box className={`${styles.column} ${styles.columnLeft}`}>
         <Box className={styles.hero}>
-          <Box
-            component="img"
-            src="/pitchMascot.png"
-            alt="Pitch mascot"
-            style={{
-              width: 'min(260px, 70vw)',
-              height: 'auto',
-              borderRadius: '0',
-              boxShadow: 'none',
-              background: 'transparent',
-            }}
-          />
+          <Box className={styles.mascotWrap}>
+            <Box className={styles.mascotShadow} />
+            <Box className={styles.mascotGlow} />
+            <Box
+              component="img"
+              src="/pitchMascot.png"
+              alt="Pitch mascot"
+              className={styles.mascotImage}
+              style={{
+                width: 'min(300px, 76vw)',
+                height: 'auto',
+              }}
+            />
+          </Box>
           <Box className={styles.heroText}>
-            <Title order={2} fw={700} c="white">
+            <Box className={styles.eyebrow}>
+              <Box className={styles.eyebrowDot} />
+              PITCH Workspace
+            </Box>
+            <Title order={2} fw={700} c="white" className={styles.title}>
               Welcome back
             </Title>
-            <Text size="sm" c="gray.3" style={{ maxWidth: '320px' }}>
-              Create your account with a trusted OAuth provider.
+            <Text size="sm" className={styles.supporting} style={{ maxWidth: '360px' }}>
+              Create your account and bring structure, clarity, and momentum to every
+              assessment.
             </Text>
-            <Text size="xs" c="gray.4">
-              OAuth-only, no passwords stored.
-            </Text>
+            <Box className={styles.metaRow}>
+              <Box className={styles.metaItem}>
+                <Box className={styles.metaDot} />
+                Clear, professional flow
+              </Box>
+              <Box className={styles.metaItem}>
+                <Box className={styles.metaDot} />
+                Designed for focus
+              </Box>
+            </Box>
           </Box>
         </Box>
       </Box>
 
       <Box className={styles.divider} />
 
-      <Box className={styles.column}>
-        <Container size={440} w="100%">
+      <Box className={`${styles.column} ${styles.columnRight}`}>
+        <Container size={440} w="100%" className={styles.formShift}>
           <RegisterForm onSwitchToLogin={() => router.push('/auth/login')} />
         </Container>
       </Box>
