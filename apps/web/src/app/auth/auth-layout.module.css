@@ -105,6 +105,7 @@
   gap: 8px;
   align-items: center;
   text-align: center;
+  max-width: 420px;
 }
 
 .eyebrow {
@@ -162,6 +163,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  z-index: 2;
 }
 
 .mascotShadow {
@@ -197,6 +199,88 @@
 .mascotImage {
   position: relative;
   z-index: 1;
+  width: min(300px, 76vw);
+  height: auto;
+}
+
+.mascotDesktop {
+  display: block;
+}
+
+.mascotMobile {
+  display: none;
+}
+
+@media (max-width: 1023px) {
+  .brand {
+    top: 16px;
+    left: 20px;
+    font-size: 12px;
+    letter-spacing: 1.6px;
+  }
+
+  .column {
+    padding: 48px 20px;
+  }
+
+  .hero {
+    gap: 18px;
+  }
+
+  .heroText {
+    max-width: 360px;
+  }
+
+  .heroText {
+    display: none;
+  }
+
+  .columnLeft {
+    padding-bottom: 0;
+    z-index: 2;
+  }
+
+  .columnRight {
+    padding-top: 0;
+    z-index: 1;
+  }
+
+  .columnRight {
+    position: relative;
+  }
+
+  .formPanel {
+    position: relative;
+    z-index: 0;
+    margin-top: -118.2px;
+  }
+
+  .mascotGlow {
+    width: 280px;
+    height: 280px;
+  }
+
+  .mascotShadow {
+    display: none;
+  }
+
+  .mascotDesktop {
+    display: none;
+  }
+
+  .mascotMobile {
+    display: block;
+  }
+}
+
+@media (max-width: 640px) {
+  .column {
+    padding: 40px 16px;
+  }
+
+  .heroText {
+    max-width: 320px;
+  }
 }
 
 @media (min-width: 1024px) {
@@ -220,6 +304,7 @@
 
   .divider {
     display: block;
+    flex-shrink: 0;
   }
 
   .hero {
@@ -229,7 +314,7 @@
   }
 
   .divider {
-    transform: translateX(-60px);
+    transform: translateX(-36px);
   }
 
   .heroText {

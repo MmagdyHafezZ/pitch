@@ -26,11 +26,13 @@ export function LoginPageClient() {
               component="img"
               src="/pitchMascot.png"
               alt="Pitch mascot"
-              className={styles.mascotImage}
-              style={{
-                width: 'min(300px, 76vw)',
-                height: 'auto',
-              }}
+              className={`${styles.mascotImage} ${styles.mascotDesktop}`}
+            />
+            <Box
+              component="img"
+              src="/pitchMascotMobile.png"
+              alt="Pitch mascot"
+              className={`${styles.mascotImage} ${styles.mascotMobile}`}
             />
           </Box>
           <Box className={styles.heroText}>
@@ -47,7 +49,7 @@ export function LoginPageClient() {
       <Box className={styles.divider} />
 
       <Box className={`${styles.column} ${styles.columnRight}`}>
-        <Container size={440} w="100%" className={styles.formShift}>
+        <Container size={440} w="100%" className={`${styles.formShift} ${styles.formPanel}`}>
           <LoginForm onSwitchToRegister={() => router.push('/auth/register')} />
         </Container>
       </Box>
