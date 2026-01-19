@@ -6,8 +6,8 @@ import {
   Delete,
   Body,
   Param,
-  Query,
   HttpStatus,
+  HttpCode,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -16,42 +16,31 @@ import {
   ApiParam,
   ApiBearerAuth,
 } from '@nestjs/swagger';
-import {
-  CreateTagDto,
-  UpdateTagDto,
-  TagResponseDto,
-  TagListQueryDto,
-} from '../dto/tag.dto';
-import { NotImplementedResponse, notImplemented } from './common';
+import { TagsService } from '../services/tags.service';
+import { CreateTagDto, UpdateTagDto, TagResponseDto } from '../dto/tag.dto';
+
+// TODO: Replace with actual user claims from JWT
+const MOCK_ORG_ID = 'org_test_123';
 
 @ApiTags('CRM - Tags')
 @ApiBearerAuth()
 @Controller('crm/tags')
 export class TagsController {
+  constructor(private readonly tagsService: TagsService) {}
+
   @Get()
-  @ApiOperation({
-    summary: 'List all tags',
-    description: 'Get all tags for the organization',
-  })
+  @ApiOperation({ summary: 'List all tags' })
   @ApiResponse({
     status: HttpStatus.OK,
     description: 'List of tags',
     type: [TagResponseDto],
   })
-  @ApiResponse({
-    status: HttpStatus.NOT_IMPLEMENTED,
-    description: 'Not implemented',
-    type: NotImplementedResponse,
-  })
-  async listTags(@Query() query: TagListQueryDto) {
-    return notImplemented('tags', 'List');
+  async listTags() {
+    return this.tagsService.findAll(MOCK_ORG_ID);
   }
 
   @Get(':id')
-  @ApiOperation({
-    summary: 'Get tag by ID',
-    description: 'Retrieve a single tag by its ID',
-  })
+  @ApiOperation({ summary: 'Get tag by ID' })
   @ApiParam({ name: 'id', description: 'Tag ID' })
   @ApiResponse({
     status: HttpStatus.OK,
@@ -59,20 +48,12 @@ export class TagsController {
     type: TagResponseDto,
   })
   @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Tag not found' })
-  @ApiResponse({
-    status: HttpStatus.NOT_IMPLEMENTED,
-    description: 'Not implemented',
-    type: NotImplementedResponse,
-  })
   async getTag(@Param('id') id: string) {
-    return notImplemented('tag', 'Get');
+    return this.tagsService.findById(id, MOCK_ORG_ID);
   }
 
   @Post()
-  @ApiOperation({
-    summary: 'Create a new tag',
-    description: 'Create a new tag for categorizing contacts',
-  })
+  @ApiOperation({ summary: 'Create a new tag' })
   @ApiResponse({
     status: HttpStatus.CREATED,
     description: 'Tag created',
@@ -83,20 +64,12 @@ export class TagsController {
     status: HttpStatus.CONFLICT,
     description: 'Tag name already exists',
   })
-  @ApiResponse({
-    status: HttpStatus.NOT_IMPLEMENTED,
-    description: 'Not implemented',
-    type: NotImplementedResponse,
-  })
   async createTag(@Body() dto: CreateTagDto) {
-    return notImplemented('tag', 'Create');
+    return this.tagsService.create(MOCK_ORG_ID, dto);
   }
 
   @Put(':id')
-  @ApiOperation({
-    summary: 'Update a tag',
-    description: 'Update an existing tag',
-  })
+  @ApiOperation({ summary: 'Update a tag' })
   @ApiParam({ name: 'id', description: 'Tag ID' })
   @ApiResponse({
     status: HttpStatus.OK,
@@ -104,46 +77,21 @@ export class TagsController {
     type: TagResponseDto,
   })
   @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Tag not found' })
-  @ApiResponse({ status: HttpStatus.BAD_REQUEST, description: 'Invalid input' })
   @ApiResponse({
-    status: HttpStatus.NOT_IMPLEMENTED,
-    description: 'Not implemented',
-    type: NotImplementedResponse,
+    status: HttpStatus.CONFLICT,
+    description: 'Tag name already exists',
   })
   async updateTag(@Param('id') id: string, @Body() dto: UpdateTagDto) {
-    return notImplemented('tag', 'Update');
+    return this.tagsService.update(id, MOCK_ORG_ID, dto);
   }
 
   @Delete(':id')
-  @ApiOperation({
-    summary: 'Delete a tag',
-    description: 'Delete a tag (removes from all contacts)',
-  })
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Delete a tag' })
   @ApiParam({ name: 'id', description: 'Tag ID' })
-  @ApiResponse({ status: HttpStatus.NO_CONTENT, description: 'Tag deleted' })
+  @ApiResponse({ status: HttpStatus.OK, description: 'Tag deleted' })
   @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Tag not found' })
-  @ApiResponse({
-    status: HttpStatus.NOT_IMPLEMENTED,
-    description: 'Not implemented',
-    type: NotImplementedResponse,
-  })
   async deleteTag(@Param('id') id: string) {
-    return notImplemented('tag', 'Delete');
-  }
-
-  @Get(':id/contacts')
-  @ApiOperation({
-    summary: 'Get contacts with tag',
-    description: 'Get all contacts that have this tag',
-  })
-  @ApiParam({ name: 'id', description: 'Tag ID' })
-  @ApiResponse({ status: HttpStatus.OK, description: 'List of contacts' })
-  @ApiResponse({
-    status: HttpStatus.NOT_IMPLEMENTED,
-    description: 'Not implemented',
-    type: NotImplementedResponse,
-  })
-  async getTagContacts(@Param('id') id: string) {
-    return notImplemented('tag contacts', 'Get');
+    return this.tagsService.delete(id, MOCK_ORG_ID);
   }
 }

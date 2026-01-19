@@ -10,6 +10,7 @@ import {
   IsArray,
   Min,
   Max,
+  ValidateIf,
 } from 'class-validator';
 
 export enum OpportunityType {
@@ -49,6 +50,15 @@ export class LineItemDto {
   discount?: number;
 }
 
+export enum OpportunityStage {
+  PROSPECTING = 'prospecting',
+  QUALIFICATION = 'qualification',
+  PROPOSAL = 'proposal',
+  NEGOTIATION = 'negotiation',
+  CLOSED_WON = 'closed_won',
+  CLOSED_LOST = 'closed_lost',
+}
+
 export class CreateOpportunityDto {
   @ApiProperty({
     example: 'Acme Corp Enterprise Deal',
@@ -62,15 +72,12 @@ export class CreateOpportunityDto {
   @IsOptional()
   amount?: number;
 
-  @ApiPropertyOptional({ description: 'Pipeline ID' })
-  @IsString()
-  @IsOptional()
-  pipelineId?: string;
-
-  @ApiPropertyOptional({ description: 'Stage ID' })
-  @IsString()
-  @IsOptional()
-  stageId?: string;
+  @ApiProperty({
+    enum: OpportunityStage,
+    default: OpportunityStage.PROSPECTING,
+  })
+  @IsEnum(OpportunityStage)
+  stage: OpportunityStage;
 
   @ApiPropertyOptional({ example: 25, description: 'Win probability (0-100)' })
   @IsInt()
@@ -80,9 +87,10 @@ export class CreateOpportunityDto {
   probability?: number;
 
   @ApiPropertyOptional({
-    example: '2024-06-30',
+    example: '2026-06-30T00:00:00Z',
     description: 'Expected close date',
   })
+  @ValidateIf((o) => o.expectedCloseDate && o.expectedCloseDate !== 'string')
   @IsDateString()
   @IsOptional()
   expectedCloseDate?: string;
@@ -150,9 +158,10 @@ export class UpdateOpportunityDto extends PartialType(CreateOpportunityDto) {
   lossReason?: string;
 
   @ApiPropertyOptional({
-    example: '2024-06-15',
+    example: '2026-06-15T00:00:00Z',
     description: 'Actual close date',
   })
+  @ValidateIf((o) => o.actualCloseDate && o.actualCloseDate !== 'string')
   @IsDateString()
   @IsOptional()
   actualCloseDate?: string;
@@ -253,15 +262,13 @@ export class OpportunityListQueryDto {
   @IsOptional()
   search?: string;
 
-  @ApiPropertyOptional({ description: 'Filter by pipeline ID' })
-  @IsString()
+  @ApiPropertyOptional({
+    enum: OpportunityStage,
+    description: 'Filter by stage',
+  })
+  @IsEnum(OpportunityStage)
   @IsOptional()
-  pipelineId?: string;
-
-  @ApiPropertyOptional({ description: 'Filter by stage ID' })
-  @IsString()
-  @IsOptional()
-  stageId?: string;
+  stage?: OpportunityStage;
 
   @ApiPropertyOptional({ description: 'Filter by account ID' })
   @IsString()
@@ -298,12 +305,20 @@ export class OpportunityListQueryDto {
   @IsOptional()
   maxAmount?: number;
 
-  @ApiPropertyOptional({ description: 'Expected close date from' })
+  @ApiPropertyOptional({
+    description: 'Expected close date from',
+    example: '2026-01-01T00:00:00Z',
+  })
+  @ValidateIf((o) => o.closeDateFrom && o.closeDateFrom !== 'string')
   @IsDateString()
   @IsOptional()
   closeDateFrom?: string;
 
-  @ApiPropertyOptional({ description: 'Expected close date to' })
+  @ApiPropertyOptional({
+    description: 'Expected close date to',
+    example: '2026-12-31T23:59:59Z',
+  })
+  @ValidateIf((o) => o.closeDateTo && o.closeDateTo !== 'string')
   @IsDateString()
   @IsOptional()
   closeDateTo?: string;

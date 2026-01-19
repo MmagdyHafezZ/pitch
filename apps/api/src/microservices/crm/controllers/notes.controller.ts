@@ -8,6 +8,7 @@ import {
   Param,
   Query,
   HttpStatus,
+  HttpCode,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -16,42 +17,33 @@ import {
   ApiParam,
   ApiBearerAuth,
 } from '@nestjs/swagger';
+import { NotesService } from '../services/notes.service';
 import {
   CreateNoteDto,
   UpdateNoteDto,
   NoteResponseDto,
   NoteListQueryDto,
 } from '../dto/note.dto';
-import { NotImplementedResponse, notImplemented } from './common';
+
+// TODO: Replace with actual user claims from JWT
+const MOCK_ORG_ID = 'org_test_123';
+const MOCK_USER_ID = 'user_test_123';
 
 @ApiTags('CRM - Notes')
 @ApiBearerAuth()
 @Controller('crm/notes')
 export class NotesController {
+  constructor(private readonly notesService: NotesService) {}
+
   @Get()
-  @ApiOperation({
-    summary: 'List all notes',
-    description: 'Get a paginated list of notes with optional filters',
-  })
-  @ApiResponse({
-    status: HttpStatus.OK,
-    description: 'List of notes',
-    type: [NoteResponseDto],
-  })
-  @ApiResponse({
-    status: HttpStatus.NOT_IMPLEMENTED,
-    description: 'Not implemented',
-    type: NotImplementedResponse,
-  })
+  @ApiOperation({ summary: 'List all notes' })
+  @ApiResponse({ status: HttpStatus.OK, description: 'List of notes' })
   async listNotes(@Query() query: NoteListQueryDto) {
-    return notImplemented('notes', 'List');
+    return this.notesService.findAll(MOCK_ORG_ID, query);
   }
 
   @Get(':id')
-  @ApiOperation({
-    summary: 'Get note by ID',
-    description: 'Retrieve a single note by its ID',
-  })
+  @ApiOperation({ summary: 'Get note by ID' })
   @ApiParam({ name: 'id', description: 'Note ID' })
   @ApiResponse({
     status: HttpStatus.OK,
@@ -59,41 +51,24 @@ export class NotesController {
     type: NoteResponseDto,
   })
   @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Note not found' })
-  @ApiResponse({
-    status: HttpStatus.NOT_IMPLEMENTED,
-    description: 'Not implemented',
-    type: NotImplementedResponse,
-  })
   async getNote(@Param('id') id: string) {
-    return notImplemented('note', 'Get');
+    return this.notesService.findById(id, MOCK_ORG_ID);
   }
 
   @Post()
-  @ApiOperation({
-    summary: 'Create a new note',
-    description:
-      'Create a new note associated with a contact, account, or opportunity',
-  })
+  @ApiOperation({ summary: 'Create a new note' })
   @ApiResponse({
     status: HttpStatus.CREATED,
     description: 'Note created',
     type: NoteResponseDto,
   })
   @ApiResponse({ status: HttpStatus.BAD_REQUEST, description: 'Invalid input' })
-  @ApiResponse({
-    status: HttpStatus.NOT_IMPLEMENTED,
-    description: 'Not implemented',
-    type: NotImplementedResponse,
-  })
   async createNote(@Body() dto: CreateNoteDto) {
-    return notImplemented('note', 'Create');
+    return this.notesService.create(MOCK_ORG_ID, MOCK_USER_ID, dto);
   }
 
   @Put(':id')
-  @ApiOperation({
-    summary: 'Update a note',
-    description: 'Update an existing note',
-  })
+  @ApiOperation({ summary: 'Update a note' })
   @ApiParam({ name: 'id', description: 'Note ID' })
   @ApiResponse({
     status: HttpStatus.OK,
@@ -101,66 +76,25 @@ export class NotesController {
     type: NoteResponseDto,
   })
   @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Note not found' })
-  @ApiResponse({ status: HttpStatus.BAD_REQUEST, description: 'Invalid input' })
-  @ApiResponse({
-    status: HttpStatus.NOT_IMPLEMENTED,
-    description: 'Not implemented',
-    type: NotImplementedResponse,
-  })
   async updateNote(@Param('id') id: string, @Body() dto: UpdateNoteDto) {
-    return notImplemented('note', 'Update');
+    return this.notesService.update(id, MOCK_ORG_ID, dto);
   }
 
   @Delete(':id')
-  @ApiOperation({
-    summary: 'Delete a note',
-    description: 'Delete a note record',
-  })
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Delete a note' })
   @ApiParam({ name: 'id', description: 'Note ID' })
-  @ApiResponse({ status: HttpStatus.NO_CONTENT, description: 'Note deleted' })
+  @ApiResponse({ status: HttpStatus.OK, description: 'Note deleted' })
   @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Note not found' })
-  @ApiResponse({
-    status: HttpStatus.NOT_IMPLEMENTED,
-    description: 'Not implemented',
-    type: NotImplementedResponse,
-  })
   async deleteNote(@Param('id') id: string) {
-    return notImplemented('note', 'Delete');
+    return this.notesService.delete(id, MOCK_ORG_ID);
   }
 
-  @Put(':id/pin')
-  @ApiOperation({ summary: 'Pin a note', description: 'Pin a note to the top' })
+  @Post(':id/toggle-pin')
+  @ApiOperation({ summary: 'Toggle pin status of a note' })
   @ApiParam({ name: 'id', description: 'Note ID' })
-  @ApiResponse({
-    status: HttpStatus.OK,
-    description: 'Note pinned',
-    type: NoteResponseDto,
-  })
-  @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Note not found' })
-  @ApiResponse({
-    status: HttpStatus.NOT_IMPLEMENTED,
-    description: 'Not implemented',
-    type: NotImplementedResponse,
-  })
-  async pinNote(@Param('id') id: string) {
-    return notImplemented('note', 'Pin');
-  }
-
-  @Put(':id/unpin')
-  @ApiOperation({ summary: 'Unpin a note', description: 'Unpin a pinned note' })
-  @ApiParam({ name: 'id', description: 'Note ID' })
-  @ApiResponse({
-    status: HttpStatus.OK,
-    description: 'Note unpinned',
-    type: NoteResponseDto,
-  })
-  @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Note not found' })
-  @ApiResponse({
-    status: HttpStatus.NOT_IMPLEMENTED,
-    description: 'Not implemented',
-    type: NotImplementedResponse,
-  })
-  async unpinNote(@Param('id') id: string) {
-    return notImplemented('note', 'Unpin');
+  @ApiResponse({ status: HttpStatus.OK, description: 'Pin status toggled' })
+  async togglePin(@Param('id') id: string) {
+    return this.notesService.togglePin(id, MOCK_ORG_ID);
   }
 }

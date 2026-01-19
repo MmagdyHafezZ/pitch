@@ -7,6 +7,7 @@ import {
   IsInt,
   IsObject,
   Min,
+  ValidateIf,
 } from 'class-validator';
 
 export enum ActivityType {
@@ -72,9 +73,10 @@ export class CreateActivityDto {
   priority?: ActivityPriority;
 
   @ApiPropertyOptional({
-    example: '2024-03-20T14:00:00Z',
+    example: '2026-03-20T14:00:00Z',
     description: 'Due date and time',
   })
+  @ValidateIf((o) => o.dueDate && o.dueDate !== 'string')
   @IsDateString()
   @IsOptional()
   dueDate?: string;
@@ -121,9 +123,10 @@ export class UpdateActivityDto extends PartialType(CreateActivityDto) {
   outcome?: ActivityOutcome;
 
   @ApiPropertyOptional({
-    example: '2024-03-20T15:30:00Z',
+    example: '2026-03-20T15:30:00Z',
     description: 'Completion date',
   })
+  @ValidateIf((o) => o.completedAt && o.completedAt !== 'string')
   @IsDateString()
   @IsOptional()
   completedAt?: string;
@@ -252,12 +255,20 @@ export class ActivityListQueryDto {
   @IsOptional()
   assignedToId?: string;
 
-  @ApiPropertyOptional({ description: 'Due date from' })
+  @ApiPropertyOptional({
+    description: 'Due date from',
+    example: '2026-01-01T00:00:00Z',
+  })
+  @ValidateIf((o) => o.dueDateFrom && o.dueDateFrom !== 'string')
   @IsDateString()
   @IsOptional()
   dueDateFrom?: string;
 
-  @ApiPropertyOptional({ description: 'Due date to' })
+  @ApiPropertyOptional({
+    description: 'Due date to',
+    example: '2026-12-31T23:59:59Z',
+  })
+  @ValidateIf((o) => o.dueDateTo && o.dueDateTo !== 'string')
   @IsDateString()
   @IsOptional()
   dueDateTo?: string;

@@ -7,6 +7,7 @@ import {
   IsObject,
   IsDateString,
   IsArray,
+  ValidateIf,
 } from 'class-validator';
 
 export enum ContactStatus {
@@ -147,7 +148,11 @@ export class CreateContactDto {
   @IsOptional()
   customFields?: Record<string, any>;
 
-  @ApiPropertyOptional({ description: 'Next follow-up date' })
+  @ApiPropertyOptional({
+    description: 'Next follow-up date (ISO 8601 format)',
+    example: '2026-02-01T10:00:00Z',
+  })
+  @ValidateIf((o) => o.nextFollowUpAt && o.nextFollowUpAt !== 'string')
   @IsDateString()
   @IsOptional()
   nextFollowUpAt?: string;
