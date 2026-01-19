@@ -35,7 +35,7 @@ export function LoginPageClient() {
               className={`${styles.mascotImage} ${styles.mascotMobile}`}
             />
           </Box>
-          <Box className={styles.heroText}>
+          <Box className={`${styles.heroText} ${styles.heroTextSpacer}`}>
             <Title order={2} fw={700} c="white" className={styles.title}>
               Welcome back.
             </Title>

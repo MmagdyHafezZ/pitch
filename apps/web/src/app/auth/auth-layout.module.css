@@ -108,6 +108,10 @@
   max-width: 420px;
 }
 
+.heroTextSpacer {
+  padding-right: 16px;
+}
+
 .eyebrow {
   display: inline-flex;
   align-items: center;
@@ -283,6 +287,12 @@
   }
 }
 
+@media (min-width: 641px) and (max-width: 1023px) {
+  .formPanel {
+    margin-top: -38.5px;
+  }
+}
+
 @media (min-width: 1024px) {
   .page {
     flex-direction: row;
@@ -320,6 +330,10 @@
   .heroText {
     align-items: flex-start;
     text-align: left;
+  }
+
+  .heroTextSpacer {
+    padding-right: 32px;
   }
 
 }
