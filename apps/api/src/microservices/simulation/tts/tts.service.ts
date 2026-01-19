@@ -1,0 +1,21 @@
+import { Injectable } from '@nestjs/common';
+import { TtsProviderFactory } from './providers/tts.factory';
+import { TtsOptions, TtsResult } from './providers/tts.provider';
+
+@Injectable()
+export class TtsService {
+  constructor(private readonly providerFactory: TtsProviderFactory) {}
+
+  async synthesize(
+    text: string,
+    providerName?: string,
+    options?: TtsOptions,
+  ): Promise<TtsResult> {
+    const provider = this.providerFactory.getProvider(providerName);
+    return provider.synthesize(text, options);
+  }
+
+  listProviders() {
+    return this.providerFactory.listProviders();
+  }
+}
