@@ -43,8 +43,8 @@ export class CreatePlanRequestDTO {
   maxTokens!: number;
 
   @ApiProperty({
-    description: 'Per-user or per-role limits (JSON blob)',
-    example: 100,
+    description: 'Per-user or per-role limits (JSON blob) {userId: limit}',
+    example: { 123123: 1999 },
   })
   @IsObject()
   @IsOptional()

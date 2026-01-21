@@ -11,6 +11,7 @@ import {
   UpdateTeamDto,
   AddMemberDto,
   UpdateMemberDto,
+  Role,
 } from '@pitch/shared-backend/interfaces/user.interface';
 import { TeamRepository } from '../repositories/team.repository';
 
@@ -177,5 +178,9 @@ export class TeamService {
       updatedBy: 'system',
       updatedAt: new Date().toISOString(),
     };
+  }
+
+  async confirmAuthorityOrThrow(userId: string, teamId: string): Promise<Role> {
+    return this.teamRepository.confirmAuthorityOrThrow(userId, teamId);
   }
 }

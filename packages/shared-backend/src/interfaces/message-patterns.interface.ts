@@ -20,16 +20,16 @@ export const USER_SERVICE_PATTERNS = {
   ADD_TEAM_MEMBER: 'add_team_member',
   UPDATE_TEAM_MEMBER: 'update_team_member',
   DELETE_TEAM_MEMBER: 'delete_team_member',
+  CREATE_SUBSCRIPTION: 'create_subscription',
+  UPDATE_SUBSCRIPTION: 'update_subscription',
+  DELETE_SUBSCRIPTION: 'delete_subscription',
+  GET_SUBSCRIPTIONS: 'get_subscriptions',
+  GET_SUBSCRIPTION: 'get_subscription',
   CREATE_PLAN: 'create_plan',
   UPDATE_PLAN: 'update_plan',
   DELETE_PLAN: 'delete_plan',
-  GET_PLAN: 'get_plan',
   GET_PLANS: 'get_plans',
-  CREATE_SUBSCRIPTION: 'create_subscription',
-  UPDATE_SUBSCRIPTION: 'update_subscription',
-  DELETE_SUBSCRIPTION: 'cancel_subscription',
-  GET_SUBSCRIPTION: 'get_subscription',
-  GET_SUBSCRIPTIONS: 'get_subscriptions',
+  GET_PLAN: 'get_plan',
 } as const
 
 export const BUSINESS_SERVICE_PATTERNS = {

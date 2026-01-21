@@ -176,8 +176,7 @@ export interface CreateSubscriptionDto {
 }
 
 export interface UpdateSubscriptionDto {
-  teamId?: string
-  planId?: string
+  planId: string
   status?: SubscriptionStatus
   currentPeriodStart?: Date
   currentPeriodEnd?: Date

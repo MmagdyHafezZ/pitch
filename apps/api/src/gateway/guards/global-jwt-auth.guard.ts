@@ -91,7 +91,7 @@ export class GlobalJwtAuthGuard implements CanActivate {
   }
 }
 
-function extractBearer(auth?: string) {
+export function extractBearer(auth?: string) {
   if (!auth) return;
   const [type, token] = auth.split(' ');
   return type?.toLowerCase() === 'bearer' ? token : undefined;

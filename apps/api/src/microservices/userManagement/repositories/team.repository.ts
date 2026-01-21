@@ -201,7 +201,7 @@ export class TeamRepository {
     if (!m.team.isActive || m.team.deletedAt !== null)
       throw new NotFoundException('Team not found');
     if (!m.isActive) throw new ForbiddenException('Membership inactive');
-    if (m.role !== Role.OWNER && m.role !== Role.ADMIN)
+    if (m.role === Role.MEMBER)
       throw new ForbiddenException('Insufficient role');
 
     return m.role;

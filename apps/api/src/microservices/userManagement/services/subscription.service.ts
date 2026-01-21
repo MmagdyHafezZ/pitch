@@ -8,36 +8,34 @@ import {
   Subscription,
   CreateSubscriptionDto,
   UpdateSubscriptionDto,
+  Role,
 } from '@pitch/shared-backend/interfaces/user.interface';
 import { SubscriptionRepository } from '../repositories/subscription.repository';
 import { PlanRepository } from '../repositories/plans.repository';
+import { TeamService } from './team.service';
 
 @Injectable()
 export class SubscriptionService {
   constructor(
     private readonly subscriptionRepository: SubscriptionRepository,
     private readonly planRepository: PlanRepository,
+    private readonly teamService: TeamService,
   ) {}
 
   async createSubscription(
     createSubscriptionDto: CreateSubscriptionDto,
     requesterId: string,
   ): Promise<Subscription> {
-    // Optional: enforce only one ACTIVE subscription per team
-    if (
-      createSubscriptionDto.status === SubscriptionStatus.ACTIVE ||
-      createSubscriptionDto.status === undefined
-    ) {
-      const existingActive =
-        await this.subscriptionRepository.findActiveByTeamId(
-          createSubscriptionDto.teamId,
-        );
-      if (existingActive) {
-        throw new ConflictException(
-          `Team with ID ${createSubscriptionDto.teamId} already has an active subscription`,
-        );
-      }
+    if (await this.checkExistingSubscription(createSubscriptionDto.teamId)) {
+      throw new ConflictException(
+        `Team with ID ${createSubscriptionDto.teamId} already has an active subscription`,
+      );
     }
+
+    await this.teamService.confirmAuthorityOrThrow(
+      requesterId,
+      createSubscriptionDto.teamId,
+    );
 
     const plan = await this.planRepository.findById(
       createSubscriptionDto.planId,
@@ -72,6 +70,11 @@ export class SubscriptionService {
       );
     }
 
+    await this.teamService.confirmAuthorityOrThrow(
+      requesterId,
+      existing.teamId,
+    );
+
     const data: Prisma.SubscriptionUpdateInput = {};
 
     if (dto.planId !== undefined) {
@@ -105,7 +108,6 @@ export class SubscriptionService {
       data.metadata = metadata;
     }
 
-    // If status flips to CANCELED and no canceledAt provided, set it
     if (
       dto.status === SubscriptionStatus.CANCELED &&
       dto.canceledAt === undefined
@@ -129,6 +131,11 @@ export class SubscriptionService {
       );
     }
 
+    await this.teamService.confirmAuthorityOrThrow(
+      requesterId,
+      existing.teamId,
+    );
+
     await this.subscriptionRepository.update(subscriptionId, {
       status: SubscriptionStatus.CANCELED,
       cancelAtPeriodEnd: false,
@@ -138,6 +145,12 @@ export class SubscriptionService {
     return {
       message: `Subscription with ID ${subscriptionId} has been canceled`,
     };
+  }
+
+  async checkExistingSubscription(teamId: string): Promise<Boolean> {
+    return (
+      (await this.subscriptionRepository.findActiveByTeamId(teamId)) !== null
+    );
   }
 
   async findAll(): Promise<Subscription[]> {

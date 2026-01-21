@@ -33,7 +33,7 @@ export class CreateSubscriptionRequestDTO {
     example: '2025-01-01T00:00:00.000Z',
   })
   @IsDate()
-  currentPeriodEnd?: Date;
+  currentPeriodEnd!: Date;
 
   @ApiProperty({
     description:
@@ -51,7 +51,7 @@ export class UpdateSubscriptionRequestDTO {
   })
   @IsString()
   @IsOptional()
-  planId?: string;
+  planId: string;
 
   @ApiProperty({
     description: 'Optional subscription status',
