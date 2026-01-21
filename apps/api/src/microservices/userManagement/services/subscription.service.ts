@@ -10,11 +10,13 @@ import {
   UpdateSubscriptionDto,
 } from '@pitch/shared-backend/interfaces/user.interface';
 import { SubscriptionRepository } from '../repositories/subscription.repository';
+import { PlanRepository } from '../repositories/plans.repository';
 
 @Injectable()
 export class SubscriptionService {
   constructor(
     private readonly subscriptionRepository: SubscriptionRepository,
+    private readonly planRepository: PlanRepository,
   ) {}
 
   async createSubscription(
@@ -37,24 +39,24 @@ export class SubscriptionService {
       }
     }
 
-    const metadata:
-      | Prisma.InputJsonValue
-      | Prisma.NullableJsonNullValueInput
-      | undefined =
-      createSubscriptionDto.metadata === null ||
-      createSubscriptionDto.metadata === undefined
-        ? undefined
-        : (createSubscriptionDto.metadata as Prisma.InputJsonValue);
+    const plan = await this.planRepository.findById(
+      createSubscriptionDto.planId,
+    );
+    if (!plan) {
+      throw new NotFoundException(
+        `Plan with ID ${createSubscriptionDto.planId} not found`,
+      );
+    }
+
+    const period_end = createSubscriptionDto.currentPeriodStart + plan.interval;
 
     return this.subscriptionRepository.create({
       teamId: createSubscriptionDto.teamId,
       planId: createSubscriptionDto.planId,
       status: createSubscriptionDto.status ?? SubscriptionStatus.ACTIVE,
       currentPeriodStart: createSubscriptionDto.currentPeriodStart,
-      currentPeriodEnd: createSubscriptionDto.currentPeriodEnd,
+      currentPeriodEnd: period_end,
       cancelAtPeriodEnd: createSubscriptionDto.cancelAtPeriodEnd ?? false,
-      metadata,
-      // createdBy / updatedBy could be added here if your schema has them
     });
   }
 

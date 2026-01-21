@@ -39,11 +39,7 @@ export class SubscriptionController {
         planId: createSubscriptionDto.planId,
         status: createSubscriptionDto.status,
         currentPeriodStart: createSubscriptionDto.currentPeriodStart,
-        currentPeriodEnd: createSubscriptionDto.currentPeriodEnd,
         cancelAtPeriodEnd: createSubscriptionDto.cancelAtPeriodEnd ?? false,
-        metadata:
-          (createSubscriptionDto.metadata as unknown as Prisma.JsonValue) ??
-          undefined,
       };
 
       return await this.subscriptionService.createSubscription(
@@ -77,11 +73,6 @@ export class SubscriptionController {
         currentPeriodStart: updateData.currentPeriodStart,
         currentPeriodEnd: updateData.currentPeriodEnd,
         cancelAtPeriodEnd: updateData.cancelAtPeriodEnd,
-        metadata:
-          updateData.metadata !== undefined
-            ? (updateData.metadata as unknown as Prisma.JsonValue)
-            : undefined,
-        canceledAt: updateData.canceledAt,
       };
 
       return await this.subscriptionService.updateSubscription(

@@ -172,9 +172,7 @@ export interface CreateSubscriptionDto {
   planId: string
   status?: SubscriptionStatus
   currentPeriodStart: Date
-  currentPeriodEnd: Date
   cancelAtPeriodEnd?: boolean
-  metadata?: unknown
 }
 
 export interface UpdateSubscriptionDto {
