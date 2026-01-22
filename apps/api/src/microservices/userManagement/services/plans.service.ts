@@ -41,7 +41,7 @@ export class PlanService {
       description: createPlanDto.description ?? null,
       planLevel: createPlanDto.planLevel,
       interval: createPlanDto.interval,
-      maxTokens: createPlanDto.maxTokens,
+      maxCoins: createPlanDto.maxCoins,
       limits,
       isActive: createPlanDto.isActive ?? true,
     });
@@ -72,7 +72,7 @@ export class PlanService {
     if (dto.description !== undefined) data.description = dto.description;
     if (dto.planLevel !== undefined) data.planLevel = dto.planLevel;
     if (dto.interval !== undefined) data.interval = dto.interval;
-    if (dto.maxTokens !== undefined) data.maxTokens = dto.maxTokens;
+    if (dto.maxCoins !== undefined) data.maxCoins = dto.maxCoins;
 
     if (dto.limits !== undefined) {
       const limits: Prisma.InputJsonValue | Prisma.NullableJsonNullValueInput =

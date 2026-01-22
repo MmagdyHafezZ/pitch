@@ -149,7 +149,7 @@ model Plan {
   description  String?
   planLevel    PlanLevel       @default(FREE)
   interval     BillingInterval @default(MONTH)
-  maxTokens    Int             @default(0) // the number of allowed tokens in the plan
+  maxCoins     Int             @default(0) // the number of allowed tokens in the plan
   limits       Json?           // usage limits
   isActive     Boolean         @default(true) // can anyone subscribe to this plan
   createdAt    DateTime        @default(now())

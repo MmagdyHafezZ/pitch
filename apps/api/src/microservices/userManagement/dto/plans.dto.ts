@@ -40,7 +40,7 @@ export class CreatePlanRequestDTO {
   @ApiProperty({ description: 'Maximum number of tokens', example: 1999 })
   @IsNumber()
   @Min(0)
-  maxTokens!: number;
+  maxCoins!: number;
 
   @ApiProperty({
     description: 'Per-user or per-role limits (JSON blob) {userId: limit}',
@@ -88,7 +88,7 @@ export class UpdatePlanRequestDTO {
   @IsNumber()
   @Min(0)
   @IsOptional()
-  maxTokens?: number;
+  maxCoins?: number;
 
   @ApiProperty({
     description: 'different users that need different levels of limits',

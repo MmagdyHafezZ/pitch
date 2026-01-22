@@ -71,7 +71,7 @@ export interface Plan {
   description?: string | null
   planLevel: PlanLevel
   interval: BillingInterval
-  maxTokens: number
+  maxCoins: number
   limits?: unknown
   isActive: boolean
   createdAt: Date
@@ -152,7 +152,7 @@ export interface CreatePlanDto {
   description?: string | null
   planLevel: PlanLevel
   interval: BillingInterval
-  maxTokens: number
+  maxCoins: number
   limits?: unknown
   isActive?: boolean
 }
@@ -162,7 +162,7 @@ export interface UpdatePlanDto {
   description?: string | null
   planLevel?: PlanLevel
   interval?: BillingInterval
-  maxTokens?: number
+  maxCoins?: number
   limits?: unknown
   isActive?: boolean
 }
