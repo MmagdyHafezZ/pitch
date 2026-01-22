@@ -159,9 +159,9 @@ export function AppSidebar({
               pt="lg"
               mx="auto"
               style={{
-                background: 'rgba(15, 23, 42, 0.7)',
+                background: 'rgba(11, 18, 36, 0.85)',
                 borderRadius: 10,
-                border: '1px solid rgba(59, 130, 246, 0.25)',
+                border: '1px solid rgba(59, 130, 246, 0.22)',
                 overflow: 'hidden',
               }}
             >
@@ -173,20 +173,36 @@ export function AppSidebar({
                   return { selected: isToday }
                 }}
                 styles={{
-                  calendarHeader: { padding: rem(6) },
-                  calendarHeaderLevel: { fontSize: rem(12), fontWeight: 600, color: '#e2e8f0' },
+                  calendarHeader: { padding: rem(6), color: '#94b9e9' },
+                  calendarHeaderLevel: { fontSize: rem(12), fontWeight: 600, color: '#92bcf4' },
+                  calendarHeaderControl: {
+                    color: '#92bcf4',
+                    '&:hover': { background: 'rgba(59, 130, 246, 0.2)' },
+                  },
+                  calendarHeaderControlIcon: { color: '#92bcf4' },
                   weekday: { fontSize: rem(10), fontWeight: 600, color: '#94a3b8' },
-                  month: { padding: rem(6) },
+                  month: { padding: rem(6), color: '#e2e8f0' },
+                  monthsListCell: { color: '#cbd5e1' },
+                  monthsListControl: {
+                    color: '#cbd5e1',
+                    '&:hover': { background: 'rgba(59, 130, 246, 0.2)' },
+                  },
+                  yearsListCell: { color: '#cbd5e1' },
+                  yearsListControl: {
+                    color: '#cbd5e1',
+                    '&:hover': { background: 'rgba(59, 130, 246, 0.2)' },
+                  },
                   day: {
                     height: rem(26),
                     fontSize: rem(12),
                     fontWeight: 600,
                     borderRadius: rem(8),
+                    color: '#cbd5e1',
                     '&[data-selected="true"]': {
-                      background: '#3b82f6',
+                      background: '#1d4ed8',
                       color: '#f8fafc',
                     },
-                    '&:hover': { background: 'rgba(59, 130, 246, 0.18)' },
+                    '&:hover': { background: 'rgba(59, 130, 246, 0.22)' },
                   },
                 }}
               />

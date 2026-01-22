@@ -26,6 +26,9 @@ export function AppLayout({ header, navbar, children }: Props) {
         navbar: {
           background: '#0f172a',
         },
+        main: {
+          background: '#0f172a',
+        },
       }}
       padding={0}
     >
@@ -34,12 +37,14 @@ export function AppLayout({ header, navbar, children }: Props) {
       <AppShell.Main>
         <Box
           style={{
-            minHeight: '100%',
+            minHeight: `calc(100vh - ${rem(60)})`,
             padding: rem(24),
             background:
               'linear-gradient(180deg, rgba(241, 245, 249, 0.9) 0%, rgba(248, 250, 252, 0.98) 100%)',
             borderTop: '1px solid #e2e8f0',
             borderLeft: '1px solid #e2e8f0',
+            borderTopLeftRadius: rem(50),
+            // borderBottomLeftRadius: rem(50),
           }}
         >
           {children}
