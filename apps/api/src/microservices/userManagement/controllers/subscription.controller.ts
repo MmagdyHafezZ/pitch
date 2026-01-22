@@ -1,4 +1,10 @@
-import { Controller, Logger, UsePipes, ValidationPipe } from '@nestjs/common';
+import {
+  Controller,
+  Logger,
+  UseGuards,
+  UsePipes,
+  ValidationPipe,
+} from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
 import { USER_SERVICE_PATTERNS } from '@pitch/shared-backend/interfaces/message-patterns.interface';
 import * as userClaimsInterface from '@pitch/shared-backend/interfaces/user-claims.interface';
@@ -11,10 +17,11 @@ import {
   CreateSubscriptionDto,
   UpdateSubscriptionDto,
 } from '@pitch/shared-backend/interfaces/user.interface';
-import { Prisma } from '@prisma/user-client';
 import { SubscriptionService } from '../services/subscription.service';
+import { ElevatedAccessGuard } from '../guards/elevated-access.guard';
 
 @Controller()
+@UseGuards(ElevatedAccessGuard)
 export class SubscriptionController {
   private readonly logger = new Logger(SubscriptionController.name);
 

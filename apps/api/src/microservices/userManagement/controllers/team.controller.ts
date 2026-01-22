@@ -1,4 +1,10 @@
-import { Controller, Logger, UsePipes, ValidationPipe } from '@nestjs/common';
+import {
+  Controller,
+  Logger,
+  UseGuards,
+  UsePipes,
+  ValidationPipe,
+} from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
 import { TeamService } from '../services/team.service';
 import { USER_SERVICE_PATTERNS } from '@pitch/shared-backend/interfaces/message-patterns.interface';
@@ -17,6 +23,7 @@ import {
   UpdateTeamDto,
 } from '@pitch/shared-backend/interfaces/user.interface';
 import { Prisma } from '@prisma/user-client';
+import { ElevatedAccessGuard } from '../guards/elevated-access.guard';
 
 @Controller()
 export class TeamController {
@@ -51,6 +58,7 @@ export class TeamController {
     }
   }
 
+  @UseGuards(ElevatedAccessGuard)
   @MessagePattern(USER_SERVICE_PATTERNS.UPDATE_TEAM)
   @UsePipes(
     new ValidationPipe({ transform: true, skipMissingProperties: true }),
@@ -81,6 +89,7 @@ export class TeamController {
     }
   }
 
+  @UseGuards(ElevatedAccessGuard)
   @MessagePattern(USER_SERVICE_PATTERNS.DELETE_TEAM)
   async deleteTeam(
     @Payload()
@@ -136,6 +145,7 @@ export class TeamController {
     }
   }
 
+  @UseGuards(ElevatedAccessGuard)
   @MessagePattern(USER_SERVICE_PATTERNS.ADD_TEAM_MEMBER)
   @UsePipes(new ValidationPipe({ transform: true }))
   async addTeamMember(
@@ -163,6 +173,7 @@ export class TeamController {
     }
   }
 
+  @UseGuards(ElevatedAccessGuard)
   @MessagePattern(USER_SERVICE_PATTERNS.UPDATE_TEAM_MEMBER)
   @UsePipes(
     new ValidationPipe({ transform: true, skipMissingProperties: true }),
@@ -194,6 +205,7 @@ export class TeamController {
     }
   }
 
+  @UseGuards(ElevatedAccessGuard)
   @MessagePattern(USER_SERVICE_PATTERNS.DELETE_TEAM_MEMBER)
   @UsePipes(
     new ValidationPipe({ transform: true, skipMissingProperties: true }),

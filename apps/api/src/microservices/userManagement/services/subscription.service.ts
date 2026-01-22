@@ -8,7 +8,6 @@ import {
   Subscription,
   CreateSubscriptionDto,
   UpdateSubscriptionDto,
-  Role,
 } from '@pitch/shared-backend/interfaces/user.interface';
 import { SubscriptionRepository } from '../repositories/subscription.repository';
 import { PlanRepository } from '../repositories/plans.repository';
