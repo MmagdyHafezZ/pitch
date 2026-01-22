@@ -12,13 +12,16 @@ type Props = {
 
 export function AppLayout({ header, navbar, children }: Props) {
   const [opened, { toggle }] = useDisclosure()
+  const headerHeight = 60
+  const navbarWidth = 300
+  const cornerRadius = 50
 
   return (
     <AppShell
       layout="alt"
       withBorder={false}
-      header={{ height: 60 }}
-      navbar={{ width: 300, breakpoint: 'sm', collapsed: { mobile: !opened } }}
+      header={{ height: headerHeight }}
+      navbar={{ width: navbarWidth, breakpoint: 'sm', collapsed: { mobile: !opened } }}
       styles={{
         header: {
           background: '#0f172a',
@@ -28,6 +31,8 @@ export function AppLayout({ header, navbar, children }: Props) {
         },
         main: {
           background: '#0f172a',
+          height: `calc(100vh - ${rem(headerHeight)})`,
+          overflow: 'hidden',
         },
       }}
       padding={0}
@@ -37,17 +42,36 @@ export function AppLayout({ header, navbar, children }: Props) {
       <AppShell.Main>
         <Box
           style={{
-            minHeight: `calc(100vh - ${rem(60)})`,
-            padding: rem(24),
-            background:
-              'linear-gradient(180deg, rgba(241, 245, 249, 0.9) 0%, rgba(248, 250, 252, 0.98) 100%)',
-            borderTop: '1px solid #e2e8f0',
-            borderLeft: '1px solid #e2e8f0',
-            borderTopLeftRadius: rem(50),
-            // borderBottomLeftRadius: rem(50),
+            position: 'relative',
+            height: '100%',
+            width: '100%',
+            overflow: 'hidden',
           }}
         >
-          {children}
+          <Box
+            style={{
+              position: 'absolute',
+              inset: 0,
+              background:
+                'linear-gradient(180deg, rgba(241, 245, 249, 0.9) 0%, rgba(248, 250, 252, 0.98) 100%)',
+              borderTop: '1px solid #e2e8f0',
+              borderLeft: '1px solid #e2e8f0',
+              borderTopLeftRadius: rem(cornerRadius),
+              pointerEvents: 'none',
+            }}
+          />
+          <Box
+            style={{
+              position: 'relative',
+              height: '100%',
+              overflow: 'auto',
+              padding: rem(24),
+              borderTopLeftRadius: rem(cornerRadius),
+              overflowX: 'hidden',
+            }}
+          >
+            {children}
+          </Box>
         </Box>
       </AppShell.Main>
     </AppShell>
