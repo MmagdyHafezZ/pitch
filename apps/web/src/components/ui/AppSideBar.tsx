@@ -63,7 +63,11 @@ function isInThisWeek(date: string, anchor: Date) {
 function Brand() {
   return (
     <Group gap="xs" align="center" px="xs" pt="xs" pb="sm">
-      <Text fw={700} size="xl" style={{ letterSpacing: 0.5, color: 'var(--mantine-color-blue-6)' }}>
+      <Text
+        fw={700}
+        size="xl"
+        style={{ letterSpacing: 0.5, color: 'var(--mantine-color-blue-6)' }}
+      >
         PITCH
       </Text>
     </Group>
@@ -94,12 +98,12 @@ export function AppSidebar({
       >
         <Box
           style={{
-            background: 'var(--mantine-color-dark-8)',
-            borderRadius: rem(16),
-            padding: rem(10),
+            background: 'transparent',
+            borderRadius: 0,
+            padding: rem(16),
             display: 'flex',
             flexDirection: 'column',
-            gap: rem(8),
+            gap: rem(10),
             width: '100%',
             height: '100%',
           }}
@@ -122,27 +126,29 @@ export function AppSidebar({
                 variant="subtle"
                 styles={{
                   root: {
-                    borderRadius: rem(10),
-                    paddingTop: rem(8),
-                    paddingBottom: rem(8),
-                    paddingLeft: rem(10),
+                    borderRadius: rem(8),
+                    paddingTop: rem(9),
+                    paddingBottom: rem(9),
+                    paddingLeft: rem(12),
                     paddingRight: rem(8),
-                    color: 'var(--mantine-color-gray-3)',
-                    transition: 'background 120ms, color 120ms',
-                    '&:hover': { background: 'rgba(255,255,255,0.04)' },
+                    color: '#e2e8f0',
+                    transition: 'background 140ms, color 140ms, border 140ms',
+                    borderLeft: '3px solid transparent',
+                    '&:hover': { background: 'rgba(59, 130, 246, 0.16)' },
                     '&[data-active="true"]': {
-                      background: 'rgba(255,255,255,0.08)',
-                      color: 'var(--mantine-color-blue-4)',
+                      background: 'rgba(59, 130, 246, 0.2)',
+                      borderLeft: '3px solid #60a5fa',
+                      color: '#f8fafc',
                     },
                   },
                   section: {
                     color:
                       active === label
-                        ? 'var(--mantine-color-blue-4)'
-                        : 'var(--mantine-color-gray-4)',
+                        ? '#93c5fd'
+                        : 'rgba(226, 232, 240, 0.7)',
                   },
                   body: {
-                    color: active === label ? 'var(--mantine-color-blue-4)' : 'inherit',
+                    color: active === label ? '#f8fafc' : 'inherit',
                   },
                   label: { fontSize: 14 },
                 }}
@@ -153,9 +159,9 @@ export function AppSidebar({
               pt="lg"
               mx="auto"
               style={{
-                background: 'var(--mantine-color-dark-7)',
-                borderRadius: 12,
-                border: '1px solid rgba(255,255,255,0.08)',
+                background: 'rgba(15, 23, 42, 0.7)',
+                borderRadius: 10,
+                border: '1px solid rgba(59, 130, 246, 0.25)',
                 overflow: 'hidden',
               }}
             >
@@ -168,8 +174,8 @@ export function AppSidebar({
                 }}
                 styles={{
                   calendarHeader: { padding: rem(6) },
-                  calendarHeaderLevel: { fontSize: rem(12), fontWeight: 600 },
-                  weekday: { fontSize: rem(10), fontWeight: 600 },
+                  calendarHeaderLevel: { fontSize: rem(12), fontWeight: 600, color: '#e2e8f0' },
+                  weekday: { fontSize: rem(10), fontWeight: 600, color: '#94a3b8' },
                   month: { padding: rem(6) },
                   day: {
                     height: rem(26),
@@ -177,10 +183,10 @@ export function AppSidebar({
                     fontWeight: 600,
                     borderRadius: rem(8),
                     '&[data-selected="true"]': {
-                      background: 'var(--mantine-color-blue-6)',
-                      color: 'white',
+                      background: '#3b82f6',
+                      color: '#f8fafc',
                     },
-                    '&:hover': { background: 'rgba(255,255,255,0.05)' },
+                    '&:hover': { background: 'rgba(59, 130, 246, 0.18)' },
                   },
                 }}
               />
@@ -211,15 +217,15 @@ export function AppSidebar({
                 variant="subtle"
                 styles={{
                   root: {
-                    borderRadius: rem(10),
+                    borderRadius: rem(8),
                     paddingTop: rem(8),
                     paddingBottom: rem(8),
-                    paddingLeft: rem(10),
+                    paddingLeft: rem(12),
                     paddingRight: rem(8),
-                    color: 'var(--mantine-color-gray-4)',
-                    '&:hover': { background: 'rgba(255,255,255,0.04)' },
+                    color: '#e2e8f0',
+                    '&:hover': { background: 'rgba(59, 130, 246, 0.16)' },
                   },
-                  section: { color: 'var(--mantine-color-gray-4)' },
+                  section: { color: 'rgba(226, 232, 240, 0.7)' },
                 }}
               />
             ))}
