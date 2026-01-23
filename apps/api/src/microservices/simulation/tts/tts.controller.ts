@@ -1,7 +1,8 @@
 import { Controller, Get, Query, Res } from '@nestjs/common';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import { Response } from 'express';
+import { ApiBearerAuth, ApiTags, ApiQuery } from '@nestjs/swagger';
 import { TtsService } from './tts.service';
+import { writeFileSync, readFileSync } from 'fs';
+import path from 'path';
 
 @ApiTags('tts')
 @ApiBearerAuth()
@@ -10,19 +11,43 @@ export class TtsController {
   constructor(private readonly ttsService: TtsService) {}
 
   @Get('speak')
+  @ApiQuery({ name: 'text', type: String, required: true })
+  @ApiQuery({ name: 'provider', type: String, required: true })
+  @ApiQuery({ name: 'voice', type: String, required: true })
   async speak(
     @Query('text') text: string,
-    @Query('provider') provider?: string,
-    // @Res() res: Response,
+    @Query('provider') provider: string,
+    @Query('voice') voice: string,
+    @Res() res,
   ) {
-    const result = await this.ttsService.synthesize(text, provider);
+    const result = await this.ttsService.synthesize(text, provider, { voice });
+    res.setHeader('Content-Type', result.contentType);
+    res.setHeader('Content-Length', result.audioBuffer.length);
+    res.setHeader('Accept-Ranges', 'bytes');
 
-    // res.setHeader('Content-Type', result.contentType);
-    // res.send(result.audioBuffer);
+    res.send(result.audioBuffer);
+    // writeFileSync(`output_${provider}_${voice}.mp3`, result.audioBuffer);
+
+    // read the saved file and send it as response
+    // const filePath = path.resolve("output_elevenlabs_iP95p4xoKVk53GoZ742B.mp3");
+    // const audioBuffer = readFileSync(filePath);
+
+    // res.setHeader("Content-Type", "audio/mpeg");
+    // res.setHeader("Content-Length", audioBuffer.length);
+    // res.send(audioBuffer);
   }
 
   @Get('providers')
   listProviders() {
     return this.ttsService.listProviders();
+  }
+
+  @Get('voices')
+  @ApiQuery({ name: 'provider', type: String, required: true })
+  getVoices(@Query('provider') provider: string) {
+    return {
+      provider,
+      voices: this.ttsService.getVoices(provider),
+    };
   }
 }

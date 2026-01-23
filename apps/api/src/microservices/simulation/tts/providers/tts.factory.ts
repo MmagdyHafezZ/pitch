@@ -1,4 +1,4 @@
-import { Injectable, Inject } from '@nestjs/common';
+import { Injectable, Inject, forwardRef } from '@nestjs/common';
 import { TtsProvider } from './tts.provider';
 
 @Injectable()
@@ -25,5 +25,14 @@ export class TtsProviderFactory {
     return this.providers.map((p) => ({
       name: p.name,
     }));
+  }
+  getVoices(providerName: string): string[] {
+    const provider = this.getProvider(providerName);
+
+    if (!provider.voices || provider.voices.length === 0) {
+      return [];
+    }
+
+    return provider.voices;
   }
 }

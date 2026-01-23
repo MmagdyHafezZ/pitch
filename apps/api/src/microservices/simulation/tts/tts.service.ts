@@ -1,10 +1,13 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, forwardRef, Inject } from '@nestjs/common';
 import { TtsProviderFactory } from './providers/tts.factory';
 import { TtsOptions, TtsResult } from './providers/tts.provider';
 
 @Injectable()
 export class TtsService {
-  constructor(private readonly providerFactory: TtsProviderFactory) {}
+  constructor(
+    @Inject(forwardRef(() => TtsProviderFactory))
+    private readonly providerFactory: TtsProviderFactory,
+  ) {}
 
   async synthesize(
     text: string,
@@ -17,5 +20,9 @@ export class TtsService {
 
   listProviders() {
     return this.providerFactory.listProviders();
+  }
+
+  getVoices(providerName: string): string[] {
+    return this.providerFactory.getVoices(providerName);
   }
 }

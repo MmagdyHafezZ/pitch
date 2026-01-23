@@ -3,6 +3,7 @@ export interface TtsOptions {
   language?: string;
   format?: 'mp3' | 'wav' | 'ogg';
   sampleRate?: number;
+  apiToken?: string;
 }
 
 export interface TtsResult {
@@ -12,5 +13,7 @@ export interface TtsResult {
 
 export interface TtsProvider {
   readonly name: string;
+  readonly description?: string;
+  readonly voices?: string[];
   synthesize(text: string, options?: TtsOptions): Promise<TtsResult>;
 }
