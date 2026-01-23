@@ -26,15 +26,6 @@ export class TtsController {
     res.setHeader('Accept-Ranges', 'bytes');
 
     res.send(result.audioBuffer);
-    // writeFileSync(`output_${provider}_${voice}.mp3`, result.audioBuffer);
-
-    // read the saved file and send it as response
-    // const filePath = path.resolve("output_elevenlabs_iP95p4xoKVk53GoZ742B.mp3");
-    // const audioBuffer = readFileSync(filePath);
-
-    // res.setHeader("Content-Type", "audio/mpeg");
-    // res.setHeader("Content-Length", audioBuffer.length);
-    // res.send(audioBuffer);
   }
 
   @Get('providers')
