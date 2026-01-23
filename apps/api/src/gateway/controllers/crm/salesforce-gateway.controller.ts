@@ -20,12 +20,30 @@ import {
   ApiQuery,
   ApiBody,
 } from '@nestjs/swagger';
-import { catchError, timeout, retry, delay } from 'rxjs/operators';
+import { catchError, timeout } from 'rxjs/operators';
 import { throwError } from 'rxjs';
 import { Public } from '../../../microservices/userManagement/decorators/public.decorator';
 import { CurrentUser } from '../../../microservices/userManagement/decorators/current-user.decorator';
-import { CRM_SERVICE_PATTERNS } from '@pitch/shared-backend/interfaces/message-patterns.interface';
 import type { ServiceError } from '@pitch/shared-backend/interfaces/error.interface';
+
+/**
+ * CRM Service Message Patterns
+ * These match the patterns defined in @pitch/shared-backend
+ * Using local definition due to TypeScript module resolution issues
+ */
+const CRM_SERVICE_PATTERNS = {
+  SALESFORCE_CONNECT: 'salesforce.connect',
+  SALESFORCE_CALLBACK: 'salesforce.callback',
+  SALESFORCE_GET_STATUS: 'salesforce.getStatus',
+  SALESFORCE_GET_CONTACTS: 'salesforce.getContacts',
+  SALESFORCE_GET_ACCOUNTS: 'salesforce.getAccounts',
+  SALESFORCE_GET_OPPORTUNITIES: 'salesforce.getOpportunities',
+  SALESFORCE_GET_LEADS: 'salesforce.getLeads',
+  SALESFORCE_SYNC_CONTACTS: 'salesforce.syncContacts',
+  SALESFORCE_QUERY: 'salesforce.query',
+  SALESFORCE_SEARCH: 'salesforce.search',
+  SALESFORCE_DISCONNECT: 'salesforce.disconnect',
+} as const;
 
 /**
  * Salesforce Gateway Controller
