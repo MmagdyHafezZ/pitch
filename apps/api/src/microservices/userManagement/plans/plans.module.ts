@@ -6,6 +6,6 @@ import { PlanRepository } from './repositories/plans.repository';
 @Module({
   controllers: [PlanController],
   providers: [PlanService, PlanRepository],
-  exports: [PlanService],
+  exports: [PlanService, PlanRepository],
 })
 export class PlansModule {}

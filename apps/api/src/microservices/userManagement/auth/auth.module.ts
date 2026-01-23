@@ -1,18 +1,16 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 
 import { AuthController } from './controllers/auth.controller';
 import { OAuthController } from './controllers/oauth.controller';
-
 import { AuthService } from './services/auth.service';
 import { AuthApplicationService } from './services/auth-application.service';
-
 import { AuthRepository } from './repositories/auth.repository';
 import { OAuthProviderFactory } from './factories/oauth-provider.factory';
-
 import { JwtStrategy } from '../user/strategies/jwt.strategy';
 import { GoogleStrategy } from './strategies/google.strategy';
+import { UserModule } from '../user/user.module';
 
 @Module({
   imports: [
@@ -21,6 +19,7 @@ import { GoogleStrategy } from './strategies/google.strategy';
       secret: process.env.JWT_SECRET || 'your-secret-key',
       signOptions: { expiresIn: '15m' },
     }),
+    forwardRef(() => UserModule),
   ],
   controllers: [AuthController, OAuthController],
   providers: [
@@ -31,6 +30,12 @@ import { GoogleStrategy } from './strategies/google.strategy';
     JwtStrategy,
     GoogleStrategy,
   ],
-  exports: [AuthService, AuthApplicationService, JwtModule, PassportModule],
+  exports: [
+    AuthService,
+    AuthApplicationService,
+    OAuthProviderFactory,
+    JwtModule,
+    PassportModule,
+  ],
 })
 export class AuthModule {}
