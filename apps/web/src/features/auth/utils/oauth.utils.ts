@@ -94,7 +94,10 @@ export function redirectToOAuthProvider(
 /**
  * Handles OAuth callback success
  */
-export function handleOAuthSuccess(tokens: OAuthTokens, redirectUrl: string = '/home'): void {
+export function handleOAuthSuccess(
+  tokens: OAuthTokens,
+  redirectUrl: string = '/studio/home'
+): void {
   storeOAuthTokens(tokens)
 
   if (typeof window !== 'undefined') {
