@@ -4,8 +4,6 @@ import Redis from 'ioredis';
 @Injectable()
 export class CoinRedisService {
   private readonly redis: Redis;
-
-  // You can inject config instead; keeping simple.
   constructor() {
     this.redis = new Redis(process.env.REDIS_URL!);
   }
