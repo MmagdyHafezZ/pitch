@@ -61,7 +61,7 @@ export function AppSidebar({
       >
         <Box
           style={{
-            background: 'var(--mantine-color-dark-9)',
+            background: 'var(--mantine-color-dark-8)',
             borderTopLeftRadius: 0,
             borderTopRightRadius: 0,
             borderBottomLeftRadius: 0,
