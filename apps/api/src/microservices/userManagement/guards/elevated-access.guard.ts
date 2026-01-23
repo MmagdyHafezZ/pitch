@@ -1,7 +1,7 @@
 import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
 import { RpcException } from '@nestjs/microservices';
 import { toRpcException } from '@pitch/shared-backend/helpers/exceptions';
-import { TeamRepository } from '../repositories/team.repository';
+import { TeamRepository } from '../team/repositories/team.repository';
 
 @Injectable()
 export class ElevatedAccessGuard implements CanActivate {

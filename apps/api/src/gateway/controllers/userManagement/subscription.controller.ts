@@ -32,7 +32,7 @@ import { normalizeError } from '@pitch/shared-backend/helpers/exceptions';
 import {
   CreateSubscriptionRequestDTO,
   UpdateSubscriptionRequestDTO,
-} from '@microservices/userManagement/dto/subscription.dto';
+} from '@microservices/userManagement/subscription/dto/subscription.dto';
 
 @UsePipes(
   new ValidationPipe({

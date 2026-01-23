@@ -34,7 +34,7 @@ import {
   UpdateTeamRequestDto,
   AddMemberRequestDTO,
   UpdateMemberRequestDto,
-} from '@microservices/userManagement/dto/team.dto';
+} from '@microservices/userManagement/team/dto/team.dto';
 
 @UsePipes(
   new ValidationPipe({

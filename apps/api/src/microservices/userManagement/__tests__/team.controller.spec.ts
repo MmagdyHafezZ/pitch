@@ -1,5 +1,5 @@
-import { TeamController } from '../controllers/team.controller';
-import type { TeamService } from '../services/team.service';
+import { TeamController } from '../team/controllers/team.controller';
+import type { TeamService } from '../team/services/team.service';
 import { toRpcException } from '@pitch/shared-backend/helpers/exceptions';
 import { RpcException } from '@nestjs/microservices';
 import type {
