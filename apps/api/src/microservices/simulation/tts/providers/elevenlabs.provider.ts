@@ -24,6 +24,7 @@ export class ElevenLabsTtsProvider implements TtsProvider {
   // Cached voice directory
   private voiceNameToId: Map<string, string> | null = null;
   private voicesCache: string[] = [];
+  // private voices: string[] = [];
 
   constructor(private readonly config: ConfigService) {
     this.apiKey = this.config.getOrThrow<string>('ELEVENLABS_API_KEY');
@@ -40,6 +41,10 @@ export class ElevenLabsTtsProvider implements TtsProvider {
 
     // Initialize SDK client with explicit apiKey (recommended in Nest)
     this.client = new ElevenLabsClient({ apiKey: this.apiKey });
+    // Preload voices
+    this.ensureVoicesLoaded().catch((err) => {
+      console.error('Failed to load ElevenLabs voices on startup:', err);
+    });
   }
 
   // Expose names for your /tts/voices endpoint
@@ -49,8 +54,6 @@ export class ElevenLabsTtsProvider implements TtsProvider {
 
   async synthesize(text: string, options?: TtsOptions): Promise<TtsResult> {
     try {
-      await this.ensureVoicesLoaded();
-
       const requested = (options?.voice || this.defaultVoice).trim();
       const voiceId = this.resolveVoiceId(requested);
 
