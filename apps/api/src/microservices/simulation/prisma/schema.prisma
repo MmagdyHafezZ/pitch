@@ -10,7 +10,6 @@ generator client {
 
 datasource db {
   provider  = "postgresql"
-  url       = env("SIMULATION_DATABASE_URL")
 }
 
 /* =================== Enums =================== */
@@ -200,6 +199,24 @@ model Metric {
   @@index([sessionId, createdAt])
 }
 
+/* =================== LLM Routing =================== */
+
+model LlmRoutingConfig {
+  id        String   @id @default(cuid())
+  scope     String   @default("global") // global|org|user
+  orgId     String?
+  userId    String?
+  name      String   @default("default")
+  isActive  Boolean  @default(true)
+  config    Json
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([scope, orgId, userId, isActive])
+  @@index([name])
+}
+
 /* =================== Configuration (owned by this service) =================== */
 
 model Scenario {
@@ -381,21 +398,22 @@ model EvalArtifact {
 
 /* =================== RAG: pgvector in Postgres =================== */
 // Add the actual vector column & indexes via SQL migrations
+// TODO: Install pgvector extension and uncomment this model
 
-model EmbeddingRow {
-  id         String  @id @default(cuid())
-  // Actual vector column added via SQL migration (e.g., vector(1536))
-  embedding  Unsupported("vector")
-  namespace  String   // "kb" | "transcript" | "previous_calls"
-  refType    String   // "TranscriptSegment" | "Doc" | "Message"
-  refId      String
-  metadata   Json?    // Small structured metadata
-
-  createdAt  DateTime @default(now())
-
-  @@index([namespace])
-  @@index([refType, refId])
-}
+// model EmbeddingRow {
+//   id         String  @id @default(cuid())
+//   // Actual vector column added via SQL migration (e.g., vector(1536))
+//   embedding  Unsupported("vector")
+//   namespace  String   // "kb" | "transcript" | "previous_calls"
+//   refType    String   // "TranscriptSegment" | "Doc" | "Message"
+//   refId      String
+//   metadata   Json?    // Small structured metadata
+//
+//   createdAt  DateTime @default(now())
+//
+//   @@index([namespace])
+//   @@index([refType, refId])
+// }
 
 /* =================== Feedback Engine =================== */
 

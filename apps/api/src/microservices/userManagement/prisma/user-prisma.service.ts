@@ -1,15 +1,32 @@
 import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { PrismaClient as UserPrismaClient } from '@prisma/user-client';
 import { withAccelerate } from '@prisma/extension-accelerate';
+import { resolvePrismaRuntimeConfig } from '../../../config/prisma-runtime.config';
 
 @Injectable()
 export class UserPrismaService implements OnModuleInit, OnModuleDestroy {
   private readonly prisma: UserPrismaClient;
 
   constructor() {
-    this.prisma = new UserPrismaClient().$extends(
-      withAccelerate(),
-    ) as unknown as UserPrismaClient;
+    const { url, useAccelerate } = resolvePrismaRuntimeConfig(
+      process.env.USER_DATABASE_URL,
+      process.env.USER_DIRECT_URL,
+    );
+    const client = new UserPrismaClient(
+      url
+        ? {
+            datasources: {
+              db: {
+                url,
+              },
+            },
+          }
+        : undefined,
+    );
+
+    this.prisma = useAccelerate
+      ? (client.$extends(withAccelerate()) as unknown as UserPrismaClient)
+      : client;
   }
 
   get client(): UserPrismaClient {

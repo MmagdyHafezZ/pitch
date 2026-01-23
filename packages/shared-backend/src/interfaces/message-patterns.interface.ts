@@ -45,6 +45,9 @@ export const SIMULATION_SERVICE_PATTERNS = {
   CHAT_STREAM: 'simulation.chat.stream',
   CHAT_CANCEL: 'simulation.chat.cancel',
 
+  LLM_ROUTING_GET: 'simulation.llm.routing.get',
+  LLM_ROUTING_UPSERT: 'simulation.llm.routing.upsert',
+
   STT_TRANSCRIBE: 'simulation.stt.transcribe',
   STT_STREAM: 'simulation.stt.stream',
 

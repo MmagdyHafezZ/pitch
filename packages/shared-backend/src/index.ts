@@ -17,7 +17,9 @@ export * from './interfaces/user-claims.interface'
 
 export * from './filters/microservice-exception.filter'
 export * from './filters/prisma-exception.filter'
+export * from './filters/rpc-exception.filter'
 
 export * from './config/jwt.config'
 
 export * from './utils/startup-health-checks'
+export * from './utils/error-logging'

@@ -1,7 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Observable, Subscription } from 'rxjs';
 import { randomUUID } from 'crypto';
-import { LLMProviderRegistry } from '../../providers/llm/llm-provider.registry';
 import {
   LLMRequestDto,
   LLMResponseDto,
@@ -11,7 +10,10 @@ import {
 } from '../../dto/llm.dto';
 import { UsageCalculatorService } from './usage-calculator.service';
 import { SimulationPrismaService } from '../../prisma/simulation-prisma.service';
-import { MongoConnectionService } from '../mongo/mongo-connection.service';
+import { LLMRouterService } from './llm-router.service';
+import { LLMRequestContext } from './llm-context.types';
+import { ProviderError } from '../../providers/llm/llm-provider.interface';
+import { LLMRouteTarget } from './llm-routing.types';
 import {
   LLMTraceModel,
   LLMTraceSchema,
@@ -19,73 +21,53 @@ import {
   type ILLMTrace,
 } from '../../schemas/mongodb';
 
-interface LLMRequestContext {
-  requestId?: string;
-  userId?: string;
-  orgId?: string;
-  purpose?: 'chat' | 'tool_call' | 'evaluation' | 'enrichment' | 'other';
-  traceId?: string;
-}
-
 @Injectable()
 export class LLMService {
   private readonly logger = new Logger(LLMService.name);
   private readonly activeStreams = new Map<string, Subscription>();
 
   constructor(
-    private readonly providerRegistry: LLMProviderRegistry,
+    private readonly router: LLMRouterService,
     private readonly usageCalculator: UsageCalculatorService,
     private readonly prisma: SimulationPrismaService,
-    private readonly mongo: MongoConnectionService,
   ) {}
 
   async complete(
     request: LLMRequestDto,
     context?: LLMRequestContext,
   ): Promise<LLMResponseDto> {
-    const provider = this.providerRegistry.getProviderForModel(
-      request.config.model,
-      request.config.provider,
-    );
-    provider.validateConfig(request.config);
-
     const startedAt = Date.now();
     try {
-      const response = await provider.complete(
-        request.messages,
-        request.config,
-      );
+      const { response, route } = await this.router.complete(request, context);
       const latencyMs = Date.now() - startedAt;
+      const effectiveRequest = this.applyRoute(request, route);
+      response.providerMeta = {
+        ...response.providerMeta,
+        provider: route.provider,
+        model: route.model,
+      };
 
       const usage = this.usageCalculator.normalizeUsage({
-        messages: request.messages,
+        messages: effectiveRequest.messages,
         responseText: response.content,
-        model: request.config.model,
-        providerName: provider.name,
+        model: route.model,
+        providerName: route.provider,
         providerUsage: response.usage,
       });
 
       response.usage = usage;
 
-      await this.persistMetric(request, usage, latencyMs, provider.name);
-      await this.persistTrace(
-        request,
-        response,
-        usage,
-        latencyMs,
-        provider.name,
-        context,
-      );
-
+      await this.persistMetric(request, usage, latencyMs, route.provider);
       return response;
     } catch (error) {
-      await this.persistErrorTrace(
-        request,
-        provider.name,
-        error,
-        context,
-        Date.now() - startedAt,
-      );
+      const providerName =
+        error instanceof ProviderError ? error.provider : 'unknown';
+      const model =
+        (error as ProviderError)?.details?.model ?? request.config.model;
+      const errorRequest = this.applyRoute(request, {
+        provider: providerName,
+        model,
+      });
       throw error;
     }
   }
@@ -94,21 +76,18 @@ export class LLMService {
     request: LLMRequestDto,
     context?: LLMRequestContext,
   ): Observable<LLMStreamChunkDto> {
-    const provider = this.providerRegistry.getProviderForModel(
-      request.config.model,
-      request.config.provider,
-    );
-    provider.validateConfig(request.config);
-
     const startedAt = Date.now();
     let content = '';
     let timeToFirstTokenMs: number | null = null;
+    let activeRoute: LLMRouteTarget | null = null;
 
     return new Observable((subscriber) => {
-      const subscription = provider
-        .stream(request.messages, request.config)
+      const subscription = this.router
+        .stream(request, context, (route) => {
+          activeRoute = route;
+        })
         .subscribe({
-          next: async (chunk) => {
+          next: (chunk) => {
             if (chunk.delta) {
               content += chunk.delta;
               if (timeToFirstTokenMs === null) {
@@ -117,41 +96,28 @@ export class LLMService {
             }
 
             if (chunk.done) {
+              const route = activeRoute ?? {
+                provider: request.config.provider ?? 'unknown',
+                model: request.config.model,
+              };
               const latencyMs = Date.now() - startedAt;
               const usage = this.usageCalculator.normalizeUsage({
                 messages: request.messages,
                 responseText: content,
-                model: request.config.model,
-                providerName: provider.name,
+                model: route.model,
+                providerName: route.provider,
                 providerUsage: chunk.usage,
               });
 
               chunk.usage = usage;
+              const effectiveRequest = this.applyRoute(request, route);
 
-              await this.persistMetric(
-                request,
+              void this.persistMetric(
+                effectiveRequest,
                 usage,
                 latencyMs,
-                provider.name,
+                route.provider,
               );
-              await this.persistTrace(
-                request,
-                {
-                  content,
-                  usage,
-                  providerMeta: {
-                    latencyMs,
-                    model: request.config.model,
-                    finishReason: chunk.finishReason,
-                  },
-                },
-                usage,
-                latencyMs,
-                provider.name,
-                context,
-                timeToFirstTokenMs,
-              );
-
               subscriber.next(chunk);
               subscriber.complete();
               return;
@@ -159,15 +125,15 @@ export class LLMService {
 
             subscriber.next(chunk);
           },
-          error: async (error) => {
-            await this.persistErrorTrace(
-              request,
-              provider.name,
-              error,
-              context,
-              Date.now() - startedAt,
-            );
-            subscriber.error(error);
+          error: (error) => {
+            const providerName =
+              error instanceof ProviderError ? error.provider : 'unknown';
+            const model =
+              (error as ProviderError)?.details?.model ?? request.config.model;
+            const errorRequest = this.applyRoute(request, {
+              provider: providerName,
+              model,
+            });
           },
           complete: () => {
             if (!subscriber.closed) {
@@ -187,6 +153,20 @@ export class LLMService {
         subscription.unsubscribe();
       };
     });
+  }
+
+  private applyRoute(
+    request: LLMRequestDto,
+    route: LLMRouteTarget,
+  ): LLMRequestDto {
+    return {
+      ...request,
+      config: {
+        ...request.config,
+        provider: route.provider,
+        model: route.model,
+      },
+    };
   }
 
   cancel(requestId: string): boolean {
@@ -224,156 +204,6 @@ export class LLMService {
     }
   }
 
-  private async persistTrace(
-    request: LLMRequestDto,
-    response: LLMResponseDto,
-    usage: LLMUsageDto,
-    latencyMs: number,
-    providerName: string,
-    context?: LLMRequestContext,
-    timeToFirstTokenMs?: number | null,
-  ): Promise<void> {
-    if (!this.mongo.isConnected()) {
-      return;
-    }
-
-    try {
-      const model = this.mongo.getModel<ILLMTrace>(
-        LLMTraceModel,
-        LLMTraceSchema,
-      );
-
-      const trace = new model({
-        _id: randomUUID(),
-        sessionId: request.sessionId,
-        turnId: request.turnId,
-        provider: providerName,
-        llmModel: request.config.model,
-        request: {
-          messages: this.convertMessages(request.messages),
-          temperature: request.config.temperature,
-          maxTokens: request.config.maxTokens,
-          topP: request.config.topP,
-          frequencyPenalty: request.config.frequencyPenalty,
-          presencePenalty: request.config.presencePenalty,
-          stop: request.config.stop,
-          stream: request.config.stream,
-          tools: request.config.tools,
-          toolChoice: request.config.toolChoice,
-        },
-        response: {
-          content: response.content,
-          finishReason: response.providerMeta?.finishReason,
-          toolCalls: response.toolCalls?.map((tool) => ({
-            id: tool.id,
-            type: 'function',
-            function: {
-              name: tool.name,
-              arguments: tool.arguments,
-            },
-          })),
-        },
-        usage: {
-          promptTokens: usage.promptTokens,
-          completionTokens: usage.completionTokens,
-          totalTokens: usage.totalTokens,
-          cost: usage.costUsd,
-        },
-        performance: {
-          latencyMs,
-          timeToFirstTokenMs: timeToFirstTokenMs ?? undefined,
-          requestId: response.providerMeta?.requestId,
-        },
-        context: context
-          ? {
-              userId: context.userId,
-              orgId: context.orgId,
-              traceId: context.traceId,
-              purpose: context.purpose,
-            }
-          : undefined,
-        error: {
-          occurred: false,
-        },
-      });
-
-      await trace.save();
-    } catch (error) {
-      this.logger.warn(
-        `Failed to persist LLM trace: ${String((error as Error)?.message || error)}`,
-      );
-    }
-  }
-
-  private async persistErrorTrace(
-    request: LLMRequestDto,
-    providerName: string,
-    error: unknown,
-    context?: LLMRequestContext,
-    latencyMs?: number,
-  ): Promise<void> {
-    if (!this.mongo.isConnected()) {
-      return;
-    }
-
-    try {
-      const model = this.mongo.getModel<ILLMTrace>(
-        LLMTraceModel,
-        LLMTraceSchema,
-      );
-      const message = (error as Error)?.message || String(error);
-
-      const trace = new model({
-        _id: randomUUID(),
-        sessionId: request.sessionId,
-        turnId: request.turnId,
-        provider: providerName,
-        llmModel: request.config.model,
-        request: {
-          messages: this.convertMessages(request.messages),
-          temperature: request.config.temperature,
-          maxTokens: request.config.maxTokens,
-          topP: request.config.topP,
-          frequencyPenalty: request.config.frequencyPenalty,
-          presencePenalty: request.config.presencePenalty,
-          stop: request.config.stop,
-          stream: request.config.stream,
-          tools: request.config.tools,
-          toolChoice: request.config.toolChoice,
-        },
-        response: {},
-        usage: {
-          promptTokens: 0,
-          completionTokens: 0,
-          totalTokens: 0,
-        },
-        performance: {
-          latencyMs: latencyMs ?? 0,
-        },
-        context: context
-          ? {
-              userId: context.userId,
-              orgId: context.orgId,
-              traceId: context.traceId,
-              purpose: context.purpose,
-            }
-          : undefined,
-        error: {
-          occurred: true,
-          message,
-        },
-      });
-
-      await trace.save();
-    } catch (traceError) {
-      this.logger.warn(
-        `Failed to persist LLM error trace: ${String(
-          (traceError as Error)?.message || traceError,
-        )}`,
-      );
-    }
-  }
-
   private convertMessages(messages: LLMMessageDto[]): ILLMMessage[] {
     return messages.map((message) => ({
       role: message.role,
@@ -391,9 +221,15 @@ export class LLMService {
 
     return content
       .map((part) => {
-        if (part.type === 'text') return part.text || '';
-        if (part.type === 'image') return `[image:${part.url || 'unknown'}]`;
-        if (part.type === 'audio') return `[audio:${part.url || 'unknown'}]`;
+        if (part.type === 'text') {
+          return (part.text as string | undefined) || '';
+        }
+        if (part.type === 'image') {
+          return `[image:${(part.url as string | undefined) || 'unknown'}]`;
+        }
+        if (part.type === 'audio') {
+          return `[audio:${(part.url as string | undefined) || 'unknown'}]`;
+        }
         return '';
       })
       .join(' ')

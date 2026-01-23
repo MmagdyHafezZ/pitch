@@ -19,6 +19,25 @@ describe('STTService', () => {
     expect(result.text).toBe('hello');
   });
 
+  it('transcribes using a named provider', async () => {
+    const registry = new STTProviderRegistry();
+    const provider: ISTTProvider = {
+      name: 'named',
+      supportsModel: () => true,
+      transcribe: jest.fn().mockResolvedValue({ text: 'named' }),
+    };
+
+    registry.register(provider);
+
+    const service = new STTService(registry);
+    const result = await service.transcribe({
+      audioUrl: 's3://audio',
+      provider: 'named',
+    });
+
+    expect(result.text).toBe('named');
+  });
+
   it('throws when streaming is not supported', () => {
     const registry = new STTProviderRegistry();
     const provider: ISTTProvider = {

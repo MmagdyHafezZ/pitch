@@ -91,6 +91,7 @@ describe('OpenAIProvider', () => {
         content: [
           { type: 'text', text: 'Look' },
           { type: 'image', url: 'https://example.com/img.png', detail: 'low' },
+          { type: 'audio', url: 's3://audio' },
         ],
       },
     ]);
@@ -99,6 +100,7 @@ describe('OpenAIProvider', () => {
     expect((converted[1].content as any[])[1].image_url.url).toBe(
       'https://example.com/img.png',
     );
+    expect((converted[1].content as any[])[2].type).toBe('audio');
   });
 
   it('estimates tokens for string messages', () => {
@@ -239,6 +241,30 @@ describe('OpenAIProvider', () => {
 
     const final = chunks.find((chunk) => chunk.done);
     expect(final?.usage?.estimated).toBe(true);
+  });
+
+  it('completes streams without final usage when finish reason is missing', async () => {
+    const provider = new OpenAIProvider(configService);
+    const client = (provider as any).client;
+
+    async function* streamGenerator() {
+      yield {
+        choices: [{ delta: { content: 'Hi' }, finish_reason: null }],
+      };
+    }
+
+    client.chat.completions.create.mockResolvedValue(streamGenerator());
+
+    const chunks: any[] = [];
+    await new Promise<void>((resolve, reject) => {
+      provider.stream(messages, { model: 'gpt-4o' } as any).subscribe({
+        next: (chunk) => chunks.push(chunk),
+        error: reject,
+        complete: () => resolve(),
+      });
+    });
+
+    expect(chunks.some((chunk) => chunk.done)).toBe(false);
   });
 
   it('maps OpenAI auth errors', async () => {

@@ -19,6 +19,7 @@ const capabilities: ModelCapabilities = {
     inputTokensPerMillion: 2,
     outputTokensPerMillion: 4,
     imageTokens: 500,
+    audioSecondsToTokens: 42,
   },
 };
 
@@ -85,5 +86,40 @@ describe('UsageCalculatorService', () => {
     expect(result.completionTokens).toBe(1);
     expect(result.totalTokens).toBe(503);
     expect(result.costUsd).toBeGreaterThan(0);
+  });
+
+  it('estimates audio tokens for audio parts', () => {
+    const messages: LLMMessageDto[] = [
+      {
+        role: 'user',
+        content: [{ type: 'audio', url: 's3://audio' }],
+      },
+    ];
+
+    const result = service.normalizeUsage({
+      messages,
+      responseText: 'ok',
+      model: 'stub-model',
+      providerName: 'stub',
+    });
+
+    expect(result.promptTokens).toBe(42);
+    expect(result.completionTokens).toBe(1);
+  });
+
+  it('marks usage as estimated when provider usage is incomplete', () => {
+    const result = service.normalizeUsage({
+      messages: [{ role: 'user', content: 'Hello' }],
+      responseText: 'Done',
+      model: 'stub-model',
+      providerName: 'stub',
+      providerUsage: {
+        promptTokens: 5,
+      },
+    });
+
+    expect(result.promptTokens).toBe(5);
+    expect(result.estimated).toBe(true);
+    expect(result.totalTokens).toBeGreaterThan(5);
   });
 });

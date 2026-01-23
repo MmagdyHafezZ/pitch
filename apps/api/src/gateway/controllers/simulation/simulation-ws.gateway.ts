@@ -57,8 +57,9 @@ export class SimulationWsGateway
 
     try {
       const payload = this.jwtService.verify(token);
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
       client.data.user = payload;
-    } catch (error) {
+    } catch {
       this.logger.warn('WS connection rejected: invalid token');
       client.disconnect();
     }
@@ -195,8 +196,8 @@ export class SimulationWsGateway
   }
 
   private extractToken(client: Socket): string | null {
-    const authToken = client.handshake.auth?.token;
-    if (authToken) return authToken;
+    const authToken = client.handshake.auth?.token as string | undefined;
+    if (authToken && typeof authToken === 'string') return authToken;
 
     const header = client.handshake.headers.authorization;
     if (!header) return null;

@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Observable } from 'rxjs';
 import axios, { AxiosInstance } from 'axios';
@@ -17,6 +17,7 @@ import {
   LLMResponseDto,
   LLMStreamChunkDto,
 } from '../../dto/llm.dto';
+import { LLMPricingService } from '../../services/llm/llm-pricing.service';
 
 /**
  * IBM WatsonX Provider
@@ -33,7 +34,10 @@ export class WatsonxProvider implements ILLMProvider {
   private accessToken: string | null = null;
   private tokenExpiry: number = 0;
 
-  constructor(private configService: ConfigService) {
+  constructor(
+    private configService: ConfigService,
+    @Optional() private readonly pricingService?: LLMPricingService,
+  ) {
     this.apiKey = this.configService.get<string>('WATSONX_API_KEY') || '';
     this.projectId = this.configService.get<string>('WATSONX_PROJECT_ID') || '';
     this.baseUrl =

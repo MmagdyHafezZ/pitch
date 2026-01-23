@@ -9,13 +9,89 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-pitch_user}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pitch_admin}
     ports:
-      - "5433:5432"
+      - "5439:5432"
     volumes:
       - postgres_user_data_local:/var/lib/postgresql/data
     networks:
       - pitch-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U pitch_user -d pitch_user"]
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  postgres-simulation:
+    image: postgres:16-alpine
+    container_name: pitch-postgres-simulation-local
+    environment:
+      POSTGRES_DB: pitch_simulation
+      POSTGRES_USER: ${POSTGRES_USER:-pitch_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pitch_admin}
+    ports:
+      - "5434:5432"
+    volumes:
+      - postgres_simulation_data_local:/var/lib/postgresql/data
+    networks:
+      - pitch-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  postgres-support:
+    image: postgres:16-alpine
+    container_name: pitch-postgres-support-local
+    environment:
+      POSTGRES_DB: pitch_support
+      POSTGRES_USER: ${POSTGRES_USER:-pitch_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pitch_admin}
+    ports:
+      - "5435:5432"
+    volumes:
+      - postgres_support_data_local:/var/lib/postgresql/data
+    networks:
+      - pitch-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  postgres-analytics:
+    image: postgres:16-alpine
+    container_name: pitch-postgres-analytics-local
+    environment:
+      POSTGRES_DB: pitch_analytics
+      POSTGRES_USER: ${POSTGRES_USER:-pitch_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pitch_admin}
+    ports:
+      - "5436:5432"
+    volumes:
+      - postgres_analytics_data_local:/var/lib/postgresql/data
+    networks:
+      - pitch-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  postgres-crm:
+    image: postgres:16-alpine
+    container_name: pitch-postgres-crm-local
+    environment:
+      POSTGRES_DB: pitch_crm
+      POSTGRES_USER: ${POSTGRES_USER:-pitch_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pitch_admin}
+    ports:
+      - "5437:5432"
+    volumes:
+      - postgres_crm_data_local:/var/lib/postgresql/data
+    networks:
+      - pitch-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -24,7 +100,7 @@ services:
     image: redis:7-alpine
     container_name: pitch-redis-local
     ports:
-      - "6380:6380"
+      - "6379:6379"
     volumes:
       - redis_data_local:/data
     networks:
@@ -34,7 +110,29 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    command: redis-server --appendonly yes
+    command: redis-server --appendonly yes --port 6379
+
+  mongodb:
+    image: mongo:7-jammy
+    container_name: pitch-mongodb-local
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER:-admin}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:-admin123}
+      MONGO_INITDB_DATABASE: pitch_simulation
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data_local:/data/db
+      - mongodb_config_local:/data/configdb
+    networks:
+      - pitch-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+    restart: unless-stopped
 
   rabbitmq:
     image: rabbitmq:3.13-management-alpine
@@ -63,7 +161,13 @@ services:
 
 volumes:
   postgres_user_data_local:
+  postgres_simulation_data_local:
+  postgres_support_data_local:
+  postgres_analytics_data_local:
+  postgres_crm_data_local:
   redis_data_local:
+  mongodb_data_local:
+  mongodb_config_local:
   rabbitmq_data_local:
 
 networks:

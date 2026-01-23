@@ -7,6 +7,10 @@
     "dev": "nest start --watch",
     "start": "nest start",
     "build": "nest build",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate deploy",
+    "db:reset": "prisma migrate reset --force",
+    "db:studio": "prisma studio",
     "lint": "eslint . --ext .ts",
     "test": "jest"
   },

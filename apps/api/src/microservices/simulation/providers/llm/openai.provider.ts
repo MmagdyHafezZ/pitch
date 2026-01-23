@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Observable, from, fromEvent, map, mergeMap } from 'rxjs';
 import OpenAI from 'openai';
@@ -18,6 +18,7 @@ import {
   LLMStreamChunkDto,
   LLMToolCallDto,
 } from '../../dto/llm.dto';
+import { LLMPricingService } from '../../services/llm/llm-pricing.service';
 
 /**
  * OpenAI Provider
@@ -29,7 +30,10 @@ export class OpenAIProvider implements ILLMProvider {
   private readonly logger = new Logger(OpenAIProvider.name);
   private client: OpenAI;
 
-  constructor(private configService: ConfigService) {
+  constructor(
+    private configService: ConfigService,
+    @Optional() private readonly pricingService?: LLMPricingService,
+  ) {
     const apiKey = this.configService.get<string>('OPENAI_API_KEY');
     if (!apiKey) {
       this.logger.warn('OPENAI_API_KEY not configured');
@@ -97,11 +101,14 @@ export class OpenAIProvider implements ILLMProvider {
 
       if (result.usage) {
         const capabilities = this.getModelCapabilities(config.model);
-        result.usage.costUsd = this.calculateCost(
+        const costUsd = this.calculateCost(
           result.usage.promptTokens,
           result.usage.completionTokens,
           capabilities,
         );
+        if (costUsd !== undefined) {
+          result.usage.costUsd = costUsd;
+        }
       }
 
       if (choice.message?.tool_calls && choice.message.tool_calls.length > 0) {
@@ -165,16 +172,19 @@ export class OpenAIProvider implements ILLMProvider {
               const latencyMs = Date.now() - startTime;
               const capabilities = this.getModelCapabilities(config.model);
 
+              const costUsd = chunk.usage
+                ? this.calculateCost(
+                    chunk.usage.prompt_tokens,
+                    chunk.usage.completion_tokens,
+                    capabilities,
+                  )
+                : undefined;
               const usage = chunk.usage
                 ? {
                     promptTokens: chunk.usage.prompt_tokens,
                     completionTokens: chunk.usage.completion_tokens,
                     totalTokens: chunk.usage.total_tokens,
-                    costUsd: this.calculateCost(
-                      chunk.usage.prompt_tokens,
-                      chunk.usage.completion_tokens,
-                      capabilities,
-                    ),
+                    ...(costUsd !== undefined ? { costUsd } : {}),
                     estimated: false,
                   }
                 : {
@@ -237,24 +247,43 @@ export class OpenAIProvider implements ILLMProvider {
   getModelCapabilities(model: string): ModelCapabilities {
     const modelLower = model.toLowerCase();
 
-    if (modelLower.includes('gpt-4-turbo') || modelLower.includes('gpt-4o')) {
+    if (modelLower.includes('gpt-4o-mini')) {
       return {
         maxTokens: 128000,
         maxOutputTokens: 4096,
         supportsStreaming: true,
         supportsTools: true,
-        supportsVision:
-          modelLower.includes('vision') || modelLower.includes('gpt-4o'),
+        supportsVision: true,
         supportsAudio: false,
-        supportedModalities:
-          modelLower.includes('vision') || modelLower.includes('gpt-4o')
-            ? ['text', 'image']
-            : ['text'],
-        pricing: {
-          inputTokensPerMillion: 10.0,
-          outputTokensPerMillion: 30.0,
-          imageTokens: 765,
-        },
+        supportedModalities: ['text', 'image'],
+        pricing: this.buildPricing(model, 765),
+      };
+    }
+
+    if (modelLower.includes('gpt-4o')) {
+      return {
+        maxTokens: 128000,
+        maxOutputTokens: 4096,
+        supportsStreaming: true,
+        supportsTools: true,
+        supportsVision: true,
+        supportsAudio: false,
+        supportedModalities: ['text', 'image'],
+        pricing: this.buildPricing(model, 765),
+      };
+    }
+
+    if (modelLower.includes('gpt-4-turbo')) {
+      const supportsVision = modelLower.includes('vision');
+      return {
+        maxTokens: 128000,
+        maxOutputTokens: 4096,
+        supportsStreaming: true,
+        supportsTools: true,
+        supportsVision,
+        supportsAudio: false,
+        supportedModalities: supportsVision ? ['text', 'image'] : ['text'],
+        pricing: this.buildPricing(model, supportsVision ? 765 : undefined),
       };
     }
 
@@ -267,10 +296,7 @@ export class OpenAIProvider implements ILLMProvider {
         supportsVision: false,
         supportsAudio: false,
         supportedModalities: ['text'],
-        pricing: {
-          inputTokensPerMillion: 30.0,
-          outputTokensPerMillion: 60.0,
-        },
+        pricing: this.buildPricing(model),
       };
     }
 
@@ -283,10 +309,7 @@ export class OpenAIProvider implements ILLMProvider {
         supportsVision: false,
         supportsAudio: false,
         supportedModalities: ['text'],
-        pricing: {
-          inputTokensPerMillion: 0.5,
-          outputTokensPerMillion: 1.5,
-        },
+        pricing: this.buildPricing(model),
       };
     }
 
@@ -299,10 +322,7 @@ export class OpenAIProvider implements ILLMProvider {
         supportsVision: false,
         supportsAudio: false,
         supportedModalities: ['text'],
-        pricing: {
-          inputTokensPerMillion: 15.0,
-          outputTokensPerMillion: 60.0,
-        },
+        pricing: this.buildPricing(model),
       };
     }
 
@@ -314,11 +334,29 @@ export class OpenAIProvider implements ILLMProvider {
       supportsVision: false,
       supportsAudio: false,
       supportedModalities: ['text'],
-      pricing: {
-        inputTokensPerMillion: 10.0,
-        outputTokensPerMillion: 30.0,
-      },
+      pricing: this.buildPricing(model),
     };
+  }
+
+  private buildPricing(
+    model: string,
+    imageTokens?: number,
+  ): ModelCapabilities['pricing'] {
+    const pricing = this.pricingService?.getPricing(this.name, model);
+
+    return {
+      inputTokensPerMillion: pricing?.inputTokensPerMillion ?? 0,
+      outputTokensPerMillion: pricing?.outputTokensPerMillion ?? 0,
+      imageTokens: pricing?.imageTokens ?? imageTokens,
+      audioSecondsToTokens: pricing?.audioSecondsToTokens,
+    };
+  }
+
+  private hasPricing(pricing: ModelCapabilities['pricing']): boolean {
+    return (
+      (pricing.inputTokensPerMillion ?? 0) > 0 ||
+      (pricing.outputTokensPerMillion ?? 0) > 0
+    );
   }
 
   /**
@@ -332,6 +370,14 @@ export class OpenAIProvider implements ILLMProvider {
         return {
           role: msg.role as any,
           content: msg.content,
+          name: msg.name,
+        };
+      }
+
+      if (!msg.content || !Array.isArray(msg.content)) {
+        return {
+          role: msg.role as any,
+          content: '',
           name: msg.name,
         };
       }
@@ -364,7 +410,10 @@ export class OpenAIProvider implements ILLMProvider {
     promptTokens: number,
     completionTokens: number,
     capabilities: ModelCapabilities,
-  ): number {
+  ): number | undefined {
+    if (!this.hasPricing(capabilities.pricing)) {
+      return undefined;
+    }
     const inputCost =
       (promptTokens / 1000000) * capabilities.pricing.inputTokensPerMillion;
     const outputCost =

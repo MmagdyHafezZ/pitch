@@ -56,6 +56,50 @@ export class LLMToolDto {
   };
 }
 
+export class LLMRouteTargetDto {
+  @IsString()
+  provider: string;
+
+  @IsString()
+  model: string;
+
+  @IsNumber()
+  @IsOptional()
+  weight?: number;
+
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  tags?: string[];
+}
+
+export class LLMRoutingHintsDto {
+  @IsEnum(['manual', 'auto'])
+  @IsOptional()
+  mode?: 'manual' | 'auto';
+
+  @IsEnum(['balanced', 'cost', 'latency', 'quality'])
+  @IsOptional()
+  strategy?: 'balanced' | 'cost' | 'latency' | 'quality';
+
+  @IsArray()
+  @IsEnum(['streaming', 'tools', 'vision', 'audio'], { each: true })
+  @IsOptional()
+  require?: Array<'streaming' | 'tools' | 'vision' | 'audio'>;
+
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => LLMRouteTargetDto)
+  @IsOptional()
+  candidates?: LLMRouteTargetDto[];
+
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => LLMRouteTargetDto)
+  @IsOptional()
+  fallbacks?: LLMRouteTargetDto[];
+}
+
 /**
  * LLM Configuration DTO
  * Configures how the LLM should behave
@@ -123,6 +167,11 @@ export class LLMConfigDto {
   @IsObject()
   @IsOptional()
   providerOptions?: Record<string, unknown>;
+
+  @ValidateNested()
+  @Type(() => LLMRoutingHintsDto)
+  @IsOptional()
+  routing?: LLMRoutingHintsDto;
 }
 
 /**
@@ -211,6 +260,7 @@ export class LLMResponseDto {
   @IsObject()
   @IsOptional()
   providerMeta?: {
+    provider?: string;
     requestId?: string;
     latencyMs?: number;
     model?: string;

@@ -17,6 +17,7 @@ import {
 import { APP_GUARD } from '@nestjs/core';
 import { TeamGatewayController } from './controllers/userManagement/team-gateway.controller';
 import { SimulationWsGateway } from './controllers/simulation/simulation-ws.gateway';
+import { TEST_CONTROLLERS } from '@microservices/simulation/controllers-test';
 
 @Module({
   imports: [

@@ -40,6 +40,16 @@ describe('ModelCapabilitiesRegistry', () => {
     expect(result.pricing.inputTokensPerMillion).toBe(1);
   });
 
+  it('uses provider inference when provider name is omitted', () => {
+    const registry = new LLMProviderRegistry();
+    registry.register(provider);
+    const service = new ModelCapabilitiesRegistry(registry);
+
+    const result = service.getCapabilities('stub-model');
+
+    expect(result.maxTokens).toBe(4096);
+  });
+
   it('falls back to default when provider lookup fails', () => {
     const registry = new LLMProviderRegistry();
     const service = new ModelCapabilitiesRegistry(registry);
