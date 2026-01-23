@@ -97,7 +97,7 @@ export class CoinAccountingService {
       ent.periodTtlSeconds,
     );
 
-    const idempotencyKey = dto.requestId;
+    const idempotencyKey = dto.idempotencyKey ?? dto.requestId;
 
     const reserveRes = await this.redis.reserveIfEnough({
       teamId: dto.teamId,
