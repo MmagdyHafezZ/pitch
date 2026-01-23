@@ -1,8 +1,6 @@
 'use client'
-
 import { ActionIcon, Box, Stack, Tooltip, Text } from '@mantine/core'
 import { useRouter } from 'next/navigation'
-import { useTeams } from '@/features/teams/hooks/useTeams'
 
 export type TeamInfo = {
   id: string
@@ -33,16 +31,13 @@ function deriveInitials(name: string, max = 2): string {
 
 export function TeamSideBar({ teams, activeTeamId, onSelectTeam }: TeamSideBarProps) {
   const router = useRouter()
-  const { fetchTeamById, setActiveTeamId } = useTeams()
 
-  const handleTeamClick = async (id: string) => {
-    setActiveTeamId(id)
-    await fetchTeamById(id)
+  const handleTeamClick = (id: string) => {
     onSelectTeam(id)
   }
 
   const handleCreateTeam = () => {
-    router.push('/team-config?mode=create')
+    router.push('/studio/team-config?mode=create')
   }
 
   return (
@@ -51,7 +46,6 @@ export function TeamSideBar({ teams, activeTeamId, onSelectTeam }: TeamSideBarPr
         width: 60,
         height: '100%',
         background: 'var(--mantine-color-dark-9)',
-        borderRadius: '16px 0 0 16px',
         borderTopLeftRadius: 0,
         display: 'flex',
         flexDirection: 'column',
@@ -75,8 +69,8 @@ export function TeamSideBar({ teams, activeTeamId, onSelectTeam }: TeamSideBarPr
           gap={6}
           style={{
             width: '100%',
-            alignItems: 'center', // center horizontally
-            justifyContent: 'flex-start', // start at top
+            alignItems: 'center',
+            justifyContent: 'flex-start',
           }}
         >
           {teams.map((team) => {

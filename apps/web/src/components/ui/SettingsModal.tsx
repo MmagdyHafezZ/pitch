@@ -52,7 +52,7 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
   const handleLogout = async () => {
     await logout()
     onClose()
-    router.push('/login')
+    router.push('/')
   }
 
   const handleSave = () => {

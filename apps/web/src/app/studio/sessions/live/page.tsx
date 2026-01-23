@@ -199,7 +199,7 @@ export default function LiveSessionPage() {
                   boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
                   cursor: 'pointer',
                 }}
-                onClick={() => router.push('/sessions')}
+                onClick={() => router.push('/studio/sessions')}
                 title="End call and return to sessions"
               >
                 <IconPhone size={32} />
