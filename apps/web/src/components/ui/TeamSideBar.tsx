@@ -48,6 +48,7 @@ export function TeamSideBar({ teams, activeTeamId, onSelectTeam }: TeamSideBarPr
         background: 'var(--mantine-color-dark-9)',
         borderTopRightRadius: 24,
         borderBottomRightRadius: 24,
+        border: '1px solid rgba(59, 130, 246, 0.4)',
         display: 'flex',
         flexDirection: 'column',
         padding: '8px 4px',
