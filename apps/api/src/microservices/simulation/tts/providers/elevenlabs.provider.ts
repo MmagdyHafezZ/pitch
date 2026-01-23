@@ -24,6 +24,7 @@ export class ElevenLabsTtsProvider implements TtsProvider {
   // Cached voice directory
   private voiceNameToId: Map<string, string> | null = null;
   private voicesCache: string[] = [];
+  // private voices: string[] = [];
 
   constructor(private readonly config: ConfigService) {
     this.apiKey = this.config.getOrThrow<string>('ELEVENLABS_API_KEY');
