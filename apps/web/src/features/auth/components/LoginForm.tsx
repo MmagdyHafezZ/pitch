@@ -176,10 +176,10 @@ export function LoginForm({ onSwitchToRegister }: LoginFormProps) {
     >
       <Box ta="center" mb="xl">
         <Title order={2} fw={700} c="dark.8" mb="xs">
-          Welcome back
+          Sign in
         </Title>
         <Text c="gray.6" size="sm">
-          Sign in to access your assessment home
+          Enter your email and continue with your provider.
         </Text>
       </Box>
 
@@ -230,9 +230,11 @@ export function LoginForm({ onSwitchToRegister }: LoginFormProps) {
             styles={{
               root: {
                 height: '56px',
-                backgroundColor: '#6366f1',
+                backgroundColor: '#1a75c2',
+                color: '#ffffff',
                 '&:hover': {
-                  backgroundColor: '#5338f1',
+                  backgroundColor: '#91bffa',
+                  color: '#ffffff',
                 },
               },
             }}

@@ -1,5 +1,5 @@
 import { Metadata } from 'next'
-import { AuthPage } from '@/features/auth/components/AuthPage'
+import { RegisterPageClient } from './RegisterPageClient'
 
 export const metadata: Metadata = {
   title: 'Create Account | PITCH',
@@ -7,5 +7,5 @@ export const metadata: Metadata = {
 }
 
 export default function RegisterPage() {
-  return <AuthPage defaultMode="register" />
+  return <RegisterPageClient />
 }

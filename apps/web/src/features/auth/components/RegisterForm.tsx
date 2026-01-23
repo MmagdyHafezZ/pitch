@@ -130,7 +130,7 @@ export function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
           Create your account
         </Title>
         <Text c="gray.6" size="sm">
-          Join thousands of educators using PITCH
+          Join professionals using PITCH to grow with guidance.
         </Text>
       </Box>
 
