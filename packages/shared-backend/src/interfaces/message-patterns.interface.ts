@@ -30,6 +30,22 @@ export const BUSINESS_SERVICE_PATTERNS = {
   GET_BUSINESSES: 'get_businesses',
 } as const
 
+export const CRM_SERVICE_PATTERNS = {
+  // Salesforce Integration
+  SALESFORCE_CONNECT: 'salesforce.connect',
+  SALESFORCE_CALLBACK: 'salesforce.callback',
+  SALESFORCE_GET_STATUS: 'salesforce.getStatus',
+  SALESFORCE_GET_CONTACTS: 'salesforce.getContacts',
+  SALESFORCE_GET_ACCOUNTS: 'salesforce.getAccounts',
+  SALESFORCE_GET_OPPORTUNITIES: 'salesforce.getOpportunities',
+  SALESFORCE_GET_LEADS: 'salesforce.getLeads',
+  SALESFORCE_SYNC_CONTACTS: 'salesforce.syncContacts',
+  SALESFORCE_QUERY: 'salesforce.query',
+  SALESFORCE_SEARCH: 'salesforce.search',
+  SALESFORCE_DISCONNECT: 'salesforce.disconnect',
+} as const
+
 export type UserServicePattern = (typeof USER_SERVICE_PATTERNS)[keyof typeof USER_SERVICE_PATTERNS]
 export type BusinessServicePattern =
   (typeof BUSINESS_SERVICE_PATTERNS)[keyof typeof BUSINESS_SERVICE_PATTERNS]
+export type CrmServicePattern = (typeof CRM_SERVICE_PATTERNS)[keyof typeof CRM_SERVICE_PATTERNS]

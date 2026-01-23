@@ -11,6 +11,57 @@ datasource db {
   url       = env("CRM_DATABASE_URL")
 }
 
+// Integration provider enum
+enum IntegrationProvider {
+  SALESFORCE
+  HUBSPOT
+}
+
+// Integration status enum
+enum IntegrationStatus {
+  CONNECTED
+  DISCONNECTED
+  ERROR
+  EXPIRED
+}
+
+// Integration - External CRM integrations (Salesforce, HubSpot, etc.)
+model Integration {
+  id       String              @id @default(cuid())
+  userId   String              // User who connected this integration
+  provider IntegrationProvider // SALESFORCE, HUBSPOT
+  status   IntegrationStatus   @default(CONNECTED)
+
+  // OAuth tokens
+  accessToken  String? // Encrypted access token
+  refreshToken String? // Encrypted refresh token
+  expiresAt    DateTime?
+  instanceUrl  String? // Salesforce instance URL or HubSpot portal ID
+
+  // Provider-specific data
+  providerId   String? // User ID from the provider
+  providerEmail String? // Email from the provider
+  providerData Json? // Additional provider-specific data
+
+  // Sync settings
+  autoSync     Boolean  @default(false) // Auto-sync data
+  syncInterval Int?     @default(3600) // Sync interval in seconds
+  lastSyncAt   DateTime?
+  lastSyncStatus String? // "success", "failed", "partial"
+  lastSyncError  String?
+
+  // Metadata
+  metadata  Json? // Additional configuration
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, provider])
+  @@index([userId])
+  @@index([provider])
+  @@index([status])
+  @@map("integrations")
+}
+
 // Contact - Individual customer/lead information
 model Contact {
   id        String   @id @default(cuid())

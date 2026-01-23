@@ -3,6 +3,8 @@ import { ClientsModule, Transport } from '@nestjs/microservices';
 import { JwtModule } from '@nestjs/jwt';
 import { UserGatewayController } from './controllers/userManagement/user-gateway.controller';
 import { AuthGatewayController } from './controllers/userManagement/auth-gateway.controller';
+import { TeamGatewayController } from './controllers/userManagement/team-gateway.controller';
+import { SalesforceGatewayController } from './controllers/crm/salesforce-gateway.controller';
 import { GlobalJwtAuthGuard } from './guards/global-jwt-auth.guard';
 import { UserClaimsInterceptor } from './interceptors/user-claims.interceptor';
 import {
@@ -15,7 +17,6 @@ import {
   getJwtAccessExpiration,
 } from '@pitch/shared-backend/config/jwt.config';
 import { APP_GUARD } from '@nestjs/core';
-import { TeamGatewayController } from './controllers/userManagement/team-gateway.controller';
 
 @Module({
   imports: [
@@ -39,6 +40,7 @@ import { TeamGatewayController } from './controllers/userManagement/team-gateway
     UserGatewayController,
     AuthGatewayController,
     TeamGatewayController,
+    SalesforceGatewayController,
   ],
   providers: [
     { provide: APP_GUARD, useClass: GlobalJwtAuthGuard },
