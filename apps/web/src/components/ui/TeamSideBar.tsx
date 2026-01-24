@@ -48,7 +48,9 @@ export function TeamSideBar({ teams, activeTeamId, onSelectTeam }: TeamSideBarPr
         background: 'var(--mantine-color-dark-9)',
         borderTopRightRadius: 24,
         borderBottomRightRadius: 24,
-        border: '1px solid rgba(59, 130, 246, 0.4)',
+        borderTop: '1px solid rgba(59, 130, 246, 0.4)',
+        borderRight: '1px solid rgba(59, 130, 246, 0.4)',
+        borderBottom: '2px solid rgba(59, 130, 246, 0.4)',
         display: 'flex',
         flexDirection: 'column',
         padding: '8px 4px',
@@ -117,7 +119,7 @@ export function TeamSideBar({ teams, activeTeamId, onSelectTeam }: TeamSideBarPr
             }}
             onClick={handleCreateTeam}
           >
-            <Text fw={700} size="sm" c="white">
+            <Text fw={700} size="sm" c="white" style={{ lineHeight: 1 }}>
               +
             </Text>
           </ActionIcon>
