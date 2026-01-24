@@ -31,7 +31,7 @@ import type { UserClaims as UserClaimsType } from '@pitch/shared-backend/interfa
 import { normalizeError } from '@pitch/shared-backend/helpers/exceptions';
 import {
   CreateSubscriptionRequestDTO,
-  UpdateSubscriptionRequestDTO,
+  UpgradeSubscriptionRequestDTO,
 } from '@microservices/userManagement/subscription/dto/subscription.dto';
 
 @UsePipes(
@@ -85,13 +85,13 @@ export class SubscriptionGatewayController {
     description: 'Subscription updated successfully',
   })
   @ApiResponse({ status: 404, description: 'Subscription not found' })
-  updateSubscription(
+  upgradeSubscription(
     @Param('id') id: string,
-    @Body() updateSubscriptionDto: UpdateSubscriptionRequestDTO,
+    @Body() updateSubscriptionDto: UpgradeSubscriptionRequestDTO,
     @UserClaims() userClaims: UserClaimsType,
   ) {
     return this.userService
-      .send(USER_SERVICE_PATTERNS.UPDATE_SUBSCRIPTION, {
+      .send(USER_SERVICE_PATTERNS.UPGRADE_SUBSCRIPTION, {
         id,
         ...updateSubscriptionDto,
         userClaims,

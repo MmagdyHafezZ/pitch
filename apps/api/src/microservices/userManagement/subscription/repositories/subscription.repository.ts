@@ -2,6 +2,10 @@ import { Injectable, Logger } from '@nestjs/common';
 import { UserPrismaService } from '../../prisma/user-prisma.service';
 import { Prisma, Subscription, SubscriptionStatus } from '@prisma/user-client';
 
+export type SubscriptionWithPlan = Prisma.SubscriptionGetPayload<{
+  include: { plan: true };
+}>;
+
 @Injectable()
 export class SubscriptionRepository {
   private readonly logger = new Logger(SubscriptionRepository.name);
@@ -10,13 +14,14 @@ export class SubscriptionRepository {
 
   async create(
     data: Prisma.SubscriptionUncheckedCreateInput,
-  ): Promise<Subscription> {
+  ): Promise<SubscriptionWithPlan> {
     this.logger.debug(
       `Creating subscription for team "${data.teamId}" on plan "${data.planId}"`,
     );
 
     return this.prisma.subscription.create({
       data,
+      include: { plan: true },
     });
   }
 
@@ -25,12 +30,13 @@ export class SubscriptionRepository {
     data:
       | Prisma.SubscriptionUpdateInput
       | Prisma.SubscriptionUncheckedUpdateInput,
-  ): Promise<Subscription> {
+  ): Promise<SubscriptionWithPlan> {
     this.logger.debug(`Updating subscription "${id}"`);
 
     return this.prisma.subscription.update({
       where: { id },
       data,
+      include: { plan: true },
     });
   }
 
@@ -42,11 +48,12 @@ export class SubscriptionRepository {
     });
   }
 
-  async findById(id: string): Promise<Subscription | null> {
+  async findById(id: string): Promise<SubscriptionWithPlan | null> {
     this.logger.debug(`Finding subscription by id "${id}"`);
 
     return this.prisma.subscription.findUnique({
       where: { id },
+      include: { plan: true },
     });
   }
 
@@ -67,6 +74,30 @@ export class SubscriptionRepository {
         status: SubscriptionStatus.ACTIVE,
       },
       orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async findAllActive(): Promise<Subscription[]> {
+    this.logger.debug('Finding all active subscriptions');
+
+    return this.prisma.subscription.findMany({
+      where: { status: SubscriptionStatus.ACTIVE },
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+
+  async findDueForRollover(currentDate: Date): Promise<SubscriptionWithPlan[]> {
+    this.logger.debug('Finding subscriptions due for rollover');
+    return this.prisma.subscription.findMany({
+      where: {
+        status: SubscriptionStatus.ACTIVE,
+        currentPeriodEnd: {
+          lte: currentDate,
+        },
+      },
+      include: {
+        plan: true,
+      },
     });
   }
 }

@@ -21,7 +21,9 @@ enum SubscriptionStatus {
 
 enum BillingInterval {
   MONTH
-  YEAR
+  QUARTER
+  SEMIANNUAL
+  ANNUAL
 }
 
 enum AuthProvider {

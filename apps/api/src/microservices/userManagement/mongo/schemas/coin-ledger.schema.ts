@@ -6,7 +6,9 @@ export type CoinLedgerDocument = CoinLedger & Document;
 export enum CoinLedgerType {
   RESERVE = 'RESERVE',
   ADJUST = 'ADJUST',
+  REFILL = 'REFILL',
   RELEASE = 'RELEASE',
+  UPGRADE = 'UPGRADE',
 }
 
 @Schema({

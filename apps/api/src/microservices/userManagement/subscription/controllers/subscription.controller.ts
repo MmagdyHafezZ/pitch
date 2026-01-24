@@ -11,11 +11,11 @@ import * as userClaimsInterface from '@pitch/shared-backend/interfaces/user-clai
 import { toRpcException } from '@pitch/shared-backend/helpers/exceptions';
 import {
   CreateSubscriptionRequestDTO,
-  UpdateSubscriptionRequestDTO,
+  UpgradeSubscriptionRequestDTO,
 } from '../dto/subscription.dto';
 import {
   CreateSubscriptionDto,
-  UpdateSubscriptionDto,
+  UpgradeSubscriptionDto,
 } from '@pitch/shared-backend/interfaces/user.interface';
 import { SubscriptionService } from '../services/subscription.service';
 import { ElevatedAccessGuard } from '../../guards/elevated-access.guard';
@@ -49,22 +49,19 @@ export class SubscriptionController {
         cancelAtPeriodEnd: createSubscriptionDto.cancelAtPeriodEnd ?? false,
       };
 
-      return await this.subscriptionService.createSubscription(
-        dto,
-        _userClaims.id,
-      );
+      return await this.subscriptionService.createSubscription(dto);
     } catch (error) {
       throw toRpcException(error);
     }
   }
 
-  @MessagePattern(USER_SERVICE_PATTERNS.UPDATE_SUBSCRIPTION)
+  @MessagePattern(USER_SERVICE_PATTERNS.UPGRADE_SUBSCRIPTION)
   @UsePipes(
     new ValidationPipe({ transform: true, skipMissingProperties: true }),
   )
-  async updateSubscription(
+  async upgradeSubscription(
     @Payload()
-    data: { id: string } & UpdateSubscriptionRequestDTO &
+    data: { id: string } & UpgradeSubscriptionRequestDTO &
       userClaimsInterface.MessageWithUserClaims,
   ) {
     try {
@@ -74,7 +71,7 @@ export class SubscriptionController {
 
       const { userClaims: _userClaims, id, ...updateData } = data;
 
-      const dto: UpdateSubscriptionDto = {
+      const dto: UpgradeSubscriptionDto = {
         planId: updateData.planId,
         status: updateData.status,
         currentPeriodStart: updateData.currentPeriodStart,
@@ -82,11 +79,7 @@ export class SubscriptionController {
         cancelAtPeriodEnd: updateData.cancelAtPeriodEnd,
       };
 
-      return await this.subscriptionService.updateSubscription(
-        id,
-        dto,
-        _userClaims.id,
-      );
+      return await this.subscriptionService.upgradeSubscription(id, dto);
     } catch (error) {
       throw toRpcException(error);
     }
@@ -101,10 +94,7 @@ export class SubscriptionController {
       this.logger.log(
         `Deleting subscription ${data.id} - Requested by: ${data.userClaims.email} (${data.userClaims.id})`,
       );
-      return await this.subscriptionService.removeSubscription(
-        data.id,
-        data.userClaims.id,
-      );
+      return await this.subscriptionService.removeSubscription(data.id);
     } catch (error) {
       throw toRpcException(error);
     }

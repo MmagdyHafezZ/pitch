@@ -6,7 +6,6 @@ import { CoinLedgerRepository } from '../repositories/coin-ledger.repository';
 import { CoinBalanceRepository } from '../repositories/coin-balance.repository';
 import { CoinLedgerType } from '../../mongo/schemas/coin-ledger.schema';
 
-import { SubscriptionService } from '../../subscription/services/subscription.service';
 import { PlanRepository } from '../../plans/repositories/plans.repository';
 
 import {
@@ -14,6 +13,7 @@ import {
   ReserveCoinsResponseDto,
 } from '../dto/coin-reserve.dto';
 import { CoinAdjustEventDto } from '../dto/coin-adjust.event';
+import { SubscriptionRepository } from '../../subscription/repositories/subscription.repository';
 
 @Injectable()
 export class CoinAccountingService {
@@ -22,23 +22,19 @@ export class CoinAccountingService {
     private readonly coinLedgerRepo: CoinLedgerRepository,
     private readonly coinBalanceRepo: CoinBalanceRepository,
 
-    // NEW:
-    private readonly subscriptionService: SubscriptionService,
+    private readonly subscriptionRepository: SubscriptionRepository,
     private readonly planRepository: PlanRepository,
   ) {}
 
   private normalizeEpochToMs(v: number): number {
-    // If it looks like seconds (e.g., 1700000000), convert to ms.
-    // If it looks like ms (e.g., 1700000000000), keep.
     return v < 10_000_000_000 ? v * 1000 : v;
   }
 
-  private buildPeriodKey(args: {
+  public buildPeriodKey(args: {
     subscriptionId: string;
     startMs: number;
     endMs: number;
   }): string {
-    // Stable, unique per billing cycle
     return `${args.subscriptionId}:${args.startMs}-${args.endMs}`;
   }
 
@@ -52,7 +48,7 @@ export class CoinAccountingService {
     periodKey: string;
     periodTtlSeconds: number;
   }> {
-    const sub = await this.subscriptionService.findActiveByTeam(teamId);
+    const sub = await this.subscriptionRepository.findActiveByTeamId(teamId);
     if (!sub) return null;
 
     const plan = await this.planRepository.findById(sub.planId);
@@ -67,7 +63,6 @@ export class CoinAccountingService {
       endMs,
     });
 
-    // TTL until period end + buffer (7 days). Minimum 1 hour.
     const nowMs = Date.now();
     const bufferMs = 7 * 24 * 60 * 60 * 1000;
     const ttlMs = Math.max(60 * 60 * 1000, endMs - nowMs + bufferMs);
@@ -81,6 +76,56 @@ export class CoinAccountingService {
       allowance,
       periodKey,
       periodTtlSeconds,
+    };
+  }
+
+  async getRemainingCoins(
+    teamId: string,
+  ): Promise<
+    | { ok: false; reason: 'NO_ACTIVE_SUBSCRIPTION' }
+    | {
+        ok: true;
+        teamId: string;
+        periodKey: string;
+        allowance: number;
+        remaining: number;
+      }
+  > {
+    const ent = await this.getEntitlementOrNull(teamId);
+    if (!ent) return { ok: false, reason: 'NO_ACTIVE_SUBSCRIPTION' };
+
+    // Ensure the period remaining exists (NX). If it already exists, this is a no-op.
+    await this.redis.initRemainingIfMissing(
+      teamId,
+      ent.periodKey,
+      ent.allowance,
+      ent.periodTtlSeconds,
+    );
+
+    // Prefer Redis (real-time)
+    const redisRemaining = await this.redis.getRemaining(teamId, ent.periodKey);
+    if (redisRemaining !== null) {
+      return {
+        ok: true,
+        teamId,
+        periodKey: ent.periodKey,
+        allowance: ent.allowance,
+        remaining: redisRemaining,
+      };
+    }
+
+    // Fallback: Mongo snapshot (might be slightly stale)
+    const mongoRemaining = await this.coinBalanceRepo.getRemaining(
+      teamId,
+      ent.periodKey,
+    );
+
+    return {
+      ok: true,
+      teamId,
+      periodKey: ent.periodKey,
+      allowance: ent.allowance,
+      remaining: mongoRemaining ?? ent.allowance,
     };
   }
 
@@ -152,8 +197,7 @@ export class CoinAccountingService {
   }
 
   async applyAdjustment(event: CoinAdjustEventDto): Promise<void> {
-    // Redis apply (idempotent by eventId)
-    const ttlSeconds = 60 * 60 * 24 * 40; // replace with computed TTL based on periodKey
+    const ttlSeconds = 60 * 60 * 24 * 40;
     const res = await this.redis.applyDeltaIdempotent({
       teamId: event.teamId,
       periodKey: event.periodKey,
@@ -164,7 +208,6 @@ export class CoinAccountingService {
 
     if (!res.applied) return;
 
-    // Receipt (Mongo idempotency via unique sparse eventId)
     await this.coinLedgerRepo.create({
       type: CoinLedgerType.ADJUST,
       eventId: event.eventId,
@@ -172,7 +215,6 @@ export class CoinAccountingService {
       requestId: event.requestId,
       sessionId: event.sessionId,
       teamId: event.teamId,
-      // include these in the RMQ event ideally:
       userId: (event as any).userId ?? 'unknown',
       subscriptionId: (event as any).subscriptionId ?? 'unknown',
       planId: (event as any).planId ?? 'unknown',
@@ -181,7 +223,6 @@ export class CoinAccountingService {
       model: event.model,
     });
 
-    // Balance snapshot
     await this.coinBalanceRepo.upsertAdjust({
       teamId: event.teamId,
       periodKey: event.periodKey,

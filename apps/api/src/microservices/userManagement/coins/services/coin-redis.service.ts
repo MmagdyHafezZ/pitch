@@ -18,6 +18,17 @@ export class CoinRedisService {
     return `idemp:coins:event:${eventId}`;
   }
 
+  async getRemaining(
+    teamId: string,
+    periodKey: string,
+  ): Promise<number | null> {
+    const key = this.keyRemaining(teamId, periodKey);
+    const v = await this.redis.get(key);
+    if (v === null) return null;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  }
+
   async initRemainingIfMissing(
     teamId: string,
     periodKey: string,
@@ -122,16 +133,21 @@ export class CoinRedisService {
       local ttl = tonumber(ARGV[2])
 
       if redis.call("GET", idemp) then
-        local rem = tonumber(redis.call("GET", remainingKey) or "-1")
-        return {0, rem}
+        local remStr = redis.call("GET", remainingKey)
+        if not remStr then
+          return {0, -1}
+        end
+        return {0, tonumber(remStr)}
       end
 
-      local rem = tonumber(redis.call("GET", remainingKey) or "-1")
-      if rem < 0 then
+      local remStr = redis.call("GET", remainingKey)
+      if not remStr then
         return {-1, -1}
       end
 
-      rem = rem - delta  -- because delta = actual-estimate; positive means charge more => remaining decreases
+      local rem = tonumber(remStr)
+      rem = rem - delta
+
       redis.call("SET", remainingKey, tostring(rem), "EX", ttl)
       redis.call("SET", idemp, "1", "EX", ttl)
       return {1, rem}

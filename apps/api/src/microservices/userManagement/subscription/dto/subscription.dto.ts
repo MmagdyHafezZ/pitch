@@ -44,7 +44,7 @@ export class CreateSubscriptionRequestDTO {
   cancelAtPeriodEnd?: boolean;
 }
 
-export class UpdateSubscriptionRequestDTO {
+export class UpgradeSubscriptionRequestDTO {
   @ApiProperty({
     description: 'Optional ID of the plan associated with the subscription',
     example: 'plan_12345',

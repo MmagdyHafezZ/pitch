@@ -2,7 +2,7 @@
 
 export type Role = 'OWNER' | 'ADMIN' | 'MEMBER'
 export type PlanLevel = 'FREE' | 'PRO' | 'TEAM' | 'ENTERPRISE'
-export type BillingInterval = 'MONTH' | 'YEAR'
+export type BillingInterval = 'MONTH' | 'QUARTER' | 'SEMIANNUAL' | 'ANNUAL'
 export type SubscriptionStatus = 'ACTIVE' | 'CANCELED'
 
 /* ---------- READ MODELS ---------- */
@@ -176,6 +176,16 @@ export interface CreateSubscriptionDto {
 }
 
 export interface UpdateSubscriptionDto {
+  planId?: string
+  status?: SubscriptionStatus
+  currentPeriodStart?: Date
+  currentPeriodEnd?: Date
+  cancelAtPeriodEnd?: boolean
+  metadata?: unknown
+  canceledAt?: Date | null
+}
+
+export interface UpgradeSubscriptionDto {
   planId: string
   status?: SubscriptionStatus
   currentPeriodStart?: Date

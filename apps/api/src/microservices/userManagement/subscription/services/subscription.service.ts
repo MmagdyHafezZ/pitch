@@ -8,33 +8,35 @@ import {
   Subscription,
   CreateSubscriptionDto,
   UpdateSubscriptionDto,
+  UpgradeSubscriptionDto,
 } from '@pitch/shared-backend/interfaces/user.interface';
-import { SubscriptionRepository } from '../repositories/subscription.repository';
+import {
+  SubscriptionRepository,
+  SubscriptionWithPlan,
+} from '../repositories/subscription.repository';
 import { PlanRepository } from '../../plans/repositories/plans.repository';
-import { TeamService } from '../../team/services/team.service';
+import { CoinRefillService } from '../../coins/services/coin-refill.service';
+import { CoinRedisService } from '../../coins/services/coin-redis.service';
+import { CoinAccountingService } from '../../coins/services/coin-accounting.service';
 
 @Injectable()
 export class SubscriptionService {
   constructor(
+    private readonly coinAccountingService: CoinAccountingService,
+    private readonly coinRedisService: CoinRedisService,
+    private readonly coinRefillService: CoinRefillService,
     private readonly subscriptionRepository: SubscriptionRepository,
     private readonly planRepository: PlanRepository,
-    private readonly teamService: TeamService,
   ) {}
 
   async createSubscription(
     createSubscriptionDto: CreateSubscriptionDto,
-    requesterId: string,
-  ): Promise<Subscription> {
+  ): Promise<SubscriptionWithPlan> {
     if (await this.checkExistingSubscription(createSubscriptionDto.teamId)) {
       throw new ConflictException(
         `Team with ID ${createSubscriptionDto.teamId} already has an active subscription`,
       );
     }
-
-    await this.teamService.confirmAuthorityOrThrow(
-      requesterId,
-      createSubscriptionDto.teamId,
-    );
 
     const plan = await this.planRepository.findById(
       createSubscriptionDto.planId,
@@ -47,7 +49,7 @@ export class SubscriptionService {
 
     const period_end = createSubscriptionDto.currentPeriodStart + plan.interval;
 
-    return this.subscriptionRepository.create({
+    const sub = await this.subscriptionRepository.create({
       teamId: createSubscriptionDto.teamId,
       planId: createSubscriptionDto.planId,
       status: createSubscriptionDto.status ?? SubscriptionStatus.ACTIVE,
@@ -55,12 +57,13 @@ export class SubscriptionService {
       currentPeriodEnd: period_end,
       cancelAtPeriodEnd: createSubscriptionDto.cancelAtPeriodEnd ?? false,
     });
+    await this.coinRefillService.refillInitialForSubscription(sub);
+    return sub;
   }
 
   async updateSubscription(
     subscriptionId: string,
     dto: UpdateSubscriptionDto,
-    requesterId: string,
   ): Promise<Subscription> {
     const existing = await this.subscriptionRepository.findById(subscriptionId);
     if (!existing) {
@@ -68,11 +71,6 @@ export class SubscriptionService {
         `Subscription with ID ${subscriptionId} not found`,
       );
     }
-
-    await this.teamService.confirmAuthorityOrThrow(
-      requesterId,
-      existing.teamId,
-    );
 
     const data: Prisma.SubscriptionUpdateInput = {};
 
@@ -119,10 +117,10 @@ export class SubscriptionService {
     return this.subscriptionRepository.update(subscriptionId, data);
   }
 
-  async removeSubscription(
+  async upgradeSubscription(
     subscriptionId: string,
-    requesterId: string,
-  ): Promise<{ message: string }> {
+    dto: UpgradeSubscriptionDto,
+  ): Promise<SubscriptionWithPlan> {
     const existing = await this.subscriptionRepository.findById(subscriptionId);
     if (!existing) {
       throw new NotFoundException(
@@ -130,15 +128,81 @@ export class SubscriptionService {
       );
     }
 
-    await this.teamService.confirmAuthorityOrThrow(
-      requesterId,
-      existing.teamId,
+    const newPlan = await this.planRepository.findById(dto.planId);
+    if (!newPlan) {
+      throw new NotFoundException(`Plan with ID ${dto.planId} not found`);
+    }
+
+    const teamId = existing.teamId;
+
+    const periodKey = this.coinAccountingService.buildPeriodKey({
+      subscriptionId: existing.id,
+      startMs: existing.currentPeriodStart.getTime(),
+      endMs: existing.currentPeriodEnd.getTime(),
+    });
+
+    const ttlSeconds = Math.max(
+      60,
+      Math.ceil((existing.currentPeriodEnd.getTime() - Date.now()) / 1000),
+    );
+    await this.coinRedisService.initRemainingIfMissing(
+      teamId,
+      periodKey,
+      Number(existing.plan.maxCoins),
+      ttlSeconds,
     );
 
+    const oldAllowance = Number(existing.plan.maxCoins);
+    const newAllowance = Number(newPlan.maxCoins);
+    const deltaAllowance = newAllowance - oldAllowance;
+
+    const eventId = `upgrade:${subscriptionId}:${dto.planId}:${existing.currentPeriodEnd.toISOString()}`;
+
+    await this.coinRedisService.applyDeltaIdempotent({
+      teamId,
+      periodKey,
+      deltaCoins: -deltaAllowance,
+      eventId,
+      ttlSeconds,
+    });
+
+    return await this.subscriptionRepository.update(subscriptionId, {
+      planId: dto.planId,
+    });
+  }
+
+  async removeSubscription(
+    subscriptionId: string,
+  ): Promise<{ message: string }> {
+    const existing = await this.subscriptionRepository.findById(subscriptionId);
+    if (!existing) {
+      throw new NotFoundException(
+        `Subscription with ID ${subscriptionId} not found`,
+      );
+    }
+    if (existing.cancelAtPeriodEnd) {
+      return {
+        message: `Subscription with ID ${subscriptionId} is already scheduled to cancel at period end`,
+      };
+    }
+
+    const now = Date.now();
+    const periodEndMs = existing.currentPeriodEnd.getTime();
+
+    if (now < periodEndMs) {
+      await this.subscriptionRepository.update(subscriptionId, {
+        cancelAtPeriodEnd: true,
+        canceledAt: new Date(now),
+      });
+
+      return {
+        message: `Subscription with ID ${subscriptionId} will be canceled at period end (${existing.currentPeriodEnd.toISOString()})`,
+      };
+    }
     await this.subscriptionRepository.update(subscriptionId, {
       status: SubscriptionStatus.CANCELED,
       cancelAtPeriodEnd: false,
-      canceledAt: new Date(),
+      canceledAt: new Date(now),
     });
 
     return {
@@ -166,5 +230,14 @@ export class SubscriptionService {
       throw new NotFoundException(`Subscription with ID ${id} not found`);
     }
     return subscription;
+  }
+
+  async findActiveSubscriptions(): Promise<Subscription[]> {
+    return this.subscriptionRepository.findAllActive();
+  }
+
+  async findDueForRollover(): Promise<SubscriptionWithPlan[]> {
+    const now = Date.now();
+    return this.subscriptionRepository.findDueForRollover(new Date(now));
   }
 }

@@ -13,6 +13,22 @@ export class CoinBalanceRepository {
     private readonly model: Model<CoinBalanceDocument>,
   ) {}
 
+  async findByTeamAndPeriodKey(teamId: string, periodKey: string) {
+    return this.model.findOne({ teamId, periodKey }).lean();
+  }
+
+  async getRemaining(
+    teamId: string,
+    periodKey: string,
+  ): Promise<number | null> {
+    const doc = await this.model
+      .findOne({ teamId, periodKey }, { remaining: 1 })
+      .lean();
+    if (!doc) return null;
+    const remaining = (doc as any).remaining;
+    return typeof remaining === 'number' ? remaining : Number(remaining);
+  }
+
   upsertReserve(args: {
     teamId: string;
     subscriptionId: string;
@@ -57,6 +73,31 @@ export class CoinBalanceRepository {
           lastEventId: args.eventId,
           lastReservationId: args.reservationId,
           lastRequestId: args.requestId,
+        },
+      },
+      { upsert: true },
+    );
+  }
+
+  upsertRefill(args: {
+    teamId: string;
+    subscriptionId: string;
+    periodKey: string;
+    allowance: number;
+    remainingAfter: number;
+    debtApplied: number;
+    eventId: string;
+  }) {
+    return this.model.updateOne(
+      { teamId: args.teamId, periodKey: args.periodKey },
+      {
+        $set: {
+          teamId: args.teamId,
+          subscriptionId: args.subscriptionId,
+          periodKey: args.periodKey,
+          allowance: args.allowance,
+          remaining: args.remainingAfter,
+          lastEventId: args.eventId,
         },
       },
       { upsert: true },
