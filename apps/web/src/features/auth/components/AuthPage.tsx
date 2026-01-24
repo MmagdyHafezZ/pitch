@@ -30,7 +30,7 @@ export function AuthPage({ defaultMode = 'login', onSuccess }: AuthPageProps) {
       <Box
         style={{
           display: 'none',
-          '@media (min-width: 1024px)': {
+          '@media (minWidth: 1024px)': {
             display: 'flex',
             width: '50%',
             background: 'linear-gradient(135deg, #eff6ff 0%, #e0e7ff 50%, #f3e8ff 100%)',

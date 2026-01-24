@@ -16,6 +16,7 @@ export const USER_SERVICE_PATTERNS = {
   DELETE_TEAM: 'delete_team',
   GET_TEAM: 'get_team',
   GET_TEAMS: 'get_teams',
+  GET_USER_TEAMS: 'get_user_teams',
   ADD_TEAM_MEMBER: 'add_team_member',
   UPDATE_TEAM_MEMBER: 'update_team_member',
   DELETE_TEAM_MEMBER: 'delete_team_member',

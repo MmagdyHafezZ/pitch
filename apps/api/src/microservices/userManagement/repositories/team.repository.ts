@@ -148,6 +148,37 @@ export class TeamRepository {
     }) as unknown as Promise<Team | null>;
   }
 
+  async findUserTeams(userId: string): Promise<Team[]> {
+    return this.prisma.team.findMany({
+      where: {
+        memberships: {
+          some: {
+            userId: userId,
+            isActive: true,
+            team: { isActive: true, deletedAt: null },
+          },
+        },
+        deletedAt: null,
+      },
+      include: {
+        memberships: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                email: true,
+                name: true,
+                avatar: true,
+                isActive: true,
+              },
+            },
+          },
+          orderBy: [{ role: 'asc' }, { invitedAt: 'asc' }],
+        },
+      },
+    });
+  }
+
   async findBySlug(slug: string): Promise<Team | null> {
     return this.prisma.team.findFirst({ where: { slug, deletedAt: null } });
   }
