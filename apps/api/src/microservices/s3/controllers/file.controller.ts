@@ -3,6 +3,13 @@ import { MessagePattern, Payload } from '@nestjs/microservices';
 import { S3_SERVICE_PATTERNS } from '@pitch/shared-backend/interfaces/message-patterns.interface';
 import { toRpcException } from '@pitch/shared-backend/helpers/exceptions';
 import { FileService } from '../services/file.service';
+import {
+  DeletePrefixDto,
+  ListFilesDto,
+  PresignDeleteDto,
+  PresignDownloadDto,
+  PresignUploadDto,
+} from '../dto/file.dto';
 
 @Controller()
 export class FileController {
@@ -11,12 +18,7 @@ export class FileController {
   @MessagePattern(S3_SERVICE_PATTERNS.PRESIGN_UPLOAD)
   async presignUpload(
     @Payload()
-    data: {
-      bucket: string;
-      key: string;
-      contentType?: string;
-      expiresInSeconds?: number;
-    },
+    data: PresignUploadDto,
   ) {
     try {
       return await this.service.createPresignedUploadUrl(data);
@@ -28,7 +30,7 @@ export class FileController {
   @MessagePattern(S3_SERVICE_PATTERNS.PRESIGN_DOWNLOAD)
   async presignDownload(
     @Payload()
-    data: { bucket: string; key: string; expiresInSeconds?: number },
+    data: PresignDownloadDto,
   ) {
     try {
       return await this.service.createPresignedDownloadUrl(data);
@@ -40,7 +42,7 @@ export class FileController {
   @MessagePattern(S3_SERVICE_PATTERNS.PRESIGN_DELETE)
   async presignDelete(
     @Payload()
-    data: { bucket: string; key: string; expiresInSeconds?: number },
+    data: PresignDeleteDto,
   ) {
     try {
       return await this.service.createPresignedDeleteUrl(data);
@@ -52,7 +54,7 @@ export class FileController {
   @MessagePattern(S3_SERVICE_PATTERNS.LIST_FILES)
   async listFiles(
     @Payload()
-    data: { bucket: string; prefix?: string; limit?: number },
+    data: ListFilesDto,
   ) {
     try {
       return await this.service.listFiles(data);
@@ -64,7 +66,7 @@ export class FileController {
   @MessagePattern(S3_SERVICE_PATTERNS.DELETE_PREFIX)
   async deleteByPrefix(
     @Payload()
-    data: { bucket: string; prefix: string },
+    data: DeletePrefixDto,
   ) {
     try {
       return await this.service.deleteByPrefix(data);
