@@ -1,0 +1,135 @@
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpException,
+  HttpStatus,
+  Inject,
+  Post,
+  Query,
+} from '@nestjs/common';
+import { ClientProxy } from '@nestjs/microservices';
+import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { catchError, timeout } from 'rxjs/operators';
+import { throwError } from 'rxjs';
+import { S3_SERVICE_PATTERNS } from '@pitch/shared-backend/interfaces/message-patterns.interface';
+import type { ServiceError } from '@pitch/shared-backend/interfaces/error.interface';
+
+@ApiTags('s3')
+@ApiBearerAuth('bearer')
+@Controller({ path: 's3', version: '1' })
+export class S3GatewayController {
+  constructor(@Inject('S3_SERVICE') private s3Service: ClientProxy) {}
+
+  @Post('presigned/upload')
+  @ApiOperation({ summary: 'Get a presigned upload URL' })
+  @ApiResponse({ status: 200, description: 'Presigned upload URL generated' })
+  presignUpload(
+    @Body()
+    body: {
+      bucket: string;
+      key: string;
+      contentType?: string;
+      expiresInSeconds?: number;
+    },
+  ) {
+    return this.s3Service
+      .send(S3_SERVICE_PATTERNS.PRESIGN_UPLOAD, body)
+      .pipe(
+        timeout(5000),
+        catchError((err: unknown) => {
+          const error = err as ServiceError;
+          const message = error.message ?? 'Failed to generate presigned upload URL';
+          const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
+          return throwError(() => new HttpException(message, status));
+        }),
+      );
+  }
+
+  @Post('presigned/download')
+  @ApiOperation({ summary: 'Get a presigned download URL' })
+  @ApiResponse({ status: 200, description: 'Presigned download URL generated' })
+  presignDownload(
+    @Body()
+    body: { bucket: string; key: string; expiresInSeconds?: number },
+  ) {
+    return this.s3Service
+      .send(S3_SERVICE_PATTERNS.PRESIGN_DOWNLOAD, body)
+      .pipe(
+        timeout(5000),
+        catchError((err: unknown) => {
+          const error = err as ServiceError;
+          const message = error.message ?? 'Failed to generate presigned download URL';
+          const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
+          return throwError(() => new HttpException(message, status));
+        }),
+      );
+  }
+
+  @Post('presigned/delete')
+  @ApiOperation({ summary: 'Get a presigned delete URL' })
+  @ApiResponse({ status: 200, description: 'Presigned delete URL generated' })
+  presignDelete(
+    @Body()
+    body: { bucket: string; key: string; expiresInSeconds?: number },
+  ) {
+    return this.s3Service
+      .send(S3_SERVICE_PATTERNS.PRESIGN_DELETE, body)
+      .pipe(
+        timeout(5000),
+        catchError((err: unknown) => {
+          const error = err as ServiceError;
+          const message = error.message ?? 'Failed to generate presigned delete URL';
+          const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
+          return throwError(() => new HttpException(message, status));
+        }),
+      );
+  }
+
+  @Get('files')
+  @ApiOperation({ summary: 'List files by prefix' })
+  @ApiResponse({ status: 200, description: 'Files listed successfully' })
+  listFiles(
+    @Query('bucket') bucket: string,
+    @Query('prefix') prefix?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const parsedLimit = limit ? Number(limit) : undefined;
+    return this.s3Service
+      .send(S3_SERVICE_PATTERNS.LIST_FILES, {
+        bucket,
+        prefix,
+        limit: parsedLimit,
+      })
+      .pipe(
+        timeout(5000),
+        catchError((err: unknown) => {
+          const error = err as ServiceError;
+          const message = error.message ?? 'Failed to list files';
+          const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
+          return throwError(() => new HttpException(message, status));
+        }),
+      );
+  }
+
+  @Delete('prefix')
+  @ApiOperation({ summary: 'Delete files by prefix' })
+  @ApiResponse({ status: 200, description: 'Files deleted successfully' })
+  deleteByPrefix(
+    @Query('bucket') bucket: string,
+    @Query('prefix') prefix: string,
+  ) {
+    return this.s3Service
+      .send(S3_SERVICE_PATTERNS.DELETE_PREFIX, { bucket, prefix })
+      .pipe(
+        timeout(5000),
+        catchError((err: unknown) => {
+          const error = err as ServiceError;
+          const message = error.message ?? 'Failed to delete files by prefix';
+          const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
+          return throwError(() => new HttpException(message, status));
+        }),
+      );
+  }
+}
