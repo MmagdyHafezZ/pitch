@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { SubscriptionService } from '../../subscription/services/subscription.service';
-import { UpdateSubscriptionDto } from '@pitch/shared-backend/interfaces/user.interface';
+import { Period } from '@pitch/shared-backend/interfaces/user.interface';
 import { CoinAccountingService } from './coin-accounting.service';
 import { CoinRefillService } from './coin-refill.service';
 
@@ -71,11 +71,11 @@ export class CoinRefillCron {
       debt,
     });
 
-    const subUpdateDto: UpdateSubscriptionDto = {
-      currentPeriodStart: newStart,
-      currentPeriodEnd: newEnd,
+    const subUpdateDto: Period = {
+      start: newStart,
+      end: newEnd,
     };
-    await this.subscriptionService.updateSubscription(
+    await this.subscriptionService.updateSubscriptionPeriod(
       subscriptionId,
       subUpdateDto,
     );

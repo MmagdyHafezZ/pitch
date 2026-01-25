@@ -34,7 +34,6 @@ export class PlanController {
         description: createPlanDto.description,
         planLevel: createPlanDto.planLevel,
         maxCoins: createPlanDto.maxCoins,
-        limits: createPlanDto.limits as unknown as Prisma.JsonValue,
         isActive: createPlanDto.isActive ?? true,
       };
 
@@ -64,7 +63,6 @@ export class PlanController {
         description: updateData.description,
         planLevel: updateData.planLevel,
         maxCoins: updateData.maxCoins,
-        limits: updateData.limits as unknown as Prisma.JsonValue,
         isActive: updateData.isActive,
       };
 
