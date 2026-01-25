@@ -24,6 +24,8 @@ export class TtsProviderFactory {
   listProviders() {
     return this.providers.map((p) => ({
       name: p.name,
+      description: p.description,
+      voices: p.voices || [],
     }));
   }
   getVoices(providerName: string): string[] {

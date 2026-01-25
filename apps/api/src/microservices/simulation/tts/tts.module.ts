@@ -1,10 +1,9 @@
 import { Module } from '@nestjs/common';
-import { TtsController } from './tts.controller';
+import { TtsMicroserviceController } from './tts.controller';
 import { TtsService } from './tts.service';
 import { TtsProviderFactory } from './providers/tts.factory';
-import { OpenAiTtsProvider } from './providers/openai.provider';
-import { PollyTtsProvider } from './providers/polly.provider';
 import { ElevenLabsTtsProvider } from './providers/elevenlabs.provider';
+import { MeloTtsProvider } from './providers/melotts.provider';
 
 import { ConfigModule } from '@nestjs/config';
 
@@ -14,22 +13,20 @@ import { ConfigModule } from '@nestjs/config';
       isGlobal: true,
     }),
   ],
-  controllers: [TtsController],
+  controllers: [TtsMicroserviceController],
   providers: [
     TtsService,
     TtsProviderFactory,
-    OpenAiTtsProvider,
-    PollyTtsProvider,
     ElevenLabsTtsProvider,
+    MeloTtsProvider,
 
     {
       provide: 'TTS_PROVIDERS',
       useFactory: (
-        openai: OpenAiTtsProvider,
-        polly: PollyTtsProvider,
         elevenLabs: ElevenLabsTtsProvider,
-      ) => [openai, polly, elevenLabs],
-      inject: [OpenAiTtsProvider, PollyTtsProvider, ElevenLabsTtsProvider],
+        melotts: MeloTtsProvider,
+      ) => [elevenLabs, melotts],
+      inject: [ElevenLabsTtsProvider, MeloTtsProvider],
     },
   ],
   exports: [TtsService],
