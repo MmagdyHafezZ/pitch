@@ -70,7 +70,6 @@ export interface Plan {
   name: string
   description?: string | null
   planLevel: PlanLevel
-  interval: BillingInterval
   maxCoins: number
   limits?: unknown
   isActive: boolean
@@ -84,6 +83,7 @@ export interface Subscription {
   teamId: string
   planId: string
   status: SubscriptionStatus
+  interval: BillingInterval
   currentPeriodStart: Date
   currentPeriodEnd: Date
   cancelAtPeriodEnd: boolean
@@ -151,7 +151,6 @@ export interface CreatePlanDto {
   name: string
   description?: string | null
   planLevel: PlanLevel
-  interval: BillingInterval
   maxCoins: number
   limits?: unknown
   isActive?: boolean
@@ -161,7 +160,6 @@ export interface UpdatePlanDto {
   name?: string
   description?: string | null
   planLevel?: PlanLevel
-  interval?: BillingInterval
   maxCoins?: number
   limits?: unknown
   isActive?: boolean
@@ -171,6 +169,7 @@ export interface CreateSubscriptionDto {
   teamId: string
   planId: string
   status?: SubscriptionStatus
+  interval: BillingInterval
   currentPeriodStart: Date
   cancelAtPeriodEnd?: boolean
 }
@@ -178,6 +177,7 @@ export interface CreateSubscriptionDto {
 export interface UpdateSubscriptionDto {
   planId?: string
   status?: SubscriptionStatus
+  interval?: BillingInterval
   currentPeriodStart?: Date
   currentPeriodEnd?: Date
   cancelAtPeriodEnd?: boolean
@@ -188,6 +188,7 @@ export interface UpdateSubscriptionDto {
 export interface UpgradeSubscriptionDto {
   planId: string
   status?: SubscriptionStatus
+  interval?: BillingInterval
   currentPeriodStart?: Date
   currentPeriodEnd?: Date
   cancelAtPeriodEnd?: boolean

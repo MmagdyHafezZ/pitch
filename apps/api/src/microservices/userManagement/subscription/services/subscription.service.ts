@@ -47,12 +47,14 @@ export class SubscriptionService {
       );
     }
 
-    const period_end = createSubscriptionDto.currentPeriodStart + plan.interval;
+    const period_end =
+      createSubscriptionDto.currentPeriodStart + createSubscriptionDto.interval;
 
     const sub = await this.subscriptionRepository.create({
       teamId: createSubscriptionDto.teamId,
       planId: createSubscriptionDto.planId,
       status: createSubscriptionDto.status ?? SubscriptionStatus.ACTIVE,
+      interval: createSubscriptionDto.interval,
       currentPeriodStart: createSubscriptionDto.currentPeriodStart,
       currentPeriodEnd: period_end,
       cancelAtPeriodEnd: createSubscriptionDto.cancelAtPeriodEnd ?? false,
@@ -77,19 +79,18 @@ export class SubscriptionService {
     if (dto.planId !== undefined) {
       (data as Prisma.SubscriptionUncheckedUpdateInput).planId = dto.planId;
     }
-
     if (dto.status !== undefined) {
       data.status = dto.status;
     }
-
     if (dto.currentPeriodStart !== undefined) {
       data.currentPeriodStart = dto.currentPeriodStart;
     }
-
+    if (dto.interval !== undefined) {
+      data.interval = dto.interval;
+    }
     if (dto.currentPeriodEnd !== undefined) {
       data.currentPeriodEnd = dto.currentPeriodEnd;
     }
-
     if (dto.cancelAtPeriodEnd !== undefined) {
       data.cancelAtPeriodEnd = dto.cancelAtPeriodEnd;
     }

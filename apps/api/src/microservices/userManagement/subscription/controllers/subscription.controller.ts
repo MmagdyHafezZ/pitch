@@ -45,6 +45,7 @@ export class SubscriptionController {
         teamId: createSubscriptionDto.teamId,
         planId: createSubscriptionDto.planId,
         status: createSubscriptionDto.status,
+        interval: createSubscriptionDto.interval,
         currentPeriodStart: createSubscriptionDto.currentPeriodStart,
         cancelAtPeriodEnd: createSubscriptionDto.cancelAtPeriodEnd ?? false,
       };
@@ -74,8 +75,8 @@ export class SubscriptionController {
       const dto: UpgradeSubscriptionDto = {
         planId: updateData.planId,
         status: updateData.status,
+        interval: updateData.interval,
         currentPeriodStart: updateData.currentPeriodStart,
-        currentPeriodEnd: updateData.currentPeriodEnd,
         cancelAtPeriodEnd: updateData.cancelAtPeriodEnd,
       };
 

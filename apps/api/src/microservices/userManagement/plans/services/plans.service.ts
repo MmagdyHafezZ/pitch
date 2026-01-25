@@ -15,10 +15,7 @@ import { PlanRepository } from '../repositories/plans.repository';
 export class PlanService {
   constructor(private readonly planRepository: PlanRepository) {}
 
-  async createPlan(
-    createPlanDto: CreatePlanDto,
-    requesterId: string,
-  ): Promise<Plan> {
+  async createPlan(createPlanDto: CreatePlanDto): Promise<Plan> {
     const existingByName = await this.planRepository.findByName(
       createPlanDto.name,
     );
@@ -40,18 +37,13 @@ export class PlanService {
       name: createPlanDto.name,
       description: createPlanDto.description ?? null,
       planLevel: createPlanDto.planLevel,
-      interval: createPlanDto.interval,
       maxCoins: createPlanDto.maxCoins,
       limits,
       isActive: createPlanDto.isActive ?? true,
     });
   }
 
-  async updatePlan(
-    planId: string,
-    dto: UpdatePlanDto,
-    requesterId: string,
-  ): Promise<Plan> {
+  async updatePlan(planId: string, dto: UpdatePlanDto): Promise<Plan> {
     const existingPlan = await this.planRepository.findById(planId);
     if (!existingPlan) {
       throw new NotFoundException(`Plan with ID ${planId} not found`);
@@ -71,7 +63,6 @@ export class PlanService {
     if (dto.name !== undefined) data.name = dto.name;
     if (dto.description !== undefined) data.description = dto.description;
     if (dto.planLevel !== undefined) data.planLevel = dto.planLevel;
-    if (dto.interval !== undefined) data.interval = dto.interval;
     if (dto.maxCoins !== undefined) data.maxCoins = dto.maxCoins;
 
     if (dto.limits !== undefined) {
@@ -88,10 +79,7 @@ export class PlanService {
     return this.planRepository.update(planId, data);
   }
 
-  async removePlan(
-    planId: string,
-    requesterId: string,
-  ): Promise<{ message: string }> {
+  async removePlan(planId: string): Promise<{ message: string }> {
     const existingPlan = await this.planRepository.findById(planId);
     if (!existingPlan) {
       throw new NotFoundException(`Plan with ID ${planId} not found`);

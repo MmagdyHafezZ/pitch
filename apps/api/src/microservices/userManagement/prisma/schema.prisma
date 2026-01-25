@@ -150,7 +150,6 @@ model Plan {
   name         String          @unique
   description  String?
   planLevel    PlanLevel       @default(FREE)
-  interval     BillingInterval @default(MONTH)
   maxCoins     Int             @default(0) // the number of allowed tokens in the plan
   limits       Json?           // usage limits
   isActive     Boolean         @default(true) // can anyone subscribe to this plan
@@ -169,6 +168,7 @@ model Subscription {
   teamId                String
   planId                String
   status                SubscriptionStatus @default(ACTIVE) // the status of the subscription
+  interval              BillingInterval    @default(MONTH)
   currentPeriodStart    DateTime
   currentPeriodEnd      DateTime
   cancelAtPeriodEnd     Boolean            @default(false)

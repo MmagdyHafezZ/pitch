@@ -1,6 +1,8 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsDate, IsEnum, IsOptional, IsString } from 'class-validator';
 import { SubscriptionStatus } from '@prisma/user-client';
+import { BillingInterval as BillingIntervalEnum } from '@prisma/user-client';
+import type { BillingInterval } from '@pitch/shared-backend/interfaces/user.interface';
 
 export class CreateSubscriptionRequestDTO {
   @ApiProperty({
@@ -29,11 +31,11 @@ export class CreateSubscriptionRequestDTO {
   currentPeriodStart!: Date;
 
   @ApiProperty({
-    description: 'End date of the subscription',
-    example: '2025-01-01T00:00:00.000Z',
+    description: 'Billing interval',
+    example: 'MONTH',
   })
-  @IsDate()
-  currentPeriodEnd!: Date;
+  @IsEnum(BillingIntervalEnum)
+  interval!: BillingInterval;
 
   @ApiProperty({
     description:
@@ -70,12 +72,11 @@ export class UpgradeSubscriptionRequestDTO {
   currentPeriodStart?: Date;
 
   @ApiProperty({
-    description: 'Optional end date of the subscription',
-    example: '2025-01-01T00:00:00.000Z',
+    description: 'Billing interval',
+    example: 'MONTH',
   })
-  @IsDate()
-  @IsOptional()
-  currentPeriodEnd?: Date;
+  @IsEnum(BillingIntervalEnum)
+  interval!: BillingInterval;
 
   @ApiProperty({
     description:

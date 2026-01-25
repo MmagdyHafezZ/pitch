@@ -33,13 +33,12 @@ export class PlanController {
         name: createPlanDto.name,
         description: createPlanDto.description,
         planLevel: createPlanDto.planLevel,
-        interval: createPlanDto.interval,
         maxCoins: createPlanDto.maxCoins,
         limits: createPlanDto.limits as unknown as Prisma.JsonValue,
         isActive: createPlanDto.isActive ?? true,
       };
 
-      return await this.planService.createPlan(dto, _userClaims.id);
+      return await this.planService.createPlan(dto);
     } catch (error) {
       throw toRpcException(error);
     }
@@ -64,13 +63,12 @@ export class PlanController {
         name: updateData.name,
         description: updateData.description,
         planLevel: updateData.planLevel,
-        interval: updateData.interval,
         maxCoins: updateData.maxCoins,
         limits: updateData.limits as unknown as Prisma.JsonValue,
         isActive: updateData.isActive,
       };
 
-      return await this.planService.updatePlan(id, dto, _userClaims.id);
+      return await this.planService.updatePlan(id, dto);
     } catch (error) {
       throw toRpcException(error);
     }
@@ -85,7 +83,7 @@ export class PlanController {
       this.logger.log(
         `Deleting plan ${data.id} - Requested by: ${data.userClaims.email} (${data.userClaims.id})`,
       );
-      return await this.planService.removePlan(data.id, data.userClaims.id);
+      return await this.planService.removePlan(data.id);
     } catch (error) {
       throw toRpcException(error);
     }
