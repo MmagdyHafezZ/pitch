@@ -25,20 +25,11 @@ export class PlanService {
       );
     }
 
-    const limits:
-      | Prisma.InputJsonValue
-      | Prisma.NullableJsonNullValueInput
-      | undefined =
-      createPlanDto.limits === null || createPlanDto.limits === undefined
-        ? undefined
-        : (createPlanDto.limits as Prisma.InputJsonValue);
-
     return this.planRepository.create({
       name: createPlanDto.name,
       description: createPlanDto.description ?? null,
       planLevel: createPlanDto.planLevel,
       maxCoins: createPlanDto.maxCoins,
-      limits,
       isActive: createPlanDto.isActive ?? true,
     });
   }
@@ -64,16 +55,6 @@ export class PlanService {
     if (dto.description !== undefined) data.description = dto.description;
     if (dto.planLevel !== undefined) data.planLevel = dto.planLevel;
     if (dto.maxCoins !== undefined) data.maxCoins = dto.maxCoins;
-
-    if (dto.limits !== undefined) {
-      const limits: Prisma.InputJsonValue | Prisma.NullableJsonNullValueInput =
-        dto.limits === null
-          ? Prisma.JsonNull
-          : (dto.limits as Prisma.InputJsonValue);
-
-      data.limits = limits;
-    }
-
     if (dto.isActive !== undefined) data.isActive = dto.isActive;
 
     return this.planRepository.update(planId, data);

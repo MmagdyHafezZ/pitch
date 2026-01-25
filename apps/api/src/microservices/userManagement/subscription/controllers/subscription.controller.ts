@@ -11,10 +11,12 @@ import * as userClaimsInterface from '@pitch/shared-backend/interfaces/user-clai
 import { toRpcException } from '@pitch/shared-backend/helpers/exceptions';
 import {
   CreateSubscriptionRequestDTO,
+  UpdateSubscriptionRequestDTO,
   UpgradeSubscriptionRequestDTO,
 } from '../dto/subscription.dto';
 import {
   CreateSubscriptionDto,
+  UpdateSubscriptionDto,
   UpgradeSubscriptionDto,
 } from '@pitch/shared-backend/interfaces/user.interface';
 import { SubscriptionService } from '../services/subscription.service';
@@ -44,13 +46,40 @@ export class SubscriptionController {
       const dto: CreateSubscriptionDto = {
         teamId: createSubscriptionDto.teamId,
         planId: createSubscriptionDto.planId,
-        status: createSubscriptionDto.status,
         interval: createSubscriptionDto.interval,
         currentPeriodStart: createSubscriptionDto.currentPeriodStart,
         cancelAtPeriodEnd: createSubscriptionDto.cancelAtPeriodEnd ?? false,
       };
 
       return await this.subscriptionService.createSubscription(dto);
+    } catch (error) {
+      throw toRpcException(error);
+    }
+  }
+
+  @MessagePattern(USER_SERVICE_PATTERNS.UPGRADE_SUBSCRIPTION)
+  @UsePipes(
+    new ValidationPipe({ transform: true, skipMissingProperties: true }),
+  )
+  async updateSubscription(
+    @Payload()
+    data: { id: string } & UpdateSubscriptionRequestDTO &
+      userClaimsInterface.MessageWithUserClaims,
+  ) {
+    try {
+      this.logger.log(
+        `Updating subscription ${data.id} - Requested by: ${data.userClaims.email} (${data.userClaims.id})`,
+      );
+
+      const { userClaims: _userClaims, id, ...updateData } = data;
+
+      const dto: UpdateSubscriptionDto = {
+        planId: updateData.planId,
+        interval: updateData.interval,
+        limits: updateData.limits,
+      };
+
+      return await this.subscriptionService.updateSubscription(id, dto);
     } catch (error) {
       throw toRpcException(error);
     }
@@ -74,10 +103,8 @@ export class SubscriptionController {
 
       const dto: UpgradeSubscriptionDto = {
         planId: updateData.planId,
-        status: updateData.status,
         interval: updateData.interval,
-        currentPeriodStart: updateData.currentPeriodStart,
-        cancelAtPeriodEnd: updateData.cancelAtPeriodEnd,
+        limits: updateData.limits,
       };
 
       return await this.subscriptionService.upgradeSubscription(id, dto);

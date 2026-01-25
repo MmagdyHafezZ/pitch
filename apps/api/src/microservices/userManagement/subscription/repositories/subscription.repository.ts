@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { UserPrismaService } from '../../prisma/user-prisma.service';
-import { Prisma, Subscription, SubscriptionStatus } from '@prisma/user-client';
+import { Prisma, Subscription } from '@prisma/user-client';
 
 export type SubscriptionWithPlan = Prisma.SubscriptionGetPayload<{
   include: { plan: true };
@@ -71,7 +71,7 @@ export class SubscriptionRepository {
     return this.prisma.subscription.findFirst({
       where: {
         teamId,
-        status: SubscriptionStatus.ACTIVE,
+        isActive: true,
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -81,7 +81,7 @@ export class SubscriptionRepository {
     this.logger.debug('Finding all active subscriptions');
 
     return this.prisma.subscription.findMany({
-      where: { status: SubscriptionStatus.ACTIVE },
+      where: { isActive: true },
       orderBy: { createdAt: 'asc' },
     });
   }
@@ -90,7 +90,7 @@ export class SubscriptionRepository {
     this.logger.debug('Finding subscriptions due for rollover');
     return this.prisma.subscription.findMany({
       where: {
-        status: SubscriptionStatus.ACTIVE,
+        isActive: true,
         currentPeriodEnd: {
           lte: currentDate,
         },

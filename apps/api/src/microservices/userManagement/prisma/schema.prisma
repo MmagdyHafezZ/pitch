@@ -14,11 +14,6 @@ enum Role {
   MEMBER
 }
 
-enum SubscriptionStatus {
-  ACTIVE
-  CANCELED
-}
-
 enum BillingInterval {
   MONTH
   QUARTER
@@ -151,7 +146,6 @@ model Plan {
   description  String?
   planLevel    PlanLevel       @default(FREE)
   maxCoins     Int             @default(0) // the number of allowed tokens in the plan
-  limits       Json?           // usage limits
   isActive     Boolean         @default(true) // can anyone subscribe to this plan
   createdAt    DateTime        @default(now())
   updatedAt    DateTime        @updatedAt
@@ -167,8 +161,9 @@ model Subscription {
   id                    String             @id @default(cuid())
   teamId                String
   planId                String
-  status                SubscriptionStatus @default(ACTIVE) // the status of the subscription
   interval              BillingInterval    @default(MONTH)
+  limits                Int?               // role-based limit
+  isActive              Boolean            @default(true) // whether the subscription is active
   currentPeriodStart    DateTime
   currentPeriodEnd      DateTime
   cancelAtPeriodEnd     Boolean            @default(false)
@@ -181,7 +176,7 @@ model Subscription {
   team                  Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
   plan                  Plan @relation(fields: [planId], references: [id])
 
-  @@index([teamId, status])
+  @@index([teamId, isActive])
   @@index([planId])
   @@map("subscriptions")
 }

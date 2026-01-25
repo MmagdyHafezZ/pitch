@@ -10,7 +10,7 @@ import {
   Length,
   Min,
 } from 'class-validator';
-import { PlanLevel, BillingInterval } from '@prisma/user-client';
+import { PlanLevel } from '@prisma/user-client';
 
 export class CreatePlanRequestDTO {
   @ApiProperty({ description: 'Plan name', example: 'Pro Plan' })
@@ -30,25 +30,10 @@ export class CreatePlanRequestDTO {
   @IsEnum(PlanLevel)
   planLevel!: PlanLevel;
 
-  @ApiProperty({
-    description: 'Billing Interval',
-    example: BillingInterval.MONTH,
-  })
-  @IsEnum(BillingInterval)
-  interval!: BillingInterval;
-
   @ApiProperty({ description: 'Maximum number of tokens', example: 1999 })
   @IsNumber()
   @Min(0)
   maxCoins!: number;
-
-  @ApiProperty({
-    description: 'Per-user or per-role limits (JSON blob) {userId: limit}',
-    example: { 123123: 1999 },
-  })
-  @IsObject()
-  @IsOptional()
-  limits?: Prisma.JsonValue | null;
 
   @ApiProperty({ description: 'Is the plan active?', example: true })
   @IsBoolean()
@@ -76,27 +61,11 @@ export class UpdatePlanRequestDTO {
   @IsOptional()
   planLevel?: PlanLevel;
 
-  @ApiProperty({
-    description: 'Billing Interval',
-    example: BillingInterval.MONTH,
-  })
-  @IsEnum(BillingInterval)
-  @IsOptional()
-  interval?: BillingInterval;
-
   @ApiProperty({ description: 'Maximum number of tokens', example: 1999 })
   @IsNumber()
   @Min(0)
   @IsOptional()
   maxCoins?: number;
-
-  @ApiProperty({
-    description: 'different users that need different levels of limits',
-    example: 100,
-  })
-  @IsObject()
-  @IsOptional()
-  limits?: Prisma.JsonValue | null;
 
   @ApiProperty({ description: 'Is the plan active?', example: true })
   @IsBoolean()

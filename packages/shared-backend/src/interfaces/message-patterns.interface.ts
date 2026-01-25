@@ -22,6 +22,7 @@ export const USER_SERVICE_PATTERNS = {
   DELETE_TEAM_MEMBER: 'delete_team_member',
   CREATE_SUBSCRIPTION: 'create_subscription',
   UPDATE_SUBSCRIPTION: 'update_subscription',
+  UPGRADE_SUBSCRIPTION: 'upgrade_subscription',
   DELETE_SUBSCRIPTION: 'delete_subscription',
   GET_SUBSCRIPTIONS: 'get_subscriptions',
   GET_SUBSCRIPTION: 'get_subscription',

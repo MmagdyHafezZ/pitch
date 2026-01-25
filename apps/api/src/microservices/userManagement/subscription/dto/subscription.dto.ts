@@ -1,6 +1,11 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsDate, IsEnum, IsOptional, IsString } from 'class-validator';
-import { SubscriptionStatus } from '@prisma/user-client';
+import {
+  IsDate,
+  IsEnum,
+  IsNumber,
+  IsOptional,
+  IsString,
+} from 'class-validator';
 import { BillingInterval as BillingIntervalEnum } from '@prisma/user-client';
 import type { BillingInterval } from '@pitch/shared-backend/interfaces/user.interface';
 
@@ -19,10 +24,6 @@ export class CreateSubscriptionRequestDTO {
   @IsString()
   planId!: string;
 
-  @ApiProperty({ description: 'Subscription status', example: 'ACTIVE' })
-  @IsEnum(SubscriptionStatus)
-  status!: SubscriptionStatus;
-
   @ApiProperty({
     description: 'Start date of the subscription',
     example: '2024-01-01T00:00:00.000Z',
@@ -38,8 +39,49 @@ export class CreateSubscriptionRequestDTO {
   interval!: BillingInterval;
 
   @ApiProperty({
+    description: 'Role-based limit',
+    example: 100,
+  })
+  @IsNumber()
+  @IsOptional()
+  limits?: number;
+
+  @ApiProperty({
     description:
       'Whether the subscription will cancel at the end of the current period',
+    example: false,
+  })
+  @IsOptional()
+  cancelAtPeriodEnd?: boolean;
+}
+
+export class UpdateSubscriptionRequestDTO {
+  @ApiProperty({
+    description: 'Optional ID of the plan associated with the subscription',
+    example: 'plan_12345',
+  })
+  @IsString()
+  @IsOptional()
+  planId: string;
+
+  @ApiProperty({
+    description: 'Billing interval',
+    example: 'MONTH',
+  })
+  @IsEnum(BillingIntervalEnum)
+  interval?: BillingInterval;
+
+  @ApiProperty({
+    description: 'Role-based limit',
+    example: 100,
+  })
+  @IsNumber()
+  @IsOptional()
+  limits?: number;
+
+  @ApiProperty({
+    description:
+      'Optional flag indicating whether the subscription will cancel at the end of the current period',
     example: false,
   })
   @IsOptional()
@@ -56,14 +98,6 @@ export class UpgradeSubscriptionRequestDTO {
   planId: string;
 
   @ApiProperty({
-    description: 'Optional subscription status',
-    example: 'ACTIVE',
-  })
-  @IsEnum(SubscriptionStatus)
-  @IsOptional()
-  status?: SubscriptionStatus;
-
-  @ApiProperty({
     description: 'Optional start date of the subscription',
     example: '2024-01-01T00:00:00.000Z',
   })
@@ -77,6 +111,14 @@ export class UpgradeSubscriptionRequestDTO {
   })
   @IsEnum(BillingIntervalEnum)
   interval!: BillingInterval;
+
+  @ApiProperty({
+    description: 'Role-based limit',
+    example: 100,
+  })
+  @IsNumber()
+  @IsOptional()
+  limits?: number;
 
   @ApiProperty({
     description:

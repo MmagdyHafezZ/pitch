@@ -3,7 +3,6 @@
 export type Role = 'OWNER' | 'ADMIN' | 'MEMBER'
 export type PlanLevel = 'FREE' | 'PRO' | 'TEAM' | 'ENTERPRISE'
 export type BillingInterval = 'MONTH' | 'QUARTER' | 'SEMIANNUAL' | 'ANNUAL'
-export type SubscriptionStatus = 'ACTIVE' | 'CANCELED'
 
 /* ---------- READ MODELS ---------- */
 
@@ -71,7 +70,6 @@ export interface Plan {
   description?: string | null
   planLevel: PlanLevel
   maxCoins: number
-  limits?: unknown
   isActive: boolean
   createdAt: Date
   updatedAt: Date
@@ -82,8 +80,9 @@ export interface Subscription {
   id: string
   teamId: string
   planId: string
-  status: SubscriptionStatus
   interval: BillingInterval
+  limits?: number | null
+  isActive: boolean
   currentPeriodStart: Date
   currentPeriodEnd: Date
   cancelAtPeriodEnd: boolean
@@ -152,7 +151,6 @@ export interface CreatePlanDto {
   description?: string | null
   planLevel: PlanLevel
   maxCoins: number
-  limits?: unknown
   isActive?: boolean
 }
 
@@ -161,37 +159,35 @@ export interface UpdatePlanDto {
   description?: string | null
   planLevel?: PlanLevel
   maxCoins?: number
-  limits?: unknown
   isActive?: boolean
 }
 
 export interface CreateSubscriptionDto {
   teamId: string
   planId: string
-  status?: SubscriptionStatus
   interval: BillingInterval
+  limits?: number
   currentPeriodStart: Date
   cancelAtPeriodEnd?: boolean
 }
 
 export interface UpdateSubscriptionDto {
   planId?: string
-  status?: SubscriptionStatus
   interval?: BillingInterval
-  currentPeriodStart?: Date
-  currentPeriodEnd?: Date
-  cancelAtPeriodEnd?: boolean
+  limits?: number
   metadata?: unknown
-  canceledAt?: Date | null
+  cancelAtPeriodEnd?: boolean
 }
 
 export interface UpgradeSubscriptionDto {
   planId: string
-  status?: SubscriptionStatus
   interval?: BillingInterval
-  currentPeriodStart?: Date
-  currentPeriodEnd?: Date
-  cancelAtPeriodEnd?: boolean
+  limits?: number
   metadata?: unknown
   canceledAt?: Date | null
+}
+
+export interface Period {
+  start: Date
+  end: Date
 }

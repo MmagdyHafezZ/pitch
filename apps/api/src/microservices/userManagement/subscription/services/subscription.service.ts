@@ -3,12 +3,13 @@ import {
   NotFoundException,
   ConflictException,
 } from '@nestjs/common';
-import { Prisma, SubscriptionStatus } from '@prisma/user-client';
+import { Prisma } from '@prisma/user-client';
 import {
   Subscription,
   CreateSubscriptionDto,
   UpdateSubscriptionDto,
   UpgradeSubscriptionDto,
+  Period,
 } from '@pitch/shared-backend/interfaces/user.interface';
 import {
   SubscriptionRepository,
@@ -53,7 +54,6 @@ export class SubscriptionService {
     const sub = await this.subscriptionRepository.create({
       teamId: createSubscriptionDto.teamId,
       planId: createSubscriptionDto.planId,
-      status: createSubscriptionDto.status ?? SubscriptionStatus.ACTIVE,
       interval: createSubscriptionDto.interval,
       currentPeriodStart: createSubscriptionDto.currentPeriodStart,
       currentPeriodEnd: period_end,
@@ -79,17 +79,8 @@ export class SubscriptionService {
     if (dto.planId !== undefined) {
       (data as Prisma.SubscriptionUncheckedUpdateInput).planId = dto.planId;
     }
-    if (dto.status !== undefined) {
-      data.status = dto.status;
-    }
-    if (dto.currentPeriodStart !== undefined) {
-      data.currentPeriodStart = dto.currentPeriodStart;
-    }
     if (dto.interval !== undefined) {
       data.interval = dto.interval;
-    }
-    if (dto.currentPeriodEnd !== undefined) {
-      data.currentPeriodEnd = dto.currentPeriodEnd;
     }
     if (dto.cancelAtPeriodEnd !== undefined) {
       data.cancelAtPeriodEnd = dto.cancelAtPeriodEnd;
@@ -104,15 +95,6 @@ export class SubscriptionService {
           : (dto.metadata as Prisma.InputJsonValue);
 
       data.metadata = metadata;
-    }
-
-    if (
-      dto.status === SubscriptionStatus.CANCELED &&
-      dto.canceledAt === undefined
-    ) {
-      data.canceledAt = new Date();
-    } else if (dto.canceledAt !== undefined) {
-      data.canceledAt = dto.canceledAt;
     }
 
     return this.subscriptionRepository.update(subscriptionId, data);
@@ -201,7 +183,7 @@ export class SubscriptionService {
       };
     }
     await this.subscriptionRepository.update(subscriptionId, {
-      status: SubscriptionStatus.CANCELED,
+      isActive: false,
       cancelAtPeriodEnd: false,
       canceledAt: new Date(now),
     });
@@ -209,6 +191,23 @@ export class SubscriptionService {
     return {
       message: `Subscription with ID ${subscriptionId} has been canceled`,
     };
+  }
+
+  async updateSubscriptionPeriod(
+    subscriptionId: string,
+    dto: Period,
+  ): Promise<Subscription> {
+    const existing = await this.subscriptionRepository.findById(subscriptionId);
+    if (!existing) {
+      throw new NotFoundException(
+        `Subscription with ID ${subscriptionId} not found`,
+      );
+    }
+
+    return this.subscriptionRepository.update(subscriptionId, {
+      currentPeriodStart: dto.start,
+      currentPeriodEnd: dto.end,
+    });
   }
 
   async checkExistingSubscription(teamId: string): Promise<Boolean> {
