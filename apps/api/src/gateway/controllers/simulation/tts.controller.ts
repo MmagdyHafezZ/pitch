@@ -1,6 +1,8 @@
 import {
   Controller,
   Get,
+  Post,
+  Body,
   Query,
   Res,
   Inject,
@@ -9,12 +11,17 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
-import { ApiBearerAuth, ApiQuery, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiTags, ApiResponse } from '@nestjs/swagger';
 import { catchError, timeout } from 'rxjs/operators';
 import { throwError, lastValueFrom } from 'rxjs';
 import type { Response } from 'express';
 
 import { GlobalJwtAuthGuard } from '../../guards/global-jwt-auth.guard';
+import {
+  SpeakRequestDto,
+  ProviderInfoDto,
+  VoicesResponseDto,
+} from './dtos/tts.dto';
 // If you have a shared interface for patterns, use that import instead.
 // Example: import { TTS_SERVICE_PATTERNS } from '@pitch/shared-backend/interfaces/message-patterns.interface';
 
@@ -32,14 +39,6 @@ type SpeakResponse = {
   contentType: string;
 };
 
-type ProviderInfo = {
-  name: string;
-  description?: string;
-  voices: string[];
-};
-
-type ListProvidersResponse = ProviderInfo[];
-
 @ApiTags('tts')
 @Controller({ path: 'tts', version: '1' })
 @UseGuards(GlobalJwtAuthGuard)
@@ -49,22 +48,30 @@ export class TtsGatewayController {
     @Inject('SIMULATION_SERVICE') private readonly ttsService: ClientProxy,
   ) {}
 
-  @Get('speak')
-  @ApiQuery({ name: 'text', type: String, required: true })
-  @ApiQuery({ name: 'provider', type: String, required: true })
-  @ApiQuery({ name: 'voice', type: String, required: true })
-  async speak(
-    @Query('text') text: string,
-    @Query('provider') provider: string,
-    @Query('voice') voice: string,
-    @Res() res: Response,
-  ) {
+  @Post('speak')
+  @ApiResponse({
+    status: 200,
+    description: 'Audio file stream',
+    schema: {
+      type: 'string',
+      format: 'binary',
+    },
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Invalid request parameters',
+  })
+  @ApiResponse({
+    status: 500,
+    description: 'Internal server error',
+  })
+  async speak(@Body() body: SpeakRequestDto, @Res() res: Response) {
     const result = await lastValueFrom(
       this.ttsService
         .send<SpeakResponse>(TTS_SERVICE_PATTERNS.SPEAK, {
-          text,
-          provider,
-          options: { voice },
+          text: body.text,
+          provider: body.provider,
+          options: { voice: body.voice },
         })
         .pipe(
           timeout(15000),
@@ -87,9 +94,14 @@ export class TtsGatewayController {
   }
 
   @Get('providers')
+  @ApiResponse({
+    status: 200,
+    description: 'List of available TTS providers with their voices',
+    type: [ProviderInfoDto],
+  })
   listProviders() {
     return this.ttsService
-      .send<ListProvidersResponse>(TTS_SERVICE_PATTERNS.LIST_PROVIDERS, {})
+      .send<ProviderInfoDto[]>(TTS_SERVICE_PATTERNS.LIST_PROVIDERS, {})
       .pipe(
         timeout(5000),
         catchError((err: unknown) => {
@@ -102,10 +114,14 @@ export class TtsGatewayController {
   }
 
   @Get('voices')
-  @ApiQuery({ name: 'provider', type: String, required: true })
+  @ApiResponse({
+    status: 200,
+    description: 'List of available voices for a provider',
+    type: VoicesResponseDto,
+  })
   getVoices(@Query('provider') provider: string) {
     return this.ttsService
-      .send(TTS_SERVICE_PATTERNS.GET_VOICES, { provider })
+      .send<VoicesResponseDto>(TTS_SERVICE_PATTERNS.GET_VOICES, { provider })
       .pipe(
         timeout(5000),
         catchError((err: unknown) => {
