@@ -5,6 +5,7 @@ import { UserGatewayController } from './controllers/userManagement/user-gateway
 import { AuthGatewayController } from './controllers/userManagement/auth-gateway.controller';
 import { GlobalJwtAuthGuard } from './guards/global-jwt-auth.guard';
 import { UserClaimsInterceptor } from './interceptors/user-claims.interceptor';
+import { TtsGatewayController } from './controllers/simulation/tts.controller';
 import {
   MICROSERVICES_CONFIG,
   getRabbitMQUrl,
@@ -39,6 +40,7 @@ import { TeamGatewayController } from './controllers/userManagement/team-gateway
     UserGatewayController,
     AuthGatewayController,
     TeamGatewayController,
+    TtsGatewayController,
   ],
   providers: [
     { provide: APP_GUARD, useClass: GlobalJwtAuthGuard },
