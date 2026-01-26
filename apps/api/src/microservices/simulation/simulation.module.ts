@@ -1,8 +1,9 @@
 import { Module } from '@nestjs/common';
+import { TtsModule } from './tts/tts.module';
 
 @Module({
-  controllers: [],
+  imports: [TtsModule],
   providers: [],
-  exports: [],
+  exports: [TtsModule],
 })
 export class SimulationModule {}
