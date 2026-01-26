@@ -19,7 +19,17 @@ import {
 import { catchError, timeout } from 'rxjs/operators';
 import { throwError } from 'rxjs';
 import type { S3ServicePattern } from '@pitch/shared-backend/interfaces/message-patterns.interface';
-import type { ServiceError } from '@pitch/shared-backend/interfaces/error.interface';
+const getErrorMessage = (err: unknown, fallback: string): string => {
+  if (err instanceof HttpException) return err.message;
+  if (err instanceof Error) return err.message;
+  if (typeof err === 'string') return err;
+  return fallback;
+};
+
+const getErrorStatus = (err: unknown): number => {
+  if (err instanceof HttpException) return err.getStatus();
+  return HttpStatus.INTERNAL_SERVER_ERROR;
+};
 
 const PRESIGN_UPLOAD: S3ServicePattern = 's3.presign.upload';
 const PRESIGN_DOWNLOAD: S3ServicePattern = 's3.presign.download';
@@ -45,12 +55,16 @@ export class S3GatewayController {
       expiresInSeconds?: number;
     },
   ) {
-    return this.s3Service.send(PRESIGN_UPLOAD, body).pipe(
+    return this.s3Service
+      .send(PRESIGN_UPLOAD, body)
+      .pipe(
         timeout(5000),
         catchError((err: unknown) => {
-          const error = err as ServiceError;
-          const message = error.message ?? 'Failed to generate presigned upload URL';
-          const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
+          const message = getErrorMessage(
+            err,
+            'Failed to generate presigned upload URL',
+          );
+          const status = getErrorStatus(err);
           return throwError(() => new HttpException(message, status));
         }),
       );
@@ -68,9 +82,11 @@ export class S3GatewayController {
       .pipe(
         timeout(5000),
         catchError((err: unknown) => {
-          const error = err as ServiceError;
-          const message = error.message ?? 'Failed to generate presigned download URL';
-          const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
+          const message = getErrorMessage(
+            err,
+            'Failed to generate presigned download URL',
+          );
+          const status = getErrorStatus(err);
           return throwError(() => new HttpException(message, status));
         }),
       );
@@ -88,9 +104,11 @@ export class S3GatewayController {
       .pipe(
         timeout(5000),
         catchError((err: unknown) => {
-          const error = err as ServiceError;
-          const message = error.message ?? 'Failed to generate presigned delete URL';
-          const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
+          const message = getErrorMessage(
+            err,
+            'Failed to generate presigned delete URL',
+          );
+          const status = getErrorStatus(err);
           return throwError(() => new HttpException(message, status));
         }),
       );
@@ -114,9 +132,8 @@ export class S3GatewayController {
       .pipe(
         timeout(5000),
         catchError((err: unknown) => {
-          const error = err as ServiceError;
-          const message = error.message ?? 'Failed to list files';
-          const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
+          const message = getErrorMessage(err, 'Failed to list files');
+          const status = getErrorStatus(err);
           return throwError(() => new HttpException(message, status));
         }),
       );
@@ -134,9 +151,11 @@ export class S3GatewayController {
       .pipe(
         timeout(5000),
         catchError((err: unknown) => {
-          const error = err as ServiceError;
-          const message = error.message ?? 'Failed to delete files by prefix';
-          const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
+          const message = getErrorMessage(
+            err,
+            'Failed to delete files by prefix',
+          );
+          const status = getErrorStatus(err);
           return throwError(() => new HttpException(message, status));
         }),
       );
