@@ -73,21 +73,23 @@ export class S3GatewayController {
   @ApiResponse({ status: 200, description: 'Presigned download URL generated' })
   presignDownload(
     @Body()
-    body: { bucket: string; key: string; expiresInSeconds?: number },
+    body: {
+      bucket: string;
+      key: string;
+      expiresInSeconds?: number;
+    },
   ) {
-    return this.s3Service
-      .send(PRESIGN_DOWNLOAD, body)
-      .pipe(
-        timeout(5000),
-        catchError((err: unknown) => {
-          const message = getErrorMessage(
-            err,
-            'Failed to generate presigned download URL',
-          );
-          const status = getErrorStatus(err);
-          return throwError(() => new HttpException(message, status));
-        }),
-      );
+    return this.s3Service.send(PRESIGN_DOWNLOAD, body).pipe(
+      timeout(5000),
+      catchError((err: unknown) => {
+        const message = getErrorMessage(
+          err,
+          'Failed to generate presigned download URL',
+        );
+        const status = getErrorStatus(err);
+        return throwError(() => new HttpException(message, status));
+      }),
+    );
   }
 
   @Post('presigned/delete')
