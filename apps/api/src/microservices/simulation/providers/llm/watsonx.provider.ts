@@ -1,5 +1,6 @@
 import { Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { RedisService } from '@pitch/shared-backend/redis/index';
 import { Observable } from 'rxjs';
 import axios, { AxiosInstance } from 'axios';
 import {
@@ -18,6 +19,7 @@ import {
   LLMStreamChunkDto,
 } from '../../dto/llm.dto';
 import { LLMPricingService } from '../../services/llm/llm-pricing.service';
+import { RedisKeys } from '../../services/redis/redis-key-patterns';
 
 /**
  * IBM WatsonX Provider
@@ -37,6 +39,7 @@ export class WatsonxProvider implements ILLMProvider {
   constructor(
     private configService: ConfigService,
     @Optional() private readonly pricingService?: LLMPricingService,
+    @Optional() private readonly redisService?: RedisService,
   ) {
     this.apiKey = this.configService.get<string>('WATSONX_API_KEY') || '';
     this.projectId = this.configService.get<string>('WATSONX_PROJECT_ID') || '';
@@ -113,6 +116,11 @@ export class WatsonxProvider implements ILLMProvider {
       const promptTokens = this.estimateTokens(prompt);
       const completionTokens = this.estimateTokens(result.generated_text);
       const totalTokens = promptTokens + completionTokens;
+      const costUsd = this.calculateCost(
+        promptTokens,
+        completionTokens,
+        capabilities,
+      );
 
       return {
         content: result.generated_text,
@@ -120,11 +128,7 @@ export class WatsonxProvider implements ILLMProvider {
           promptTokens,
           completionTokens,
           totalTokens,
-          costUsd: this.calculateCost(
-            promptTokens,
-            completionTokens,
-            capabilities,
-          ),
+          ...(costUsd !== undefined ? { costUsd } : {}),
           estimated: true,
         },
         providerMeta: {
@@ -191,6 +195,11 @@ export class WatsonxProvider implements ILLMProvider {
                 if (data === '[DONE]') {
                   const capabilities = this.getModelCapabilities(config.model);
                   const promptTokens = this.estimateTokens(prompt);
+                  const costUsd = this.calculateCost(
+                    promptTokens,
+                    accumulatedTokens,
+                    capabilities,
+                  );
 
                   subscriber.next({
                     done: true,
@@ -198,11 +207,7 @@ export class WatsonxProvider implements ILLMProvider {
                       promptTokens,
                       completionTokens: accumulatedTokens,
                       totalTokens: promptTokens + accumulatedTokens,
-                      costUsd: this.calculateCost(
-                        promptTokens,
-                        accumulatedTokens,
-                        capabilities,
-                      ),
+                      ...(costUsd !== undefined ? { costUsd } : {}),
                       estimated: true,
                     },
                     finishReason: 'stop',
@@ -236,6 +241,11 @@ export class WatsonxProvider implements ILLMProvider {
             if (!subscriber.closed) {
               const capabilities = this.getModelCapabilities(config.model);
               const promptTokens = this.estimateTokens(prompt);
+              const costUsd = this.calculateCost(
+                promptTokens,
+                accumulatedTokens,
+                capabilities,
+              );
 
               subscriber.next({
                 done: true,
@@ -243,11 +253,7 @@ export class WatsonxProvider implements ILLMProvider {
                   promptTokens,
                   completionTokens: accumulatedTokens,
                   totalTokens: promptTokens + accumulatedTokens,
-                  costUsd: this.calculateCost(
-                    promptTokens,
-                    accumulatedTokens,
-                    capabilities,
-                  ),
+                  ...(costUsd !== undefined ? { costUsd } : {}),
                   estimated: true,
                 },
                 finishReason: 'stop',
@@ -305,10 +311,7 @@ export class WatsonxProvider implements ILLMProvider {
         supportsVision: false,
         supportsAudio: false,
         supportedModalities: ['text'],
-        pricing: {
-          inputTokensPerMillion: 2.0,
-          outputTokensPerMillion: 6.0,
-        },
+        pricing: this.buildPricing(model),
       };
     }
 
@@ -324,10 +327,7 @@ export class WatsonxProvider implements ILLMProvider {
         supportsVision: false,
         supportsAudio: false,
         supportedModalities: ['text'],
-        pricing: {
-          inputTokensPerMillion: 4.0,
-          outputTokensPerMillion: 12.0,
-        },
+        pricing: this.buildPricing(model),
       };
     }
 
@@ -340,10 +340,7 @@ export class WatsonxProvider implements ILLMProvider {
         supportsVision: false,
         supportsAudio: false,
         supportedModalities: ['text'],
-        pricing: {
-          inputTokensPerMillion: 5.0,
-          outputTokensPerMillion: 15.0,
-        },
+        pricing: this.buildPricing(model),
       };
     }
 
@@ -356,10 +353,7 @@ export class WatsonxProvider implements ILLMProvider {
         supportsVision: false,
         supportsAudio: false,
         supportedModalities: ['text'],
-        pricing: {
-          inputTokensPerMillion: 1.0,
-          outputTokensPerMillion: 3.0,
-        },
+        pricing: this.buildPricing(model),
       };
     }
 
@@ -371,11 +365,50 @@ export class WatsonxProvider implements ILLMProvider {
       supportsVision: false,
       supportsAudio: false,
       supportedModalities: ['text'],
-      pricing: {
-        inputTokensPerMillion: 3.0,
-        outputTokensPerMillion: 9.0,
-      },
+      pricing: this.buildPricing(model),
     };
+  }
+
+  private buildPricing(model: string): ModelCapabilities['pricing'] {
+    const pricing = this.pricingService?.getPricing(this.name, model);
+
+    return {
+      inputTokensPerMillion: pricing?.inputTokensPerMillion ?? 0,
+      outputTokensPerMillion: pricing?.outputTokensPerMillion ?? 0,
+      imageTokens: pricing?.imageTokens,
+      audioSecondsToTokens: pricing?.audioSecondsToTokens,
+    };
+  }
+
+  private hasPricing(pricing: ModelCapabilities['pricing']): boolean {
+    return (
+      (pricing.inputTokensPerMillion ?? 0) > 0 ||
+      (pricing.outputTokensPerMillion ?? 0) > 0
+    );
+  }
+
+  private tokenCacheKey(): string {
+    return RedisKeys.llmAuthToken(this.name);
+  }
+
+  private async readCachedToken(): Promise<string | null> {
+    if (!this.redisService) {
+      return null;
+    }
+    return this.redisService.get<string>(this.tokenCacheKey());
+  }
+
+  private async cacheToken(
+    token: string,
+    expiresInSeconds: number,
+  ): Promise<void> {
+    if (!this.redisService) {
+      return;
+    }
+    const ttlSeconds = Math.max(expiresInSeconds - 300, 60);
+    await this.redisService.set(this.tokenCacheKey(), token, {
+      ttl: ttlSeconds,
+    });
   }
 
   /**
@@ -383,12 +416,20 @@ export class WatsonxProvider implements ILLMProvider {
    */
   private async ensureAuthenticated(): Promise<void> {
     const now = Date.now();
+    const bufferMs = 5 * 60 * 1000;
 
-    if (this.accessToken && this.tokenExpiry > now + 5 * 60 * 1000) {
+    if (this.accessToken && this.tokenExpiry > now + bufferMs) {
       return;
     }
 
     try {
+      const cachedToken = await this.readCachedToken();
+      if (cachedToken) {
+        this.accessToken = cachedToken;
+        this.tokenExpiry = now + bufferMs;
+        return;
+      }
+
       const response = await axios.post(
         'https://iam.cloud.ibm.com/identity/token',
         new URLSearchParams({
@@ -403,7 +444,11 @@ export class WatsonxProvider implements ILLMProvider {
       );
 
       this.accessToken = response.data.access_token;
-      this.tokenExpiry = now + response.data.expires_in * 1000;
+      const expiresIn = response.data.expires_in ?? 3600;
+      this.tokenExpiry = now + expiresIn * 1000;
+      if (this.accessToken) {
+        await this.cacheToken(this.accessToken, expiresIn);
+      }
 
       this.logger.log('Successfully authenticated with WatsonX');
     } catch (error) {
@@ -436,7 +481,10 @@ export class WatsonxProvider implements ILLMProvider {
     promptTokens: number,
     completionTokens: number,
     capabilities: ModelCapabilities,
-  ): number {
+  ): number | undefined {
+    if (!this.hasPricing(capabilities.pricing)) {
+      return undefined;
+    }
     const inputCost =
       (promptTokens / 1000000) * capabilities.pricing.inputTokensPerMillion;
     const outputCost =

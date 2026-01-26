@@ -6,8 +6,8 @@ export default {
   datasources: {
     db: {
       url:
-        process.env.SIMULATION_DIRECT_URL ??
-        process.env.SIMULATION_DATABASE_URL ??
+        process.env.SIMULATION_DIRECT_URL ||
+        process.env.SIMULATION_DATABASE_URL ||
         '',
     },
   },

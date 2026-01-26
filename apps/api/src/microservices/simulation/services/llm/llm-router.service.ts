@@ -546,6 +546,12 @@ export class LLMRouterService {
     try {
       const provider = this.providerRegistry.getProvider(route.provider);
       const pricing = provider.getModelCapabilities(route.model).pricing;
+      const hasPricing =
+        (pricing.inputTokensPerMillion ?? 0) > 0 ||
+        (pricing.outputTokensPerMillion ?? 0) > 0;
+      if (!hasPricing) {
+        return Number.POSITIVE_INFINITY;
+      }
       return pricing.inputTokensPerMillion + pricing.outputTokensPerMillion;
     } catch {
       return Number.POSITIVE_INFINITY;

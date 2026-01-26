@@ -3,6 +3,8 @@ import { ClientsModule, Transport } from '@nestjs/microservices';
 import { JwtModule } from '@nestjs/jwt';
 import { UserGatewayController } from './controllers/userManagement/user-gateway.controller';
 import { AuthGatewayController } from './controllers/userManagement/auth-gateway.controller';
+import { SessionGatewayController } from './controllers/simulation/session-gateway.controller';
+import { InvitationGatewayController } from './controllers/simulation/invitation-gateway.controller';
 import { GlobalJwtAuthGuard } from './guards/global-jwt-auth.guard';
 import { UserClaimsInterceptor } from './interceptors/user-claims.interceptor';
 import { TtsGatewayController } from './controllers/simulation/tts.controller';
@@ -18,7 +20,6 @@ import {
 import { APP_GUARD } from '@nestjs/core';
 import { TeamGatewayController } from './controllers/userManagement/team-gateway.controller';
 import { SimulationWsGateway } from './controllers/simulation/simulation-ws.gateway';
-import { TEST_CONTROLLERS } from '@microservices/simulation/controllers-test';
 
 @Module({
   imports: [
@@ -43,6 +44,8 @@ import { TEST_CONTROLLERS } from '@microservices/simulation/controllers-test';
     AuthGatewayController,
     TeamGatewayController,
     TtsGatewayController,
+    SessionGatewayController,
+    InvitationGatewayController,
   ],
   providers: [
     { provide: APP_GUARD, useClass: GlobalJwtAuthGuard },

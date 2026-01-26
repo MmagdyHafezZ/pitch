@@ -1,12 +1,38 @@
-import { Controller, Post, Body, Logger, HttpCode, Get } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Body,
+  Logger,
+  HttpCode,
+  Get,
+  HttpException,
+  HttpStatus,
+} from '@nestjs/common';
+import {
+  ApiBadRequestResponse,
+  ApiBadGatewayResponse,
+  ApiGatewayTimeoutResponse,
+  ApiOkResponse,
+  ApiOperation,
+  ApiTags,
+  ApiTooManyRequestsResponse,
+  ApiUnauthorizedResponse,
+  ApiInternalServerErrorResponse,
+} from '@nestjs/swagger';
 import { LLMService } from '../services/llm/llm.service';
 import { ModelCapabilitiesRegistry } from '../services/llm/model-capabilities.registry';
+import { LLMModelCatalogService } from '../services/llm/llm-model-catalog.service';
+import { LLMPricingService } from '../services/llm/llm-pricing.service';
+import { LLMProviderRegistry } from '../providers/llm/llm-provider.registry';
 import {
   SimpleLLMRequestDto,
   ModelLLMRequestDto,
   LLMTestResponseDto,
 } from '../dto/llm-test.dto';
 import { LLMRequestDto } from '../dto/llm.dto';
+import { HttpErrorResponseDto } from '../dto/http-error.dto';
+import { LLMProvidersResponseDto } from '../dto/llm-providers.dto';
+import { ProviderError } from '../providers/llm/llm-provider.interface';
 
 /**
  * LLM Test Controller
@@ -16,6 +42,7 @@ import { LLMRequestDto } from '../dto/llm.dto';
  *
  * Base path: /simulation/llm
  */
+@ApiTags('Simulation LLM')
 @Controller('simulation/llm')
 export class LLMTestController {
   private readonly logger = new Logger(LLMTestController.name);
@@ -23,6 +50,9 @@ export class LLMTestController {
   constructor(
     private readonly llmService: LLMService,
     private readonly capabilitiesRegistry: ModelCapabilitiesRegistry,
+    private readonly modelCatalog: LLMModelCatalogService,
+    private readonly pricingService: LLMPricingService,
+    private readonly providerRegistry: LLMProviderRegistry,
   ) {}
 
   /**
@@ -31,6 +61,16 @@ export class LLMTestController {
    * GET /simulation/llm/health
    */
   @Get('health')
+  @ApiOperation({ summary: 'Health check' })
+  @ApiOkResponse({
+    schema: {
+      example: {
+        status: 'ok',
+        service: 'simulation-llm',
+        timestamp: '2024-01-01T12:00:00.000Z',
+      },
+    },
+  })
   health() {
     return {
       status: 'ok',
@@ -56,6 +96,32 @@ export class LLMTestController {
    */
   @Post('test')
   @HttpCode(200)
+  @ApiOperation({ summary: 'Simple LLM completion test' })
+  @ApiOkResponse({ type: LLMTestResponseDto })
+  @ApiBadRequestResponse({
+    type: HttpErrorResponseDto,
+    description: 'Invalid request or unsupported model/provider.',
+  })
+  @ApiUnauthorizedResponse({
+    type: HttpErrorResponseDto,
+    description: 'Missing or invalid provider credentials.',
+  })
+  @ApiTooManyRequestsResponse({
+    type: HttpErrorResponseDto,
+    description: 'Provider rate limit exceeded.',
+  })
+  @ApiBadGatewayResponse({
+    type: HttpErrorResponseDto,
+    description: 'Upstream provider error.',
+  })
+  @ApiGatewayTimeoutResponse({
+    type: HttpErrorResponseDto,
+    description: 'Provider request timed out.',
+  })
+  @ApiInternalServerErrorResponse({
+    type: HttpErrorResponseDto,
+    description: 'Unexpected error.',
+  })
   async simpleTest(
     @Body() dto: SimpleLLMRequestDto,
   ): Promise<LLMTestResponseDto> {
@@ -103,7 +169,7 @@ export class LLMTestController {
       };
     } catch (error) {
       this.logger.error('Simple test failed', error);
-      throw error;
+      this.throwHttpError(error);
     }
   }
 
@@ -136,6 +202,32 @@ export class LLMTestController {
    */
   @Post('complete')
   @HttpCode(200)
+  @ApiOperation({ summary: 'Model-specific LLM completion test' })
+  @ApiOkResponse({ type: LLMTestResponseDto })
+  @ApiBadRequestResponse({
+    type: HttpErrorResponseDto,
+    description: 'Invalid request or unsupported model/provider.',
+  })
+  @ApiUnauthorizedResponse({
+    type: HttpErrorResponseDto,
+    description: 'Missing or invalid provider credentials.',
+  })
+  @ApiTooManyRequestsResponse({
+    type: HttpErrorResponseDto,
+    description: 'Provider rate limit exceeded.',
+  })
+  @ApiBadGatewayResponse({
+    type: HttpErrorResponseDto,
+    description: 'Upstream provider error.',
+  })
+  @ApiGatewayTimeoutResponse({
+    type: HttpErrorResponseDto,
+    description: 'Provider request timed out.',
+  })
+  @ApiInternalServerErrorResponse({
+    type: HttpErrorResponseDto,
+    description: 'Unexpected error.',
+  })
   async modelSpecificTest(
     @Body() dto: ModelLLMRequestDto,
   ): Promise<LLMTestResponseDto> {
@@ -186,7 +278,7 @@ export class LLMTestController {
       };
     } catch (error) {
       this.logger.error('Model-specific test failed', error);
-      throw error;
+      this.throwHttpError(error);
     }
   }
 
@@ -199,8 +291,19 @@ export class LLMTestController {
    * including pricing and capability metadata.
    */
   @Get('providers')
+  @ApiOperation({ summary: 'List available providers and models' })
+  @ApiOkResponse({ type: LLMProvidersResponseDto })
+  @ApiInternalServerErrorResponse({
+    type: HttpErrorResponseDto,
+    description: 'Unexpected error.',
+  })
   async listProviders() {
-    const openaiModels = [
+    await Promise.all([
+      this.pricingService.refreshIfNeeded(),
+      this.modelCatalog.refreshIfNeeded(),
+    ]);
+
+    const openaiFallback = [
       'gpt-4o',
       'gpt-4o-mini',
       'gpt-4-turbo',
@@ -209,13 +312,22 @@ export class LLMTestController {
       'o1-preview',
       'o1-mini',
     ];
-    const watsonxModels = [
+    const watsonxFallback = [
       'ibm/granite-13b-chat-v2',
       'ibm/granite-20b-chat-v2',
       'ibm/granite-34b-chat-v2',
       'meta-llama/llama-3-8b-instruct',
       'meta-llama/llama-3-70b-instruct',
     ];
+
+    const openaiModels = await this.loadProviderModels(
+      'openai',
+      openaiFallback,
+    );
+    const watsonxModels = await this.loadProviderModels(
+      'watsonx',
+      watsonxFallback,
+    );
 
     return {
       providers: [
@@ -237,6 +349,22 @@ export class LLMTestController {
     };
   }
 
+  private async loadProviderModels(
+    providerName: string,
+    fallback: string[],
+  ): Promise<string[]> {
+    const providerNameLower = providerName.toLowerCase();
+    const models = await this.modelCatalog.listModels(providerNameLower);
+    const effectiveModels = models.length > 0 ? models : fallback;
+
+    try {
+      const provider = this.providerRegistry.getProvider(providerNameLower);
+      return effectiveModels.filter((model) => provider.supportsModel(model));
+    } catch (error) {
+      return effectiveModels;
+    }
+  }
+
   private buildModelDetails(models: string[], providerName: string) {
     return models.map((model) => {
       const capabilities = this.capabilitiesRegistry.getCapabilities(
@@ -256,5 +384,37 @@ export class LLMTestController {
         supportedModalities: capabilities.supportedModalities,
       };
     });
+  }
+
+  private throwHttpError(error: unknown): never {
+    if (error instanceof ProviderError) {
+      throw this.toHttpException(error);
+    }
+    throw error;
+  }
+
+  private toHttpException(error: ProviderError): HttpException {
+    const status = this.mapProviderErrorStatus(error.code);
+    const message = `LLM provider error [${error.provider}/${error.code}]: ${error.message}`;
+    return new HttpException(message, status);
+  }
+
+  private mapProviderErrorStatus(code: string): HttpStatus {
+    switch (code) {
+      case 'INVALID_REQUEST':
+      case 'MODEL_NOT_SUPPORTED':
+      case 'PROVIDER_NOT_FOUND':
+        return HttpStatus.BAD_REQUEST;
+      case 'AUTH_ERROR':
+        return HttpStatus.UNAUTHORIZED;
+      case 'RATE_LIMIT':
+        return HttpStatus.TOO_MANY_REQUESTS;
+      case 'TIMEOUT':
+        return HttpStatus.GATEWAY_TIMEOUT;
+      case 'API_ERROR':
+        return HttpStatus.BAD_GATEWAY;
+      default:
+        return HttpStatus.INTERNAL_SERVER_ERROR;
+    }
   }
 }

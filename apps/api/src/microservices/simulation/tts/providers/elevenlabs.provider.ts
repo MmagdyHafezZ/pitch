@@ -21,33 +21,23 @@ export class ElevenLabsTtsProvider implements TtsProvider {
 
   private readonly client: ElevenLabsClient;
 
-  // Cached voice directory
   private voiceNameToId: Map<string, string> | null = null;
   private voicesCache: string[] = [];
-  // private voices: string[] = [];
-
   constructor(private readonly config: ConfigService) {
     this.apiKey = this.config.getOrThrow<string>('ELEVENLABS_API_KEY');
     this.defaultVoice =
       this.config.get<string>('ELEVENLABS_DEFAULT_VOICE') || 'Rachel';
 
-    // Align with SDK naming
     this.modelId =
       this.config.get<string>('ELEVENLABS_MODEL_ID') || 'eleven_v2_flash';
 
-    // Example: mp3_44100_128 (matches your snippet style)
     this.outputFormat =
       this.config.get<string>('ELEVENLABS_OUTPUT_FORMAT') || 'mp3_44100_128';
 
-    // Initialize SDK client with explicit apiKey (recommended in Nest)
     this.client = new ElevenLabsClient({ apiKey: this.apiKey });
-    // Preload voices
-    this.ensureVoicesLoaded().catch((err) => {
-      console.error('Failed to load ElevenLabs voices on startup:', err);
-    });
+    this.ensureVoicesLoaded().catch((err) => {});
   }
 
-  // Expose names for your /tts/voices endpoint
   get voices(): string[] {
     return this.voicesCache;
   }
@@ -57,13 +47,10 @@ export class ElevenLabsTtsProvider implements TtsProvider {
       const requested = (options?.voice || this.defaultVoice).trim();
       const voiceId = this.resolveVoiceId(requested);
 
-      // SDK call (matches your snippet conceptually)
       const audioStream = await this.client.textToSpeech.convert(voiceId, {
         text,
         modelId: this.modelId,
-        outputFormat: this.outputFormat,
-        // Optional: if you later extend TtsOptions with stability/similarity,
-        // you can pass them here as well.
+        outputFormat: this.outputFormat as any,
       });
 
       const audioBuffer = await this.readWebStreamToBuffer(audioStream);
@@ -75,7 +62,6 @@ export class ElevenLabsTtsProvider implements TtsProvider {
           : 'application/octet-stream',
       };
     } catch (err) {
-      // Preserve explicit BadRequestException behavior for unknown voices
       if (err instanceof BadRequestException) throw err;
 
       throw new InternalServerErrorException('ElevenLabs TTS failed');
@@ -83,18 +69,15 @@ export class ElevenLabsTtsProvider implements TtsProvider {
   }
 
   private resolveVoiceId(input: string): string {
-    // Exact name match
     if (this.voiceNameToId?.has(input)) {
       return this.voiceNameToId.get(input)!;
     }
 
-    // Case-insensitive name match
     const lower = input.toLowerCase();
     for (const [name, id] of this.voiceNameToId ?? []) {
       if (name.toLowerCase() === lower) return id;
     }
 
-    // If it looks like an ID, accept it and let ElevenLabs validate
     if (/^[a-zA-Z0-9_-]{10,}$/.test(input)) {
       return input;
     }

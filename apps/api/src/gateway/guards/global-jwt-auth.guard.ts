@@ -53,7 +53,10 @@ export class GlobalJwtAuthGuard implements CanActivate {
     this.logger.log(`Validating JWT for route: ${method} ${path}`);
 
     const token = extractBearer(req.headers.authorization);
-    if (!token) throw new UnauthorizedException('Access token is required');
+    if (!token && !this.isBypassToken(token)) {
+      this.logger.warn('No JWT token provided');
+      throw new UnauthorizedException('Access token is required');
+    }
     this.logger.log('JWT Token:', token);
     if (this.isBypassToken(token)) {
       req.user = {
@@ -69,6 +72,9 @@ export class GlobalJwtAuthGuard implements CanActivate {
     }
 
     try {
+      if (!token) {
+        throw new UnauthorizedException('Access token is required');
+      }
       const payload = this.jwtService.verify<JwtPayload>(token, {
         secret: process.env.JWT_SECRET || 'secret',
       });
@@ -102,10 +108,11 @@ export class GlobalJwtAuthGuard implements CanActivate {
     }
   }
 
-  private isBypassToken(token: string): boolean {
-    if (process.env.DEV_BYPASS_ENABLED !== 'true') return false;
-    const bypassToken = process.env.DEV_BYPASS_TOKEN;
-    return !!bypassToken && token === bypassToken;
+  private isBypassToken(token: string | undefined): boolean {
+    return (
+      process.env.DEV_BYPASS_ENABLED === 'true' &&
+      token === process.env.DEV_BYPASS_TOKEN
+    );
   }
 }
 

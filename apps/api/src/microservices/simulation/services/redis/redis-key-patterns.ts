@@ -52,6 +52,10 @@ export const RedisKeys = {
     `sim:llm:${sessionId}:${turnId}:stream`,
 
   vadState: (callId: string) => `sim:vad:${callId}:state`,
+
+  llmPricing: (provider: string) => `sim:llm:pricing:${provider}`,
+  llmCatalog: (provider: string) => `sim:llm:catalog:${provider}`,
+  llmAuthToken: (provider: string) => `sim:llm:auth:${provider}`,
 } as const;
 
 /**
@@ -229,4 +233,6 @@ export const RedisTTL = {
   TURN_CONTEXT: 10 * 60,
   LLM_STREAM: 5 * 60,
   VAD_STATE: 5 * 60,
+  LLM_PRICING: 6 * 60 * 60,
+  LLM_MODEL_CATALOG: 6 * 60 * 60,
 } as const;

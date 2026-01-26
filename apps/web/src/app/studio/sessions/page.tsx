@@ -12,45 +12,35 @@ import {
   Box,
   Collapse,
   UnstyledButton,
+  Loader,
+  Center,
 } from '@mantine/core'
 import { IconChevronDown, IconChevronUp, IconX } from '@tabler/icons-react'
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { Suspense, useState, useEffect, useMemo } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { useAuth } from '@/features/auth'
+import { useSessions, type Session } from '@/features/sessions'
 
-type Status = 'Upcoming' | 'Pending' | 'Overdue' | 'Completed'
+type Status = 'active' | 'ended'
 const statusColor: Record<Status, string> = {
-  Upcoming: 'blue',
-  Pending: 'yellow',
-  Overdue: 'red',
-  Completed: 'green',
-}
-
-interface SessionType {
-  title: string
-  date: string
-  tags: string[]
-  status: Status
-  score?: number
-  description?: string
+  active: 'blue',
+  ended: 'green',
 }
 
 function SessionCard({
-  title,
-  date,
-  tags,
-  status,
-  score,
+  session,
   onClick,
   isSelected,
 }: {
-  title: string
-  date: string
-  tags: string[]
-  status: Status
-  score?: number
+  session: Session
   onClick: () => void
   isSelected?: boolean
 }) {
+  const displayStatus = session.status as Status
+  const displayName =
+    session.name && session.name.trim()
+      ? session.name.trim()
+      : `Session ${session.id.substring(0, 8)}`
   return (
     <Card
       withBorder
@@ -70,39 +60,69 @@ function SessionCard({
     >
       <Stack gap="xs">
         <Group justify="space-between" align="center">
-          <Title order={5}>{title}</Title>
-          <Badge color={statusColor[status]} radius="sm" variant="light">
-            {status}
+          <Title order={5}>{displayName}</Title>
+          <Badge color={statusColor[displayStatus]} radius="sm" variant="light">
+            {displayStatus}
           </Badge>
         </Group>
         <Text size="xs" c="dimmed">
-          {date}
+          ID: {session.id.substring(0, 12)}
+        </Text>
+        <Text size="xs" c="dimmed">
+          {new Date(session.createdAt).toLocaleDateString()}
         </Text>
         <Group gap={6} wrap="wrap">
-          {tags.map((t, idx) => (
-            <Badge key={`${t}-${idx}`} variant="outline" color="gray" radius="sm">
-              {t}
+          <Badge variant="outline" color="blue" radius="sm">
+            {session.type}
+          </Badge>
+          {session.tags?.map((tag: string, idx: number) => (
+            <Badge key={`${tag}-${idx}`} variant="outline" color="gray" radius="sm">
+              {tag}
             </Badge>
           ))}
         </Group>
-        {status === 'Completed' && score && (
-          <Badge radius="sm" size="lg" color={score >= 7 ? 'green' : 'yellow'}>
-            {score.toFixed(1)}
-          </Badge>
-        )}
       </Stack>
     </Card>
   )
 }
 
-function SessionDetailPanel({
-  session,
-  onDismiss,
-}: {
-  session: SessionType
-  onDismiss: () => void
-}) {
+function SessionDetailPanel({ session, onDismiss }: { session: Session; onDismiss: () => void }) {
   const router = useRouter()
+  const displayStatus = session.status as Status
+  const displayName =
+    session.name && session.name.trim()
+      ? session.name.trim()
+      : `Session ${session.id.substring(0, 12)}`
+  const configEntries =
+    session.sessionConfig && typeof session.sessionConfig === 'object'
+      ? Object.entries(session.sessionConfig as Record<string, unknown>).filter(
+          ([key]) => key !== 'description'
+        )
+      : []
+  const description =
+    session.sessionConfig &&
+    typeof (session.sessionConfig as Record<string, unknown>).description === 'string'
+      ? ((session.sessionConfig as Record<string, unknown>).description as string)
+      : null
+  const details = [
+    { label: 'Scenario', value: session.scenarioId },
+    { label: 'Persona', value: session.personaId },
+    { label: 'Language', value: session.language },
+    { label: 'CRM Context', value: session.crmContextId },
+    { label: 'Ended Reason', value: session.endedReason },
+    {
+      label: 'Ended At',
+      value: session.endedAt ? new Date(session.endedAt).toLocaleString() : null,
+    },
+  ]
+
+  const formatValue = (value: unknown) => {
+    if (value == null || value === '') return 'N/A'
+    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+      return String(value)
+    }
+    return JSON.stringify(value)
+  }
 
   return (
     <Card
@@ -112,24 +132,27 @@ function SessionDetailPanel({
       style={{
         backgroundColor: 'var(--mantine-color-dark-8)',
         color: 'white',
-        height: 'fit-content',
+        height: 'calc(100vh - 3.7em - 32px)',
+        maxHeight: 'calc(100vh - 3.7em - 32px)',
+        overflowY: 'auto',
         position: 'sticky',
-        top: 20,
+        top: 0,
+        alignSelf: 'flex-start',
       }}
     >
       <Stack gap="xl">
         {/* Header */}
         <Box>
           <Group justify="space-between" align="start" mb="xs">
-            <Title order={2} c="white" style={{ fontWeight: 700, flex: 1 }}>
-              {session.title}
-            </Title>
+            <Stack gap={4} style={{ flex: 1 }}>
+              <Title order={2} c="white" style={{ fontWeight: 700 }}>
+                {displayName}
+              </Title>
+              <Text size="sm" c="dimmed">
+                ID: {session.id}
+              </Text>
+            </Stack>
             <Group gap="xs">
-              {session.score && (
-                <Text size="xl" fw={700} c="white">
-                  {session.score.toFixed(1)}/10
-                </Text>
-              )}
               <UnstyledButton
                 onClick={onDismiss}
                 style={{
@@ -152,24 +175,27 @@ function SessionDetailPanel({
           </Group>
           <Group gap="xs">
             <Text size="sm" c="dimmed">
-              {session.date}
+              {new Date(session.createdAt).toLocaleDateString()}
             </Text>
             <Text size="sm" c="dimmed">
               •
             </Text>
-            <Badge color={statusColor[session.status]} radius="sm" variant="light">
-              {session.status}
+            <Badge color={statusColor[displayStatus]} radius="sm" variant="light">
+              {displayStatus}
             </Badge>
           </Group>
         </Box>
 
-        {/* Tags */}
+        {/* Type & Tags */}
         <Box>
           <Title order={4} c="white" mb="md">
-            Tags
+            Type & Tags
           </Title>
           <Group gap="xs">
-            {session.tags.map((tag, idx) => (
+            <Badge variant="filled" color="blue" radius="md" size="lg">
+              {session.type}
+            </Badge>
+            {session.tags?.map((tag: string, idx: number) => (
               <Badge
                 key={`detail-${tag}-${idx}`}
                 variant="filled"
@@ -188,58 +214,60 @@ function SessionDetailPanel({
           <Title order={4} c="white" mb="md">
             Config
           </Title>
-          <Stack gap="md">
-            <Box
-              style={{
-                height: 8,
-                backgroundColor: 'var(--mantine-color-dark-6)',
-                borderRadius: 4,
-              }}
-            />
-            <Box
-              style={{
-                height: 8,
-                backgroundColor: 'var(--mantine-color-dark-6)',
-                borderRadius: 4,
-              }}
-            />
-            <Box
-              style={{
-                height: 8,
-                backgroundColor: 'var(--mantine-color-dark-6)',
-                borderRadius: 4,
-              }}
-            />
-          </Stack>
-        </Box>
-
-        {/* Description */}
-        <Box>
-          <Title order={4} c="white" mb="md">
-            Description
-          </Title>
-          <Box
-            p="md"
-            style={{
-              backgroundColor: 'white',
-              borderRadius: 8,
-              minHeight: 200,
-            }}
-          >
+          {configEntries.length > 0 ? (
             <Stack gap="sm">
-              {Array.from({ length: 7 }).map((_, i) => (
-                <Box
-                  key={i}
-                  style={{
-                    height: 8,
-                    backgroundColor: 'var(--mantine-color-gray-3)',
-                    borderRadius: 4,
-                    width: i === 6 ? '60%' : '100%',
-                  }}
-                />
+              {configEntries.map(([key, value]) => (
+                <Group key={key} align="flex-start" gap="sm" wrap="nowrap">
+                  <Text size="sm" c="dimmed" style={{ minWidth: 120 }}>
+                    {key}
+                  </Text>
+                  <Text size="sm" c="white">
+                    {formatValue(value)}
+                  </Text>
+                </Group>
               ))}
             </Stack>
-          </Box>
+          ) : (
+            <Text size="sm" c="dimmed">
+              No config provided.
+            </Text>
+          )}
+        </Box>
+
+        {/* Details */}
+        <Box>
+          <Title order={4} c="white" mb="md">
+            Details
+          </Title>
+          <Stack
+            gap="sm"
+            p="md"
+            style={{
+              backgroundColor: 'var(--mantine-color-dark-7)',
+              borderRadius: 8,
+            }}
+          >
+            {details.map((detail) => (
+              <Group key={detail.label} align="flex-start" gap="sm" wrap="nowrap">
+                <Text size="sm" c="dimmed" style={{ minWidth: 120 }}>
+                  {detail.label}
+                </Text>
+                <Text size="sm" c="white">
+                  {formatValue(detail.value)}
+                </Text>
+              </Group>
+            ))}
+            {description && (
+              <>
+                <Text size="sm" c="dimmed" mt="sm">
+                  Description
+                </Text>
+                <Text size="sm" c="white">
+                  {description}
+                </Text>
+              </>
+            )}
+          </Stack>
         </Box>
 
         {/* Action Buttons */}
@@ -248,7 +276,7 @@ function SessionDetailPanel({
             size="lg"
             variant="light"
             color="blue"
-            onClick={() => router.push('/studio/sessions/create')}
+            onClick={() => router.push(`/studio/sessions/${session.id}/edit`)}
           >
             Edit
           </Button>
@@ -256,7 +284,7 @@ function SessionDetailPanel({
             size="lg"
             variant="filled"
             color="blue"
-            onClick={() => router.push('/studio/sessions/live')}
+            onClick={() => router.push(`/session/${session.id}`)}
           >
             Launch
           </Button>
@@ -267,93 +295,75 @@ function SessionDetailPanel({
 }
 
 export default function SessionsPage() {
+  return (
+    <Suspense fallback={<SessionsPageFallback />}>
+      <SessionsPageInner />
+    </Suspense>
+  )
+}
+
+function SessionsPageInner() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const { user } = useAuth()
+  const { sessions, loading, fetchUserSessions } = useSessions()
+
   const [assignedExpanded, setAssignedExpanded] = useState(true)
-  const [createdExpanded, setCreatedExpanded] = useState(false)
-  const [selectedSession, setSelectedSession] = useState<SessionType | null>(null)
+  const [createdExpanded, setCreatedExpanded] = useState(true)
+  const [selectedSession, setSelectedSession] = useState<Session | null>(null)
 
-  const assigned: SessionType[] = [
-    {
-      title: 'Product Intro Practice',
-      date: 'October 13, 2025',
-      tags: ['Tag', 'Tag', 'Tag', 'Tag', 'Tag', '+7 more'],
-      status: 'Upcoming' as const,
-      description: 'Practice session for product introduction',
-    },
-    {
-      title: 'Product Intro Practice',
-      date: 'October 11, 2025',
-      tags: ['Tag', 'Tag', 'Tag', 'Tag', 'Tag', '+7 more'],
-      status: 'Upcoming' as const,
-    },
-    {
-      title: 'Product Intro Practice',
-      date: 'October 10, 2025',
-      tags: ['Tag', 'Tag', 'Tag', 'Tag', 'Tag', '+7 more'],
-      status: 'Upcoming' as const,
-    },
-    {
-      title: 'Product Intro Practice',
-      date: 'October 8, 2025',
-      tags: ['Tag', 'Tag', 'Tag', 'Tag', 'Tag', '+7 more'],
-      status: 'Pending' as const,
-    },
-    {
-      title: 'Product Intro Practice',
-      date: 'October 7, 2025',
-      tags: ['Tag', 'Tag', 'Tag', 'Tag', 'Tag', '+7 more'],
-      status: 'Overdue' as const,
-    },
-    {
-      title: 'Product Intro Practice',
-      date: 'October 5, 2025',
-      tags: ['Tag', 'Tag', 'Tag', 'Tag', 'Tag', '+7 more'],
-      status: 'Overdue' as const,
-    },
-    {
-      title: 'Product Intro Practice',
-      date: 'October 4, 2025',
-      tags: ['Tag', 'Tag', 'Tag', '+9 more'],
-      status: 'Completed' as const,
-      score: 8.2,
-    },
-    {
-      title: 'Product Intro Practice',
-      date: 'October 4, 2025',
-      tags: ['Tag', 'Tag', 'Tag', '+9 more'],
-      status: 'Completed' as const,
-      score: 6.5,
-    },
-    {
-      title: 'Product Intro Practice',
-      date: 'October 3, 2025',
-      tags: ['Tag', 'Tag', 'Tag', '+9 more'],
-      status: 'Completed' as const,
-      score: 3.7,
-    },
-  ]
+  useEffect(() => {
+    if (user?.id) {
+      fetchUserSessions(user.id)
+    }
+  }, [user?.id, fetchUserSessions])
 
-  const created: SessionType[] = [
-    {
-      title: 'Sales Pitch 101',
-      date: 'September 20, 2025',
-      tags: ['Tag', 'Tag', 'Tag', '+7 more'],
-      status: 'Upcoming' as const,
-    },
-    {
-      title: 'Pricing Objection Handling',
-      date: 'September 18, 2025',
-      tags: ['Tag', 'Tag', 'Tag', '+7 more'],
-      status: 'Pending' as const,
-    },
-    {
-      title: 'Competitive Intel Brief',
-      date: 'September 08, 2025',
-      tags: ['Tag', 'Tag', 'Tag', '+9 more'],
-      status: 'Completed' as const,
-      score: 7.9,
-    },
-  ]
+  const searchQuery = (searchParams.get('q') ?? '').trim().toLowerCase()
+
+  const matchesQuery = (session: Session, query: string) => {
+    if (!query) return true
+
+    const description =
+      session.sessionConfig &&
+      typeof (session.sessionConfig as Record<string, unknown>).description === 'string'
+        ? ((session.sessionConfig as Record<string, unknown>).description as string)
+        : ''
+
+    const haystack = [
+      session.name,
+      session.id,
+      session.type,
+      session.status,
+      session.language,
+      session.scenarioId,
+      session.personaId,
+      session.crmContextId,
+      session.endedReason,
+      ...(session.tags ?? []),
+      description,
+    ]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase()
+
+    return haystack.includes(query)
+  }
+
+  const filteredSessions = useMemo(() => {
+    if (!searchQuery) return sessions
+    return sessions.filter((session) => matchesQuery(session, searchQuery))
+  }, [sessions, searchQuery])
+
+  const createdSessions = filteredSessions.filter((s) => s.userId === user?.id)
+  const assignedSessions = filteredSessions.filter((s) => s.userId !== user?.id)
+
+  useEffect(() => {
+    if (!selectedSession) return
+    const stillVisible = filteredSessions.some((session) => session.id === selectedSession.id)
+    if (!stillVisible) {
+      setSelectedSession(null)
+    }
+  }, [filteredSessions, selectedSession])
 
   return (
     <Group align="start" gap="xl" wrap="nowrap">
@@ -362,95 +372,108 @@ export default function SessionsPage() {
         style={{
           flex: selectedSession ? '0 0 65%' : '1 1 100%',
           transition: 'flex 0.3s linear',
+          justifyContent: 'center',
+          alignItems: 'center',
         }}
       >
         <Stack gap="xl">
-          <Box>
-            <UnstyledButton
-              onClick={() => setAssignedExpanded(!assignedExpanded)}
+          {loading ? (
+            <Center p="xl">
+              <Loader size="lg" />
+            </Center>
+          ) : assignedSessions.length === 0 && createdSessions.length === 0 ? (
+            <Box
               style={{
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'center',
+                alignItems: 'center',
+                height: '100%',
                 width: '100%',
-                padding: '16px 20px',
-                backgroundColor: 'var(--mantine-color-dark-8)',
-                borderRadius: '8px',
-                marginBottom: '16px',
+                paddingTop: '10em',
               }}
             >
-              <Group justify="space-between" wrap="nowrap">
-                <Title order={3} c="white" style={{ fontWeight: 600 }}>
-                  Assigned to you
-                </Title>
-                {assignedExpanded ? (
-                  <IconChevronDown size={24} color="white" />
-                ) : (
-                  <IconChevronUp size={24} color="white" />
-                )}
-              </Group>
-            </UnstyledButton>
-
-            <Collapse in={assignedExpanded}>
-              <SimpleGrid
-                cols={{ base: 1, sm: 2, lg: selectedSession ? 2 : 3 }}
-                spacing="lg"
-                style={{ transition: 'all 0.3s ease-in-out' }}
+              <Title order={3} c="dimmed" mb="md">
+                No sessions found
+              </Title>
+              <Text c="dimmed" mb="md">
+                You haven&apos;t created or been assigned to any sessions yet.
+              </Text>
+              <Button
+                variant="light"
+                color="blue"
+                onClick={() => router.push('/studio/sessions/create')}
               >
-                {assigned.map((s, i) => (
-                  <SessionCard
-                    key={`${s.title}-${i}`}
-                    {...s}
-                    onClick={() => setSelectedSession(s)}
-                    isSelected={
-                      selectedSession?.title === s.title && selectedSession?.date === s.date
-                    }
-                  />
-                ))}
-              </SimpleGrid>
-            </Collapse>
-          </Box>
+                Create a session
+              </Button>
+            </Box>
+          ) : (
+            <>
+              {createdSessions.length > 0 && (
+                <Box>
+                  <Collapse in={createdExpanded}>
+                    <SimpleGrid
+                      cols={{ base: 1, sm: 2, lg: selectedSession ? 2 : 3 }}
+                      spacing="lg"
+                      style={{ transition: 'all 0.3s ease-in-out' }}
+                    >
+                      {createdSessions.map((session) => (
+                        <SessionCard
+                          key={session.id}
+                          session={session}
+                          onClick={() => setSelectedSession(session)}
+                          isSelected={selectedSession?.id === session.id}
+                        />
+                      ))}
+                    </SimpleGrid>
+                  </Collapse>
+                </Box>
+              )}
 
-          {/* Created by you section */}
-          <Box>
-            <UnstyledButton
-              onClick={() => setCreatedExpanded(!createdExpanded)}
-              style={{
-                width: '100%',
-                padding: '16px 20px',
-                backgroundColor: 'var(--mantine-color-dark-8)',
-                borderRadius: '8px',
-                marginBottom: '16px',
-              }}
-            >
-              <Group justify="space-between" wrap="nowrap">
-                <Title order={3} c="white" style={{ fontWeight: 600 }}>
-                  Created by you
-                </Title>
-                {createdExpanded ? (
-                  <IconChevronDown size={24} color="white" />
-                ) : (
-                  <IconChevronUp size={24} color="white" />
-                )}
-              </Group>
-            </UnstyledButton>
+              {assignedSessions.length > 0 && (
+                <Box>
+                  <UnstyledButton
+                    onClick={() => setAssignedExpanded(!assignedExpanded)}
+                    style={{
+                      width: '100%',
+                      padding: '16px 20px',
+                      backgroundColor: 'var(--mantine-color-dark-8)',
+                      borderRadius: '8px',
+                      marginBottom: '16px',
+                    }}
+                  >
+                    <Group justify="space-between" wrap="nowrap">
+                      <Title order={3} c="white" style={{ fontWeight: 600 }}>
+                        Assigned to you ({assignedSessions.length})
+                      </Title>
+                      {assignedExpanded ? (
+                        <IconChevronDown size={24} color="white" />
+                      ) : (
+                        <IconChevronUp size={24} color="white" />
+                      )}
+                    </Group>
+                  </UnstyledButton>
 
-            <Collapse in={createdExpanded}>
-              <SimpleGrid
-                cols={{ base: 1, sm: 2, lg: selectedSession ? 2 : 3 }}
-                spacing="lg"
-                style={{ transition: 'all 0.3s ease-in-out' }}
-              >
-                {created.map((s, i) => (
-                  <SessionCard
-                    key={`${s.title}-created-${i}`}
-                    {...s}
-                    onClick={() => setSelectedSession(s)}
-                    isSelected={
-                      selectedSession?.title === s.title && selectedSession?.date === s.date
-                    }
-                  />
-                ))}
-              </SimpleGrid>
-            </Collapse>
-          </Box>
+                  <Collapse in={assignedExpanded}>
+                    <SimpleGrid
+                      cols={{ base: 1, sm: 2, lg: selectedSession ? 2 : 3 }}
+                      spacing="lg"
+                      style={{ transition: 'all 0.3s ease-in-out' }}
+                    >
+                      {assignedSessions.map((session) => (
+                        <SessionCard
+                          key={session.id}
+                          session={session}
+                          onClick={() => setSelectedSession(session)}
+                          isSelected={selectedSession?.id === session.id}
+                        />
+                      ))}
+                    </SimpleGrid>
+                  </Collapse>
+                </Box>
+              )}
+            </>
+          )}
         </Stack>
       </Box>
 
@@ -472,7 +495,14 @@ export default function SessionsPage() {
   )
 }
 
-// Add CSS for slide-in animation
+function SessionsPageFallback() {
+  return (
+    <Center p="xl">
+      <Loader size="lg" />
+    </Center>
+  )
+}
+
 if (typeof document !== 'undefined') {
   const styleId = 'session-slide-animation'
   if (!document.getElementById(styleId)) {

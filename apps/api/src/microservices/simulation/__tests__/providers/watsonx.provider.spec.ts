@@ -32,6 +32,25 @@ describe('WatsonxProvider', () => {
       return undefined;
     }),
   } as any;
+  const pricingService = {
+    getPricing: jest.fn((_provider: string, model: string) => {
+      if (model.includes('granite-13b')) {
+        return { inputTokensPerMillion: 2, outputTokensPerMillion: 6 };
+      }
+      if (model.includes('granite-34b')) {
+        return { inputTokensPerMillion: 4, outputTokensPerMillion: 12 };
+      }
+      if (model.includes('llama-3-70b')) {
+        return { inputTokensPerMillion: 5, outputTokensPerMillion: 15 };
+      }
+      if (model.includes('llama-3-8b')) {
+        return { inputTokensPerMillion: 1, outputTokensPerMillion: 3 };
+      }
+      return undefined;
+    }),
+  } as any;
+  const createProvider = (config = configService) =>
+    new WatsonxProvider(config, pricingService);
 
   beforeEach(() => {
     (axios.create as jest.Mock).mockReturnValue({ post: jest.fn() });
@@ -42,7 +61,7 @@ describe('WatsonxProvider', () => {
   });
 
   it('supports WatsonX model names', () => {
-    const provider = new WatsonxProvider(configService);
+    const provider = createProvider();
     expect(provider.supportsModel('granite-13b-chat')).toBe(true);
     expect(provider.supportsModel('llama-3-8b')).toBe(true);
     expect(provider.supportsModel('mixtral-8x7b')).toBe(true);
@@ -52,7 +71,7 @@ describe('WatsonxProvider', () => {
 
   it('validates missing API key', () => {
     const badConfig = { get: jest.fn(() => '') } as any;
-    const provider = new WatsonxProvider(badConfig);
+    const provider = createProvider(badConfig);
 
     expect(() =>
       provider.validateConfig({ model: 'granite-13b' } as any),
@@ -60,7 +79,7 @@ describe('WatsonxProvider', () => {
   });
 
   it('validates unsupported model', () => {
-    const provider = new WatsonxProvider(configService);
+    const provider = createProvider();
 
     expect(() => provider.validateConfig({ model: 'gpt-4' } as any)).toThrow(
       ProviderInvalidRequestError,
@@ -71,7 +90,7 @@ describe('WatsonxProvider', () => {
     const badConfig = {
       get: jest.fn((key: string) => (key === 'WATSONX_API_KEY' ? 'key' : '')),
     } as any;
-    const provider = new WatsonxProvider(badConfig);
+    const provider = createProvider(badConfig);
 
     expect(() =>
       provider.validateConfig({ model: 'granite-13b' } as any),
@@ -79,7 +98,7 @@ describe('WatsonxProvider', () => {
   });
 
   it('returns model capabilities by model family', () => {
-    const provider = new WatsonxProvider(configService);
+    const provider = createProvider();
 
     expect(
       provider.getModelCapabilities('granite-13b').pricing
@@ -99,11 +118,11 @@ describe('WatsonxProvider', () => {
     expect(
       provider.getModelCapabilities('mixtral-8x7b').pricing
         .inputTokensPerMillion,
-    ).toBe(3.0);
+    ).toBe(0);
   });
 
   it('converts messages to prompt strings', () => {
-    const provider = new WatsonxProvider(configService);
+    const provider = createProvider();
     const prompt = (provider as any).convertMessagesToPrompt([
       { role: 'user', content: 'Hello' },
       {
@@ -117,7 +136,7 @@ describe('WatsonxProvider', () => {
   });
 
   it('estimates tokens and calculates cost', () => {
-    const provider = new WatsonxProvider(configService);
+    const provider = createProvider();
     const tokens = (provider as any).estimateTokens('12345678');
     const cost = (provider as any).calculateCost(10, 5, {
       pricing: { inputTokensPerMillion: 2, outputTokensPerMillion: 4 },
@@ -128,7 +147,7 @@ describe('WatsonxProvider', () => {
   });
 
   it('skips auth when token is still valid', async () => {
-    const provider = new WatsonxProvider(configService) as any;
+    const provider = createProvider() as any;
     provider.accessToken = 'cached';
     provider.tokenExpiry = Date.now() + 10 * 60 * 1000;
 
@@ -140,7 +159,7 @@ describe('WatsonxProvider', () => {
   it('throws when IAM token cannot be fetched', async () => {
     (axios.post as jest.Mock).mockRejectedValue(new Error('IAM down'));
 
-    const provider = new WatsonxProvider(configService);
+    const provider = createProvider();
 
     await expect((provider as any).ensureAuthenticated()).rejects.toThrow(
       ProviderAuthError,
@@ -148,7 +167,7 @@ describe('WatsonxProvider', () => {
   });
 
   it('completes responses with estimated usage', async () => {
-    const provider = new WatsonxProvider(configService);
+    const provider = createProvider();
     const client = (provider as any).client;
 
     client.post.mockResolvedValue({
@@ -168,7 +187,7 @@ describe('WatsonxProvider', () => {
   });
 
   it('streams deltas and emits final usage', async () => {
-    const provider = new WatsonxProvider(configService);
+    const provider = createProvider();
     const client = (provider as any).client;
 
     const stream = new PassThrough();

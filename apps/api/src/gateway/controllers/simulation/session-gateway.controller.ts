@@ -1,0 +1,243 @@
+import {
+  Controller,
+  Get,
+  Post,
+  Put,
+  Delete,
+  Body,
+  Param,
+  Query,
+  Inject,
+  HttpException,
+  HttpStatus,
+  UseGuards,
+  UseInterceptors,
+} from '@nestjs/common';
+import { ClientProxy } from '@nestjs/microservices';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+  ApiQuery,
+} from '@nestjs/swagger';
+import { catchError, timeout } from 'rxjs/operators';
+import { throwError } from 'rxjs';
+import { SIMULATION_SERVICE_PATTERNS } from '@pitch/shared-backend/interfaces/message-patterns.interface';
+import { GlobalJwtAuthGuard } from '../../guards/global-jwt-auth.guard';
+import { UserClaimsInterceptor } from '../../interceptors/user-claims.interceptor';
+import { UserClaims } from '../../decorators/user-claims.decorator';
+import type { UserClaims as UserClaimsType } from '@pitch/shared-backend/interfaces/user-claims.interface';
+import { normalizeError } from '@pitch/shared-backend/helpers/exceptions';
+
+/**
+ * Session Gateway Controller
+ *
+ * HTTP Gateway controller that forwards session management requests
+ * to the simulation microservice via RabbitMQ.
+ *
+ * Base path: /v1/simulation/sessions
+ */
+@ApiTags('simulation-sessions')
+@Controller({ path: 'simulation/sessions', version: '1' })
+@UseGuards(GlobalJwtAuthGuard)
+@UseInterceptors(UserClaimsInterceptor)
+@ApiBearerAuth('bearer')
+export class SessionGatewayController {
+  constructor(
+    @Inject('SIMULATION_SERVICE') private simulationService: ClientProxy,
+  ) {}
+
+  /**
+   * Create a new session
+   *
+   * POST /v1/simulation/sessions
+   */
+  @Post()
+  @ApiOperation({ summary: 'Create a new simulation session' })
+  @ApiResponse({ status: 201, description: 'Session created successfully' })
+  @ApiResponse({ status: 400, description: 'Invalid input data' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  createSession(
+    @Body() createSessionDto: any,
+    @UserClaims() userClaims: UserClaimsType,
+  ) {
+    return this.simulationService
+      .send(SIMULATION_SERVICE_PATTERNS.CREATE_SESSION, {
+        ...createSessionDto,
+        userClaims,
+      })
+      .pipe(
+        timeout(10000),
+        catchError((err: unknown) => {
+          const error = normalizeError(err);
+          const message = error.message ?? 'Failed to create session';
+          const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
+          return throwError(() => new HttpException(message, status));
+        }),
+      );
+  }
+
+  /**
+   * Get a session by ID
+   *
+   * GET /v1/simulation/sessions/:id
+   */
+  @Get(':id')
+  @ApiOperation({ summary: 'Get a session by ID' })
+  @ApiResponse({ status: 200, description: 'Session retrieved successfully' })
+  @ApiResponse({ status: 404, description: 'Session not found' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  getSession(
+    @Param('id') id: string,
+    @UserClaims() userClaims: UserClaimsType,
+  ) {
+    return this.simulationService
+      .send(SIMULATION_SERVICE_PATTERNS.GET_SESSION, {
+        id,
+        userClaims,
+      })
+      .pipe(
+        timeout(5000),
+        catchError((err: unknown) => {
+          const error = normalizeError(err);
+          const message = error.message ?? 'Failed to get session';
+          const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
+          return throwError(() => new HttpException(message, status));
+        }),
+      );
+  }
+
+  /**
+   * List sessions with optional filters
+   *
+   * GET /v1/simulation/sessions
+   */
+  @Get()
+  @ApiOperation({ summary: 'List sessions with optional filters' })
+  @ApiResponse({ status: 200, description: 'Sessions retrieved successfully' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiQuery({ name: 'userId', required: false, type: String })
+  @ApiQuery({ name: 'orgId', required: false, type: String })
+  @ApiQuery({ name: 'type', required: false, enum: ['text', 'voice', 'video'] })
+  @ApiQuery({ name: 'status', required: false, type: String })
+  @ApiQuery({ name: 'scenarioId', required: false, type: String })
+  @ApiQuery({ name: 'personaId', required: false, type: String })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiQuery({ name: 'offset', required: false, type: Number })
+  listSessions(@Query() query: any, @UserClaims() userClaims: UserClaimsType) {
+    return this.simulationService
+      .send(SIMULATION_SERVICE_PATTERNS.LIST_SESSIONS, {
+        ...query,
+        userClaims,
+      })
+      .pipe(
+        timeout(10000),
+        catchError((err: unknown) => {
+          const error = normalizeError(err);
+          const message = error.message ?? 'Failed to list sessions';
+          const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
+          return throwError(() => new HttpException(message, status));
+        }),
+      );
+  }
+
+  /**
+   * Update a session
+   *
+   * PUT /v1/simulation/sessions/:id
+   */
+  @Put(':id')
+  @ApiOperation({ summary: 'Update a session' })
+  @ApiResponse({ status: 200, description: 'Session updated successfully' })
+  @ApiResponse({
+    status: 400,
+    description: 'Invalid input data or session already ended',
+  })
+  @ApiResponse({ status: 404, description: 'Session not found' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  updateSession(
+    @Param('id') id: string,
+    @Body() updateSessionDto: any,
+    @UserClaims() userClaims: UserClaimsType,
+  ) {
+    return this.simulationService
+      .send(SIMULATION_SERVICE_PATTERNS.UPDATE_SESSION, {
+        id,
+        ...updateSessionDto,
+        userClaims,
+      })
+      .pipe(
+        timeout(5000),
+        catchError((err: unknown) => {
+          const error = normalizeError(err);
+          const message = error.message ?? 'Failed to update session';
+          const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
+          return throwError(() => new HttpException(message, status));
+        }),
+      );
+  }
+
+  /**
+   * End a session
+   *
+   * POST /v1/simulation/sessions/:id/end
+   */
+  @Post(':id/end')
+  @ApiOperation({ summary: 'End a session' })
+  @ApiResponse({ status: 200, description: 'Session ended successfully' })
+  @ApiResponse({ status: 400, description: 'Session already ended' })
+  @ApiResponse({ status: 404, description: 'Session not found' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  endSession(
+    @Param('id') id: string,
+    @Body() endSessionDto: any,
+    @UserClaims() userClaims: UserClaimsType,
+  ) {
+    return this.simulationService
+      .send(SIMULATION_SERVICE_PATTERNS.END_SESSION, {
+        id,
+        ...endSessionDto,
+        userClaims,
+      })
+      .pipe(
+        timeout(5000),
+        catchError((err: unknown) => {
+          const error = normalizeError(err);
+          const message = error.message ?? 'Failed to end session';
+          const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
+          return throwError(() => new HttpException(message, status));
+        }),
+      );
+  }
+
+  /**
+   * Delete a session
+   *
+   * DELETE /v1/simulation/sessions/:id
+   */
+  @Delete(':id')
+  @ApiOperation({ summary: 'Delete a session' })
+  @ApiResponse({ status: 200, description: 'Session deleted successfully' })
+  @ApiResponse({ status: 404, description: 'Session not found' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  deleteSession(
+    @Param('id') id: string,
+    @UserClaims() userClaims: UserClaimsType,
+  ) {
+    return this.simulationService
+      .send(SIMULATION_SERVICE_PATTERNS.DELETE_SESSION, {
+        id,
+        userClaims,
+      })
+      .pipe(
+        timeout(5000),
+        catchError((err: unknown) => {
+          const error = normalizeError(err);
+          const message = error.message ?? 'Failed to delete session';
+          const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
+          return throwError(() => new HttpException(message, status));
+        }),
+      );
+  }
+}

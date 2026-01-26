@@ -9,6 +9,7 @@ generator client {
 datasource db {
   provider  = "postgresql"
   url       = env("CRM_DATABASE_URL")
+  directUrl = env("CRM_DIRECT_URL")
 }
 
 // Contact - Individual customer/lead information

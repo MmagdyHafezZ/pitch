@@ -1,0 +1,169 @@
+import { Controller, ValidationPipe, UsePipes, Logger } from '@nestjs/common';
+import { MessagePattern, Payload } from '@nestjs/microservices';
+import { SessionService } from '../services/session.service';
+import { SIMULATION_SERVICE_PATTERNS } from '@pitch/shared-backend/interfaces/message-patterns.interface';
+import { toRpcException } from '@pitch/shared-backend/helpers/exceptions';
+import {
+  CreateSessionDto,
+  UpdateSessionDto,
+  ListSessionsQueryDto,
+  EndSessionDto,
+} from '../dto/session.dto';
+import * as userClaimsInterface from '@pitch/shared-backend/interfaces/user-claims.interface';
+
+/**
+ * Session Controller (Message-based)
+ *
+ * Handles RPC message patterns for session operations
+ */
+@Controller()
+export class SessionController {
+  private readonly logger = new Logger(SessionController.name);
+
+  constructor(private readonly sessionService: SessionService) {}
+
+  /**
+   * Create a new session
+   */
+  @MessagePattern(SIMULATION_SERVICE_PATTERNS.CREATE_SESSION)
+  @UsePipes(new ValidationPipe({ transform: true }))
+  async createSession(
+    @Payload()
+    data: CreateSessionDto & userClaimsInterface.MessageWithUserClaims,
+  ) {
+    try {
+      if (!data.userClaims?.id) {
+        throw new Error('User claims are required to create a session');
+      }
+
+      this.logger.log(
+        `Creating session - Requested by: ${data.userClaims.email} (${data.userClaims.id})`,
+      );
+
+      const { userClaims, ...createSessionDto } = data;
+
+      const sessionData = {
+        ...createSessionDto,
+        userId: userClaims.id,
+        userSnapshot: createSessionDto.userSnapshot || {
+          id: userClaims.id,
+          email: userClaims.email,
+          name: userClaims.name,
+        },
+      };
+
+      return await this.sessionService.create(sessionData);
+    } catch (error) {
+      this.logger.error('Failed to create session', error);
+      throw toRpcException(error);
+    }
+  }
+
+  /**
+   * Get a session by ID
+   */
+  @MessagePattern(SIMULATION_SERVICE_PATTERNS.GET_SESSION)
+  async getSession(
+    @Payload()
+    data: { id: string } & userClaimsInterface.MessageWithUserClaims,
+  ) {
+    try {
+      this.logger.log(
+        `Getting session ${data.id} - Requested by: ${data.userClaims?.email || 'unknown'}`,
+      );
+      return await this.sessionService.findOne(data.id);
+    } catch (error) {
+      this.logger.error(`Failed to get session ${data.id}`, error);
+      throw toRpcException(error);
+    }
+  }
+
+  /**
+   * List sessions with filters
+   */
+  @MessagePattern(SIMULATION_SERVICE_PATTERNS.LIST_SESSIONS)
+  @UsePipes(new ValidationPipe({ transform: true }))
+  async listSessions(
+    @Payload()
+    data: ListSessionsQueryDto & userClaimsInterface.MessageWithUserClaims,
+  ) {
+    try {
+      this.logger.log(
+        `Listing sessions - Requested by: ${data.userClaims?.email || 'unknown'}`,
+      );
+      const { userClaims: _userClaims, ...query } = data;
+      void _userClaims;
+      return await this.sessionService.findAll(query);
+    } catch (error) {
+      this.logger.error('Failed to list sessions', error);
+      throw toRpcException(error);
+    }
+  }
+
+  /**
+   * Update a session
+   */
+  @MessagePattern(SIMULATION_SERVICE_PATTERNS.UPDATE_SESSION)
+  @UsePipes(
+    new ValidationPipe({ transform: true, skipMissingProperties: true }),
+  )
+  async updateSession(
+    @Payload()
+    data: { id: string } & UpdateSessionDto &
+      userClaimsInterface.MessageWithUserClaims,
+  ) {
+    try {
+      this.logger.log(
+        `Updating session ${data.id} - Requested by: ${data.userClaims?.email || 'unknown'}`,
+      );
+      const { userClaims: _userClaims, id, ...updateData } = data;
+      void _userClaims;
+      return await this.sessionService.update(id, updateData);
+    } catch (error) {
+      this.logger.error(`Failed to update session ${data.id}`, error);
+      throw toRpcException(error);
+    }
+  }
+
+  /**
+   * End a session
+   */
+  @MessagePattern(SIMULATION_SERVICE_PATTERNS.END_SESSION)
+  @UsePipes(new ValidationPipe({ transform: true }))
+  async endSession(
+    @Payload()
+    data: { id: string } & EndSessionDto &
+      userClaimsInterface.MessageWithUserClaims,
+  ) {
+    try {
+      this.logger.log(
+        `Ending session ${data.id} - Requested by: ${data.userClaims?.email || 'unknown'}`,
+      );
+      const { userClaims: _userClaims, id, ...endData } = data;
+      void _userClaims;
+      return await this.sessionService.end(id, endData);
+    } catch (error) {
+      this.logger.error(`Failed to end session ${data.id}`, error);
+      throw toRpcException(error);
+    }
+  }
+
+  /**
+   * Delete a session
+   */
+  @MessagePattern(SIMULATION_SERVICE_PATTERNS.DELETE_SESSION)
+  async deleteSession(
+    @Payload()
+    data: { id: string } & userClaimsInterface.MessageWithUserClaims,
+  ) {
+    try {
+      this.logger.log(
+        `Deleting session ${data.id} - Requested by: ${data.userClaims?.email || 'unknown'}`,
+      );
+      return await this.sessionService.remove(data.id);
+    } catch (error) {
+      this.logger.error(`Failed to delete session ${data.id}`, error);
+      throw toRpcException(error);
+    }
+  }
+}

@@ -10,7 +10,7 @@ export class RpcExceptionLoggingFilter extends BaseRpcExceptionFilter {
   catch(exception: unknown, host: ArgumentsHost): Observable<unknown> {
     const rpcHost = host.switchToRpc()
     const error = normalizeError(exception)
-    const pattern = rpcHost.getPattern?.()
+    const pattern = (rpcHost as any).getPattern?.()
     const data = rpcHost.getData?.()
     const context = rpcHost.getContext?.()
 

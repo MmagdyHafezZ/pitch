@@ -22,4 +22,3 @@ export * from './filters/rpc-exception.filter'
 export * from './config/jwt.config'
 
 export * from './utils/startup-health-checks'
-export * from './utils/error-logging'

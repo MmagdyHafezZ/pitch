@@ -33,15 +33,8 @@ function TeamConfigInner() {
   const isCreateMode = searchParams.get('mode') === 'create'
 
   const { logout } = useAuth()
-  const [active, setActive] = useState(() => (isCreateMode ? '' : 'Team Config'))
-  const [selectedDate, setSelectedDate] = useState<Date | null>(new Date())
-
-  const { teams, currentTeam, activeTeamId, setActiveTeamId, updateTeam } = useTeams()
-
-  // CREATE MODE: shared form + validation
+  const { currentTeam, updateTeam } = useTeams()
   const { values, errors, setField, submit, submitting, apiError } = useCreateTeamForm()
-
-  // EDIT MODE: local editable snapshot of currentTeam
   const [editValues, setEditValues] = useState({
     name: '',
     billingEmail: '',
@@ -54,12 +47,6 @@ function TeamConfigInner() {
   const [editError, setEditError] = useState<string | null>(null)
   const [savingEdit, setSavingEdit] = useState(false)
 
-  const handleLogout = async () => {
-    await logout()
-    router.push('/auth/login')
-  }
-
-  // hydrate edit form when not creating and currentTeam changes
   useEffect(() => {
     if (!isCreateMode && currentTeam) {
       const addr = currentTeam.billingAddress ?? ({} as any)

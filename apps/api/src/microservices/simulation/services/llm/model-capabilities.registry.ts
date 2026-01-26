@@ -11,8 +11,8 @@ const DEFAULT_CAPABILITIES: ModelCapabilities = {
   supportsAudio: false,
   supportedModalities: ['text'],
   pricing: {
-    inputTokensPerMillion: 3.0,
-    outputTokensPerMillion: 9.0,
+    inputTokensPerMillion: 0,
+    outputTokensPerMillion: 0,
   },
 };
 

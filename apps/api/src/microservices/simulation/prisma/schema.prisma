@@ -10,14 +10,23 @@ generator client {
 
 datasource db {
   provider  = "postgresql"
+  url       = env("SIMULATION_DATABASE_URL")
+  directUrl = env("SIMULATION_DIRECT_URL")
 }
 
 /* =================== Enums =================== */
 
-enum SessionMode {
+enum SessionType {
   text
   voice
   video
+}
+
+enum InvitationStatus {
+  pending
+  accepted
+  declined
+  revoked
 }
 
 enum TurnRole {
@@ -66,7 +75,7 @@ enum ReportFormat {
 
 model Session {
   id            String      @id @default(cuid())
-  userId        String
+  userId        String 
   orgId         String
 
   // Denormalized snapshots captured at session creation time for audit/reporting
@@ -74,8 +83,12 @@ model Session {
   // orgSnapshot shape: { id, name, region, tier }
   userSnapshot  Json?
   orgSnapshot   Json?
+  name          String?
 
-  mode          SessionMode
+  type          SessionType
+  tags          String[]
+  sessionConfig Json?
+
   scenarioId    String?
   scenario      Scenario?   @relation(fields: [scenarioId], references: [id])
   personaId     String?
@@ -98,6 +111,7 @@ model Session {
   transcripts   Transcript[]
   mediaAssets   MediaAsset[]
   toolCalls     ToolCall[]
+  invitations   SessionInvitation[]
 
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
@@ -107,6 +121,34 @@ model Session {
   @@index([status])
   @@index([scenarioId])
   @@index([personaId])
+}
+
+model SessionInvitation {
+  id            String           @id @default(cuid())
+  sessionId     String
+  session       Session          @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  // Inviter (who sent the invitation)
+  inviterId     String
+  inviterSnapshot Json?          // { id, email, name } - captured at invitation time
+
+  // Invitee (who is being invited)
+  inviteeId     String
+  inviteeSnapshot Json?          // { id, email, name } - captured at invitation time
+
+  status        InvitationStatus @default(pending)
+  message       String?          // Optional message from inviter
+
+  // Response tracking
+  respondedAt   DateTime?
+
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  @@index([sessionId, status])
+  @@index([inviteeId, status])
+  @@index([inviterId])
+  @@unique([sessionId, inviteeId])  // One invitation per user per session
 }
 
 model Turn {
@@ -397,23 +439,21 @@ model EvalArtifact {
 }
 
 /* =================== RAG: pgvector in Postgres =================== */
-// Add the actual vector column & indexes via SQL migrations
-// TODO: Install pgvector extension and uncomment this model
 
-// model EmbeddingRow {
-//   id         String  @id @default(cuid())
-//   // Actual vector column added via SQL migration (e.g., vector(1536))
-//   embedding  Unsupported("vector")
-//   namespace  String   // "kb" | "transcript" | "previous_calls"
-//   refType    String   // "TranscriptSegment" | "Doc" | "Message"
-//   refId      String
-//   metadata   Json?    // Small structured metadata
-//
-//   createdAt  DateTime @default(now())
-//
-//   @@index([namespace])
-//   @@index([refType, refId])
-// }
+model EmbeddingRow {
+  id         String  @id @default(cuid())
+  // Actual vector column added via SQL migration (e.g., vector(1536))
+  embedding  Unsupported("vector")
+  namespace  String   // "kb" | "transcript" | "previous_calls"
+  refType    String   // "TranscriptSegment" | "Doc" | "Message"
+  refId      String
+  metadata   Json?    // Small structured metadata
+
+  createdAt  DateTime @default(now())
+
+  @@index([namespace])
+  @@index([refType, refId])
+}
 
 /* =================== Feedback Engine =================== */
 

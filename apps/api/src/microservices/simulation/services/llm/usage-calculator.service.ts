@@ -43,7 +43,9 @@ export class UsageCalculatorService {
 
     const costUsd =
       input.providerUsage?.costUsd ??
-      this.calculateCost(promptTokens, completionTokens, capabilities);
+      (this.hasPricing(capabilities.pricing)
+        ? this.calculateCost(promptTokens, completionTokens, capabilities)
+        : undefined);
 
     return {
       promptTokens,
@@ -91,12 +93,22 @@ export class UsageCalculatorService {
     promptTokens: number,
     completionTokens: number,
     capabilities: ModelCapabilities,
-  ): number {
+  ): number | undefined {
+    if (!this.hasPricing(capabilities.pricing)) {
+      return undefined;
+    }
     const inputCost =
       (promptTokens / 1_000_000) * capabilities.pricing.inputTokensPerMillion;
     const outputCost =
       (completionTokens / 1_000_000) *
       capabilities.pricing.outputTokensPerMillion;
     return inputCost + outputCost;
+  }
+
+  private hasPricing(pricing: ModelCapabilities['pricing']): boolean {
+    return (
+      (pricing.inputTokensPerMillion ?? 0) > 0 ||
+      (pricing.outputTokensPerMillion ?? 0) > 0
+    );
   }
 }

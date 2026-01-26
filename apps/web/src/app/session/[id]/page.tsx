@@ -136,15 +136,12 @@ export default function LiveSessionPage() {
           </Stack>
         </Paper>
 
-        {/* Center - Main Content */}
         <Box style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-          {/* Video/Audio Visualization */}
           <Paper
             withBorder
             radius="lg"
             p="xl"
             style={{
-              flex: 1,
               backgroundColor: 'white',
               display: 'flex',
               flexDirection: 'column',
@@ -156,7 +153,6 @@ export default function LiveSessionPage() {
               <Avatar size={120} radius="md" />
             </Box>
 
-            {/* Audio Waveform */}
             <Box
               style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', flex: 1 }}
             >

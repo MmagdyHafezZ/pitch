@@ -14,11 +14,16 @@ import { useRouter } from 'next/navigation'
 import { WeekCalendar } from '@/components/ui/WeekCalendar'
 import { SettingsModal } from './SettingsModal'
 
-export type SidebarLink = { icon: React.ComponentType<{ size?: number }>; label: string }
+export type SidebarLink = {
+  icon: React.ComponentType<{ size?: number }>
+  label: 'Home' | 'Sessions' | 'Teams' | 'Analytics' | 'Settings' | 'Team Config'
+}
 
 type Props = {
-  active: string
-  setActive: Dispatch<SetStateAction<string>>
+  active: 'Home' | 'Sessions' | 'Teams' | 'Analytics' | 'Settings' | 'Team Config'
+  setActive: Dispatch<
+    SetStateAction<'Home' | 'Sessions' | 'Teams' | 'Analytics' | 'Settings' | 'Team Config'>
+  >
   selectedDate: Date | null
   setSelectedDate: Dispatch<SetStateAction<Date | null>>
   mainLinks?: SidebarLink[]
@@ -32,18 +37,12 @@ const DEFAULT_MAIN: SidebarLink[] = [
   { icon: IconUserCog, label: 'Team Config' },
 ]
 
-const DEFAULT_SECONDARY: SidebarLink[] = [
-  { icon: IconHelp, label: 'Support' },
-  { icon: IconSettings, label: 'Settings' },
-]
-
 export function AppSidebar({
   active,
   setActive,
   selectedDate,
   setSelectedDate,
   mainLinks = DEFAULT_MAIN,
-  secondaryLinks = DEFAULT_SECONDARY,
 }: Props) {
   const router = useRouter()
   const [settingsOpened, setSettingsOpened] = useState(false)
@@ -61,8 +60,7 @@ export function AppSidebar({
       >
         <Box
           style={{
-            background: 'var(--mantine-color-dark-8)',
-            borderRadius: rem(16),
+            background: 'var(--mantine-color-dark-9)',
             borderTopLeftRadius: 0,
             borderTopRightRadius: 0,
             borderBottomLeftRadius: 0,
@@ -124,8 +122,8 @@ export function AppSidebar({
               mx="0"
               pb={10}
               style={{
-                width: '100%', // delete
-                background: 'var(--mantine-color-dark-7)',
+                width: '100%',
+                background: 'var(--mantine-color-dark-9)',
                 borderRadius: 12,
                 border: '1px solid rgba(255,255,255,0.08)',
                 overflow: 'hidden',

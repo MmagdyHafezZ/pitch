@@ -38,23 +38,31 @@ describe('OpenAIProvider', () => {
       key === 'OPENAI_API_KEY' ? 'test-key' : undefined,
     ),
   } as any;
+  const pricingService = {
+    getPricing: jest.fn(() => ({
+      inputTokensPerMillion: 1,
+      outputTokensPerMillion: 2,
+    })),
+  } as any;
+  const createProvider = (config = configService) =>
+    new OpenAIProvider(config, pricingService);
 
   it('supports common OpenAI model names', () => {
-    const provider = new OpenAIProvider(configService);
+    const provider = createProvider();
     expect(provider.supportsModel('gpt-4o')).toBe(true);
     expect(provider.supportsModel('gpt-3.5-turbo')).toBe(true);
     expect(provider.supportsModel('claude-3')).toBe(false);
   });
 
   it('initializes even when API key is missing', () => {
-    const provider = new OpenAIProvider({
+    const provider = createProvider({
       get: jest.fn(() => undefined),
     } as any);
     expect(provider.supportsModel('gpt-4')).toBe(true);
   });
 
   it('validates temperature and maxTokens constraints', () => {
-    const provider = new OpenAIProvider(configService);
+    const provider = createProvider();
     expect(() =>
       provider.validateConfig({ model: 'gpt-4o', temperature: -1 } as any),
     ).toThrow(ProviderInvalidRequestError);
@@ -67,7 +75,7 @@ describe('OpenAIProvider', () => {
   });
 
   it('returns model capabilities by model family', () => {
-    const provider = new OpenAIProvider(configService);
+    const provider = createProvider();
     expect(provider.getModelCapabilities('gpt-4o').supportsVision).toBe(true);
     expect(provider.getModelCapabilities('gpt-4').maxTokens).toBe(8192);
     expect(provider.getModelCapabilities('gpt-3.5-turbo').maxTokens).toBe(
@@ -79,11 +87,11 @@ describe('OpenAIProvider', () => {
     expect(
       provider.getModelCapabilities('custom-model').pricing
         .inputTokensPerMillion,
-    ).toBe(10.0);
+    ).toBe(1);
   });
 
   it('converts multimodal messages to OpenAI payloads', () => {
-    const provider = new OpenAIProvider(configService);
+    const provider = createProvider();
     const converted = (provider as any).convertMessages([
       { role: 'user', content: 'Hello' },
       {
@@ -104,7 +112,7 @@ describe('OpenAIProvider', () => {
   });
 
   it('estimates tokens for string messages', () => {
-    const provider = new OpenAIProvider(configService);
+    const provider = createProvider();
     const tokens = (provider as any).estimateTokens([
       { role: 'user', content: '12345678' },
       { role: 'assistant', content: '1234' },
@@ -114,7 +122,7 @@ describe('OpenAIProvider', () => {
   });
 
   it('maps rate limit and timeout errors', () => {
-    const provider = new OpenAIProvider(configService);
+    const provider = createProvider();
     const OpenAI = require('openai').default;
 
     const rateLimitError = new OpenAI.APIError('rate limited', 429);
@@ -129,7 +137,7 @@ describe('OpenAIProvider', () => {
   });
 
   it('maps invalid request and unknown errors', () => {
-    const provider = new OpenAIProvider(configService);
+    const provider = createProvider();
     const OpenAI = require('openai').default;
 
     const invalidError = new OpenAI.APIError('bad request', 400);
@@ -144,14 +152,14 @@ describe('OpenAIProvider', () => {
   });
 
   it('validates missing model', () => {
-    const provider = new OpenAIProvider(configService);
+    const provider = createProvider();
     expect(() => provider.validateConfig({} as any)).toThrow(
       ProviderInvalidRequestError,
     );
   });
 
   it('completes responses and maps tool calls', async () => {
-    const provider = new OpenAIProvider(configService);
+    const provider = createProvider();
     const client = (provider as any).client;
 
     client.chat.completions.create.mockResolvedValue({
@@ -185,7 +193,7 @@ describe('OpenAIProvider', () => {
   });
 
   it('streams deltas and emits final usage', async () => {
-    const provider = new OpenAIProvider(configService);
+    const provider = createProvider();
     const client = (provider as any).client;
 
     async function* streamGenerator() {
@@ -216,7 +224,7 @@ describe('OpenAIProvider', () => {
   });
 
   it('estimates usage when stream usage is missing', async () => {
-    const provider = new OpenAIProvider(configService);
+    const provider = createProvider();
     const client = (provider as any).client;
 
     async function* streamGenerator() {
@@ -244,7 +252,7 @@ describe('OpenAIProvider', () => {
   });
 
   it('completes streams without final usage when finish reason is missing', async () => {
-    const provider = new OpenAIProvider(configService);
+    const provider = createProvider();
     const client = (provider as any).client;
 
     async function* streamGenerator() {
@@ -268,7 +276,7 @@ describe('OpenAIProvider', () => {
   });
 
   it('maps OpenAI auth errors', async () => {
-    const provider = new OpenAIProvider(configService);
+    const provider = createProvider();
     const client = (provider as any).client;
     const OpenAI = require('openai').default;
 

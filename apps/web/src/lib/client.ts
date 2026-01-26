@@ -1,19 +1,16 @@
 import { QueryClient } from '@tanstack/react-query'
 import { get } from 'http'
 
-// API configuration
 export const API_CONFIG = {
   baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1',
   timeout: 10000,
 }
 
-// Create a single QueryClient instance for the entire app
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 1000 * 60 * 5, // 5 minutes
+      staleTime: 1000 * 60 * 5,
       retry: (failureCount, error: any) => {
-        // Don't retry on 4xx errors
         if (error?.status >= 400 && error?.status < 500) {
           return false
         }
@@ -26,7 +23,6 @@ export const queryClient = new QueryClient({
   },
 })
 
-// Base API client function
 export async function apiRequest<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const url = `${API_CONFIG.baseURL}${endpoint}`
 
@@ -38,7 +34,6 @@ export async function apiRequest<T>(endpoint: string, options: RequestInit = {})
     ...options,
   }
 
-  // Add auth token if available
   const token = typeof window !== 'undefined' ? localStorage.getItem('authToken') : null
   if (token) {
     config.headers = {
@@ -73,9 +68,7 @@ export async function apiRequest<T>(endpoint: string, options: RequestInit = {})
   }
 }
 
-// API methods
 export const api = {
-  // User endpoints
   users: {
     getAll: () => apiRequest<any[]>('/users'),
     getById: (id: string) => apiRequest<any>(`/users/${id}`),
@@ -95,7 +88,6 @@ export const api = {
       }),
   },
 
-  // Business endpoints
   businesses: {
     getAll: () => apiRequest<any[]>('/businesses'),
     getById: (id: string) => apiRequest<any>(`/businesses/${id}`),
@@ -115,7 +107,6 @@ export const api = {
       }),
   },
 
-  // Auth endpoints
   auth: {
     login: (credentials: { email: string; password: string }) =>
       apiRequest<{ token: string; user: any }>('/auth/login', {
@@ -149,7 +140,6 @@ export const api = {
       }),
   },
 
-  // OAuth endpoints
   oauth: {
     getProviders: () =>
       apiRequest<
@@ -184,7 +174,6 @@ export const api = {
       }),
   },
 
-  // Teams endpoints
   teams: {
     getAll: () => apiRequest<any[]>('/teams'),
     getById: (id: string) => apiRequest<any>(`/teams/${id}`),
@@ -218,5 +207,98 @@ export const api = {
         method: 'DELETE',
         body: JSON.stringify(data),
       }),
+  },
+
+  sessions: {
+    getAll: (params?: {
+      userId?: string
+      orgId?: string
+      type?: string
+      status?: string
+      scenarioId?: string
+      personaId?: string
+      limit?: number
+      offset?: number
+    }) => {
+      const query = new URLSearchParams()
+      if (params?.userId) query.set('userId', params.userId)
+      if (params?.orgId) query.set('orgId', params.orgId)
+      if (params?.type) query.set('type', params.type)
+      if (params?.status) query.set('status', params.status)
+      if (params?.scenarioId) query.set('scenarioId', params.scenarioId)
+      if (params?.personaId) query.set('personaId', params.personaId)
+      if (params?.limit) query.set('limit', params.limit.toString())
+      if (params?.offset) query.set('offset', params.offset.toString())
+      const queryString = query.toString()
+      return apiRequest<any>(`/simulation/sessions${queryString ? `?${queryString}` : ''}`)
+    },
+    getById: (id: string) => apiRequest<any>(`/simulation/sessions/${id}`),
+    getUserSessions: (userId: string, params?: { limit?: number; offset?: number }) => {
+      const query = new URLSearchParams()
+      query.set('userId', userId)
+      if (params?.limit) query.set('limit', params.limit.toString())
+      if (params?.offset) query.set('offset', params.offset.toString())
+      const queryString = query.toString()
+      return apiRequest<any>(`/simulation/sessions?${queryString}`)
+    },
+    getOrgSessions: (orgId: string, params?: { limit?: number; offset?: number }) => {
+      const query = new URLSearchParams()
+      query.set('orgId', orgId)
+      if (params?.limit) query.set('limit', params.limit.toString())
+      if (params?.offset) query.set('offset', params.offset.toString())
+      const queryString = query.toString()
+      return apiRequest<any>(`/simulation/sessions?${queryString}`)
+    },
+    create: (data: any) =>
+      apiRequest<any>('/simulation/sessions', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    update: (id: string, data: any) =>
+      apiRequest<any>(`/simulation/sessions/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      }),
+    end: (id: string, data?: { reason?: string }) =>
+      apiRequest<any>(`/simulation/sessions/${id}/end`, {
+        method: 'POST',
+        body: JSON.stringify(data || {}),
+      }),
+    delete: (id: string) =>
+      apiRequest<any>(`/simulation/sessions/${id}`, {
+        method: 'DELETE',
+      }),
+  },
+
+  invitations: {
+    createForSession: (sessionId: string, data: { inviteeIds: string[]; message?: string }) =>
+      apiRequest<any>(`/simulation/sessions/${sessionId}/invitations`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    getSessionInvitations: (sessionId: string) =>
+      apiRequest<any>(`/simulation/sessions/${sessionId}/invitations`),
+    getMyInvitations: (status?: string) => {
+      const queryString = status ? `?status=${status}` : ''
+      return apiRequest<any>(`/simulation/invitations/me${queryString}`)
+    },
+    getSentInvitations: (status?: string) => {
+      const queryString = status ? `?status=${status}` : ''
+      return apiRequest<any>(`/simulation/invitations/sent${queryString}`)
+    },
+    getById: (id: string) => apiRequest<any>(`/simulation/invitations/${id}`),
+    accept: (id: string) =>
+      apiRequest<any>(`/simulation/invitations/${id}/accept`, {
+        method: 'POST',
+      }),
+    decline: (id: string) =>
+      apiRequest<any>(`/simulation/invitations/${id}/decline`, {
+        method: 'POST',
+      }),
+    revoke: (id: string) =>
+      apiRequest<any>(`/simulation/invitations/${id}/revoke`, {
+        method: 'DELETE',
+      }),
+    getPendingCount: () => apiRequest<{ count: number }>('/simulation/invitations/pending-count'),
   },
 }
