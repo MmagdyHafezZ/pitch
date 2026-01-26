@@ -24,7 +24,9 @@ export class S3Repository {
 
     if (!region) throw new Error('AWS_REGION is required');
     if (!accessKeyId || !secretAccessKey) {
-      throw new Error('AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY are required');
+      throw new Error(
+        'AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY are required',
+      );
     }
 
     this.defaultBucket = process.env.AWS_S3_BUCKET;
@@ -110,8 +112,8 @@ export class S3Repository {
 
     const response = await this.client.send(command);
     const keys =
-      response.Contents?.map((item) => item.Key).filter(
-        (key): key is string => Boolean(key),
+      response.Contents?.map((item) => item.Key).filter((key): key is string =>
+        Boolean(key),
       ) ?? [];
 
     return { keys };

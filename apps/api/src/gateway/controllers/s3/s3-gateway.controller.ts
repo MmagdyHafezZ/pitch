@@ -97,21 +97,23 @@ export class S3GatewayController {
   @ApiResponse({ status: 200, description: 'Presigned delete URL generated' })
   presignDelete(
     @Body()
-    body: { bucket: string; key: string; expiresInSeconds?: number },
+    body: {
+      bucket: string;
+      key: string;
+      expiresInSeconds?: number;
+    },
   ) {
-    return this.s3Service
-      .send(PRESIGN_DELETE, body)
-      .pipe(
-        timeout(5000),
-        catchError((err: unknown) => {
-          const message = getErrorMessage(
-            err,
-            'Failed to generate presigned delete URL',
-          );
-          const status = getErrorStatus(err);
-          return throwError(() => new HttpException(message, status));
-        }),
-      );
+    return this.s3Service.send(PRESIGN_DELETE, body).pipe(
+      timeout(5000),
+      catchError((err: unknown) => {
+        const message = getErrorMessage(
+          err,
+          'Failed to generate presigned delete URL',
+        );
+        const status = getErrorStatus(err);
+        return throwError(() => new HttpException(message, status));
+      }),
+    );
   }
 
   @Get('files')
@@ -146,18 +148,16 @@ export class S3GatewayController {
     @Query('bucket') bucket: string,
     @Query('prefix') prefix: string,
   ) {
-    return this.s3Service
-      .send(DELETE_PREFIX, { bucket, prefix })
-      .pipe(
-        timeout(5000),
-        catchError((err: unknown) => {
-          const message = getErrorMessage(
-            err,
-            'Failed to delete files by prefix',
-          );
-          const status = getErrorStatus(err);
-          return throwError(() => new HttpException(message, status));
-        }),
-      );
+    return this.s3Service.send(DELETE_PREFIX, { bucket, prefix }).pipe(
+      timeout(5000),
+      catchError((err: unknown) => {
+        const message = getErrorMessage(
+          err,
+          'Failed to delete files by prefix',
+        );
+        const status = getErrorStatus(err);
+        return throwError(() => new HttpException(message, status));
+      }),
+    );
   }
 }

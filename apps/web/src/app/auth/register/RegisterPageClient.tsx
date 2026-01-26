@@ -36,7 +36,6 @@ export function RegisterPageClient() {
             />
           </Box>
           <Box className={styles.heroText}>
-            
             <Title order={2} fw={700} c="white" className={styles.title}>
               Get started.
             </Title>
