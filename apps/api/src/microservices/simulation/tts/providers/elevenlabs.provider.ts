@@ -61,7 +61,7 @@ export class ElevenLabsTtsProvider implements TtsProvider {
       const audioStream = await this.client.textToSpeech.convert(voiceId, {
         text,
         modelId: this.modelId,
-        outputFormat: this.outputFormat,
+        outputFormat: this.outputFormat as any,
         // Optional: if you later extend TtsOptions with stability/similarity,
         // you can pass them here as well.
       });

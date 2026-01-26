@@ -178,7 +178,7 @@ export class AuthGatewayController {
     this.logger.log(`Profile request for user: ${userId}`);
 
     return this.userService
-      .send(USER_SERVICE_PATTERNS.GET_USER, { id: userId, userClaims })
+      .send(USER_SERVICE_PATTERNS.GET_USER, { userId, userClaims })
       .pipe(
         timeout(10000),
         catchError((err: unknown) => {
