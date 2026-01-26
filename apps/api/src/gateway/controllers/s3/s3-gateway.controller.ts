@@ -55,19 +55,17 @@ export class S3GatewayController {
       expiresInSeconds?: number;
     },
   ) {
-    return this.s3Service
-      .send(PRESIGN_UPLOAD, body)
-      .pipe(
-        timeout(5000),
-        catchError((err: unknown) => {
-          const message = getErrorMessage(
-            err,
-            'Failed to generate presigned upload URL',
-          );
-          const status = getErrorStatus(err);
-          return throwError(() => new HttpException(message, status));
-        }),
-      );
+    return this.s3Service.send(PRESIGN_UPLOAD, body).pipe(
+      timeout(5000),
+      catchError((err: unknown) => {
+        const message = getErrorMessage(
+          err,
+          'Failed to generate presigned upload URL',
+        );
+        const status = getErrorStatus(err);
+        return throwError(() => new HttpException(message, status));
+      }),
+    );
   }
 
   @Post('presigned/download')
