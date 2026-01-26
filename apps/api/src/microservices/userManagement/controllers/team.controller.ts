@@ -98,13 +98,14 @@ export class TeamController {
 
   @MessagePattern(USER_SERVICE_PATTERNS.GET_TEAM)
   async getTeam(
-    @Payload() data: { id: string } & userClaimsInterface.MessageWithUserClaims,
+    @Payload()
+    data: { teamId: string } & userClaimsInterface.MessageWithUserClaims,
   ) {
     try {
       this.logger.log(
-        `Getting user ${data.id} - Requested by: ${data.userClaims.email} (${data.userClaims.id})`,
+        `Getting team ${data.teamId} - Requested by: ${data.userClaims.email} (${data.userClaims.id})`,
       );
-      return await this.teamService.findOne(data.id);
+      return await this.teamService.findById(data.teamId);
     } catch (error) {
       throw toRpcException(error);
     }
@@ -117,6 +118,20 @@ export class TeamController {
         `Getting teams - Requested by: ${data.userClaims.email} (${data.userClaims.id})`,
       );
       return await this.teamService.findAll();
+    } catch (error) {
+      throw toRpcException(error);
+    }
+  }
+
+  @MessagePattern(USER_SERVICE_PATTERNS.GET_USER_TEAMS)
+  async getUserTeams(
+    @Payload() data: userClaimsInterface.MessageWithUserClaims,
+  ) {
+    try {
+      this.logger.log(
+        `Getting teams for user ${data.userClaims.id} - Requested by: ${data.userClaims.email} (${data.userClaims.id})`,
+      );
+      return await this.teamService.findUserTeams(data.userClaims.id);
     } catch (error) {
       throw toRpcException(error);
     }

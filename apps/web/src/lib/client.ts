@@ -1,4 +1,5 @@
 import { QueryClient } from '@tanstack/react-query'
+import { get } from 'http'
 
 // API configuration
 export const API_CONFIG = {
@@ -180,6 +181,42 @@ export const api = {
       apiRequest<{ access_token: string; refresh_token: string }>('/auth/oauth/refresh', {
         method: 'POST',
         body: JSON.stringify({ refresh_token: refreshToken }),
+      }),
+  },
+
+  // Teams endpoints
+  teams: {
+    getAll: () => apiRequest<any[]>('/teams'),
+    getById: (id: string) => apiRequest<any>(`/teams/${id}`),
+    getUserTeams: () => apiRequest<any[]>('/teams/user-teams'),
+    create: (data: any) =>
+      apiRequest<any>('/teams', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    update: (id: string, data: any) =>
+      apiRequest<any>(`/teams/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      }),
+    delete: (id: string) =>
+      apiRequest<any>(`/teams/${id}`, {
+        method: 'DELETE',
+      }),
+    addMember: (id: string, data: any) =>
+      apiRequest<any>(`/teams/${id}/members`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    updateMember: (id: string, userId: string, data: any) =>
+      apiRequest<any>(`/teams/${id}/members/${userId}`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      }),
+    deleteMember: (id: string, userId: string, data: any) =>
+      apiRequest<any>(`/teams/${id}/members/${userId}`, {
+        method: 'DELETE',
+        body: JSON.stringify(data),
       }),
   },
 }
