@@ -30,13 +30,14 @@ export class UserController {
 
   @MessagePattern(USER_SERVICE_PATTERNS.GET_USER)
   async getUser(
-    @Payload() data: { id: string } & userClaimsInterface.MessageWithUserClaims,
+    @Payload()
+    data: { userId: string } & userClaimsInterface.MessageWithUserClaims,
   ) {
     try {
       this.logger.log(
-        `Getting user ${data.id} - Requested by: ${data.userClaims.email} (${data.userClaims.id})`,
+        `Getting user ${data.userId} - Requested by: ${data.userClaims.email} (${data.userClaims.id})`,
       );
-      return await this.userService.findOne(data.id);
+      return await this.userService.findOne(data.userId);
     } catch (error) {
       throw toRpcException(error);
     }
@@ -67,16 +68,16 @@ export class UserController {
   )
   async updateUser(
     @Payload()
-    data: { id: string } & userInterface.UpdateUserDto &
+    data: { userId: string } & userInterface.UpdateUserDto &
       userClaimsInterface.MessageWithUserClaims,
   ) {
     try {
       this.logger.log(
-        `Updating user ${data.id} - Requested by: ${data.userClaims.email} (${data.userClaims.id})`,
+        `Updating user ${data.userId} - Requested by: ${data.userClaims.email} (${data.userClaims.id})`,
       );
-      const { userClaims: _userClaims, id, ...updateData } = data;
+      const { userClaims: _userClaims, userId, ...updateData } = data;
       void _userClaims;
-      return await this.userService.update(id, updateData);
+      return await this.userService.update(userId, updateData);
     } catch (error) {
       throw toRpcException(error);
     }
@@ -84,13 +85,14 @@ export class UserController {
 
   @MessagePattern(USER_SERVICE_PATTERNS.DELETE_USER)
   async deleteUser(
-    @Payload() data: { id: string } & userClaimsInterface.MessageWithUserClaims,
+    @Payload()
+    data: { userId: string } & userClaimsInterface.MessageWithUserClaims,
   ) {
     try {
       this.logger.log(
-        `Deleting user ${data.id} - Requested by: ${data.userClaims.email} (${data.userClaims.id})`,
+        `Deleting user ${data.userId} - Requested by: ${data.userClaims.email} (${data.userClaims.id})`,
       );
-      return await this.userService.remove(data.id);
+      return await this.userService.remove(data.userId);
     } catch (error) {
       throw toRpcException(error);
     }

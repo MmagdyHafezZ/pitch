@@ -95,7 +95,7 @@ export class TeamRepository {
     });
   }
 
-  async deleteTeamMember(userId: string, teamId: string): Promise<void> {
+  async deleteTeamMember(teamId: string, userId: string): Promise<void> {
     await this.prisma.teamMembership.update({
       where: {
         userId_teamId: { userId: userId, teamId: teamId },
@@ -127,8 +127,8 @@ export class TeamRepository {
   }
 
   findById(id: string): Promise<Team | null> {
-    return this.prisma.team.findFirst({
-      where: { id, deletedAt: null },
+    return this.prisma.team.findUnique({
+      where: { id },
       include: {
         memberships: {
           include: {

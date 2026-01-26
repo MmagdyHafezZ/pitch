@@ -2,9 +2,7 @@
 
 import {
   Group,
-  TextInput,
   Button,
-  Select,
   Title,
   Card,
   Stack,
@@ -15,15 +13,9 @@ import {
   Collapse,
   UnstyledButton,
 } from '@mantine/core'
-import { IconSearch, IconChevronDown, IconChevronUp } from '@tabler/icons-react'
+import { IconChevronDown, IconChevronUp, IconX } from '@tabler/icons-react'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-
-import { AppLayout } from '@/components/layout/AppLayout'
-import { AppSidebar } from '@/components/ui/AppSideBar'
-import { AppTopBar } from '@/components/ui/AppTopBar'
-import { TeamSideBar } from '@/components/ui/TeamSideBar'
-import { useTeams } from '@/features/teams/hooks/useTeams'
 
 type Status = 'Upcoming' | 'Pending' | 'Overdue' | 'Completed'
 const statusColor: Record<Status, string> = {
@@ -68,9 +60,12 @@ function SessionCard({
       onClick={onClick}
       style={{
         cursor: 'pointer',
-        transition: 'all 150ms ease',
+        transition: 'all 0.2s ease-in-out',
         border: isSelected ? '2px solid var(--mantine-color-blue-6)' : undefined,
         transform: isSelected ? 'scale(1.02)' : undefined,
+        boxShadow: isSelected
+          ? '0 4px 12px rgba(37, 99, 235, 0.2)'
+          : '0 1px 3px rgba(0, 0, 0, 0.1)',
       }}
     >
       <Stack gap="xs">
@@ -100,7 +95,13 @@ function SessionCard({
   )
 }
 
-function SessionDetailPanel({ session }: { session: SessionType }) {
+function SessionDetailPanel({
+  session,
+  onDismiss,
+}: {
+  session: SessionType
+  onDismiss: () => void
+}) {
   const router = useRouter()
 
   return (
@@ -120,14 +121,34 @@ function SessionDetailPanel({ session }: { session: SessionType }) {
         {/* Header */}
         <Box>
           <Group justify="space-between" align="start" mb="xs">
-            <Title order={2} c="white" style={{ fontWeight: 700 }}>
+            <Title order={2} c="white" style={{ fontWeight: 700, flex: 1 }}>
               {session.title}
             </Title>
-            {session.score && (
-              <Text size="xl" fw={700} c="white">
-                {session.score.toFixed(1)}/10
-              </Text>
-            )}
+            <Group gap="xs">
+              {session.score && (
+                <Text size="xl" fw={700} c="white">
+                  {session.score.toFixed(1)}/10
+                </Text>
+              )}
+              <UnstyledButton
+                onClick={onDismiss}
+                style={{
+                  color: 'var(--mantine-color-gray-5)',
+                  transition: 'color 0.2s',
+                  padding: 4,
+                  display: 'flex',
+                  alignItems: 'center',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.color = 'white'
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.color = 'var(--mantine-color-gray-5)'
+                }}
+              >
+                <IconX size={20} />
+              </UnstyledButton>
+            </Group>
           </Group>
           <Group gap="xs">
             <Text size="sm" c="dimmed">
@@ -206,7 +227,7 @@ function SessionDetailPanel({ session }: { session: SessionType }) {
             }}
           >
             <Stack gap="sm">
-              {[...Array(7)].map((_, i) => (
+              {Array.from({ length: 7 }).map((_, i) => (
                 <Box
                   key={i}
                   style={{
@@ -227,7 +248,7 @@ function SessionDetailPanel({ session }: { session: SessionType }) {
             size="lg"
             variant="light"
             color="blue"
-            onClick={() => router.push('/sessions/create')}
+            onClick={() => router.push('/studio/sessions/create')}
           >
             Edit
           </Button>
@@ -235,7 +256,7 @@ function SessionDetailPanel({ session }: { session: SessionType }) {
             size="lg"
             variant="filled"
             color="blue"
-            onClick={() => router.push('/sessions/live')}
+            onClick={() => router.push('/studio/sessions/live')}
           >
             Launch
           </Button>
@@ -247,8 +268,6 @@ function SessionDetailPanel({ session }: { session: SessionType }) {
 
 export default function SessionsPage() {
   const router = useRouter()
-  const [active, setActive] = useState('Sessions')
-  const [selectedDate, setSelectedDate] = useState<Date | null>(new Date())
   const [assignedExpanded, setAssignedExpanded] = useState(true)
   const [createdExpanded, setCreatedExpanded] = useState(false)
   const [selectedSession, setSelectedSession] = useState<SessionType | null>(null)
@@ -336,159 +355,139 @@ export default function SessionsPage() {
     },
   ]
 
-  const { teams, activeTeamId, setActiveTeamId } = useTeams()
-
   return (
-    <AppLayout
-      header={
-        <AppTopBar
-          showSearch={false}
-          rightSlot={
-            <Group gap="sm" wrap="nowrap">
-              <Select
-                data={['Sort Descending', 'Sort Ascending']}
-                defaultValue="Sort Descending"
-                allowDeselect={false}
-                comboboxProps={{ withinPortal: true }}
-                styles={{
-                  input: {
-                    background: 'var(--mantine-color-dark-7)',
-                    color: 'white',
-                    border: '1px solid var(--mantine-color-dark-6)',
-                  },
-                }}
-                radius="xl"
-                w={180}
-              />
-              <TextInput
-                placeholder="Search"
-                leftSection={<IconSearch size={18} />}
-                radius="xl"
-                styles={{
-                  input: {
-                    width: 'clamp(220px, 32vw, 420px)',
-                    background: 'var(--mantine-color-dark-7)',
-                    color: 'white',
-                    border: '1px solid var(--mantine-color-dark-6)',
-                  },
-                }}
-              />
-              <Button radius="md" onClick={() => router.push('/sessions/create')}>
-                Create New Session
-              </Button>
-            </Group>
-          }
-        />
-      }
-      navbar={
-        <Box h="100%" style={{ display: 'flex', flexDirection: 'row' }}>
-          <TeamSideBar
-            teams={teams.map((t) => ({ id: t.id, name: t.name }))}
-            activeTeamId={activeTeamId}
-            onSelectTeam={setActiveTeamId}
-          />
-          <AppSidebar
-            active={active}
-            setActive={setActive}
-            selectedDate={selectedDate}
-            setSelectedDate={setSelectedDate}
-          />
-        </Box>
-      }
-    >
-      <Group align="start" gap="xl" wrap="nowrap">
-        {/* Left side - Sessions list */}
-        <Box style={{ flex: selectedSession ? '0 0 65%' : '1 1 100%' }}>
-          <Stack gap="xl">
-            {/* Assigned to you section */}
-            <Box>
-              <UnstyledButton
-                onClick={() => setAssignedExpanded(!assignedExpanded)}
-                style={{
-                  width: '100%',
-                  padding: '16px 20px',
-                  backgroundColor: 'var(--mantine-color-dark-8)',
-                  borderRadius: '8px',
-                  marginBottom: '16px',
-                }}
+    <Group align="start" gap="xl" wrap="nowrap">
+      {/* Left side - Sessions list */}
+      <Box
+        style={{
+          flex: selectedSession ? '0 0 65%' : '1 1 100%',
+          transition: 'flex 0.3s linear',
+        }}
+      >
+        <Stack gap="xl">
+          <Box>
+            <UnstyledButton
+              onClick={() => setAssignedExpanded(!assignedExpanded)}
+              style={{
+                width: '100%',
+                padding: '16px 20px',
+                backgroundColor: 'var(--mantine-color-dark-8)',
+                borderRadius: '8px',
+                marginBottom: '16px',
+              }}
+            >
+              <Group justify="space-between" wrap="nowrap">
+                <Title order={3} c="white" style={{ fontWeight: 600 }}>
+                  Assigned to you
+                </Title>
+                {assignedExpanded ? (
+                  <IconChevronDown size={24} color="white" />
+                ) : (
+                  <IconChevronUp size={24} color="white" />
+                )}
+              </Group>
+            </UnstyledButton>
+
+            <Collapse in={assignedExpanded}>
+              <SimpleGrid
+                cols={{ base: 1, sm: 2, lg: selectedSession ? 2 : 3 }}
+                spacing="lg"
+                style={{ transition: 'all 0.3s ease-in-out' }}
               >
-                <Group justify="space-between" wrap="nowrap">
-                  <Title order={3} c="white" style={{ fontWeight: 600 }}>
-                    Assigned to you
-                  </Title>
-                  {assignedExpanded ? (
-                    <IconChevronDown size={24} color="white" />
-                  ) : (
-                    <IconChevronUp size={24} color="white" />
-                  )}
-                </Group>
-              </UnstyledButton>
-
-              <Collapse in={assignedExpanded}>
-                <SimpleGrid cols={{ base: 1, sm: 2, lg: selectedSession ? 2 : 3 }} spacing="lg">
-                  {assigned.map((s, i) => (
-                    <SessionCard
-                      key={`${s.title}-${i}`}
-                      {...s}
-                      onClick={() => setSelectedSession(s)}
-                      isSelected={
-                        selectedSession?.title === s.title && selectedSession?.date === s.date
-                      }
-                    />
-                  ))}
-                </SimpleGrid>
-              </Collapse>
-            </Box>
-
-            {/* Created by you section */}
-            <Box>
-              <UnstyledButton
-                onClick={() => setCreatedExpanded(!createdExpanded)}
-                style={{
-                  width: '100%',
-                  padding: '16px 20px',
-                  backgroundColor: 'var(--mantine-color-dark-8)',
-                  borderRadius: '8px',
-                  marginBottom: '16px',
-                }}
-              >
-                <Group justify="space-between" wrap="nowrap">
-                  <Title order={3} c="white" style={{ fontWeight: 600 }}>
-                    Created by you
-                  </Title>
-                  {createdExpanded ? (
-                    <IconChevronDown size={24} color="white" />
-                  ) : (
-                    <IconChevronUp size={24} color="white" />
-                  )}
-                </Group>
-              </UnstyledButton>
-
-              <Collapse in={createdExpanded}>
-                <SimpleGrid cols={{ base: 1, sm: 2, lg: selectedSession ? 2 : 3 }} spacing="lg">
-                  {created.map((s, i) => (
-                    <SessionCard
-                      key={`${s.title}-created-${i}`}
-                      {...s}
-                      onClick={() => setSelectedSession(s)}
-                      isSelected={
-                        selectedSession?.title === s.title && selectedSession?.date === s.date
-                      }
-                    />
-                  ))}
-                </SimpleGrid>
-              </Collapse>
-            </Box>
-          </Stack>
-        </Box>
-
-        {/* Right side - Session details */}
-        {selectedSession && (
-          <Box style={{ flex: '0 0 35%', minWidth: 0 }}>
-            <SessionDetailPanel session={selectedSession} />
+                {assigned.map((s, i) => (
+                  <SessionCard
+                    key={`${s.title}-${i}`}
+                    {...s}
+                    onClick={() => setSelectedSession(s)}
+                    isSelected={
+                      selectedSession?.title === s.title && selectedSession?.date === s.date
+                    }
+                  />
+                ))}
+              </SimpleGrid>
+            </Collapse>
           </Box>
-        )}
-      </Group>
-    </AppLayout>
+
+          {/* Created by you section */}
+          <Box>
+            <UnstyledButton
+              onClick={() => setCreatedExpanded(!createdExpanded)}
+              style={{
+                width: '100%',
+                padding: '16px 20px',
+                backgroundColor: 'var(--mantine-color-dark-8)',
+                borderRadius: '8px',
+                marginBottom: '16px',
+              }}
+            >
+              <Group justify="space-between" wrap="nowrap">
+                <Title order={3} c="white" style={{ fontWeight: 600 }}>
+                  Created by you
+                </Title>
+                {createdExpanded ? (
+                  <IconChevronDown size={24} color="white" />
+                ) : (
+                  <IconChevronUp size={24} color="white" />
+                )}
+              </Group>
+            </UnstyledButton>
+
+            <Collapse in={createdExpanded}>
+              <SimpleGrid
+                cols={{ base: 1, sm: 2, lg: selectedSession ? 2 : 3 }}
+                spacing="lg"
+                style={{ transition: 'all 0.3s ease-in-out' }}
+              >
+                {created.map((s, i) => (
+                  <SessionCard
+                    key={`${s.title}-created-${i}`}
+                    {...s}
+                    onClick={() => setSelectedSession(s)}
+                    isSelected={
+                      selectedSession?.title === s.title && selectedSession?.date === s.date
+                    }
+                  />
+                ))}
+              </SimpleGrid>
+            </Collapse>
+          </Box>
+        </Stack>
+      </Box>
+
+      {selectedSession && (
+        <Box
+          style={{
+            flex: '0 0 35%',
+            minWidth: 0,
+            animation: 'slideIn 0.3s linear',
+          }}
+        >
+          <SessionDetailPanel
+            session={selectedSession}
+            onDismiss={() => setSelectedSession(null)}
+          />
+        </Box>
+      )}
+    </Group>
   )
+}
+
+// Add CSS for slide-in animation
+if (typeof document !== 'undefined') {
+  const styleId = 'session-slide-animation'
+  if (!document.getElementById(styleId)) {
+    const style = document.createElement('style')
+    style.id = styleId
+    style.textContent = `
+      @keyframes slideIn {
+        from {
+          transform: translateX(100%);
+        }
+        to {
+          transform: translateX(0);
+        }
+      }
+    `
+    document.head.appendChild(style)
+  }
 }

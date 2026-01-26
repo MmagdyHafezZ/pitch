@@ -77,12 +77,12 @@ export class TeamGatewayController {
       );
   }
 
-  @Put(':id')
+  @Put(':teamId')
   @ApiOperation({ summary: 'Update Team' })
   @ApiResponse({ status: 200, description: 'Team updated successfully' })
   @ApiResponse({ status: 404, description: 'Team not found' })
   updateTeam(
-    @Param('id') id: string,
+    @Param('teamId') teamId: string,
     @Body() updateTeamDto: UpdateTeamRequestDto,
     @UserClaims() userClaims: UserClaimsType,
   ) {
@@ -103,12 +103,12 @@ export class TeamGatewayController {
       );
   }
 
-  @Delete(':id')
+  @Delete(':teamId')
   @ApiOperation({ summary: 'Delete team' })
   @ApiResponse({ status: 200, description: 'Team deleted successfully' })
   @ApiResponse({ status: 404, description: 'Team not found' })
   deleteTeam(
-    @Param('id') id: string,
+    @Param('teamId') teamId: string,
     @UserClaims() userClaims: UserClaimsType,
   ) {
     return this.teamService
@@ -147,7 +147,7 @@ export class TeamGatewayController {
   }
 
   @Get('user-teams')
-  @ApiOperation({ summary: 'Get all teams' })
+  @ApiOperation({ summary: 'Get all teams that a user is a part of' })
   @ApiResponse({ status: 200, description: 'Teams retrieved successfully' })
   getUserTeams(@UserClaims() userClaims: UserClaimsType) {
     return this.teamService
@@ -165,12 +165,12 @@ export class TeamGatewayController {
       );
   }
 
-  @Get(':id')
+  @Get(':teamId')
   @ApiOperation({ summary: 'Get team by ID' })
   @ApiResponse({ status: 200, description: 'Team retrieved successfully' })
   @ApiResponse({ status: 404, description: 'Team not found' })
   getTeamById(
-    @Param('id') id: string,
+    @Param('teamId') teamId: string,
     @UserClaims() userClaims: UserClaimsType,
   ) {
     return this.teamService

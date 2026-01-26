@@ -43,8 +43,6 @@ export const useTeamsStore = create<TeamsState>()(
 
       setActiveTeamId: (id) => set({ activeTeamId: id }),
 
-      // your existing logic stays the same:
-
       fetchTeams: async () => {
         const { loading, teams } = get()
         if (loading || teams.length > 0) return
