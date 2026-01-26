@@ -10,11 +10,22 @@ import {
   Query,
 } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
-import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 import { catchError, timeout } from 'rxjs/operators';
 import { throwError } from 'rxjs';
-import { S3_SERVICE_PATTERNS } from '@pitch/shared-backend/interfaces/message-patterns.interface';
+import type { S3ServicePattern } from '@pitch/shared-backend/interfaces/message-patterns.interface';
 import type { ServiceError } from '@pitch/shared-backend/interfaces/error.interface';
+
+const PRESIGN_UPLOAD: S3ServicePattern = 's3.presign.upload';
+const PRESIGN_DOWNLOAD: S3ServicePattern = 's3.presign.download';
+const PRESIGN_DELETE: S3ServicePattern = 's3.presign.delete';
+const LIST_FILES: S3ServicePattern = 's3.files.list';
+const DELETE_PREFIX: S3ServicePattern = 's3.files.deletePrefix';
 
 @ApiTags('s3')
 @ApiBearerAuth('bearer')
@@ -34,9 +45,7 @@ export class S3GatewayController {
       expiresInSeconds?: number;
     },
   ) {
-    return this.s3Service
-      .send(S3_SERVICE_PATTERNS.PRESIGN_UPLOAD, body)
-      .pipe(
+    return this.s3Service.send(PRESIGN_UPLOAD, body).pipe(
         timeout(5000),
         catchError((err: unknown) => {
           const error = err as ServiceError;
@@ -55,7 +64,7 @@ export class S3GatewayController {
     body: { bucket: string; key: string; expiresInSeconds?: number },
   ) {
     return this.s3Service
-      .send(S3_SERVICE_PATTERNS.PRESIGN_DOWNLOAD, body)
+      .send(PRESIGN_DOWNLOAD, body)
       .pipe(
         timeout(5000),
         catchError((err: unknown) => {
@@ -75,7 +84,7 @@ export class S3GatewayController {
     body: { bucket: string; key: string; expiresInSeconds?: number },
   ) {
     return this.s3Service
-      .send(S3_SERVICE_PATTERNS.PRESIGN_DELETE, body)
+      .send(PRESIGN_DELETE, body)
       .pipe(
         timeout(5000),
         catchError((err: unknown) => {
@@ -97,7 +106,7 @@ export class S3GatewayController {
   ) {
     const parsedLimit = limit ? Number(limit) : undefined;
     return this.s3Service
-      .send(S3_SERVICE_PATTERNS.LIST_FILES, {
+      .send(LIST_FILES, {
         bucket,
         prefix,
         limit: parsedLimit,
@@ -121,7 +130,7 @@ export class S3GatewayController {
     @Query('prefix') prefix: string,
   ) {
     return this.s3Service
-      .send(S3_SERVICE_PATTERNS.DELETE_PREFIX, { bucket, prefix })
+      .send(DELETE_PREFIX, { bucket, prefix })
       .pipe(
         timeout(5000),
         catchError((err: unknown) => {
