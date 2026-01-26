@@ -28,10 +28,6 @@
       "@microservices/*": ["../../microservices/*"]
     }
   },
-  "include": [
-    "**/*.ts",
-    "main.ts",
-    "../../gateway/controllers/simulation/tts.controller.ts"
-  ],
+  "include": ["**/*.ts", "main.ts"],
   "exclude": ["node_modules", "dist"]
 }

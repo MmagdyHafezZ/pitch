@@ -15,27 +15,17 @@ import { ApiBearerAuth, ApiTags, ApiResponse } from '@nestjs/swagger';
 import { catchError, timeout } from 'rxjs/operators';
 import { throwError, lastValueFrom } from 'rxjs';
 import type { Response } from 'express';
-
+import { TTS_SERVICE_PATTERNS } from '@pitch/shared-backend/interfaces/message-patterns.interface';
 import { GlobalJwtAuthGuard } from '../../guards/global-jwt-auth.guard';
+import { ServiceError } from '@pitch/shared-backend/interfaces/error.interface';
 import {
   SpeakRequestDto,
   ProviderInfoDto,
   VoicesResponseDto,
 } from './dtos/tts.dto';
-// If you have a shared interface for patterns, use that import instead.
-// Example: import { TTS_SERVICE_PATTERNS } from '@pitch/shared-backend/interfaces/message-patterns.interface';
-
-type ServiceError = { message?: string; status?: number };
-
-// Define patterns (preferably move this to shared package)
-export const TTS_SERVICE_PATTERNS = {
-  SPEAK: 'tts.speak',
-  LIST_PROVIDERS: 'tts.providers',
-  GET_VOICES: 'tts.voices',
-} as const;
 
 type SpeakResponse = {
-  audioBase64: string; // microservice returns base64 encoded audio
+  audioBase64: string;
   contentType: string;
 };
 

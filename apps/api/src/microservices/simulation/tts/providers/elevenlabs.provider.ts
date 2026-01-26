@@ -78,11 +78,6 @@ export class ElevenLabsTtsProvider implements TtsProvider {
       // Preserve explicit BadRequestException behavior for unknown voices
       if (err instanceof BadRequestException) throw err;
 
-      // If SDK throws a useful error, keep it visible in logs
-      // but avoid leaking internals to client
-      // eslint-disable-next-line no-console
-      console.error('ElevenLabs TTS synthesis error:', err);
-
       throw new InternalServerErrorException('ElevenLabs TTS failed');
     }
   }

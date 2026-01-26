@@ -2,12 +2,7 @@ import { Controller, Logger } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
 import { toRpcException } from '@pitch/shared-backend/helpers/exceptions';
 import { TtsService } from './tts.service';
-
-export const TTS_SERVICE_PATTERNS = {
-  SPEAK: 'tts.speak',
-  LIST_PROVIDERS: 'tts.providers',
-  GET_VOICES: 'tts.voices',
-} as const;
+import { TTS_SERVICE_PATTERNS } from '@pitch/shared-backend/interfaces/message-patterns.interface';
 
 type SpeakRequest = {
   text: string;
@@ -20,7 +15,6 @@ type SpeakRequest = {
   };
 };
 
-// Recommended for RabbitMQ/JSON payloads:
 type SpeakResponse = {
   audioBase64: string;
   contentType: string;

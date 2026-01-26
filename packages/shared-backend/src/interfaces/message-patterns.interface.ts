@@ -33,3 +33,9 @@ export const BUSINESS_SERVICE_PATTERNS = {
 export type UserServicePattern = (typeof USER_SERVICE_PATTERNS)[keyof typeof USER_SERVICE_PATTERNS]
 export type BusinessServicePattern =
   (typeof BUSINESS_SERVICE_PATTERNS)[keyof typeof BUSINESS_SERVICE_PATTERNS]
+
+export const TTS_SERVICE_PATTERNS = {
+  SPEAK: 'tts.speak',
+  LIST_PROVIDERS: 'tts.providers',
+  GET_VOICES: 'tts.voices',
+} as const
