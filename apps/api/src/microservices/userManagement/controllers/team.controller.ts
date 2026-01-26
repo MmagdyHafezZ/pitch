@@ -98,13 +98,14 @@ export class TeamController {
 
   @MessagePattern(USER_SERVICE_PATTERNS.GET_TEAM)
   async getTeam(
-    @Payload() data: { id: string } & userClaimsInterface.MessageWithUserClaims,
+    @Payload()
+    data: { teamId: string } & userClaimsInterface.MessageWithUserClaims,
   ) {
     try {
       this.logger.log(
-        `Getting user ${data.id} - Requested by: ${data.userClaims.email} (${data.userClaims.id})`,
+        `Getting team ${data.teamId} - Requested by: ${data.userClaims.email} (${data.userClaims.id})`,
       );
-      return await this.teamService.findOne(data.id);
+      return await this.teamService.findById(data.teamId);
     } catch (error) {
       throw toRpcException(error);
     }

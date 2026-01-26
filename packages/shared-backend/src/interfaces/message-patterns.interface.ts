@@ -91,3 +91,9 @@ export type BusinessServicePattern =
   (typeof BUSINESS_SERVICE_PATTERNS)[keyof typeof BUSINESS_SERVICE_PATTERNS]
 export type SimulationServicePattern =
   (typeof SIMULATION_SERVICE_PATTERNS)[keyof typeof SIMULATION_SERVICE_PATTERNS]
+
+export const TTS_SERVICE_PATTERNS = {
+  SPEAK: 'tts.speak',
+  LIST_PROVIDERS: 'tts.providers',
+  GET_VOICES: 'tts.voices',
+} as const
