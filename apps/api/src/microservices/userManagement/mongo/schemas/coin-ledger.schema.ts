@@ -26,7 +26,7 @@ export class CoinLedger {
 
   @Prop({ required: true, index: true }) requestId: string;
 
-  @Prop({ required: true, unique: true, index: true })
+  @Prop({ required: true })
   reservationId: string;
 
   @Prop({ required: true, enum: CoinLedgerType, index: true })
@@ -49,4 +49,5 @@ export class CoinLedger {
 export const CoinLedgerSchema = SchemaFactory.createForClass(CoinLedger);
 
 CoinLedgerSchema.index({ teamId: 1, periodKey: 1 });
+CoinLedgerSchema.index({ reservationId: 1, type: 1 }, { unique: true });
 CoinLedgerSchema.index({ subscriptionId: 1, periodKey: 1 });

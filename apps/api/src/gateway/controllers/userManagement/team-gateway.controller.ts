@@ -88,7 +88,7 @@ export class TeamGatewayController {
   ) {
     return this.teamService
       .send(USER_SERVICE_PATTERNS.UPDATE_TEAM, {
-        teamId: id,
+        teamId: teamId,
         ...updateTeamDto,
         userClaims,
       })
@@ -113,7 +113,7 @@ export class TeamGatewayController {
   ) {
     return this.teamService
       .send(USER_SERVICE_PATTERNS.DELETE_TEAM, {
-        teamId: id,
+        teamId: teamId,
         userClaims,
       })
       .pipe(
@@ -175,7 +175,7 @@ export class TeamGatewayController {
   ) {
     return this.teamService
       .send(USER_SERVICE_PATTERNS.GET_TEAM, {
-        teamId: id,
+        teamId: teamId,
         userClaims,
       })
       .pipe(

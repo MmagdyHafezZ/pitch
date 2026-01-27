@@ -14,7 +14,7 @@ export class CoinLedgerRepository {
     private readonly model: Model<CoinLedgerDocument>,
   ) {}
 
-  create(doc: Partial<CoinLedger>) {
+  create(doc: Partial<CoinLedger>): Promise<CoinLedger> {
     return this.model.create(doc);
   }
 
@@ -23,16 +23,27 @@ export class CoinLedgerRepository {
     return !!res;
   }
 
-  async existsByReservationId(reservationId: string): Promise<boolean> {
-    const res = await this.model.exists({ reservationId });
-    return !!res;
+  async findByReservationId(reservationId: string): Promise<CoinLedger | null> {
+    return this.model
+      .findOne({
+        reservationId,
+        type: CoinLedgerType.RESERVE,
+      })
+      .lean();
+  }
+
+  async findAllByReservationId(reservationId: string): Promise<CoinLedger[]> {
+    return this.model.find({ reservationId }).lean<CoinLedger[]>().exec();
   }
 
   async createRefillIfNotExists(args: {
+    userId: string;
     eventId: string;
     teamId: string;
     subscriptionId: string;
     planId: string;
+    requestId: string;
+    reservationId: string;
     periodKey: string;
     allowance: number;
     debtApplied: number;
@@ -42,10 +53,13 @@ export class CoinLedgerRepository {
 
     await this.create({
       type: CoinLedgerType.REFILL,
+      userId: args.userId,
       eventId: args.eventId,
       teamId: args.teamId,
       subscriptionId: args.subscriptionId,
       planId: args.planId,
+      requestId: args.requestId,
+      reservationId: args.reservationId,
       periodKey: args.periodKey,
       allowance: args.allowance,
       debtApplied: args.debtApplied,

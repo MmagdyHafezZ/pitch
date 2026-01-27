@@ -31,6 +31,7 @@ import type { UserClaims as UserClaimsType } from '@pitch/shared-backend/interfa
 import { normalizeError } from '@pitch/shared-backend/helpers/exceptions';
 import {
   CreateSubscriptionRequestDTO,
+  UpdateSubscriptionRequestDTO,
   UpgradeSubscriptionRequestDTO,
 } from '@microservices/userManagement/subscription/dto/subscription.dto';
 
@@ -85,13 +86,13 @@ export class SubscriptionGatewayController {
     description: 'Subscription updated successfully',
   })
   @ApiResponse({ status: 404, description: 'Subscription not found' })
-  upgradeSubscription(
+  updateSubscription(
     @Param('id') id: string,
-    @Body() updateSubscriptionDto: UpgradeSubscriptionRequestDTO,
+    @Body() updateSubscriptionDto: UpdateSubscriptionRequestDTO,
     @UserClaims() userClaims: UserClaimsType,
   ) {
     return this.userService
-      .send(USER_SERVICE_PATTERNS.UPGRADE_SUBSCRIPTION, {
+      .send(USER_SERVICE_PATTERNS.UPDATE_SUBSCRIPTION, {
         id,
         ...updateSubscriptionDto,
         userClaims,
@@ -101,6 +102,35 @@ export class SubscriptionGatewayController {
         catchError((err: unknown) => {
           const error = normalizeError(err);
           const message = error.message ?? 'Failed to update subscription';
+          const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
+          return throwError(() => new HttpException(message, status));
+        }),
+      );
+  }
+
+  @Put(':id/upgrade')
+  @ApiOperation({ summary: 'Upgrade subscription' })
+  @ApiResponse({
+    status: 200,
+    description: 'Subscription upgraded successfully',
+  })
+  @ApiResponse({ status: 404, description: 'Subscription not found' })
+  upgradeSubscription(
+    @Param('id') id: string,
+    @Body() upgradeSubscriptionDto: UpgradeSubscriptionRequestDTO,
+    @UserClaims() userClaims: UserClaimsType,
+  ) {
+    return this.userService
+      .send(USER_SERVICE_PATTERNS.UPGRADE_SUBSCRIPTION, {
+        id,
+        ...upgradeSubscriptionDto,
+        userClaims,
+      })
+      .pipe(
+        timeout(5000),
+        catchError((err: unknown) => {
+          const error = normalizeError(err);
+          const message = error.message ?? 'Failed to upgrade subscription';
           const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
           return throwError(() => new HttpException(message, status));
         }),
@@ -170,6 +200,33 @@ export class SubscriptionGatewayController {
     return this.userService
       .send(USER_SERVICE_PATTERNS.GET_SUBSCRIPTION, {
         id,
+        userClaims,
+      })
+      .pipe(
+        timeout(5000),
+        catchError((err: unknown) => {
+          const error = normalizeError(err);
+          const message = error.message ?? 'Failed to get subscription';
+          const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
+          return throwError(() => new HttpException(message, status));
+        }),
+      );
+  }
+
+  @Get('teams/:teamId')
+  @ApiOperation({ summary: 'Get subscription by teamId' })
+  @ApiResponse({
+    status: 200,
+    description: 'Subscription retrieved successfully',
+  })
+  @ApiResponse({ status: 404, description: 'Subscription not found' })
+  getSubscriptionByTeamId(
+    @Param('teamId') teamId: string,
+    @UserClaims() userClaims: UserClaimsType,
+  ) {
+    return this.userService
+      .send(USER_SERVICE_PATTERNS.GET_TEAM_SUBSCRIPTION, {
+        teamId,
         userClaims,
       })
       .pipe(

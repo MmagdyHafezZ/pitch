@@ -2,6 +2,7 @@ import { ApiProperty } from '@nestjs/swagger';
 import {
   IsDate,
   IsEnum,
+  IsISO8601,
   IsNumber,
   IsOptional,
   IsString,
@@ -25,11 +26,13 @@ export class CreateSubscriptionRequestDTO {
   planId!: string;
 
   @ApiProperty({
-    description: 'Start date of the subscription',
+    description: 'Start date of the subscription (ISO string)',
     example: '2024-01-01T00:00:00.000Z',
+    required: false,
   })
-  @IsDate()
-  currentPeriodStart!: Date;
+  @IsOptional()
+  @IsISO8601()
+  currentPeriodStart?: string | null;
 
   @ApiProperty({
     description: 'Billing interval',
@@ -56,6 +59,13 @@ export class CreateSubscriptionRequestDTO {
 }
 
 export class UpdateSubscriptionRequestDTO {
+  @ApiProperty({
+    description: 'ID of the team associated with the subscription',
+    example: 'team_12345',
+  })
+  @IsString()
+  teamId!: string;
+
   @ApiProperty({
     description: 'Optional ID of the plan associated with the subscription',
     example: 'plan_12345',

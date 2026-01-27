@@ -1,6 +1,17 @@
 import { Injectable } from '@nestjs/common';
 import Redis from 'ioredis';
 
+export type ApplyDeltaResult =
+  | { applied: true; remainingAfter: number; reason: 'APPLIED' }
+  | {
+      applied: false;
+      remainingAfter?: number;
+      reason:
+        | 'ALREADY_PROCESSED'
+        | 'REMAINING_ALREADY_NEGATIVE'
+        | 'MISSING_REMAINING_KEY';
+    };
+
 @Injectable()
 export class CoinRedisService {
   private readonly redis: Redis;
@@ -75,6 +86,10 @@ export class CoinRedisService {
       local est = tonumber(ARGV[1])
       local ttl = tonumber(ARGV[2])
 
+      if est < 0 then
+        return {0, rem, 0}
+      end
+
       local prev = redis.call("GET", idemp)
       if prev then
         local rem = redis.call("GET", remainingKey)
@@ -120,7 +135,7 @@ export class CoinRedisService {
     deltaCoins: number;
     eventId: string;
     ttlSeconds: number;
-  }): Promise<{ applied: boolean; remainingAfter?: number }> {
+  }): Promise<ApplyDeltaResult> {
     const { teamId, periodKey, deltaCoins, eventId, ttlSeconds } = args;
 
     const remainingKey = this.keyRemaining(teamId, periodKey);
@@ -146,6 +161,10 @@ export class CoinRedisService {
       end
 
       local rem = tonumber(remStr)
+      if rem < 0 then
+        return {2, rem}
+      end
+
       rem = rem - delta
 
       redis.call("SET", remainingKey, tostring(rem), "EX", ttl)
@@ -161,11 +180,25 @@ export class CoinRedisService {
       String(deltaCoins),
       String(ttlSeconds),
     )) as any[];
+
     const code = Number(res[0]);
     const remainingAfter = Number(res[1]);
-    if (code === 0) return { applied: false, remainingAfter };
-    if (code === 1) return { applied: true, remainingAfter };
-    // -1 missing key
-    return { applied: false };
+
+    if (code === 1) return { applied: true, remainingAfter, reason: 'APPLIED' };
+
+    if (code === 0) {
+      return remainingAfter === -1
+        ? { applied: false, reason: 'MISSING_REMAINING_KEY' }
+        : { applied: false, remainingAfter, reason: 'ALREADY_PROCESSED' };
+    }
+
+    if (code === 2)
+      return {
+        applied: false,
+        remainingAfter,
+        reason: 'REMAINING_ALREADY_NEGATIVE',
+      };
+
+    return { applied: false, reason: 'MISSING_REMAINING_KEY' };
   }
 }

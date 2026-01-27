@@ -23,12 +23,12 @@ import { SubscriptionService } from '../services/subscription.service';
 import { ElevatedAccessGuard } from '../../guards/elevated-access.guard';
 
 @Controller()
-@UseGuards(ElevatedAccessGuard)
 export class SubscriptionController {
   private readonly logger = new Logger(SubscriptionController.name);
 
   constructor(private readonly subscriptionService: SubscriptionService) {}
 
+  @UseGuards(ElevatedAccessGuard)
   @MessagePattern(USER_SERVICE_PATTERNS.CREATE_SUBSCRIPTION)
   @UsePipes(new ValidationPipe({ transform: true }))
   async createSubscription(
@@ -47,17 +47,23 @@ export class SubscriptionController {
         teamId: createSubscriptionDto.teamId,
         planId: createSubscriptionDto.planId,
         interval: createSubscriptionDto.interval,
-        currentPeriodStart: createSubscriptionDto.currentPeriodStart,
+        currentPeriodStart: createSubscriptionDto.currentPeriodStart
+          ? new Date(createSubscriptionDto.currentPeriodStart)
+          : null,
         cancelAtPeriodEnd: createSubscriptionDto.cancelAtPeriodEnd ?? false,
       };
 
-      return await this.subscriptionService.createSubscription(dto);
+      return await this.subscriptionService.createSubscription(
+        dto,
+        _userClaims.id,
+      );
     } catch (error) {
       throw toRpcException(error);
     }
   }
 
-  @MessagePattern(USER_SERVICE_PATTERNS.UPGRADE_SUBSCRIPTION)
+  @UseGuards(ElevatedAccessGuard)
+  @MessagePattern(USER_SERVICE_PATTERNS.UPDATE_SUBSCRIPTION)
   @UsePipes(
     new ValidationPipe({ transform: true, skipMissingProperties: true }),
   )
@@ -74,6 +80,7 @@ export class SubscriptionController {
       const { userClaims: _userClaims, id, ...updateData } = data;
 
       const dto: UpdateSubscriptionDto = {
+        teamId: updateData.teamId,
         planId: updateData.planId,
         interval: updateData.interval,
         limits: updateData.limits,
@@ -85,6 +92,7 @@ export class SubscriptionController {
     }
   }
 
+  @UseGuards(ElevatedAccessGuard)
   @MessagePattern(USER_SERVICE_PATTERNS.UPGRADE_SUBSCRIPTION)
   @UsePipes(
     new ValidationPipe({ transform: true, skipMissingProperties: true }),
@@ -138,6 +146,22 @@ export class SubscriptionController {
         `Getting subscription ${data.id} - Requested by: ${data.userClaims.email} (${data.userClaims.id})`,
       );
       return await this.subscriptionService.findOne(data.id);
+    } catch (error) {
+      throw toRpcException(error);
+    }
+  }
+
+  @UseGuards(ElevatedAccessGuard)
+  @MessagePattern(USER_SERVICE_PATTERNS.GET_TEAM_SUBSCRIPTION)
+  async getTeamSubscription(
+    @Payload()
+    data: { teamId: string } & userClaimsInterface.MessageWithUserClaims,
+  ) {
+    try {
+      this.logger.log(
+        `Getting subscription for Team ${data.teamId} - Requested by: ${data.userClaims.email} (${data.userClaims.id})`,
+      );
+      return await this.subscriptionService.findSubForTeam(data.teamId);
     } catch (error) {
       throw toRpcException(error);
     }

@@ -167,11 +167,12 @@ export interface CreateSubscriptionDto {
   planId: string
   interval: BillingInterval
   limits?: number
-  currentPeriodStart: Date
+  currentPeriodStart?: Date | null
   cancelAtPeriodEnd?: boolean
 }
 
 export interface UpdateSubscriptionDto {
+  teamId?: string
   planId?: string
   interval?: BillingInterval
   limits?: number

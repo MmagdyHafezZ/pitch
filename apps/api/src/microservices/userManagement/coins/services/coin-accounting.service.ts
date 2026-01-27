@@ -38,9 +38,6 @@ export class CoinAccountingService {
     return `${args.subscriptionId}:${args.startMs}-${args.endMs}`;
   }
 
-  /**
-   * Entitlement = active subscription + plan allowance + current billing cycle key.
-   */
   private async getEntitlementOrNull(teamId: string): Promise<null | {
     subscriptionId: string;
     planId: string;
@@ -81,6 +78,11 @@ export class CoinAccountingService {
 
   async getRemainingCoins(
     teamId: string,
+    opts?: {
+      periodKey?: string;
+      allowanceFallback?: number;
+      initIfMissing?: boolean;
+    },
   ): Promise<
     | { ok: false; reason: 'NO_ACTIVE_SUBSCRIPTION' }
     | {
@@ -91,18 +93,45 @@ export class CoinAccountingService {
         remaining: number;
       }
   > {
+    if (opts?.periodKey) {
+      const periodKey = opts.periodKey;
+      const redisRemaining = await this.redis.getRemaining(teamId, periodKey);
+      if (redisRemaining !== null) {
+        return {
+          ok: true,
+          teamId,
+          periodKey,
+          allowance: opts.allowanceFallback ?? 0,
+          remaining: redisRemaining,
+        };
+      }
+
+      const mongoRemaining = await this.coinBalanceRepo.getRemaining(
+        teamId,
+        periodKey,
+      );
+      return {
+        ok: true,
+        teamId,
+        periodKey,
+        allowance: opts.allowanceFallback ?? 0,
+        remaining: mongoRemaining ?? opts.allowanceFallback ?? 0,
+      };
+    }
+
     const ent = await this.getEntitlementOrNull(teamId);
     if (!ent) return { ok: false, reason: 'NO_ACTIVE_SUBSCRIPTION' };
 
-    // Ensure the period remaining exists (NX). If it already exists, this is a no-op.
-    await this.redis.initRemainingIfMissing(
-      teamId,
-      ent.periodKey,
-      ent.allowance,
-      ent.periodTtlSeconds,
-    );
+    const init = opts?.initIfMissing ?? true;
+    if (init) {
+      await this.redis.initRemainingIfMissing(
+        teamId,
+        ent.periodKey,
+        ent.allowance,
+        ent.periodTtlSeconds,
+      );
+    }
 
-    // Prefer Redis (real-time)
     const redisRemaining = await this.redis.getRemaining(teamId, ent.periodKey);
     if (redisRemaining !== null) {
       return {
@@ -114,12 +143,10 @@ export class CoinAccountingService {
       };
     }
 
-    // Fallback: Mongo snapshot (might be slightly stale)
     const mongoRemaining = await this.coinBalanceRepo.getRemaining(
       teamId,
       ent.periodKey,
     );
-
     return {
       ok: true,
       teamId,
@@ -197,6 +224,25 @@ export class CoinAccountingService {
   }
 
   async applyAdjustment(event: CoinAdjustEventDto): Promise<void> {
+    const reserved_entry = await this.coinLedgerRepo.findByReservationId(
+      event.reservationId,
+    );
+    if (reserved_entry === null) {
+      throw new Error(`Could not find the corresponding RESERVE entry`);
+    }
+
+    const state = await this.guardReservationLifecycle(event.reservationId);
+
+    if (!state.hasReserve) {
+      throw new Error(
+        `Cannot ADJUST without RESERVE for ${event.reservationId}`,
+      );
+    }
+
+    if (state.hasAdjust) {
+      throw new Error(`Reservation ${event.reservationId} already adjusted`);
+    }
+
     const ttlSeconds = 60 * 60 * 24 * 40;
     const res = await this.redis.applyDeltaIdempotent({
       teamId: event.teamId,
@@ -206,7 +252,18 @@ export class CoinAccountingService {
       ttlSeconds,
     });
 
-    if (!res.applied) return;
+    if (!res.applied) {
+      if (res.reason === 'ALREADY_PROCESSED') return;
+
+      if (res.reason === 'REMAINING_ALREADY_NEGATIVE') {
+        throw new Error(
+          `Cannot apply adjustment; remaining is already negative for team=${event.teamId} period=${event.periodKey} (remaining=${res.remainingAfter})`,
+        );
+      }
+      throw new Error(
+        `Cannot apply adjustment; missing remaining key for team=${event.teamId} period=${event.periodKey}`,
+      );
+    }
 
     await this.coinLedgerRepo.create({
       type: CoinLedgerType.ADJUST,
@@ -215,9 +272,9 @@ export class CoinAccountingService {
       requestId: event.requestId,
       sessionId: event.sessionId,
       teamId: event.teamId,
-      userId: (event as any).userId ?? 'unknown',
-      subscriptionId: (event as any).subscriptionId ?? 'unknown',
-      planId: (event as any).planId ?? 'unknown',
+      userId: reserved_entry.userId,
+      subscriptionId: reserved_entry.subscriptionId,
+      planId: reserved_entry.planId,
       periodKey: event.periodKey,
       deltaCoins: event.deltaCoins,
       model: event.model,
@@ -230,6 +287,35 @@ export class CoinAccountingService {
       eventId: event.eventId,
       reservationId: event.reservationId,
       requestId: event.requestId,
+      estimatedCoins: reserved_entry.estimatedCoins ?? 0,
+      deltaCoins: event.deltaCoins,
     });
+  }
+
+  private async guardReservationLifecycle(reservationId: string) {
+    const entries =
+      await this.coinLedgerRepo.findAllByReservationId(reservationId);
+    if (entries.length === 0) {
+      return { hasReserve: false, hasAdjust: false };
+    }
+    if (entries.length > 2) {
+      throw new Error(
+        `Invalid ledger state for reservation ${reservationId}: more than 2 entries`,
+      );
+    }
+    const hasReserve = entries.some((e) => e.type === CoinLedgerType.RESERVE);
+    const hasAdjust = entries.some((e) => e.type === CoinLedgerType.ADJUST);
+    if (hasAdjust && !hasReserve) {
+      throw new Error(
+        `Invalid ledger state for reservation ${reservationId}: ADJUST without RESERVE`,
+      );
+    }
+    if (hasReserve && hasAdjust) {
+      return { hasReserve: true, hasAdjust: true };
+    }
+    if (hasReserve) {
+      return { hasReserve: true, hasAdjust: false };
+    }
+    throw new Error(`Invalid ledger state for reservation ${reservationId}`);
   }
 }

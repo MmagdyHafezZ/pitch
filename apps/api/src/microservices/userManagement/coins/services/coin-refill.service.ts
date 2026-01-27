@@ -16,7 +16,10 @@ export class CoinRefillService {
     return `${subscriptionId}:${start.getTime()}-${end.getTime()}`;
   }
 
-  async refillInitialForSubscription(sub: SubscriptionWithPlan) {
+  async refillInitialForSubscription(
+    sub: SubscriptionWithPlan,
+    requesterId: string,
+  ) {
     const { id: subscriptionId, teamId: teamId, plan: plan } = sub;
 
     const start = new Date(sub.currentPeriodStart);
@@ -42,10 +45,13 @@ export class CoinRefillService {
     const eventId = `refill:init:${teamId}:${periodKey}`;
 
     await this.coinLedgerRepo.createRefillIfNotExists({
+      userId: requesterId,
       eventId,
       teamId,
       subscriptionId,
       planId: sub.planId,
+      requestId: eventId,
+      reservationId: eventId,
       periodKey,
       allowance,
       debtApplied: 0,
@@ -109,10 +115,13 @@ export class CoinRefillService {
     const remainingAfter = adj.remainingAfter ?? allowance - debt;
 
     await this.coinLedgerRepo.createRefillIfNotExists({
+      userId: 'system',
       eventId,
       teamId,
       subscriptionId,
       planId,
+      requestId: eventId,
+      reservationId: eventId,
       periodKey: newPeriodKey,
       allowance,
       debtApplied: debt,

@@ -64,17 +64,46 @@ export class CoinBalanceRepository {
     eventId: string;
     reservationId: string;
     requestId: string;
+    estimatedCoins: number;
+    deltaCoins: number;
   }) {
+    const actualCoins = args.estimatedCoins + args.deltaCoins;
+
     return this.model.updateOne(
       { teamId: args.teamId, periodKey: args.periodKey },
-      {
-        $set: {
-          remaining: args.remainingAfter,
-          lastEventId: args.eventId,
-          lastReservationId: args.reservationId,
-          lastRequestId: args.requestId,
+      [
+        {
+          $set: {
+            teamId: args.teamId,
+            periodKey: args.periodKey,
+            remaining: args.remainingAfter,
+            lastEventId: args.eventId,
+            lastReservationId: args.reservationId,
+            lastRequestId: args.requestId,
+          },
         },
-      },
+        {
+          $set: {
+            reserved: {
+              $max: [
+                0,
+                {
+                  $subtract: [
+                    { $ifNull: ['$reserved', 0] },
+                    args.estimatedCoins,
+                  ],
+                },
+              ],
+            },
+            usedActual: {
+              $max: [
+                0,
+                { $add: [{ $ifNull: ['$usedActual', 0] }, actualCoins] },
+              ],
+            },
+          },
+        },
+      ],
       { upsert: true },
     );
   }

@@ -32,6 +32,7 @@ export class SubscriptionService {
 
   async createSubscription(
     createSubscriptionDto: CreateSubscriptionDto,
+    requesterId: string,
   ): Promise<SubscriptionWithPlan> {
     if (await this.checkExistingSubscription(createSubscriptionDto.teamId)) {
       throw new ConflictException(
@@ -47,9 +48,17 @@ export class SubscriptionService {
         `Plan with ID ${createSubscriptionDto.planId} not found`,
       );
     }
+    if (
+      createSubscriptionDto.currentPeriodStart === null ||
+      !createSubscriptionDto.currentPeriodStart
+    ) {
+      createSubscriptionDto.currentPeriodStart = new Date();
+    }
 
-    const period_end =
-      createSubscriptionDto.currentPeriodStart + createSubscriptionDto.interval;
+    const period_end = this.addInterval(
+      createSubscriptionDto.currentPeriodStart,
+      createSubscriptionDto.interval,
+    );
 
     const sub = await this.subscriptionRepository.create({
       teamId: createSubscriptionDto.teamId,
@@ -59,7 +68,7 @@ export class SubscriptionService {
       currentPeriodEnd: period_end,
       cancelAtPeriodEnd: createSubscriptionDto.cancelAtPeriodEnd ?? false,
     });
-    await this.coinRefillService.refillInitialForSubscription(sub);
+    await this.coinRefillService.refillInitialForSubscription(sub, requesterId);
     return sub;
   }
 
@@ -232,6 +241,17 @@ export class SubscriptionService {
     return subscription;
   }
 
+  async findSubForTeam(teamId: string): Promise<Subscription> {
+    const subscription =
+      await this.subscriptionRepository.findActiveByTeamId(teamId);
+    if (!subscription) {
+      throw new NotFoundException(
+        `Couldn't find a subscription for team with ID ${teamId}`,
+      );
+    }
+    return subscription;
+  }
+
   async findActiveSubscriptions(): Promise<Subscription[]> {
     return this.subscriptionRepository.findAllActive();
   }
@@ -239,5 +259,14 @@ export class SubscriptionService {
   async findDueForRollover(): Promise<SubscriptionWithPlan[]> {
     const now = Date.now();
     return this.subscriptionRepository.findDueForRollover(new Date(now));
+  }
+
+  private addInterval(d: Date, interval: string) {
+    const date = new Date(d);
+    if (interval === 'MONTH') date.setMonth(date.getMonth() + 1);
+    if (interval === 'QUARTER') date.setMonth(date.getMonth() + 3);
+    if (interval === 'SEMIANNUAL') date.setMonth(date.getMonth() + 6);
+    if (interval === 'ANNUAL') date.setFullYear(date.getFullYear() + 1);
+    return date;
   }
 }

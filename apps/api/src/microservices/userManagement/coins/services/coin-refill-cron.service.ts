@@ -1,7 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { SubscriptionService } from '../../subscription/services/subscription.service';
-import { Period } from '@pitch/shared-backend/interfaces/user.interface';
 import { CoinAccountingService } from './coin-accounting.service';
 import { CoinRefillService } from './coin-refill.service';
 
@@ -45,40 +44,39 @@ export class CoinRefillCron {
       return;
     }
 
-    const balance =
-      (await this.coinAccountingService.getRemainingCoins(sub.teamId)) ?? null;
+    const oldStart = new Date(sub.currentPeriodStart);
+    const oldEnd = new Date(sub.currentPeriodEnd);
 
-    if (balance.ok === false) {
-      return;
-    }
-    const newStart = sub.currentPeriodEnd;
-    const newEnd = this.addInterval(newStart, sub.plan.interval);
+    const oldPeriodKey = this.buildPeriodKey(subscriptionId, oldStart, oldEnd);
 
-    const newPeriodKey = this.buildPeriodKey(subscriptionId, newStart, newEnd);
+    const balance = await this.coinAccountingService.getRemainingCoins(teamId, {
+      periodKey: oldPeriodKey,
+      allowanceFallback: plan.maxCoins,
+    });
 
-    const oldRemaining = balance.remaining ?? 0;
+    if (balance.ok === false) return;
+
+    const oldRemaining = balance.remaining;
     const debt = Math.max(0, -oldRemaining);
 
-    const allowance = plan.maxCoins;
+    const newStart = oldEnd;
+    const newEnd = this.addInterval(newStart, sub.plan.interval);
+    const newPeriodKey = this.buildPeriodKey(subscriptionId, newStart, newEnd);
 
     await this.coinRefillService.refillAfterRollover({
       teamId,
       subscriptionId,
       planId: sub.planId,
-      allowance,
+      allowance: plan.maxCoins,
       newPeriodKey,
       newPeriodEnd: newEnd,
       debt,
     });
 
-    const subUpdateDto: Period = {
+    await this.subscriptionService.updateSubscriptionPeriod(subscriptionId, {
       start: newStart,
       end: newEnd,
-    };
-    await this.subscriptionService.updateSubscriptionPeriod(
-      subscriptionId,
-      subUpdateDto,
-    );
+    });
   }
 
   // helpers
