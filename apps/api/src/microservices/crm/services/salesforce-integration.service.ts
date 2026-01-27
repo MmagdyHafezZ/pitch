@@ -5,12 +5,14 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from './prisma.service';
+import * as crypto from 'crypto';
 
 /**
  * Salesforce Integration Service
  *
  * Handles Salesforce API interactions using stored OAuth tokens.
  * Automatically refreshes expired tokens.
+ * Stores integration data in PostgreSQL database via Prisma.
  *
  * This service is called by the CRM controller via RabbitMQ message patterns.
  */
@@ -19,7 +21,14 @@ export class SalesforceIntegrationService {
   private readonly logger = new Logger(SalesforceIntegrationService.name);
   private readonly SALESFORCE_API_VERSION = 'v58.0';
 
-  constructor(private readonly prisma: PrismaService) {}
+  // Store code verifiers temporarily (in production, use Redis)
+  private codeVerifiers = new Map<string, string>();
+
+  constructor(private readonly prisma: PrismaService) {
+    this.logger.log(
+      'Salesforce Integration Service initialized with Prisma database',
+    );
+  }
 
   /**
    * Get Salesforce integration for a user
@@ -184,25 +193,43 @@ export class SalesforceIntegrationService {
   }
 
   /**
+   * Generate code verifier and challenge for PKCE
+   */
+  private generatePKCE() {
+    // Generate random code verifier (43-128 characters)
+    const codeVerifier = crypto.randomBytes(32).toString('base64url');
+
+    // Generate code challenge (SHA256 hash of verifier)
+    const codeChallenge = crypto
+      .createHash('sha256')
+      .update(codeVerifier)
+      .digest('base64url');
+
+    return { codeVerifier, codeChallenge };
+  }
+
+  /**
    * Generate OAuth URL for connecting Salesforce
    */
   async getConnectUrl(userId: string, state?: string) {
     const clientId = process.env.SALESFORCE_CLIENT_ID;
     const redirectUri =
       process.env.SALESFORCE_REDIRECT_URI ||
-      'http://localhost:3001/api/v1/integrations/salesforce/callback';
+      'http://localhost:8000/api/crm/salesforce/callback';
 
     if (!clientId) {
       throw new BadRequestException('Salesforce client ID not configured');
     }
 
-    // Build Salesforce OAuth URL
+    const stateParam = state || userId;
+
+    // Build Salesforce OAuth URL (without PKCE for now)
     const params = new URLSearchParams({
       response_type: 'code',
       client_id: clientId,
       redirect_uri: redirectUri,
-      scope: 'api refresh_token id',
-      state: state || userId, // Pass userId in state to retrieve after callback
+      scope: 'api refresh_token openid id',
+      state: stateParam, // Pass userId in state to retrieve after callback
     });
 
     const authUrl = `https://login.salesforce.com/services/oauth2/authorize?${params.toString()}`;
@@ -229,7 +256,17 @@ export class SalesforceIntegrationService {
     this.logger.log(`Salesforce callback for user ${userId}`);
 
     try {
-      // Exchange code for tokens
+      // Exchange code for tokens (standard OAuth flow without PKCE)
+      const tokenParams: Record<string, string> = {
+        grant_type: 'authorization_code',
+        code,
+        client_id: process.env.SALESFORCE_CLIENT_ID || '',
+        client_secret: process.env.SALESFORCE_CLIENT_SECRET || '',
+        redirect_uri:
+          process.env.SALESFORCE_REDIRECT_URI ||
+          'http://localhost:8000/api/crm/salesforce/callback',
+      };
+
       const tokenResponse = await fetch(
         'https://login.salesforce.com/services/oauth2/token',
         {
@@ -237,15 +274,7 @@ export class SalesforceIntegrationService {
           headers: {
             'Content-Type': 'application/x-www-form-urlencoded',
           },
-          body: new URLSearchParams({
-            grant_type: 'authorization_code',
-            code,
-            client_id: process.env.SALESFORCE_CLIENT_ID || '',
-            client_secret: process.env.SALESFORCE_CLIENT_SECRET || '',
-            redirect_uri:
-              process.env.SALESFORCE_REDIRECT_URI ||
-              'http://localhost:3001/api/v1/integrations/salesforce/callback',
-          }),
+          body: new URLSearchParams(tokenParams),
         },
       );
 
@@ -337,9 +366,6 @@ export class SalesforceIntegrationService {
         status: true,
         providerEmail: true,
         instanceUrl: true,
-        lastSyncAt: true,
-        lastSyncStatus: true,
-        autoSync: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -416,112 +442,6 @@ export class SalesforceIntegrationService {
     const endpoint = `/services/data/${this.SALESFORCE_API_VERSION}/search?q=${encodedQuery}`;
 
     return this.makeRequest(userId, endpoint);
-  }
-
-  /**
-   * Sync contacts from Salesforce to local CRM database
-   */
-  async syncContacts(userId: string, orgId: string) {
-    this.logger.log(`Syncing Salesforce contacts for user ${userId}`);
-
-    try {
-      const contacts = await this.getContacts(userId, 1000);
-
-      let synced = 0;
-      let errors = 0;
-
-      for (const sfContact of contacts) {
-        try {
-          // Check if contact already exists by Salesforce ID in customFields
-          const existingContact = await this.prisma.client.contact.findFirst({
-            where: {
-              orgId,
-              email: sfContact.Email || `sf_${sfContact.Id}@placeholder.com`,
-            },
-          });
-
-          if (existingContact) {
-            // Update existing contact
-            await this.prisma.client.contact.update({
-              where: { id: existingContact.id },
-              data: {
-                firstName: sfContact.FirstName || '',
-                lastName: sfContact.LastName || '',
-                phone: sfContact.Phone,
-                title: sfContact.Title,
-                company: sfContact.Account?.Name,
-                customFields: {
-                  salesforceId: sfContact.Id,
-                  salesforceAccountId: sfContact.AccountId,
-                  syncedAt: new Date().toISOString(),
-                },
-              },
-            });
-          } else {
-            // Create new contact
-            await this.prisma.client.contact.create({
-              data: {
-                orgId,
-                firstName: sfContact.FirstName || '',
-                lastName: sfContact.LastName || '',
-                email: sfContact.Email || `sf_${sfContact.Id}@placeholder.com`,
-                phone: sfContact.Phone,
-                title: sfContact.Title,
-                company: sfContact.Account?.Name,
-                customFields: {
-                  salesforceId: sfContact.Id,
-                  salesforceAccountId: sfContact.AccountId,
-                  syncedAt: new Date().toISOString(),
-                },
-              },
-            });
-          }
-          synced++;
-        } catch (error) {
-          this.logger.error(`Error syncing contact ${sfContact.Id}:`, error);
-          errors++;
-        }
-      }
-
-      // Update last sync time
-      const integration = await this.getIntegration(userId);
-      await this.prisma.client.integration.update({
-        where: { id: integration.id },
-        data: {
-          lastSyncAt: new Date(),
-          lastSyncStatus: errors > 0 ? 'partial' : 'success',
-          lastSyncError:
-            errors > 0 ? `${errors} contacts failed to sync` : null,
-        },
-      });
-
-      this.logger.log(
-        `Synced ${synced} contacts from Salesforce (${errors} errors)`,
-      );
-
-      return {
-        success: true,
-        synced,
-        errors,
-        total: contacts.length,
-      };
-    } catch (error) {
-      this.logger.error('Error syncing contacts:', error);
-
-      // Update sync status
-      const integration = await this.getIntegration(userId);
-      await this.prisma.client.integration.update({
-        where: { id: integration.id },
-        data: {
-          lastSyncAt: new Date(),
-          lastSyncStatus: 'failed',
-          lastSyncError:
-            error instanceof Error ? error.message : 'Unknown error',
-        },
-      });
-
-      throw error;
-    }
   }
 
   /**

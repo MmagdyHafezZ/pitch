@@ -10,6 +10,7 @@ import {
   HttpStatus,
   Logger,
   HttpCode,
+  VERSION_NEUTRAL,
 } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
 import {
@@ -39,7 +40,6 @@ const CRM_SERVICE_PATTERNS = {
   SALESFORCE_GET_ACCOUNTS: 'salesforce.getAccounts',
   SALESFORCE_GET_OPPORTUNITIES: 'salesforce.getOpportunities',
   SALESFORCE_GET_LEADS: 'salesforce.getLeads',
-  SALESFORCE_SYNC_CONTACTS: 'salesforce.syncContacts',
   SALESFORCE_QUERY: 'salesforce.query',
   SALESFORCE_SEARCH: 'salesforce.search',
   SALESFORCE_DISCONNECT: 'salesforce.disconnect',
@@ -52,9 +52,11 @@ const CRM_SERVICE_PATTERNS = {
  * Pattern: HTTP Request → Gateway Controller → [RabbitMQ] → CRM Microservice
  *
  * This follows the same pattern as AuthGatewayController in userManagement.
+ *
+ * Note: VERSION_NEUTRAL is used to avoid versioning (OAuth callbacks need exact URLs)
  */
 @ApiTags('Salesforce Integration')
-@Controller({ path: 'integrations/salesforce', version: '1' })
+@Controller({ path: 'crm/salesforce', version: VERSION_NEUTRAL })
 export class SalesforceGatewayController {
   private readonly logger = new Logger(SalesforceGatewayController.name);
 
@@ -338,47 +340,6 @@ export class SalesforceGatewayController {
           );
           const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
           const message = error.message ?? 'Failed to get Salesforce leads';
-          return throwError(() => new HttpException(message, status));
-        }),
-      );
-  }
-
-  /**
-   * Sync Salesforce contacts to local CRM
-   */
-  @Post('sync/contacts')
-  @HttpCode(HttpStatus.OK)
-  @ApiBearerAuth('bearer')
-  @ApiOperation({ summary: 'Sync Salesforce contacts to local CRM' })
-  @ApiResponse({ status: 200, description: 'Contacts synced successfully' })
-  @ApiBody({
-    schema: {
-      type: 'object',
-      properties: {
-        orgId: { type: 'string', description: 'Organization ID' },
-      },
-      required: ['orgId'],
-    },
-  })
-  syncContacts(
-    @CurrentUser('id') userId: string,
-    @Body('orgId') orgId: string,
-  ) {
-    this.logger.log(`Salesforce sync contacts for user: ${userId}`);
-
-    return this.crmService
-      .send(CRM_SERVICE_PATTERNS.SALESFORCE_SYNC_CONTACTS, { userId, orgId })
-      .pipe(
-        timeout(30000), // Longer timeout for sync operation
-        catchError((err: unknown) => {
-          const error = err as ServiceError;
-          const stack = error.stack ?? JSON.stringify(err);
-          this.logger.error(
-            `Salesforce sync contacts failed for user ${userId}`,
-            stack,
-          );
-          const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
-          const message = error.message ?? 'Failed to sync Salesforce contacts';
           return throwError(() => new HttpException(message, status));
         }),
       );

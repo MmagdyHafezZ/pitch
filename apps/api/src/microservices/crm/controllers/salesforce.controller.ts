@@ -178,24 +178,6 @@ export class SalesforceController {
   }
 
   /**
-   * Sync Salesforce contacts to local CRM
-   * Pattern: salesforce.syncContacts
-   */
-  @MessagePattern(CRM_SERVICE_PATTERNS.SALESFORCE_SYNC_CONTACTS)
-  async syncContacts(@Payload() data: { userId: string; orgId: string }) {
-    try {
-      this.logger.log(`Salesforce sync contacts for user: ${data.userId}`);
-      return await this.salesforceService.syncContacts(data.userId, data.orgId);
-    } catch (error) {
-      this.logger.error(
-        `Salesforce sync contacts failed for user ${data.userId}`,
-        error,
-      );
-      throw error;
-    }
-  }
-
-  /**
    * Execute custom SOQL query
    * Pattern: salesforce.query
    */

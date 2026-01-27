@@ -59,7 +59,7 @@ PITCH follows a microservices architecture with database-per-service pattern:
 | **Simulation**      | -    | PostgreSQL + MongoDB | AI-powered simulations, voice/video, feedback |
 | **Support**         | -    | PostgreSQL           | FAQ, tickets, chat support                    |
 | **Analytics**       | -    | PostgreSQL           | Metrics, dashboards, reporting                |
-| **CRM**             | -    | PostgreSQL           | Customer relationship management              |
+| **CRM**             | -    | PostgreSQL           | Salesforce/HubSpot integrations, OAuth tokens |
 | **LTI**             | -    | -                    | LMS integration (LTI 1.3)                     |
 | **S3**              | -    | -                    | File storage management                       |
 
@@ -167,6 +167,15 @@ PITCH/
 - ✅ **Persona Management** - Configurable AI characters
 - ✅ **Session Recording** - MongoDB-backed chat history
 
+### CRM Integrations
+
+- ✅ **Salesforce Integration** - OAuth 2.0, real-time data access
+- ✅ **Automatic Token Refresh** - Seamless authentication management
+- ✅ **Contact Management** - Fetch contacts, accounts, opportunities, leads
+- ✅ **Custom Queries** - Execute SOQL queries and SOSL searches
+- ✅ **Secure Token Storage** - Encrypted OAuth tokens in PostgreSQL
+- 🚧 **HubSpot Integration** - Coming soon
+
 ### Developer Experience
 
 - ✅ **Single Build** - One Docker image for all services
@@ -228,9 +237,12 @@ pnpm test:cov                   # Coverage report
 
 # Database
 pnpm db:generate:all            # Generate all Prisma clients
+pnpm db:generate:crm            # Generate CRM Prisma client
 pnpm db:migrate:all             # Run all migrations
+pnpm db:migrate:crm             # Run CRM migrations only
 pnpm db:push:all                # Push schema changes (dev only)
-pnpm db:studio:user             # Open Prisma Studio
+pnpm db:studio:user             # Open Prisma Studio (User DB)
+pnpm db:studio:crm              # Open Prisma Studio (CRM DB)
 
 # Docker
 pnpm docker:up                  # Start containers

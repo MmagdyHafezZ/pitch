@@ -1,5 +1,5 @@
 // CRM Microservice - Prisma Schema
-// This microservice manages customer relationships, contacts, organizations, and sales pipeline
+// This microservice manages external CRM integrations (Salesforce, HubSpot, etc.)
 
 generator client {
   provider = "prisma-client-js"
@@ -7,8 +7,8 @@ generator client {
 }
 
 datasource db {
-  provider  = "postgresql"
-  url       = env("CRM_DATABASE_URL")
+  provider = "postgresql"
+  url      = env("CRM_DATABASE_URL")
 }
 
 // Integration provider enum
@@ -26,6 +26,7 @@ enum IntegrationStatus {
 }
 
 // Integration - External CRM integrations (Salesforce, HubSpot, etc.)
+// Stores OAuth tokens and connection metadata
 model Integration {
   id       String              @id @default(cuid())
   userId   String              // User who connected this integration
@@ -33,22 +34,15 @@ model Integration {
   status   IntegrationStatus   @default(CONNECTED)
 
   // OAuth tokens
-  accessToken  String? // Encrypted access token
-  refreshToken String? // Encrypted refresh token
-  expiresAt    DateTime?
+  accessToken  String? // OAuth access token
+  refreshToken String? // OAuth refresh token
+  expiresAt    DateTime? // Token expiration time
   instanceUrl  String? // Salesforce instance URL or HubSpot portal ID
 
   // Provider-specific data
-  providerId   String? // User ID from the provider
+  providerId    String? // User ID from the provider
   providerEmail String? // Email from the provider
-  providerData Json? // Additional provider-specific data
-
-  // Sync settings
-  autoSync     Boolean  @default(false) // Auto-sync data
-  syncInterval Int?     @default(3600) // Sync interval in seconds
-  lastSyncAt   DateTime?
-  lastSyncStatus String? // "success", "failed", "partial"
-  lastSyncError  String?
+  providerData  Json? // Additional provider-specific data
 
   // Metadata
   metadata  Json? // Additional configuration
@@ -60,299 +54,4 @@ model Integration {
   @@index([provider])
   @@index([status])
   @@map("integrations")
-}
-
-// Contact - Individual customer/lead information
-model Contact {
-  id        String   @id @default(cuid())
-  orgId     String   // Organization this contact belongs to
-  firstName String
-  lastName  String
-  email     String
-  phone     String?
-  title     String? // Job title
-  company   String? // Company name
-
-  // Contact status and lifecycle
-  status       String @default("active") // active, inactive, blocked
-  leadStatus   String? // new, contacted, qualified, unqualified
-  customerType String? // prospect, customer, partner, vendor
-
-  // Relationships
-  accountId String?
-  account   Account? @relation(fields: [accountId], references: [id], onDelete: SetNull)
-  ownerId   String? // User ID of the owner/assigned sales rep
-
-  // Contact details
-  address      Json? // {street, city, state, zip, country}
-  socialMedia  Json? // {linkedin, twitter, etc}
-  customFields Json? // Flexible custom fields
-
-  // Engagement tracking
-  lastContactedAt DateTime?
-  nextFollowUpAt  DateTime?
-
-  // Relationships
-  opportunities Opportunity[]
-  activities    Activity[]
-  notes         Note[]
-  tags          ContactTag[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([orgId])
-  @@index([email])
-  @@index([accountId])
-  @@index([ownerId])
-  @@index([status])
-  @@index([leadStatus])
-  @@map("contacts")
-}
-
-// Account - Company/Organization account
-model Account {
-  id     String @id @default(cuid())
-  orgId  String
-  name   String
-  domain String? // Company domain (e.g., company.com)
-
-  // Account type and status
-  type   String @default("prospect") // prospect, customer, partner, vendor
-  status String @default("active") // active, inactive, churned
-
-  // Account details
-  industry        String?
-  employeeCount   String? // "1-10", "11-50", "51-200", etc.
-  annualRevenue   Float?
-  website         String?
-  description     String?
-  address         Json? // {street, city, state, zip, country}
-  billingAddress  Json?
-  shippingAddress Json?
-
-  // Relationships
-  parentAccountId String?
-  parentAccount   Account?  @relation("AccountHierarchy", fields: [parentAccountId], references: [id], onDelete: SetNull)
-  childAccounts   Account[] @relation("AccountHierarchy")
-  ownerId         String? // User ID of account owner
-
-  // Custom fields
-  customFields Json?
-
-  // Relationships
-  contacts      Contact[]
-  opportunities Opportunity[]
-  activities    Activity[]
-  notes         Note[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([orgId])
-  @@index([domain])
-  @@index([type])
-  @@index([status])
-  @@index([ownerId])
-  @@map("accounts")
-}
-
-// Opportunity - Sales opportunity/deal
-model Opportunity {
-  id      String @id @default(cuid())
-  orgId   String
-  name    String
-  amount  Float?
-  stage   String // "prospecting", "qualification", "proposal", "negotiation", "closed_won", "closed_lost"
-
-  // Probability and forecasting
-  probability  Int?    @default(0) // 0-100
-  expectedCloseDate DateTime?
-  actualCloseDate   DateTime?
-
-  // Relationships
-  accountId String?
-  account   Account? @relation(fields: [accountId], references: [id], onDelete: SetNull)
-  contactId String?
-  contact   Contact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
-  ownerId   String? // User ID of opportunity owner
-
-  // Opportunity details
-  type          String? // "new_business", "upsell", "renewal", "cross_sell"
-  source        String? // "website", "referral", "cold_call", "event"
-  description   String?
-  nextStep      String?
-  lossReason    String? // If closed_lost
-  competitorInfo Json?
-
-  // Custom fields
-  customFields Json?
-
-  // Products/line items
-  lineItems Json? // [{product, quantity, price, discount}]
-
-  // Relationships
-  activities Activity[]
-  notes      Note[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([orgId])
-  @@index([accountId])
-  @@index([contactId])
-  @@index([ownerId])
-  @@index([stage])
-  @@index([expectedCloseDate])
-  @@map("opportunities")
-}
-
-// Activity - Interactions (calls, emails, meetings, tasks)
-model Activity {
-  id          String   @id @default(cuid())
-  orgId       String
-  type        String // "call", "email", "meeting", "task", "note"
-  subject     String
-  description String?
-
-  // Activity status and scheduling
-  status      String   @default("scheduled") // scheduled, completed, cancelled
-  priority    String   @default("normal") // low, normal, high
-  dueDate     DateTime?
-  completedAt DateTime?
-  duration    Int? // Duration in minutes
-
-  // Relationships
-  contactId     String?
-  contact       Contact?     @relation(fields: [contactId], references: [id], onDelete: SetNull)
-  accountId     String?
-  account       Account?     @relation(fields: [accountId], references: [id], onDelete: SetNull)
-  opportunityId String?
-  opportunity   Opportunity? @relation(fields: [opportunityId], references: [id], onDelete: SetNull)
-  assignedToId  String? // User ID of assigned user
-  createdById   String? // User ID who created the activity
-
-  // Activity metadata
-  outcome      String? // "successful", "unsuccessful", "no_answer", "left_message"
-  customFields Json?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([orgId])
-  @@index([contactId])
-  @@index([accountId])
-  @@index([opportunityId])
-  @@index([assignedToId])
-  @@index([type])
-  @@index([status])
-  @@index([dueDate])
-  @@map("activities")
-}
-
-// Note - General notes on contacts, accounts, opportunities
-model Note {
-  id      String @id @default(cuid())
-  orgId   String
-  content String
-
-  // Relationships
-  contactId     String?
-  contact       Contact?     @relation(fields: [contactId], references: [id], onDelete: Cascade)
-  accountId     String?
-  account       Account?     @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  opportunityId String?
-  opportunity   Opportunity? @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
-  createdById   String? // User ID who created the note
-
-  isPinned Boolean @default(false)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([orgId])
-  @@index([contactId])
-  @@index([accountId])
-  @@index([opportunityId])
-  @@index([createdById])
-  @@map("notes")
-}
-
-// Tag - Tags for categorizing contacts
-model Tag {
-  id    String @id @default(cuid())
-  orgId String
-  name  String
-  color String? // Hex color code
-
-  contacts ContactTag[]
-
-  createdAt DateTime @default(now())
-
-  @@unique([orgId, name])
-  @@index([orgId])
-  @@map("tags")
-}
-
-// ContactTag - Many-to-many relationship between contacts and tags
-model ContactTag {
-  contactId String
-  contact   Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
-  tagId     String
-  tag       Tag     @relation(fields: [tagId], references: [id], onDelete: Cascade)
-
-  createdAt DateTime @default(now())
-
-  @@id([contactId, tagId])
-  @@index([contactId])
-  @@index([tagId])
-  @@map("contact_tags")
-}
-
-// SalesGoal - Sales targets and quotas
-model SalesGoal {
-  id     String @id @default(cuid())
-  orgId  String
-  userId String? // Null if org-wide goal
-  name   String
-
-  // Goal details
-  targetAmount Float
-  actualAmount Float   @default(0)
-  period       String // "monthly", "quarterly", "yearly"
-  startDate    DateTime
-  endDate      DateTime
-
-  // Metrics
-  currency String @default("USD")
-  metric   String @default("revenue") // "revenue", "deals", "calls", "meetings"
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([orgId])
-  @@index([userId])
-  @@index([startDate, endDate])
-  @@map("sales_goals")
-}
-
-// EmailTemplate - Reusable email templates
-model EmailTemplate {
-  id      String @id @default(cuid())
-  orgId   String
-  name    String
-  subject String
-  body    String // HTML content
-
-  // Template metadata
-  category String? // "follow_up", "introduction", "proposal", etc.
-  isActive Boolean @default(true)
-
-  createdById String? // User ID who created
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  @@index([orgId])
-  @@index([category])
-  @@map("email_templates")
 }

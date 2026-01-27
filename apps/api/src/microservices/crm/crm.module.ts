@@ -7,6 +7,7 @@ import { SalesforceIntegrationService } from './services/salesforce-integration.
  * CRM Microservice Module
  *
  * Handles CRM-related functionality including Salesforce integration.
+ * Uses PostgreSQL database via Prisma for storing integration data.
  * This module contains controllers with @MessagePattern decorators for RabbitMQ.
  */
 @Module({

@@ -39,7 +39,6 @@ export const CRM_SERVICE_PATTERNS = {
   SALESFORCE_GET_ACCOUNTS: 'salesforce.getAccounts',
   SALESFORCE_GET_OPPORTUNITIES: 'salesforce.getOpportunities',
   SALESFORCE_GET_LEADS: 'salesforce.getLeads',
-  SALESFORCE_SYNC_CONTACTS: 'salesforce.syncContacts',
   SALESFORCE_QUERY: 'salesforce.query',
   SALESFORCE_SEARCH: 'salesforce.search',
   SALESFORCE_DISCONNECT: 'salesforce.disconnect',
