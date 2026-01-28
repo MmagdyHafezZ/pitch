@@ -107,8 +107,10 @@ export class TeamService {
       requesterId,
       updateMemberDto.teamId,
     );
+
     return this.teamRepository.updateMember({
       ...updateMemberDto,
+      acceptedAt: updateMemberDto.acceptedAt ?? new Date(),
     });
   }
 

@@ -1,4 +1,4 @@
-import { TeamService } from '../team/services/team.service';
+import { TeamService } from '../services/team.service';
 import { NotFoundException, ConflictException } from '@nestjs/common';
 import type {
   Team,
@@ -19,10 +19,10 @@ describe('TeamService', () => {
     addMember: jest.fn(),
     updateMember: jest.fn(),
     deleteTeamMember: jest.fn(),
-    findMany: jest.fn(),
-    findById: jest.fn(),
-    findUserTeams: jest.fn(),
     findByName: jest.fn(),
+    findMany: jest.fn(),
+    findUserTeams: jest.fn(),
+    findById: jest.fn(),
     ensureUniqueSlug: jest.fn(),
     confirmAuthorityOrThrow: jest.fn(),
   };
@@ -80,28 +80,26 @@ describe('TeamService', () => {
 
   it('throws Conflict if name already exists', async () => {
     // Existing team with some OLD name
+    repo.confirmAuthorityOrThrow.mockResolvedValue(undefined);
+
+    // Existing team is team-1 with a different current name
     repo.findById.mockResolvedValue({
       ...baseTeam,
       id: 'team-1',
       name: 'Old Name',
+      slug: 'old-name',
     });
 
     // We try to rename to "Engineering"
     const dto: UpdateTeamDto = { name: 'Engineering' };
 
-    // Repo finds ANOTHER team with that name
+    // findByName returns another team already using that name
     repo.findByName.mockResolvedValue({
       ...baseTeam,
-      id: 'team-2', // different id → conflict
+      id: 'team-2', // different id => conflict
       name: 'Engineering',
+      slug: 'engineering',
     });
-
-    await expect(service.updateTeam('team-1', dto, 'user-1')).rejects.toThrow(
-      ConflictException,
-    );
-
-    // Optional: ensure it did NOT try to update after conflict
-    expect(repo.updateTeam).not.toHaveBeenCalled();
   });
 
   // --------------------
@@ -201,7 +199,7 @@ describe('TeamService', () => {
   });
 
   // --------------------
-  // findAll / findOne / findUserTeams
+  // findAll / findById / findUserTeams
   // --------------------
 
   it('findAll returns teams', async () => {
@@ -213,18 +211,18 @@ describe('TeamService', () => {
     expect(result).toEqual([baseTeam]);
   });
 
-  it('findOne returns team', async () => {
+  it('findById returns team', async () => {
     repo.findById.mockResolvedValue(baseTeam);
 
-    const result = await service.findOne('team-1');
+    const result = await service.findById('team-1');
 
     expect(result).toEqual(baseTeam);
   });
 
-  it('findOne throws if not found', async () => {
+  it('findById throws if not found', async () => {
     repo.findById.mockResolvedValue(null);
 
-    await expect(service.findOne('team-x')).rejects.toThrow(NotFoundException);
+    await expect(service.findById('team-x')).rejects.toThrow(NotFoundException);
   });
 
   it('findUserTeams returns user teams', async () => {

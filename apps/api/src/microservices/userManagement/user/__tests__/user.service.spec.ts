@@ -1,6 +1,6 @@
 import { NotFoundException } from '@nestjs/common';
-import { UserService } from '../user/services/user.service';
-import { UserRepository } from '../user/repositories/user.repository';
+import { UserService } from '../services/user.service';
+import { UserRepository } from '../repositories/user.repository';
 
 describe('UserService', () => {
   let mockRepository: jest.Mocked<UserRepository>;
