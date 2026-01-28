@@ -15,13 +15,36 @@ import {
   MICROSERVICES_CONFIG,
 } from './config/microservices.config';
 import { PrismaClient } from '@prisma/user-client';
+import { withAccelerate } from '@prisma/extension-accelerate';
+import { resolvePrismaRuntimeConfig } from './config/prisma-runtime.config';
+import {
+  normalizeError,
+  safeStringify,
+} from '@pitch/shared-backend/utils/error-logging';
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
 
   try {
     const rabbitmqUrl = getRabbitMQUrl();
-    const prisma = new PrismaClient();
+    const { url, useAccelerate } = resolvePrismaRuntimeConfig(
+      process.env.USER_DATABASE_URL,
+      process.env.USER_DIRECT_URL,
+    );
+    const basePrisma = new PrismaClient(
+      url
+        ? {
+            datasources: {
+              db: {
+                url,
+              },
+            },
+          }
+        : undefined,
+    );
+    const prisma = useAccelerate
+      ? (basePrisma.$extends(withAccelerate()) as unknown as PrismaClient)
+      : basePrisma;
     await runStartupHealthChecks(rabbitmqUrl, prisma);
   } catch {
     logger.error('Startup health checks failed. Exiting...');
@@ -123,8 +146,12 @@ async function bootstrap() {
     const microservices = app.getMicroservices();
     logger.log(`📊 Number of connected microservices: ${microservices.length}`);
   } catch (error) {
-    logger.error('❌ Failed to start microservices', error);
-    logger.error('Error details:', JSON.stringify(error, null, 2));
+    const details = normalizeError(error);
+    logger.error(
+      `❌ Failed to start microservices: ${details.message}`,
+      details.stack,
+    );
+    logger.error(`Error details: ${safeStringify(details)}`);
     throw error;
   }
 
@@ -149,6 +176,11 @@ async function bootstrap() {
 
 bootstrap().catch((error) => {
   const logger = new Logger('Bootstrap');
-  logger.error('Failed to start application', error);
+  const details = normalizeError(error);
+  logger.error(
+    `Failed to start application: ${details.message}`,
+    details.stack,
+  );
+  logger.error(`Error details: ${safeStringify(details)}`);
   process.exit(1);
 });

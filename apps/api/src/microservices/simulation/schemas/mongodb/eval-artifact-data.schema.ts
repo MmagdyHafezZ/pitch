@@ -13,14 +13,12 @@ import { Schema, Document } from 'mongoose';
  */
 
 export interface IEvalArtifactData extends Document {
-  _id: string; // Same as PostgreSQL EvalArtifact.id (cuid)
-  sessionId: string;
+  _id: string;
+  sessionMemberId: string;
   turnId?: string;
-  kind: string; // "ragas" | "deepeval" | "llm_judge" | "prompt_eval"
+  kind: string;
 
-  // Full evaluation data (can be large)
   data: {
-    // RAGAS metrics
     ragas?: {
       faithfulness?: number;
       answer_relevancy?: number;
@@ -31,7 +29,6 @@ export interface IEvalArtifactData extends Document {
       harmfulness?: number;
     };
 
-    // DeepEval metrics
     deepeval?: {
       answerRelevancy?: number;
       faithfulness?: number;
@@ -42,7 +39,6 @@ export interface IEvalArtifactData extends Document {
       bias?: number;
     };
 
-    // LLM Judge results
     llmJudge?: {
       model: string;
       prompt: string;
@@ -56,7 +52,6 @@ export interface IEvalArtifactData extends Document {
       }>;
     };
 
-    // Prompt evaluation
     promptEval?: {
       inputTokens: number;
       outputTokens: number;
@@ -65,14 +60,11 @@ export interface IEvalArtifactData extends Document {
       modelParams?: Record<string, any>;
     };
 
-    // Custom evaluator results
     custom?: Record<string, any>;
   };
 
-  // Overall aggregated score (denormalized from PostgreSQL)
   score?: number;
 
-  // Evaluation metadata
   metadata?: {
     evaluatorVersion?: string;
     modelVersion?: string;
@@ -90,9 +82,9 @@ export interface IEvalArtifactData extends Document {
 
 export const EvalArtifactDataSchema = new Schema<IEvalArtifactData>(
   {
-    _id: { type: String, required: true }, // Same as Postgres EvalArtifact.id
-    sessionId: { type: String, required: true, index: true },
-    turnId: { type: String, index: true },
+    _id: { type: String, required: true },
+    sessionMemberId: { type: String, required: true, index: true },
+    turnId: { type: String },
     kind: { type: String, required: true, index: true },
 
     data: {
@@ -157,8 +149,7 @@ export const EvalArtifactDataSchema = new Schema<IEvalArtifactData>(
   },
 );
 
-// Indexes for common queries
-EvalArtifactDataSchema.index({ sessionId: 1, kind: 1 });
+EvalArtifactDataSchema.index({ sessionMemberId: 1, kind: 1 });
 EvalArtifactDataSchema.index({ turnId: 1 });
 EvalArtifactDataSchema.index({ kind: 1, score: -1 });
 EvalArtifactDataSchema.index({ createdAt: -1 });

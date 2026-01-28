@@ -16,24 +16,21 @@ export interface ITranscriptSegment {
   endMs: number;
   text: string;
   speakerId?: string;
-  // Token-level timing and metadata
   tokens?: Array<{
     word: string;
     startMs: number;
     endMs?: number;
     confidence?: number;
   }>;
-  // Named Entity Recognition results
   entities?: Array<{
-    type: string; // PERSON, ORGANIZATION, LOCATION, etc.
+    type: string;
     text: string;
     start: number;
     end: number;
     confidence?: number;
   }>;
-  // Segment-level sentiment
   sentiment?: {
-    score: number; // -1 to 1
+    score: number;
     magnitude?: number;
     label?: 'positive' | 'negative' | 'neutral';
   };
@@ -41,39 +38,33 @@ export interface ITranscriptSegment {
 
 export interface ISpeaker {
   _id: string;
-  label: string; // "Speaker 1", "Agent", "Customer"
-  // Raw diarization output from STT provider
+  label: string;
   diarization?: {
-    provider: string; // "deepgram", "assemblyai", etc.
+    provider: string;
     speakerTag: string;
     confidence?: number;
     metadata?: Record<string, any>;
   };
-  // Speaker metadata if known
   role?: 'agent' | 'customer' | 'unknown';
   totalDurationMs?: number;
   segmentCount?: number;
 }
 
 export interface IEnrichment {
-  // High-level summary
   summary?: string;
 
-  // Key topics/themes
   topics?: Array<{
     label: string;
     confidence?: number;
     mentions?: number;
   }>;
 
-  // Overall sentiment analysis
   sentiment?: {
-    overall: number; // -1 to 1
-    perSegment?: number[]; // Sentiment score per segment
+    overall: number;
+    perSegment?: number[];
     trend?: 'improving' | 'declining' | 'stable';
   };
 
-  // Named entities across entire transcript
   entities?: {
     people?: string[];
     organizations?: string[];
@@ -82,37 +73,31 @@ export interface IEnrichment {
     custom?: Record<string, string[]>;
   };
 
-  // Key moments/highlights
   highlights?: Array<{
-    type: string; // "objection", "closing", "question", etc.
+    type: string;
     text: string;
     startMs: number;
     endMs: number;
     importance?: number;
   }>;
 
-  // Analysis metadata
   analyzedAt?: Date;
   modelVersion?: string;
   processingTimeMs?: number;
 }
 
 export interface IEnrichedTranscript extends Document {
-  _id: string; // Same as PostgreSQL Transcript.id (cuid)
+  _id: string;
   assetId: string;
-  sessionId?: string;
+  sessionMemberId?: string;
   language?: string;
 
-  // Embedded segments (denormalized)
   segments: ITranscriptSegment[];
 
-  // Embedded speakers (denormalized)
   speakers: ISpeaker[];
 
-  // Embedded enrichment data
   enrichment?: IEnrichment;
 
-  // Metadata
   durationMs?: number;
   wordCount?: number;
   speakerCount?: number;
@@ -123,9 +108,9 @@ export interface IEnrichedTranscript extends Document {
 
 export const EnrichedTranscriptSchema = new Schema<IEnrichedTranscript>(
   {
-    _id: { type: String, required: true }, // Same as Postgres Transcript.id
-    assetId: { type: String, required: true, index: true },
-    sessionId: { type: String, index: true },
+    _id: { type: String, required: true },
+    assetId: { type: String, required: true },
+    sessionMemberId: { type: String },
     language: { type: String },
 
     segments: [
@@ -221,10 +206,9 @@ export const EnrichedTranscriptSchema = new Schema<IEnrichedTranscript>(
   },
 );
 
-// Indexes for common queries
 EnrichedTranscriptSchema.index({ assetId: 1 });
-EnrichedTranscriptSchema.index({ sessionId: 1 });
-EnrichedTranscriptSchema.index({ sessionId: 1, createdAt: -1 });
+EnrichedTranscriptSchema.index({ sessionMemberId: 1 });
+EnrichedTranscriptSchema.index({ sessionMemberId: 1, createdAt: -1 });
 EnrichedTranscriptSchema.index({ 'enrichment.topics.label': 1 });
 EnrichedTranscriptSchema.index({ 'enrichment.sentiment.overall': 1 });
 

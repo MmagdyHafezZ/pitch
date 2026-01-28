@@ -15,6 +15,7 @@ export class GradeService {
   constructor(private readonly repository: LtiRepository) {}
 
   syncGrade(_data: GradeData) {
+    void _data;
     return { success: true };
   }
 }
