@@ -188,6 +188,7 @@ export class AuthRepository {
     userId: string,
     _provider: AuthProvider,
   ): Promise<boolean> {
+    void _provider;
     const count = await this.countOAuthAccountsForUser(userId);
 
     return count > 1;

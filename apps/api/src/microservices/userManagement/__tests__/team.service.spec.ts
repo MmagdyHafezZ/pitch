@@ -151,7 +151,7 @@ describe('TeamService', () => {
   // updateMember
   // --------------------
 
-  it('updates a member and sets acceptedAt', async () => {
+  it('updates a member', async () => {
     const dto: UpdateMemberDto = {
       teamId: 'team-1',
       userId: 'user-2',
@@ -172,7 +172,6 @@ describe('TeamService', () => {
       expect.objectContaining({
         teamId: 'team-1',
         userId: 'user-2',
-        acceptedAt: expect.any(Date),
       }),
     );
     expect(result).toEqual(membership);
@@ -213,18 +212,18 @@ describe('TeamService', () => {
     expect(result).toEqual([baseTeam]);
   });
 
-  it('findOne returns team', async () => {
+  it('findById returns team', async () => {
     repo.findById.mockResolvedValue(baseTeam);
 
-    const result = await service.findOne('team-1');
+    const result = await service.findById('team-1');
 
     expect(result).toEqual(baseTeam);
   });
 
-  it('findOne throws if not found', async () => {
+  it('findById throws if not found', async () => {
     repo.findById.mockResolvedValue(null);
 
-    await expect(service.findOne('team-x')).rejects.toThrow(NotFoundException);
+    await expect(service.findById('team-x')).rejects.toThrow(NotFoundException);
   });
 
   it('findUserTeams returns user teams', async () => {

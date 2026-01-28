@@ -71,7 +71,7 @@ describe('UserController', () => {
     service.findOne.mockResolvedValue(user);
     const controller = new UserController(service, oauthProviderFactory);
 
-    const payload = { id: 'user-1', ...basePayload };
+    const payload = { userId: 'user-1', ...basePayload };
 
     await expect(controller.getUser(payload)).resolves.toEqual(user);
     expect(service.findOne).toHaveBeenCalledWith('user-1');
@@ -103,7 +103,7 @@ describe('UserController', () => {
     const controller = new UserController(service, oauthProviderFactory);
 
     const payload = {
-      id: 'user-1',
+      userId: 'user-1',
       name: 'Updated',
       ...basePayload,
     };
@@ -119,7 +119,7 @@ describe('UserController', () => {
     const controller = new UserController(service, oauthProviderFactory);
 
     await expect(
-      controller.deleteUser({ id: 'user-1', ...basePayload }),
+      controller.deleteUser({ userId: 'user-1', ...basePayload }),
     ).resolves.toEqual({ message: 'deleted' });
     expect(service.remove).toHaveBeenCalledWith('user-1');
   });
@@ -147,7 +147,7 @@ describe('UserController', () => {
     const controller = new UserController(service, oauthProviderFactory);
 
     await expect(
-      controller.getUser({ id: 'user-1', ...basePayload }),
+      controller.getUser({ userId: 'user-1', ...basePayload }),
     ).rejects.toThrow(rpcError);
   });
 
@@ -180,7 +180,7 @@ describe('UserController', () => {
 
     await expect(
       controller.updateUser({
-        id: 'user-1',
+        userId: 'user-1',
         name: 'Updated',
         ...basePayload,
       }),
@@ -197,7 +197,7 @@ describe('UserController', () => {
     const controller = new UserController(service, oauthProviderFactory);
 
     await expect(
-      controller.deleteUser({ id: 'user-1', ...basePayload }),
+      controller.deleteUser({ userId: 'user-1', ...basePayload }),
     ).rejects.toThrow(rpcError);
   });
 });

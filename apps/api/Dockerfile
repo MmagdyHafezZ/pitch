@@ -34,6 +34,8 @@ COPY --from=deps /app/apps/api/node_modules ./apps/api/node_modules
 
 COPY . .
 
+RUN pnpm --filter @pitch/shared-backend build
+
 RUN cd apps/api && pnpm run db:generate:all
 
 RUN cd apps/api && pnpm build
@@ -60,6 +62,8 @@ COPY --from=builder --chown=nestjs:nodejs /app/apps/api/dist ./apps/api/dist
 COPY --from=builder --chown=nestjs:nodejs /app/node_modules/@prisma ./node_modules/@prisma
 
 COPY --from=builder --chown=nestjs:nodejs /app/apps/api/src/microservices/*/prisma ./apps/api/src/microservices/
+
+COPY --from=builder --chown=nestjs:nodejs /app/packages/shared-backend ./packages/shared-backend
 
 USER nestjs
 WORKDIR /app/apps/api

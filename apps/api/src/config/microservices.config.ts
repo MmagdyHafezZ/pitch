@@ -19,12 +19,14 @@ export const MICROSERVICES_CONFIG: MicroserviceConfig[] = [
 /**
  * Creates microservice configuration options for RabbitMQ transport
  *
- * IMPORTANT: Requires RABBITMQ_URL environment variable to be set.
+ * IMPORTANT: Requires RabbitMQ URL environment variable to be set.
+ * - DEP_MODE=local -> RABBITMQ_URL
+ * - DEP_MODE=prod -> CLOUDAMQP_URL
  * Format: amqp://user:password@host:port/vhost
  *
  * @param queue - Queue name for this microservice
  * @returns MicroserviceOptions configured for RabbitMQ
- * @throws Error if RABBITMQ_URL is not set
+ * @throws Error if required RabbitMQ URL is not set
  */
 export function createMicroserviceOptions(queue: string): MicroserviceOptions {
   const url = getRabbitMQUrl();
@@ -46,18 +48,21 @@ export function createMicroserviceOptions(queue: string): MicroserviceOptions {
 /**
  * Gets RabbitMQ connection URL from environment
  *
- * SECURITY: This function enforces that RABBITMQ_URL must be set.
+ * SECURITY: This function enforces that the correct RabbitMQ URL is set.
  * Never commit credentials to source control.
  *
  * @returns RabbitMQ connection URL
- * @throws Error if RABBITMQ_URL environment variable is not set
+ * @throws Error if required RabbitMQ URL environment variable is not set
  */
 export function getRabbitMQUrl(): string {
-  const url = process.env.RABBITMQ_URL;
+  const mode = (process.env.DEP_MODE ?? '').trim().toLowerCase();
+  const isProd = mode === 'prod' || mode === 'production';
+  const url = isProd ? process.env.CLOUDAMQP_URL : process.env.RABBITMQ_URL;
 
   if (!url) {
+    const missingVar = isProd ? 'CLOUDAMQP_URL' : 'RABBITMQ_URL';
     throw new Error(
-      'RABBITMQ_URL environment variable is required. ' +
+      `${missingVar} environment variable is required. ` +
         'Format: amqp://username:password@host:port/vhost',
     );
   }
