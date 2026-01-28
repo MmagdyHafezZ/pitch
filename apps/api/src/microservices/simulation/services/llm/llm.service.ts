@@ -1,6 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Observable, Subscription } from 'rxjs';
-import { randomUUID } from 'crypto';
 import {
   LLMRequestDto,
   LLMResponseDto,
@@ -14,12 +13,7 @@ import { LLMRouterService } from './llm-router.service';
 import { LLMRequestContext } from './llm-context.types';
 import { ProviderError } from '../../providers/llm/llm-provider.interface';
 import { LLMRouteTarget } from './llm-routing.types';
-import {
-  LLMTraceModel,
-  LLMTraceSchema,
-  type ILLMMessage,
-  type ILLMTrace,
-} from '../../schemas/mongodb';
+import type { ILLMMessage } from '../../schemas/mongodb';
 
 @Injectable()
 export class LLMService {
@@ -62,12 +56,12 @@ export class LLMService {
     } catch (error) {
       const providerName =
         error instanceof ProviderError ? error.provider : 'unknown';
-      const model =
-        (error as ProviderError)?.details?.model ?? request.config.model;
-      const errorRequest = this.applyRoute(request, {
-        provider: providerName,
-        model,
-      });
+      const model = this.getErrorModel(error, request.config.model);
+      this.logger.warn(
+        `LLM completion failed (${providerName}${model ? `/${model}` : ''}): ${String(
+          (error as Error)?.message ?? error,
+        )}`,
+      );
       throw error;
     }
   }
@@ -128,12 +122,13 @@ export class LLMService {
           error: (error) => {
             const providerName =
               error instanceof ProviderError ? error.provider : 'unknown';
-            const model =
-              (error as ProviderError)?.details?.model ?? request.config.model;
-            const errorRequest = this.applyRoute(request, {
-              provider: providerName,
-              model,
-            });
+            const model = this.getErrorModel(error, request.config.model);
+            this.logger.warn(
+              `LLM stream failed (${providerName}${model ? `/${model}` : ''}): ${String(
+                (error as Error)?.message ?? error,
+              )}`,
+            );
+            subscriber.error(error as Error);
           },
           complete: () => {
             if (!subscriber.closed) {
@@ -180,6 +175,18 @@ export class LLMService {
     return true;
   }
 
+  private getErrorModel(error: unknown, fallback?: string): string | undefined {
+    if (!(error instanceof ProviderError)) {
+      return fallback;
+    }
+    const details =
+      error.details && typeof error.details === 'object'
+        ? (error.details as Record<string, unknown>)
+        : undefined;
+    const model = details?.model;
+    return typeof model === 'string' ? model : fallback;
+  }
+
   private async persistMetric(
     request: LLMRequestDto,
     usage: LLMUsageDto,
@@ -187,9 +194,17 @@ export class LLMService {
     providerName: string,
   ): Promise<void> {
     try {
+      const sessionMemberId = await this.resolveSessionMemberId(request);
+      if (!sessionMemberId) {
+        this.logger.warn(
+          `Skipping metric persistence: no sessionMemberId for session ${request.sessionId}`,
+        );
+        return;
+      }
+
       await this.prisma.metric.create({
         data: {
-          sessionId: request.sessionId,
+          sessionMemberId,
           tokensInput: usage.promptTokens,
           tokensOutput: usage.completionTokens,
           latencyMs,
@@ -202,6 +217,29 @@ export class LLMService {
         `Failed to persist metric: ${String((error as Error)?.message || error)}`,
       );
     }
+  }
+
+  private async resolveSessionMemberId(
+    request: LLMRequestDto,
+  ): Promise<string | null> {
+    if (request.sessionMemberId) {
+      return request.sessionMemberId;
+    }
+
+    if (request.userId) {
+      const member = await this.prisma.client.sessionMember.findUnique({
+        where: {
+          sessionId_userId: {
+            sessionId: request.sessionId,
+            userId: request.userId,
+          },
+        },
+        select: { id: true },
+      });
+      return member?.id ?? null;
+    }
+
+    return null;
   }
 
   private convertMessages(messages: LLMMessageDto[]): ILLMMessage[] {

@@ -3,21 +3,20 @@ import {
   NotFoundException,
   Logger,
   BadRequestException,
-  ConflictException,
 } from '@nestjs/common';
 import { InvitationRepository } from '../repositories/invitation.repository';
 import { SessionRepository } from '../repositories/session.repository';
-import type { SessionInvitation } from '@prisma/simulation-client';
 import type { PrismaError } from '@pitch/shared-backend/interfaces/error.interface';
 import {
   CreateInvitationDto,
-  UpdateInvitationStatusDto,
   InvitationResponseDto,
   InvitationListResponseDto,
   DeleteInvitationResponseDto,
   BulkCreateInvitationsResponseDto,
   InvitationStatus,
 } from '../dto/invitation.dto';
+import type { ISessionInvitation } from '../schemas/mongodb';
+import { SessionMemberRepository } from '../repositories/session-member.repository';
 
 /**
  * Invitation Service
@@ -31,6 +30,7 @@ export class InvitationService {
   constructor(
     private readonly invitationRepository: InvitationRepository,
     private readonly sessionRepository: SessionRepository,
+    private readonly sessionMemberRepository: SessionMemberRepository,
   ) {}
 
   /**
@@ -56,7 +56,13 @@ export class InvitationService {
       );
     }
 
-    if (session.userId !== inviterId) {
+    const inviterMember =
+      await this.sessionMemberRepository.findBySessionIdAndUserId(
+        sessionId,
+        inviterId,
+      );
+
+    if (!inviterMember || inviterMember.role !== 'owner') {
       throw new BadRequestException(
         `User ${inviterId} does not have permission to invite users to session ${sessionId}`,
       );
@@ -78,6 +84,19 @@ export class InvitationService {
         if (existing) {
           errors.push(
             `User ${inviteeId} already invited to session ${sessionId} (status: ${existing.status})`,
+          );
+          failed++;
+          continue;
+        }
+
+        const existingMember =
+          await this.sessionMemberRepository.findBySessionIdAndUserId(
+            sessionId,
+            inviteeId,
+          );
+        if (existingMember) {
+          errors.push(
+            `User ${inviteeId} is already a member of session ${sessionId}`,
           );
           failed++;
           continue;
@@ -126,8 +145,17 @@ export class InvitationService {
     const invitations =
       await this.invitationRepository.findBySessionId(sessionId);
 
+    const sessions = await this.sessionRepository.findByIds([
+      ...new Set(invitations.map((invite) => invite.sessionId)),
+    ]);
+    const sessionMap = new Map(
+      sessions.map((session) => [session.id, session]),
+    );
+
     return {
-      invitations: invitations.map(this.mapToResponseDto),
+      invitations: invitations.map((invitation) =>
+        this.mapToResponseDto(invitation, sessionMap.get(invitation.sessionId)),
+      ),
       total: invitations.length,
     };
   }
@@ -145,11 +173,20 @@ export class InvitationService {
 
     const invitations = await this.invitationRepository.findByInviteeId(
       userId,
-      status as any,
+      status,
+    );
+
+    const sessions = await this.sessionRepository.findByIds([
+      ...new Set(invitations.map((invite) => invite.sessionId)),
+    ]);
+    const sessionMap = new Map(
+      sessions.map((session) => [session.id, session]),
     );
 
     return {
-      invitations: invitations.map(this.mapToResponseDto),
+      invitations: invitations.map((invitation) =>
+        this.mapToResponseDto(invitation, sessionMap.get(invitation.sessionId)),
+      ),
       total: invitations.length,
     };
   }
@@ -167,11 +204,20 @@ export class InvitationService {
 
     const invitations = await this.invitationRepository.findByInviterId(
       userId,
-      status as any,
+      status,
+    );
+
+    const sessions = await this.sessionRepository.findByIds([
+      ...new Set(invitations.map((invite) => invite.sessionId)),
+    ]);
+    const sessionMap = new Map(
+      sessions.map((session) => [session.id, session]),
     );
 
     return {
-      invitations: invitations.map(this.mapToResponseDto),
+      invitations: invitations.map((invitation) =>
+        this.mapToResponseDto(invitation, sessionMap.get(invitation.sessionId)),
+      ),
       total: invitations.length,
     };
   }
@@ -187,7 +233,8 @@ export class InvitationService {
       throw new NotFoundException(`Invitation with ID ${id} not found`);
     }
 
-    return this.mapToResponseDto(invitation);
+    const session = await this.sessionRepository.findById(invitation.sessionId);
+    return this.mapToResponseDto(invitation, session || undefined);
   }
 
   /**
@@ -228,9 +275,27 @@ export class InvitationService {
       id,
       'accepted',
     );
+
+    const existingMember =
+      await this.sessionMemberRepository.findBySessionIdAndUserId(
+        invitation.sessionId,
+        userId,
+      );
+    if (!existingMember) {
+      await this.sessionMemberRepository.create({
+        sessionId: invitation.sessionId,
+        userId,
+        role: 'viewer',
+        userSnapshot: invitation.inviteeSnapshot,
+      });
+    }
+
     this.logger.log(`Invitation ${id} accepted`);
 
-    return this.mapToResponseDto(updated);
+    const sessionSummary = session
+      ? session
+      : await this.sessionRepository.findById(invitation.sessionId);
+    return this.mapToResponseDto(updated, sessionSummary || undefined);
   }
 
   /**
@@ -265,7 +330,8 @@ export class InvitationService {
     );
     this.logger.log(`Invitation ${id} declined`);
 
-    return this.mapToResponseDto(updated);
+    const session = await this.sessionRepository.findById(updated.sessionId);
+    return this.mapToResponseDto(updated, session || undefined);
   }
 
   /**
@@ -344,30 +410,27 @@ export class InvitationService {
    * Map SessionInvitation to InvitationResponseDto
    */
   private mapToResponseDto(
-    invitation: SessionInvitation,
+    invitation: ISessionInvitation,
+    session?: { id: string; type: string; status: string; createdAt: Date },
   ): InvitationResponseDto {
     return {
-      id: invitation.id,
+      id: invitation._id,
       sessionId: invitation.sessionId,
       inviterId: invitation.inviterId,
-      inviterSnapshot: invitation.inviterSnapshot as
-        | Record<string, any>
-        | undefined,
+      inviterSnapshot: invitation.inviterSnapshot,
       inviteeId: invitation.inviteeId,
-      inviteeSnapshot: invitation.inviteeSnapshot as
-        | Record<string, any>
-        | undefined,
+      inviteeSnapshot: invitation.inviteeSnapshot,
       status: invitation.status as InvitationStatus,
       message: invitation.message || undefined,
       respondedAt: invitation.respondedAt || undefined,
       createdAt: invitation.createdAt,
       updatedAt: invitation.updatedAt,
-      session: (invitation as any).session
+      session: session
         ? {
-            id: (invitation as any).session.id,
-            type: (invitation as any).session.type,
-            status: (invitation as any).session.status,
-            createdAt: (invitation as any).session.createdAt,
+            id: session.id,
+            type: session.type,
+            status: session.status,
+            createdAt: session.createdAt,
           }
         : undefined,
     };

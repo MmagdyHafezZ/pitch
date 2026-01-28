@@ -22,7 +22,7 @@ describe('TeamController', () => {
       updateMember: jest.fn(),
       removeTeamMember: jest.fn(),
       findAll: jest.fn(),
-      findOne: jest.fn(),
+      findById: jest.fn(),
       findUserTeams: jest.fn(),
       findByName: jest.fn(),
       createSlug: jest.fn(),
@@ -181,13 +181,13 @@ describe('TeamController', () => {
 
   it('returns a single team', async () => {
     const service = createServiceMock();
-    service.findOne.mockResolvedValue(team);
+    service.findById.mockResolvedValue(team);
     const controller = new TeamController(service);
 
-    const payload = { id: 'team-1', ...basePayload };
+    const payload = { teamId: 'team-1', ...basePayload };
 
     await expect(controller.getTeam(payload as any)).resolves.toEqual(team);
-    expect(service.findOne).toHaveBeenCalledWith('team-1');
+    expect(service.findById).toHaveBeenCalledWith('team-1');
   });
 
   it('returns all teams', async () => {
@@ -358,13 +358,13 @@ describe('TeamController', () => {
     const error = new Error('failure');
     const rpcError = new RpcException('rpc');
 
-    service.findOne.mockRejectedValue(error);
+    service.findById.mockRejectedValue(error);
     toRpcExceptionMock.mockReturnValueOnce(rpcError);
 
     const controller = new TeamController(service);
 
     await expect(
-      controller.getTeam({ id: 'team-1', ...basePayload } as any),
+      controller.getTeam({ teamId: 'team-1', ...basePayload } as any),
     ).rejects.toThrow(rpcError);
   });
 

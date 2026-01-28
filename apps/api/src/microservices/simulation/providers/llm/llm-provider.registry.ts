@@ -13,7 +13,7 @@ export class LLMProviderRegistry implements OnModuleInit {
 
   onModuleInit() {
     this.logger.log(`Initialized with ${this.providers.size} LLM providers`);
-    for (const [name, provider] of this.providers.entries()) {
+    for (const [name] of this.providers.entries()) {
       this.logger.log(`  - ${name}`);
     }
   }

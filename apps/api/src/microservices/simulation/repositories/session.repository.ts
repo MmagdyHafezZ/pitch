@@ -1,15 +1,28 @@
 import { Injectable } from '@nestjs/common';
 import { SimulationPrismaService } from '../prisma/simulation-prisma.service';
-import type { Session, SessionType } from '@prisma/simulation-client';
+import type { SessionType } from '@prisma/simulation-client';
 import { Prisma } from '@prisma/simulation-client';
+
+const sessionOwnerInclude = {
+  scenario: true,
+  persona: true,
+  members: {
+    where: { role: 'owner' },
+    take: 1,
+  },
+} satisfies Prisma.SessionInclude;
+
+export type SessionWithOwner = Prisma.SessionGetPayload<{
+  include: typeof sessionOwnerInclude;
+}>;
 
 /**
  * Interface for creating a new session
  */
 export interface CreateSessionData {
-  userId: string;
+  ownerUserId: string;
   orgId: string;
-  userSnapshot?: Prisma.InputJsonValue;
+  ownerSnapshot?: Prisma.InputJsonValue;
   orgSnapshot?: Prisma.InputJsonValue;
   name?: string;
   type: SessionType;
@@ -57,6 +70,8 @@ export interface SessionListFilters {
 export class SessionRepository {
   constructor(private readonly prisma: SimulationPrismaService) {}
 
+  private readonly ownerInclude = sessionOwnerInclude;
+
   /**
    * Find all sessions with optional filters and pagination
    */
@@ -64,11 +79,15 @@ export class SessionRepository {
     filters?: SessionListFilters,
     limit: number = 10,
     offset: number = 0,
-  ): Promise<{ sessions: Session[]; total: number }> {
+  ): Promise<{ sessions: SessionWithOwner[]; total: number }> {
     const where: Prisma.SessionWhereInput = {};
 
     if (filters?.userId) {
-      where.userId = filters.userId;
+      where.members = {
+        some: {
+          userId: filters.userId,
+        },
+      };
     }
     if (filters?.orgId) {
       where.orgId = filters.orgId;
@@ -92,10 +111,7 @@ export class SessionRepository {
         skip: offset,
         take: limit,
         orderBy: { createdAt: 'desc' },
-        include: {
-          scenario: true,
-          persona: true,
-        },
+        include: this.ownerInclude,
       }),
       this.prisma.client.session.count({ where }),
     ]);
@@ -106,21 +122,10 @@ export class SessionRepository {
   /**
    * Find a session by ID
    */
-  async findById(id: string): Promise<Session | null> {
+  async findById(id: string): Promise<SessionWithOwner | null> {
     return await this.prisma.client.session.findUnique({
       where: { id },
-      include: {
-        scenario: true,
-        persona: true,
-        turns: {
-          orderBy: { order: 'asc' },
-          take: 10,
-        },
-        metrics: {
-          orderBy: { createdAt: 'desc' },
-          take: 1,
-        },
-      },
+      include: this.ownerInclude,
     });
   }
 
@@ -131,7 +136,7 @@ export class SessionRepository {
     userId: string,
     limit: number = 10,
     offset: number = 0,
-  ): Promise<{ sessions: Session[]; total: number }> {
+  ): Promise<{ sessions: SessionWithOwner[]; total: number }> {
     return this.findMany({ userId }, limit, offset);
   }
 
@@ -142,19 +147,17 @@ export class SessionRepository {
     orgId: string,
     limit: number = 10,
     offset: number = 0,
-  ): Promise<{ sessions: Session[]; total: number }> {
+  ): Promise<{ sessions: SessionWithOwner[]; total: number }> {
     return this.findMany({ orgId }, limit, offset);
   }
 
   /**
    * Create a new session
    */
-  async create(data: CreateSessionData): Promise<Session> {
+  async create(data: CreateSessionData): Promise<SessionWithOwner> {
     return await this.prisma.client.session.create({
       data: {
-        userId: data.userId,
         orgId: data.orgId,
-        userSnapshot: data.userSnapshot,
         orgSnapshot: data.orgSnapshot,
         name: data.name,
         type: data.type,
@@ -164,32 +167,33 @@ export class SessionRepository {
         personaId: data.personaId,
         language: data.language,
         crmContextId: data.crmContextId,
+        members: {
+          create: {
+            userId: data.ownerUserId,
+            role: 'owner',
+            userSnapshot: data.ownerSnapshot,
+          },
+        },
       },
-      include: {
-        scenario: true,
-        persona: true,
-      },
+      include: this.ownerInclude,
     });
   }
 
   /**
    * Update a session
    */
-  async update(id: string, data: UpdateSessionData): Promise<Session> {
+  async update(id: string, data: UpdateSessionData): Promise<SessionWithOwner> {
     return await this.prisma.client.session.update({
       where: { id },
       data,
-      include: {
-        scenario: true,
-        persona: true,
-      },
+      include: this.ownerInclude,
     });
   }
 
   /**
    * End a session
    */
-  async end(id: string, reason?: string): Promise<Session> {
+  async end(id: string, reason?: string): Promise<SessionWithOwner> {
     return await this.prisma.client.session.update({
       where: { id },
       data: {
@@ -197,10 +201,7 @@ export class SessionRepository {
         endedReason: reason,
         endedAt: new Date(),
       },
-      include: {
-        scenario: true,
-        persona: true,
-      },
+      include: this.ownerInclude,
     });
   }
 
@@ -220,7 +221,11 @@ export class SessionRepository {
     const where: Prisma.SessionWhereInput = {};
 
     if (filters?.userId) {
-      where.userId = filters.userId;
+      where.members = {
+        some: {
+          userId: filters.userId,
+        },
+      };
     }
     if (filters?.orgId) {
       where.orgId = filters.orgId;
@@ -244,34 +249,46 @@ export class SessionRepository {
   /**
    * Find active sessions by user ID
    */
-  async findActiveByUserId(userId: string): Promise<Session[]> {
+  async findActiveByUserId(userId: string): Promise<SessionWithOwner[]> {
     return await this.prisma.client.session.findMany({
       where: {
-        userId,
+        members: {
+          some: { userId },
+        },
         status: 'active',
       },
       orderBy: { createdAt: 'desc' },
-      include: {
-        scenario: true,
-        persona: true,
-      },
+      include: this.ownerInclude,
     });
   }
 
   /**
    * Find active sessions by organization ID
    */
-  async findActiveByOrgId(orgId: string): Promise<Session[]> {
+  async findActiveByOrgId(orgId: string): Promise<SessionWithOwner[]> {
     return await this.prisma.client.session.findMany({
       where: {
         orgId,
         status: 'active',
       },
       orderBy: { createdAt: 'desc' },
-      include: {
-        scenario: true,
-        persona: true,
+      include: this.ownerInclude,
+    });
+  }
+
+  /**
+   * Find sessions by IDs
+   */
+  async findByIds(ids: string[]): Promise<SessionWithOwner[]> {
+    if (ids.length === 0) {
+      return [];
+    }
+
+    return await this.prisma.client.session.findMany({
+      where: {
+        id: { in: ids },
       },
+      include: this.ownerInclude,
     });
   }
 }

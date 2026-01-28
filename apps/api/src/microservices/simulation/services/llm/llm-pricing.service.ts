@@ -139,7 +139,7 @@ export class LLMPricingService {
         return;
       }
 
-      const payload = await response.json();
+      const payload: unknown = await response.json();
       const pricing = this.parsePricingPayload(payload);
       if (pricing.size === 0) {
         this.logger.warn(`Pricing API returned no models for ${provider}`);
@@ -301,7 +301,7 @@ export class LLMPricingService {
     const map = new Map<string, ModelPricing>();
     for (const [model, value] of Object.entries(pricing)) {
       if (!value || typeof value !== 'object') continue;
-      map.set(model, value as ModelPricing);
+      map.set(model, value);
     }
     return map;
   }

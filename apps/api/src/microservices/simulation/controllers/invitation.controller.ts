@@ -3,11 +3,7 @@ import { MessagePattern, Payload } from '@nestjs/microservices';
 import { InvitationService } from '../services/invitation.service';
 import { SIMULATION_SERVICE_PATTERNS } from '@pitch/shared-backend/interfaces/message-patterns.interface';
 import { toRpcException } from '@pitch/shared-backend/helpers/exceptions';
-import {
-  CreateInvitationDto,
-  UpdateInvitationStatusDto,
-  InvitationStatus,
-} from '../dto/invitation.dto';
+import { CreateInvitationDto, InvitationStatus } from '../dto/invitation.dto';
 import * as userClaimsInterface from '@pitch/shared-backend/interfaces/user-claims.interface';
 
 /**
@@ -35,13 +31,8 @@ export class InvitationController {
       this.logger.log(
         `Creating invitations for session ${data.sessionId} - Requested by: ${data.userClaims?.email || 'unknown'}`,
       );
-      const {
-        userClaims: _userClaims,
-        sessionId,
-        inviterId,
-        ...createDto
-      } = data;
-      void _userClaims;
+      const { userClaims: _userClaims, sessionId, ...createDto } = data;
+      const inviterId = _userClaims?.id || data.inviterId;
       return await this.invitationService.createInvitations(
         sessionId,
         inviterId,
@@ -106,8 +97,9 @@ export class InvitationController {
       this.logger.log(
         `Listing invitations for user ${data.userId} - Requested by: ${data.userClaims?.email || 'unknown'}`,
       );
+      const requesterId = data.userClaims?.id || data.userId;
       return await this.invitationService.findInvitationsForUser(
-        data.userId,
+        requesterId,
         data.status,
       );
     } catch (error) {
@@ -131,8 +123,9 @@ export class InvitationController {
       this.logger.log(
         `Listing sent invitations for user ${data.userId} - Requested by: ${data.userClaims?.email || 'unknown'}`,
       );
+      const requesterId = data.userClaims?.id || data.userId;
       return await this.invitationService.findInvitationsSentByUser(
-        data.userId,
+        requesterId,
         data.status,
       );
     } catch (error) {
@@ -156,9 +149,10 @@ export class InvitationController {
       this.logger.log(
         `Accepting invitation ${data.id} - Requested by: ${data.userClaims?.email || 'unknown'}`,
       );
+      const requesterId = data.userClaims?.id || data.userId;
       return await this.invitationService.acceptInvitation(
         data.id,
-        data.userId,
+        requesterId,
       );
     } catch (error) {
       this.logger.error(`Failed to accept invitation ${data.id}`, error);
@@ -181,9 +175,10 @@ export class InvitationController {
       this.logger.log(
         `Declining invitation ${data.id} - Requested by: ${data.userClaims?.email || 'unknown'}`,
       );
+      const requesterId = data.userClaims?.id || data.userId;
       return await this.invitationService.declineInvitation(
         data.id,
-        data.userId,
+        requesterId,
       );
     } catch (error) {
       this.logger.error(`Failed to decline invitation ${data.id}`, error);
@@ -206,9 +201,10 @@ export class InvitationController {
       this.logger.log(
         `Revoking invitation ${data.id} - Requested by: ${data.userClaims?.email || 'unknown'}`,
       );
+      const requesterId = data.userClaims?.id || data.userId;
       return await this.invitationService.revokeInvitation(
         data.id,
-        data.userId,
+        requesterId,
       );
     } catch (error) {
       this.logger.error(`Failed to revoke invitation ${data.id}`, error);
@@ -247,7 +243,8 @@ export class InvitationController {
       this.logger.log(
         `Getting pending count for user ${data.userId} - Requested by: ${data.userClaims?.email || 'unknown'}`,
       );
-      return await this.invitationService.getPendingCount(data.userId);
+      const requesterId = data.userClaims?.id || data.userId;
+      return await this.invitationService.getPendingCount(requesterId);
     } catch (error) {
       this.logger.error('Failed to get pending count', error);
       throw toRpcException(error);

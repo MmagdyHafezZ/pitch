@@ -1,42 +1,38 @@
-import { TTSProviderRegistry } from '../../providers/tts/tts-provider.registry';
-import { ITTSProvider } from '../../providers/tts/tts-provider.interface';
+import { TtsProviderFactory } from '../../tts/providers/tts.factory';
+import type { TtsProvider } from '../../tts/providers/tts.provider';
 
-describe('TTSProviderRegistry', () => {
-  it('registers and returns providers', () => {
-    const registry = new TTSProviderRegistry();
-    const provider: ITTSProvider = {
+describe('TtsProviderFactory', () => {
+  it('returns providers and defaults to the first provider', () => {
+    const primary: TtsProvider = {
       name: 'elevenlabs',
-      supportsVoice: () => true,
+      voices: ['Ada'],
+      synthesize: jest.fn(),
+    };
+    const secondary: TtsProvider = {
+      name: 'melo',
+      description: 'MeloTTS',
       synthesize: jest.fn(),
     };
 
-    registry.register(provider);
+    const factory = new TtsProviderFactory([primary, secondary]);
 
-    expect(registry.listProviders()).toEqual(['elevenlabs']);
-    expect(registry.getProvider('elevenlabs')).toBe(provider);
-    expect(registry.getDefaultProvider()).toBe(provider);
+    expect(factory.getProvider()).toBe(primary);
+    expect(factory.getProvider('melo')).toBe(secondary);
+    expect(factory.listProviders()).toEqual([
+      { name: 'elevenlabs', description: undefined, voices: ['Ada'] },
+      { name: 'melo', description: 'MeloTTS', voices: [] },
+    ]);
+    expect(factory.getVoices('elevenlabs')).toEqual(['Ada']);
+    expect(factory.getVoices('melo')).toEqual([]);
   });
 
   it('throws when provider is missing', () => {
-    const registry = new TTSProviderRegistry();
-
-    expect(() => registry.getProvider('missing')).toThrow('not registered');
-    expect(() => registry.getDefaultProvider()).toThrow(
-      'Default TTS provider not registered',
-    );
-  });
-
-  it('overwrites when registering duplicate providers', () => {
-    const registry = new TTSProviderRegistry();
-    const provider: ITTSProvider = {
+    const provider: TtsProvider = {
       name: 'elevenlabs',
-      supportsVoice: () => true,
       synthesize: jest.fn(),
     };
+    const factory = new TtsProviderFactory([provider]);
 
-    registry.register(provider);
-    registry.register(provider);
-
-    expect(registry.listProviders()).toEqual(['elevenlabs']);
+    expect(() => factory.getProvider('missing')).toThrow('not registered');
   });
 });

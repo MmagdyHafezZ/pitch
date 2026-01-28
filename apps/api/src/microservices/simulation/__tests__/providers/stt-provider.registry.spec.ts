@@ -1,5 +1,5 @@
-import { STTProviderRegistry } from '../../providers/stt/stt-provider.registry';
-import { ISTTProvider } from '../../providers/stt/stt-provider.interface';
+import { STTProviderRegistry } from '../../stt/providers/stt-provider.registry';
+import type { ISTTProvider } from '../../stt/providers/stt-provider.interface';
 
 describe('STTProviderRegistry', () => {
   it('registers and returns providers', () => {
@@ -20,10 +20,12 @@ describe('STTProviderRegistry', () => {
   it('throws when provider is missing', () => {
     const registry = new STTProviderRegistry();
 
-    expect(() => registry.getProvider('missing')).toThrow('not registered');
-    expect(() => registry.getDefaultProvider()).toThrow(
-      'No STT providers registered',
-    );
+    expect(() => {
+      registry.getProvider('missing');
+    }).toThrow('not registered');
+    expect(() => {
+      registry.getDefaultProvider();
+    }).toThrow('No STT providers registered');
   });
 
   it('overwrites when registering duplicate providers', () => {

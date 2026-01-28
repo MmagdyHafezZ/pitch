@@ -40,7 +40,10 @@ export class MongoConnectionService implements OnModuleInit, OnModuleDestroy {
   }
 
   isConnected(): boolean {
-    return !!this.connection && this.connection.readyState === 1;
+    return (
+      !!this.connection &&
+      this.connection.readyState === mongoose.ConnectionStates.connected
+    );
   }
 
   getModel<T>(name: string, schema: Schema<T>): Model<T> {

@@ -184,6 +184,14 @@ export class LLMRequestDto {
 
   @IsString()
   @IsOptional()
+  sessionMemberId?: string;
+
+  @IsString()
+  @IsOptional()
+  userId?: string;
+
+  @IsString()
+  @IsOptional()
   turnId?: string;
 
   @IsArray()

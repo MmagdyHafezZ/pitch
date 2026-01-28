@@ -186,7 +186,7 @@ export class LLMModelCatalogService {
         return;
       }
 
-      const payload = await response.json();
+      const payload: unknown = await response.json();
       const models = this.normalizeModels(parser(payload));
       if (models.length === 0) {
         this.logger.warn(`Model catalog returned no models for ${provider}`);

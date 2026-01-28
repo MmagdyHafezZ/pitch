@@ -301,4 +301,42 @@ export const api = {
       }),
     getPendingCount: () => apiRequest<{ count: number }>('/simulation/invitations/pending-count'),
   },
+
+  tts: {
+    listProviders: () => apiRequest<any[]>('/tts/providers'),
+    getVoices: (provider: string) =>
+      apiRequest<{ provider: string; voices: string[] }>(`/tts/voices?provider=${provider}`),
+    speak: async (data: { text: string; provider: string; voice: string }): Promise<Blob> => {
+      const url = `${API_CONFIG.baseURL}/tts/speak`
+      const token = typeof window !== 'undefined' ? localStorage.getItem('authToken') : null
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify(data),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.message || `HTTP ${response.status}: ${response.statusText}`)
+      }
+
+      return await response.blob()
+    },
+  },
+
+  personas: {
+    getAll: (params?: { orgId?: string }) => {
+      const query = new URLSearchParams()
+      if (params?.orgId) query.set('orgId', params.orgId)
+      const queryString = query.toString()
+      return apiRequest<{ personas: any[]; total: number }>(
+        `/simulation/personas${queryString ? `?${queryString}` : ''}`
+      )
+    },
+    getById: (id: string) => apiRequest<any>(`/simulation/personas/${id}`),
+  },
 }

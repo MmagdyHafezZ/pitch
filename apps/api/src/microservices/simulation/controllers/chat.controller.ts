@@ -12,6 +12,8 @@ import {
 interface ChatStreamRequest {
   requestId?: string;
   sessionId: string;
+  sessionMemberId?: string;
+  userId?: string;
   turnId?: string;
   messages: ChatStartPayload['messages'];
   config: ChatStartPayload['config'];
@@ -28,6 +30,8 @@ export class ChatController {
     const request = this.normalizeRequest(payload);
     return this.llmService.complete({
       sessionId: request.sessionId,
+      sessionMemberId: request.sessionMemberId,
+      userId: request.userId,
       turnId: request.turnId,
       messages: request.messages,
       config: request.config,
@@ -41,6 +45,8 @@ export class ChatController {
     return this.llmService.stream(
       {
         sessionId: request.sessionId,
+        sessionMemberId: request.sessionMemberId,
+        userId: request.userId,
         turnId: request.turnId,
         messages: request.messages,
         config: {
@@ -73,6 +79,8 @@ export class ChatController {
       return {
         requestId: envelope.requestId,
         sessionId: envelope.sessionId,
+        sessionMemberId: envelope.sessionMemberId,
+        userId: envelope.userId,
         turnId: envelope.turnId,
         messages: envelope.payload.messages,
         config: envelope.payload.config,
@@ -82,6 +90,8 @@ export class ChatController {
     const request = payload as LLMRequestDto;
     return {
       sessionId: request.sessionId,
+      sessionMemberId: request.sessionMemberId,
+      userId: request.userId,
       turnId: request.turnId,
       messages: request.messages,
       config: request.config,

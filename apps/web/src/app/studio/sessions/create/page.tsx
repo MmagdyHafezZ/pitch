@@ -37,7 +37,9 @@ import { useRouter } from 'next/navigation'
 import { useAuth } from '@/features/auth'
 import { useTeams } from '@/features/teams'
 import { useSessions, type SessionType, type CreateSessionInput } from '@/features/sessions'
+import { useTtsProviders } from '@/features/tts'
 import { notifications } from '@mantine/notifications'
+import { api } from '@/lib/client'
 
 interface SessionConfigForm {
   multiTurnEnabled: boolean
@@ -48,11 +50,28 @@ interface SessionConfigForm {
   [key: string]: any
 }
 
+interface Persona {
+  id: string
+  name: string
+  orgId: string
+  traits: {
+    role: string
+    level: string
+    personality: string
+    voice?: {
+      provider: string
+      voiceName: string
+      language: string
+    }
+  }
+}
+
 export default function CreateSessionPage() {
   const router = useRouter()
   const { user } = useAuth()
   const { teams, activeTeamId, fetchUserTeams, loading: teamsLoading } = useTeams()
   const { createSession, loading, error } = useSessions()
+  const { providers: ttsProviders, loading: ttsLoading } = useTtsProviders()
 
   const [active, setActive] = useState(0)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -65,8 +84,12 @@ export default function CreateSessionPage() {
   const [language, setLanguage] = useState('en-US')
 
   const [selectedPersona, setSelectedPersona] = useState<string | null>(null)
+  const [personas, setPersonas] = useState<Persona[]>([])
+  const [personasLoading, setPersonasLoading] = useState(false)
 
   const [multiTurnEnabled, setMultiTurnEnabled] = useState(true)
+  const [ttsProvider, setTtsProvider] = useState('elevenlabs')
+  const [ttsVoice, setTtsVoice] = useState('Rachel')
   const [accent, setAccent] = useState('British')
   const [tone, setTone] = useState('Formal')
   const [speechRate, setSpeechRate] = useState('Normal')
@@ -85,6 +108,35 @@ export default function CreateSessionPage() {
       setSelectedTeamId(activeTeamId)
     }
   }, [activeTeamId, selectedTeamId])
+
+  useEffect(() => {
+    const fetchPersonas = async () => {
+      setPersonasLoading(true)
+      try {
+        const response = await api.personas.getAll()
+        setPersonas(response.personas)
+      } catch (err) {
+        notifications.show({
+          title: 'Warning',
+          message: 'Failed to load personas. Using default options.',
+          color: 'yellow',
+        })
+      } finally {
+        setPersonasLoading(false)
+      }
+    }
+
+    fetchPersonas()
+  }, [])
+
+  useEffect(() => {
+    if (!ttsLoading && ttsProviders.length > 0 && !ttsVoice) {
+      const provider = ttsProviders.find((p) => p.name === ttsProvider)
+      if (provider && provider.voices.length > 0) {
+        setTtsVoice(provider.voices[0])
+      }
+    }
+  }, [ttsLoading, ttsProviders, ttsProvider, ttsVoice])
 
   const validateStep = (step: number): boolean => {
     const newErrors: Record<string, string> = {}
@@ -151,6 +203,11 @@ export default function CreateSessionPage() {
         difficulty,
       }
 
+      if (sessionType === 'voice' || sessionType === 'video') {
+        sessionConfig.ttsProvider = ttsProvider
+        sessionConfig.ttsVoice = ttsVoice
+      }
+
       if (!sessionType) {
         throw new Error('Session type is required')
       }
@@ -195,13 +252,11 @@ export default function CreateSessionPage() {
         </ActionIcon>
         <Title order={1}>Create New Session</Title>
       </Group>
-
       {error && (
         <Alert icon={<IconAlertCircle size={16} />} title="Error" color="red" mb="md">
           {error}
         </Alert>
       )}
-
       <Paper shadow="sm" p="xl" radius="md" withBorder>
         <Stepper active={active} onStepClick={setActive} mb="xl">
           <Stepper.Step label="Basic Info" description="Session details">
@@ -320,100 +375,80 @@ export default function CreateSessionPage() {
                 Choose the AI persona that will participate in this session
               </Text>
 
-              {/* Mock personas - in production, these would come from an API */}
-              <SimpleGrid cols={{ base: 1, sm: 2, md: 3, lg: 4 }} spacing="md">
-                {[
-                  {
-                    id: 'persona_1',
-                    name: 'Sarah - Sales Expert',
-                    role: 'Technical Sales',
-                    level: 'Expert',
-                  },
-                  {
-                    id: 'persona_2',
-                    name: 'John - Product Manager',
-                    role: 'Product Strategy',
-                    level: 'Senior',
-                  },
-                  {
-                    id: 'persona_3',
-                    name: 'Maria - Customer Success',
-                    role: 'Support & Onboarding',
-                    level: 'Expert',
-                  },
-                  {
-                    id: 'persona_4',
-                    name: 'Alex - Technical Lead',
-                    role: 'Engineering',
-                    level: 'Principal',
-                  },
-                ].map((persona) => {
-                  const isSelected = selectedPersona === persona.id
-                  return (
-                    <Card
-                      key={persona.id}
-                      withBorder
-                      padding="md"
-                      radius="md"
-                      style={{
-                        cursor: 'pointer',
-                        border: isSelected ? '2px solid var(--mantine-color-blue-6)' : undefined,
-                        backgroundColor: isSelected ? 'var(--mantine-color-blue-0)' : undefined,
-                      }}
-                      onClick={() => {
-                        setSelectedPersona(selectedPersona === persona.id ? null : persona.id)
-                      }}
-                    >
-                      <Stack gap="xs" align="center">
-                        <Box pos="relative">
-                          <Avatar size={80} radius="md" color="blue">
-                            <IconUser size={40} />
-                          </Avatar>
-                          {isSelected && (
-                            <Box
-                              style={{
-                                position: 'absolute',
-                                top: -8,
-                                right: -8,
-                                background: 'var(--mantine-color-blue-6)',
-                                borderRadius: '50%',
-                                width: 24,
-                                height: 24,
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                              }}
-                            >
-                              <IconCheck size={16} color="white" />
-                            </Box>
-                          )}
-                        </Box>
-                        <Text fw={600} size="sm" ta="center">
-                          {persona.name}
-                        </Text>
-                        <Badge size="xs" variant="light">
-                          {persona.role}
-                        </Badge>
-                        <Text size="xs" c="dimmed" ta="center">
-                          Level: {persona.level}
-                        </Text>
-                      </Stack>
-                    </Card>
-                  )
-                })}
-              </SimpleGrid>
+              {personasLoading ? (
+                <Group justify="center" p="xl">
+                  <Loader />
+                  <Text c="dimmed">Loading personas...</Text>
+                </Group>
+              ) : personas.length === 0 ? (
+                <Alert color="yellow" title="No personas available">
+                  No personas found. Please contact support or try again later.
+                </Alert>
+              ) : (
+                <SimpleGrid cols={{ base: 1, sm: 2, md: 3, lg: 4 }} spacing="md">
+                  {personas.map((persona) => {
+                    const isSelected = selectedPersona === persona.id
+                    return (
+                      <Card
+                        key={persona.id}
+                        withBorder
+                        padding="md"
+                        radius="md"
+                        style={{
+                          cursor: 'pointer',
+                          border: isSelected ? '2px solid var(--mantine-color-blue-6)' : undefined,
+                          backgroundColor: isSelected ? 'var(--mantine-color-blue-0)' : undefined,
+                        }}
+                        onClick={() => {
+                          setSelectedPersona(selectedPersona === persona.id ? null : persona.id)
+                        }}
+                      >
+                        <Stack gap="xs" align="center">
+                          <Box pos="relative">
+                            <Avatar size={80} radius="md" color="blue">
+                              <IconUser size={40} />
+                            </Avatar>
+                            {isSelected && (
+                              <Box
+                                style={{
+                                  position: 'absolute',
+                                  top: -8,
+                                  right: -8,
+                                  background: 'var(--mantine-color-blue-6)',
+                                  borderRadius: '50%',
+                                  width: 24,
+                                  height: 24,
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                }}
+                              >
+                                <IconCheck size={16} color="white" />
+                              </Box>
+                            )}
+                          </Box>
+                          <Text fw={600} size="sm" ta="center">
+                            {persona.name}
+                          </Text>
+                          <Badge size="xs" variant="light">
+                            {persona.traits?.role || 'AI Assistant'}
+                          </Badge>
+                          <Text size="xs" c="dimmed" ta="center">
+                            {persona.traits?.level || 'Expert'}
+                          </Text>
+                        </Stack>
+                      </Card>
+                    )
+                  })}
+                </SimpleGrid>
+              )}
 
               {selectedPersona && (
                 <Paper p="md" withBorder mt="md">
                   <Group>
                     <Text fw={500}>Selected Persona:</Text>
                     <Text c="dimmed">
-                      {[
-                        { id: 'persona_1', name: 'Sarah - Sales Expert' },
-                        { id: 'persona_2', name: 'John - Product Manager' },
-                        { id: 'persona_3', name: 'Maria - Customer Success' },
-                        { id: 'persona_4', name: 'Alex - Technical Lead' },
-                      ].find((p) => p.id === selectedPersona)?.name || selectedPersona}
+                      {personas.find((p) => p.id === selectedPersona)?.name || selectedPersona}
                     </Text>
                   </Group>
                 </Paper>
@@ -462,6 +497,52 @@ export default function CreateSessionPage() {
                 ]}
                 description="Speaking speed for audio sessions"
               />
+
+              {(sessionType === 'voice' || sessionType === 'video') && (
+                <>
+                  <Select
+                    label="TTS Provider"
+                    value={ttsProvider}
+                    onChange={(value) => {
+                      const newProvider = value || 'elevenlabs'
+                      setTtsProvider(newProvider)
+                      const provider = ttsProviders.find((p) => p.name === newProvider)
+                      if (provider && provider.voices.length > 0) {
+                        setTtsVoice(provider.voices[0])
+                      } else {
+                        setTtsVoice('')
+                      }
+                    }}
+                    data={
+                      ttsLoading
+                        ? [{ value: 'elevenlabs', label: 'Loading...' }]
+                        : ttsProviders.map((provider) => ({
+                            value: provider.name,
+                            label: provider.description || provider.name,
+                          }))
+                    }
+                    description="Text-to-speech provider for voice sessions"
+                    disabled={ttsLoading}
+                  />
+
+                  <Select
+                    label="Voice"
+                    value={ttsVoice}
+                    onChange={(value) => setTtsVoice(value || '')}
+                    data={
+                      ttsProviders
+                        .find((p) => p.name === ttsProvider)
+                        ?.voices.map((voice) => ({
+                          value: voice,
+                          label: voice,
+                        })) || []
+                    }
+                    description="Voice to use for speech synthesis"
+                    searchable
+                    disabled={!ttsProvider}
+                  />
+                </>
+              )}
 
               <NumberInput
                 label="Difficulty"

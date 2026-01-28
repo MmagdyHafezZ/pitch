@@ -1,106 +1,115 @@
-import { ElevenLabsProvider } from '../../providers/tts/elevenlabs.provider';
 import {
-  TTSProviderAuthError,
-  TTSProviderRequestError,
-} from '../../providers/tts/tts-provider.interface';
+  BadRequestException,
+  InternalServerErrorException,
+} from '@nestjs/common';
+import { ElevenLabsTtsProvider } from '../../tts/providers/elevenlabs.provider';
+
+const convertMock = jest.fn();
+
+jest.mock('@elevenlabs/elevenlabs-js', () => ({
+  ElevenLabsClient: jest.fn().mockImplementation(() => ({
+    textToSpeech: {
+      convert: convertMock,
+    },
+  })),
+}));
 
 const originalFetch = global.fetch;
 
-describe('ElevenLabsProvider', () => {
-  afterEach(() => {
+const createConfig = (values: Record<string, string | undefined>) => ({
+  getOrThrow: jest.fn((key: string) => {
+    const value = values[key];
+    if (!value) {
+      throw new Error(`${key} is not configured`);
+    }
+    return value;
+  }),
+  get: jest.fn((key: string) => values[key]),
+});
+
+const createStream = (chunks: number[][]) =>
+  new ReadableStream<Uint8Array>({
+    start(controller) {
+      for (const chunk of chunks) {
+        controller.enqueue(Uint8Array.from(chunk));
+      }
+      controller.close();
+    },
+  });
+
+describe('ElevenLabsTtsProvider', () => {
+  beforeEach(() => {
+    convertMock.mockReset();
+    global.fetch = jest.fn();
+  });
+
+  afterAll(() => {
     global.fetch = originalFetch;
   });
 
-  it('throws when API key is missing', async () => {
-    const configService = { get: jest.fn(() => '') } as any;
-    const provider = new ElevenLabsProvider(configService);
+  it('throws when API key is missing', () => {
+    const configService = createConfig({});
 
-    await expect(provider.synthesize({ text: 'hi' })).rejects.toThrow(
-      TTSProviderAuthError,
+    expect(() => new ElevenLabsTtsProvider(configService as any)).toThrow(
+      'ELEVENLABS_API_KEY',
     );
   });
 
   it('throws when voice is missing', async () => {
-    const configService = {
-      get: jest.fn((key: string) =>
-        key === 'ELEVENLABS_API_KEY' ? 'key' : '',
-      ),
-    } as any;
-    const provider = new ElevenLabsProvider(configService);
+    const configService = createConfig({
+      ELEVENLABS_API_KEY: 'key',
+    });
 
-    await expect(provider.synthesize({ text: 'hi' })).rejects.toThrow(
-      TTSProviderRequestError,
+    (global.fetch as jest.Mock).mockResolvedValue({
+      ok: true,
+      json: async () => ({ voices: [] }),
+    });
+
+    const provider = new ElevenLabsTtsProvider(configService as any);
+
+    await expect(provider.synthesize('hi')).rejects.toThrow(
+      BadRequestException,
     );
   });
 
   it('returns audio buffer when request succeeds', async () => {
-    const configService = {
-      get: jest.fn((key: string) => {
-        if (key === 'ELEVENLABS_API_KEY') return 'key';
-        if (key === 'ELEVENLABS_VOICE_ID') return 'voice-1';
-        return undefined;
-      }),
-    } as any;
-
-    const provider = new ElevenLabsProvider(configService);
-
-    global.fetch = jest.fn().mockResolvedValue({
-      ok: true,
-      arrayBuffer: async () => Uint8Array.from([1, 2, 3]).buffer,
-      headers: { get: jest.fn().mockReturnValue('req-1') },
-    } as any);
-
-    const response = await provider.synthesize({ text: 'hello' });
-
-    expect(response.audioBuffer.length).toBe(3);
-    expect(response.providerMeta?.requestId).toBe('req-1');
-  });
-
-  it('maps wav output formats', async () => {
-    const configService = {
-      get: jest.fn((key: string) => {
-        if (key === 'ELEVENLABS_API_KEY') return 'key';
-        if (key === 'ELEVENLABS_VOICE_ID') return 'voice-1';
-        return undefined;
-      }),
-    } as any;
-
-    const provider = new ElevenLabsProvider(configService);
-
-    global.fetch = jest.fn().mockResolvedValue({
-      ok: true,
-      arrayBuffer: async () => Uint8Array.from([9, 9]).buffer,
-      headers: { get: jest.fn().mockReturnValue('req-2') },
-    } as any);
-
-    const response = await provider.synthesize({
-      text: 'hello',
-      format: 'wav',
+    const configService = createConfig({
+      ELEVENLABS_API_KEY: 'key',
+      ELEVENLABS_DEFAULT_VOICE: 'Test Voice',
     });
 
-    expect(response.format).toBe('pcm_16000');
+    (global.fetch as jest.Mock).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        voices: [{ voice_id: 'voice-1', name: 'Test Voice' }],
+      }),
+    });
+
+    convertMock.mockResolvedValue(createStream([[1, 2, 3]]));
+
+    const provider = new ElevenLabsTtsProvider(configService as any);
+    const response = await provider.synthesize('hello');
+
+    expect(response.audioBuffer.length).toBe(3);
+    expect(response.contentType).toBe('audio/mpeg');
   });
 
-  it('throws when API response fails', async () => {
-    const configService = {
-      get: jest.fn((key: string) => {
-        if (key === 'ELEVENLABS_API_KEY') return 'key';
-        if (key === 'ELEVENLABS_VOICE_ID') return 'voice-1';
-        return undefined;
-      }),
-    } as any;
+  it('wraps failures when voices fetch fails', async () => {
+    const configService = createConfig({
+      ELEVENLABS_API_KEY: 'key',
+      ELEVENLABS_DEFAULT_VOICE: 'Test Voice',
+    });
 
-    const provider = new ElevenLabsProvider(configService);
-
-    global.fetch = jest.fn().mockResolvedValue({
+    (global.fetch as jest.Mock).mockResolvedValue({
       ok: false,
-      text: async () => 'bad request',
-      headers: { get: jest.fn() },
-      status: 400,
-    } as any);
+      status: 500,
+      text: async () => 'boom',
+    });
 
-    await expect(provider.synthesize({ text: 'hello' })).rejects.toThrow(
-      TTSProviderRequestError,
+    const provider = new ElevenLabsTtsProvider(configService as any);
+
+    await expect(provider.synthesize('hello')).rejects.toThrow(
+      InternalServerErrorException,
     );
   });
 });

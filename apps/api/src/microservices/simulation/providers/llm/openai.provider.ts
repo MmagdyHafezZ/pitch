@@ -1,6 +1,6 @@
 import { Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Observable, from, fromEvent, map, mergeMap } from 'rxjs';
+import { Observable } from 'rxjs';
 import OpenAI from 'openai';
 import {
   ILLMProvider,
@@ -16,9 +16,10 @@ import {
   LLMConfigDto,
   LLMResponseDto,
   LLMStreamChunkDto,
-  LLMToolCallDto,
 } from '../../dto/llm.dto';
 import { LLMPricingService } from '../../services/llm/llm-pricing.service';
+
+type OpenAIContentPart = OpenAI.Chat.ChatCompletionContentPart;
 
 /**
  * OpenAI Provider
@@ -29,6 +30,10 @@ export class OpenAIProvider implements ILLMProvider {
   readonly name = 'openai';
   private readonly logger = new Logger(OpenAIProvider.name);
   private client: OpenAI;
+
+  private readonly contentPartGuard = (
+    part: OpenAIContentPart | null,
+  ): part is OpenAIContentPart => part !== null;
 
   constructor(
     private configService: ConfigService,
@@ -65,6 +70,13 @@ export class OpenAIProvider implements ILLMProvider {
     try {
       const startTime = Date.now();
 
+      const tools = config.tools as
+        | OpenAI.Chat.ChatCompletionTool[]
+        | undefined;
+      const toolChoice = config.toolChoice as
+        | OpenAI.Chat.ChatCompletionToolChoiceOption
+        | undefined;
+
       const response = await this.client.chat.completions.create({
         model: config.model,
         messages: this.convertMessages(messages),
@@ -74,8 +86,8 @@ export class OpenAIProvider implements ILLMProvider {
         frequency_penalty: config.frequencyPenalty,
         presence_penalty: config.presencePenalty,
         stop: config.stop,
-        tools: config.tools as any,
-        tool_choice: config.toolChoice as any,
+        tools,
+        tool_choice: toolChoice,
         stream: false,
         ...config.providerOptions,
       });
@@ -132,12 +144,17 @@ export class OpenAIProvider implements ILLMProvider {
     this.validateConfig(config);
 
     return new Observable((subscriber) => {
-      const startTime = Date.now();
-      let accumulatedContent = '';
       let accumulatedTokens = 0;
 
-      (async () => {
+      void (async () => {
         try {
+          const tools = config.tools as
+            | OpenAI.Chat.ChatCompletionTool[]
+            | undefined;
+          const toolChoice = config.toolChoice as
+            | OpenAI.Chat.ChatCompletionToolChoiceOption
+            | undefined;
+
           const stream = await this.client.chat.completions.create({
             model: config.model,
             messages: this.convertMessages(messages),
@@ -147,8 +164,8 @@ export class OpenAIProvider implements ILLMProvider {
             frequency_penalty: config.frequencyPenalty,
             presence_penalty: config.presencePenalty,
             stop: config.stop,
-            tools: config.tools as any,
-            tool_choice: config.toolChoice as any,
+            tools,
+            tool_choice: toolChoice,
             stream: true,
             stream_options: { include_usage: true },
             ...config.providerOptions,
@@ -159,7 +176,6 @@ export class OpenAIProvider implements ILLMProvider {
             const finishReason = chunk.choices[0]?.finish_reason;
 
             if (delta?.content) {
-              accumulatedContent += delta.content;
               accumulatedTokens++;
 
               subscriber.next({
@@ -169,7 +185,6 @@ export class OpenAIProvider implements ILLMProvider {
             }
 
             if (finishReason || chunk.usage) {
-              const latencyMs = Date.now() - startTime;
               const capabilities = this.getModelCapabilities(config.model);
 
               const costUsd = chunk.usage
@@ -366,40 +381,67 @@ export class OpenAIProvider implements ILLMProvider {
     messages: LLMMessageDto[],
   ): OpenAI.Chat.ChatCompletionMessageParam[] {
     return messages.map((msg) => {
-      if (typeof msg.content === 'string') {
+      const role: 'system' | 'user' | 'assistant' | 'tool' = msg.role;
+
+      const stringContent =
+        typeof msg.content === 'string'
+          ? msg.content
+          : Array.isArray(msg.content)
+            ? msg.content
+                .map((part) => (part.type === 'text' ? part.text : ''))
+                .join(' ')
+                .trim()
+            : '';
+
+      if (role === 'tool') {
         return {
-          role: msg.role as any,
-          content: msg.content,
-          name: msg.name,
+          role: 'tool',
+          content: stringContent,
+          tool_call_id: msg.toolCallId ?? 'tool',
         };
       }
 
-      if (!msg.content || !Array.isArray(msg.content)) {
-        return {
-          role: msg.role as any,
-          content: '',
-          name: msg.name,
-        };
+      if (role === 'system') {
+        return msg.name
+          ? { role: 'system', content: stringContent, name: msg.name }
+          : { role: 'system', content: stringContent };
       }
 
-      return {
-        role: msg.role as any,
-        content: msg.content.map((part) => {
-          if (part.type === 'text') {
-            return { type: 'text', text: part.text };
-          } else if (part.type === 'image') {
-            return {
-              type: 'image_url',
-              image_url: {
-                url: part.url,
-                detail: part.detail || 'auto',
-              },
-            };
-          }
-          return part;
-        }) as any,
-        name: msg.name,
-      };
+      if (role === 'assistant') {
+        return msg.name
+          ? { role: 'assistant', content: stringContent, name: msg.name }
+          : { role: 'assistant', content: stringContent };
+      }
+
+      let content: string | OpenAIContentPart[] = stringContent;
+
+      if (Array.isArray(msg.content)) {
+        const contentParts = msg.content
+          .map((part): OpenAIContentPart | null => {
+            if (part.type === 'text') {
+              return { type: 'text', text: part.text };
+            }
+            if (part.type === 'image') {
+              return {
+                type: 'image_url',
+                image_url: {
+                  url: part.url,
+                  detail: part.detail || 'auto',
+                },
+              };
+            }
+            return null;
+          })
+          .filter(this.contentPartGuard);
+
+        if (contentParts.length > 0) {
+          content = contentParts;
+        }
+      }
+
+      return msg.name
+        ? { role: 'user', content, name: msg.name }
+        : { role: 'user', content };
     });
   }
 
@@ -439,11 +481,12 @@ export class OpenAIProvider implements ILLMProvider {
   /**
    * Handle OpenAI errors and convert to standard provider errors
    */
-  private handleError(error: any): Error {
+  private handleError(error: unknown): Error {
     this.logger.error('OpenAI API error:', error);
 
     if (error instanceof OpenAI.APIError) {
-      const status = error.status;
+      const status =
+        typeof error.status === 'number' ? error.status : undefined;
 
       if (status === 401 || status === 403) {
         return new ProviderAuthError(this.name, {
@@ -453,10 +496,16 @@ export class OpenAIProvider implements ILLMProvider {
       }
 
       if (status === 429) {
-        const retryAfter = error.headers?.['retry-after'];
+        const headers =
+          error.headers && typeof error.headers === 'object'
+            ? (error.headers as Record<string, unknown>)
+            : undefined;
+        const retryAfterHeader = headers?.['retry-after'];
+        const retryAfter =
+          typeof retryAfterHeader === 'string' ? retryAfterHeader : undefined;
         return new ProviderRateLimitError(
           this.name,
-          retryAfter ? parseInt(retryAfter) * 1000 : undefined,
+          retryAfter ? parseInt(retryAfter, 10) * 1000 : undefined,
           { message: error.message },
         );
       }
@@ -479,11 +528,8 @@ export class OpenAIProvider implements ILLMProvider {
       });
     }
 
-    return new ProviderError(
-      this.name,
-      'UNKNOWN_ERROR',
-      error.message || 'Unknown error occurred',
-      error,
-    );
+    const message =
+      error instanceof Error ? error.message : 'Unknown error occurred';
+    return new ProviderError(this.name, 'UNKNOWN_ERROR', message, error);
   }
 }

@@ -1,10 +1,11 @@
 import { Injectable } from '@nestjs/common';
-import { SimulationPrismaService } from '../prisma/simulation-prisma.service';
-import type {
-  SessionInvitation,
-  InvitationStatus,
-} from '@prisma/simulation-client';
-import { Prisma } from '@prisma/simulation-client';
+import { Types, Model } from 'mongoose';
+import { MongoConnectionService } from '../services/mongo/mongo-connection.service';
+import {
+  SessionInvitationModel,
+  SessionInvitationSchema,
+  type ISessionInvitation,
+} from '../schemas/mongodb';
 
 /**
  * Interface for creating a new invitation
@@ -12,240 +13,152 @@ import { Prisma } from '@prisma/simulation-client';
 export interface CreateInvitationData {
   sessionId: string;
   inviterId: string;
-  inviterSnapshot?: Prisma.InputJsonValue;
+  inviterSnapshot?: Record<string, any>;
   inviteeId: string;
-  inviteeSnapshot?: Prisma.InputJsonValue;
+  inviteeSnapshot?: Record<string, any>;
   message?: string;
 }
 
-/**
- * Invitation Repository
- *
- * Handles all data access operations for session invitations
- */
 @Injectable()
 export class InvitationRepository {
-  constructor(private readonly prisma: SimulationPrismaService) {}
+  constructor(private readonly mongo: MongoConnectionService) {}
 
-  /**
-   * Create a new invitation
-   */
-  async create(data: CreateInvitationData): Promise<SessionInvitation> {
-    return await this.prisma.client.sessionInvitation.create({
-      data: {
-        sessionId: data.sessionId,
-        inviterId: data.inviterId,
-        inviterSnapshot: data.inviterSnapshot,
-        inviteeId: data.inviteeId,
-        inviteeSnapshot: data.inviteeSnapshot,
-        message: data.message,
-      },
-      include: {
-        session: {
-          select: {
-            id: true,
-            type: true,
-            status: true,
-            createdAt: true,
-          },
-        },
-      },
-    });
+  private get model(): Model<ISessionInvitation> {
+    if (!this.mongo.isConnected()) {
+      throw new Error('MongoDB connection is not initialized');
+    }
+
+    return this.mongo.getModel<ISessionInvitation>(
+      SessionInvitationModel,
+      SessionInvitationSchema,
+    );
   }
 
-  /**
-   * Create multiple invitations at once
-   */
+  async create(data: CreateInvitationData): Promise<ISessionInvitation> {
+    const doc = await this.model.create({
+      _id: new Types.ObjectId().toHexString(),
+      sessionId: data.sessionId,
+      inviterId: data.inviterId,
+      inviterSnapshot: data.inviterSnapshot,
+      inviteeId: data.inviteeId,
+      inviteeSnapshot: data.inviteeSnapshot,
+      message: data.message,
+      status: 'pending',
+    });
+
+    return doc.toObject();
+  }
+
   async createMany(
     invitations: CreateInvitationData[],
   ): Promise<{ count: number }> {
-    return await this.prisma.client.sessionInvitation.createMany({
-      data: invitations.map((inv) => ({
-        sessionId: inv.sessionId,
-        inviterId: inv.inviterId,
-        inviterSnapshot: inv.inviterSnapshot,
-        inviteeId: inv.inviteeId,
-        inviteeSnapshot: inv.inviteeSnapshot,
-        message: inv.message,
-      })),
-      skipDuplicates: true,
+    if (invitations.length === 0) {
+      return { count: 0 };
+    }
+
+    const docs = invitations.map((invitation) => ({
+      _id: new Types.ObjectId().toHexString(),
+      sessionId: invitation.sessionId,
+      inviterId: invitation.inviterId,
+      inviterSnapshot: invitation.inviterSnapshot,
+      inviteeId: invitation.inviteeId,
+      inviteeSnapshot: invitation.inviteeSnapshot,
+      message: invitation.message,
+      status: 'pending',
+    }));
+
+    const result = await this.model.insertMany(docs, {
+      ordered: false,
     });
+
+    return { count: Array.isArray(result) ? result.length : 0 };
   }
 
-  /**
-   * Find invitation by ID
-   */
-  async findById(id: string): Promise<SessionInvitation | null> {
-    return await this.prisma.client.sessionInvitation.findUnique({
-      where: { id },
-      include: {
-        session: {
-          select: {
-            id: true,
-            type: true,
-            status: true,
-            createdAt: true,
-          },
-        },
-      },
-    });
+  async findById(id: string): Promise<ISessionInvitation | null> {
+    return (await this.model
+      .findById(id)
+      .lean()) as unknown as ISessionInvitation | null;
   }
 
-  /**
-   * Find invitations for a session
-   */
-  async findBySessionId(sessionId: string): Promise<SessionInvitation[]> {
-    return await this.prisma.client.sessionInvitation.findMany({
-      where: { sessionId },
-      orderBy: { createdAt: 'desc' },
-      include: {
-        session: {
-          select: {
-            id: true,
-            type: true,
-            status: true,
-            createdAt: true,
-          },
-        },
-      },
-    });
+  async findBySessionId(sessionId: string): Promise<ISessionInvitation[]> {
+    return (await this.model
+      .find({ sessionId })
+      .sort({ createdAt: -1 })
+      .lean()) as unknown as ISessionInvitation[];
   }
 
-  /**
-   * Find invitations received by a user
-   */
   async findByInviteeId(
     inviteeId: string,
-    status?: InvitationStatus,
-  ): Promise<SessionInvitation[]> {
-    const where: Prisma.SessionInvitationWhereInput = { inviteeId };
-
+    status?: string,
+  ): Promise<ISessionInvitation[]> {
+    const query: Record<string, any> = { inviteeId };
     if (status) {
-      where.status = status;
+      query.status = status;
     }
 
-    return await this.prisma.client.sessionInvitation.findMany({
-      where,
-      orderBy: { createdAt: 'desc' },
-      include: {
-        session: {
-          select: {
-            id: true,
-            type: true,
-            status: true,
-            createdAt: true,
-          },
-        },
-      },
-    });
+    return (await this.model
+      .find(query)
+      .sort({ createdAt: -1 })
+      .lean()) as unknown as ISessionInvitation[];
   }
 
-  /**
-   * Find invitations sent by a user
-   */
   async findByInviterId(
     inviterId: string,
-    status?: InvitationStatus,
-  ): Promise<SessionInvitation[]> {
-    const where: Prisma.SessionInvitationWhereInput = { inviterId };
-
+    status?: string,
+  ): Promise<ISessionInvitation[]> {
+    const query: Record<string, any> = { inviterId };
     if (status) {
-      where.status = status;
+      query.status = status;
     }
 
-    return await this.prisma.client.sessionInvitation.findMany({
-      where,
-      orderBy: { createdAt: 'desc' },
-      include: {
-        session: {
-          select: {
-            id: true,
-            type: true,
-            status: true,
-            createdAt: true,
-          },
-        },
-      },
-    });
+    return (await this.model
+      .find(query)
+      .sort({ createdAt: -1 })
+      .lean()) as unknown as ISessionInvitation[];
   }
 
-  /**
-   * Update invitation status
-   */
-  async updateStatus(
-    id: string,
-    status: InvitationStatus,
-  ): Promise<SessionInvitation> {
-    return await this.prisma.client.sessionInvitation.update({
-      where: { id },
-      data: {
-        status,
-        respondedAt: status !== 'pending' ? new Date() : null,
-      },
-      include: {
-        session: {
-          select: {
-            id: true,
-            type: true,
-            status: true,
-            createdAt: true,
-          },
-        },
-      },
-    });
+  async updateStatus(id: string, status: string): Promise<ISessionInvitation> {
+    const respondedAt = status !== 'pending' ? new Date() : null;
+    const updated = (await this.model
+      .findByIdAndUpdate(id, { status, respondedAt }, { new: true })
+      .lean()) as unknown as ISessionInvitation | null;
+
+    if (!updated) {
+      throw new Error(`Invitation with ID ${id} not found`);
+    }
+
+    return updated;
   }
 
-  /**
-   * Check if invitation exists for a session and invitee
-   */
   async existsForSessionAndInvitee(
     sessionId: string,
     inviteeId: string,
-  ): Promise<SessionInvitation | null> {
-    return await this.prisma.client.sessionInvitation.findUnique({
-      where: {
-        sessionId_inviteeId: {
-          sessionId,
-          inviteeId,
-        },
-      },
-    });
+  ): Promise<ISessionInvitation | null> {
+    return (await this.model
+      .findOne({ sessionId, inviteeId })
+      .lean()) as unknown as ISessionInvitation | null;
   }
 
-  /**
-   * Delete/revoke an invitation
-   */
   async delete(id: string): Promise<void> {
-    await this.prisma.client.sessionInvitation.delete({
-      where: { id },
-    });
+    await this.model.findByIdAndDelete(id);
   }
 
-  /**
-   * Count pending invitations for a user
-   */
   async countPendingForInvitee(inviteeId: string): Promise<number> {
-    return await this.prisma.client.sessionInvitation.count({
-      where: {
-        inviteeId,
-        status: 'pending',
-      },
+    return await this.model.countDocuments({
+      inviteeId,
+      status: 'pending',
     });
   }
 
-  /**
-   * Count invitations for a session by status
-   */
   async countBySessionAndStatus(
     sessionId: string,
-    status?: InvitationStatus,
+    status?: string,
   ): Promise<number> {
-    const where: Prisma.SessionInvitationWhereInput = { sessionId };
-
+    const query: Record<string, any> = { sessionId };
     if (status) {
-      where.status = status;
+      query.status = status;
     }
 
-    return await this.prisma.client.sessionInvitation.count({ where });
+    return await this.model.countDocuments(query);
   }
 }

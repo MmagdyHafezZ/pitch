@@ -5,9 +5,13 @@ import { LLMRoutingController } from './controllers/llm-routing.controller';
 import { LLMTestController } from './controllers/llm-test.controller';
 import { SessionController } from './controllers/session.controller';
 import { SessionHttpController } from './controllers/session-http.controller';
+import { SessionMemberController } from './controllers/session-member.controller';
 import { InvitationController } from './controllers/invitation.controller';
 import { InvitationHttpController } from './controllers/invitation-http.controller';
+import { ConversationController } from './controllers/conversation.controller';
+import { PersonaHttpController } from './controllers/persona-http.controller';
 import { SimulationPrismaService } from './prisma/simulation-prisma.service';
+import { MongoConnectionService } from './services/mongo/mongo-connection.service';
 import { LLMService } from './services/llm/llm.service';
 import { UsageCalculatorService } from './services/llm/usage-calculator.service';
 import { ModelCapabilitiesRegistry } from './services/llm/model-capabilities.registry';
@@ -19,10 +23,15 @@ import { LLMProviderRegistry } from './providers/llm/llm-provider.registry';
 import { OpenAIProvider } from './providers/llm/openai.provider';
 import { WatsonxProvider } from './providers/llm/watsonx.provider';
 import { SessionService } from './services/session.service';
+import { SessionMemberService } from './services/session-member.service';
 import { SessionRepository } from './repositories/session.repository';
+import { SessionMemberRepository } from './repositories/session-member.repository';
 import { InvitationService } from './services/invitation.service';
 import { InvitationRepository } from './repositories/invitation.repository';
+import { PersonaService } from './services/persona.service';
+import { PersonaRepository } from './repositories/persona.repository';
 import { RedisModule } from '@pitch/shared-backend/redis/index';
+import { TtsModule } from './tts/tts.module';
 
 @Module({
   imports: [
@@ -34,6 +43,7 @@ import { RedisModule } from '@pitch/shared-backend/redis/index';
       }),
       inject: [ConfigService],
     }),
+    TtsModule,
   ],
   controllers: [
     ChatController,
@@ -41,11 +51,15 @@ import { RedisModule } from '@pitch/shared-backend/redis/index';
     LLMTestController,
     SessionController,
     SessionHttpController,
+    SessionMemberController,
     InvitationController,
     InvitationHttpController,
+    ConversationController,
+    PersonaHttpController,
   ],
   providers: [
     SimulationPrismaService,
+    MongoConnectionService,
     LLMProviderRegistry,
     ModelCapabilitiesRegistry,
     LLMRoutingConfigService,
@@ -71,9 +85,19 @@ import { RedisModule } from '@pitch/shared-backend/redis/index';
     },
     SessionRepository,
     SessionService,
+    SessionMemberRepository,
+    SessionMemberService,
     InvitationRepository,
     InvitationService,
+    PersonaRepository,
+    PersonaService,
   ],
-  exports: [LLMService, SessionService, InvitationService],
+  exports: [
+    LLMService,
+    SessionService,
+    SessionMemberService,
+    InvitationService,
+    PersonaService,
+  ],
 })
 export class SimulationModule {}

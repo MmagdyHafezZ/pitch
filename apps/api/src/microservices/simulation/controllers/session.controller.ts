@@ -71,7 +71,7 @@ export class SessionController {
       this.logger.log(
         `Getting session ${data.id} - Requested by: ${data.userClaims?.email || 'unknown'}`,
       );
-      return await this.sessionService.findOne(data.id);
+      return await this.sessionService.findOne(data.id, data.userClaims?.id);
     } catch (error) {
       this.logger.error(`Failed to get session ${data.id}`, error);
       throw toRpcException(error);
@@ -92,8 +92,7 @@ export class SessionController {
         `Listing sessions - Requested by: ${data.userClaims?.email || 'unknown'}`,
       );
       const { userClaims: _userClaims, ...query } = data;
-      void _userClaims;
-      return await this.sessionService.findAll(query);
+      return await this.sessionService.findAll(query, _userClaims?.id);
     } catch (error) {
       this.logger.error('Failed to list sessions', error);
       throw toRpcException(error);
@@ -117,8 +116,7 @@ export class SessionController {
         `Updating session ${data.id} - Requested by: ${data.userClaims?.email || 'unknown'}`,
       );
       const { userClaims: _userClaims, id, ...updateData } = data;
-      void _userClaims;
-      return await this.sessionService.update(id, updateData);
+      return await this.sessionService.update(id, updateData, _userClaims?.id);
     } catch (error) {
       this.logger.error(`Failed to update session ${data.id}`, error);
       throw toRpcException(error);
@@ -140,8 +138,7 @@ export class SessionController {
         `Ending session ${data.id} - Requested by: ${data.userClaims?.email || 'unknown'}`,
       );
       const { userClaims: _userClaims, id, ...endData } = data;
-      void _userClaims;
-      return await this.sessionService.end(id, endData);
+      return await this.sessionService.end(id, endData, _userClaims?.id);
     } catch (error) {
       this.logger.error(`Failed to end session ${data.id}`, error);
       throw toRpcException(error);
@@ -160,7 +157,7 @@ export class SessionController {
       this.logger.log(
         `Deleting session ${data.id} - Requested by: ${data.userClaims?.email || 'unknown'}`,
       );
-      return await this.sessionService.remove(data.id);
+      return await this.sessionService.remove(data.id, data.userClaims?.id);
     } catch (error) {
       this.logger.error(`Failed to delete session ${data.id}`, error);
       throw toRpcException(error);

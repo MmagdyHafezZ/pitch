@@ -15,13 +15,36 @@ import {
   ChatDeltaPayload,
   ChatErrorPayload,
   ChatStartPayload,
+  ConversationStartPayload,
+  ConversationTextPayload,
+  ConversationAudioReadyPayload,
+  ConversationErrorPayload,
   WsEnvelope,
   WsEnvelopeFactory,
   WsMessageType,
 } from '@microservices/simulation/dto/websocket.dto';
 import { SIMULATION_SERVICE_PATTERNS } from '@pitch/shared-backend/interfaces/message-patterns.interface';
 import { LLMStreamChunkDto } from '@microservices/simulation/dto/llm.dto';
-import { Subscription } from 'rxjs';
+import { Subscription, firstValueFrom } from 'rxjs';
+import { JwtTokenPayload, SocketUser } from '../../../types/socket';
+
+interface SimulationSocketData {
+  user?: SocketUser;
+}
+
+type SimulationSocket = Socket<any, any, any, SimulationSocketData>;
+
+interface ConversationProcessResult {
+  text: string;
+  usage: {
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+    costUsd?: number;
+  };
+  audioBase64: string;
+  contentType: string;
+}
 
 interface StreamHandle {
   socketId: string;
@@ -47,7 +70,7 @@ export class SimulationWsGateway
     private readonly jwtService: JwtService,
   ) {}
 
-  handleConnection(client: Socket) {
+  handleConnection(client: SimulationSocket) {
     const token = this.extractToken(client);
     if (!token) {
       this.logger.warn('WS connection rejected: missing token');
@@ -56,16 +79,19 @@ export class SimulationWsGateway
     }
 
     try {
-      const payload = this.jwtService.verify(token);
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-      client.data.user = payload;
+      const payload = this.jwtService.verify<JwtTokenPayload>(token);
+      client.data.user = {
+        id: payload.sub,
+        email: payload.email,
+        name: payload.name,
+      };
     } catch {
       this.logger.warn('WS connection rejected: invalid token');
       client.disconnect();
     }
   }
 
-  handleDisconnect(client: Socket) {
+  handleDisconnect(client: SimulationSocket) {
     for (const [requestId, handle] of this.activeStreams.entries()) {
       if (handle.socketId === client.id) {
         handle.subscription.unsubscribe();
@@ -76,11 +102,15 @@ export class SimulationWsGateway
 
   @SubscribeMessage(WsMessageType.CHAT_START)
   handleChatStart(
-    @ConnectedSocket() client: Socket,
+    @ConnectedSocket() client: SimulationSocket,
     @MessageBody() envelope: WsEnvelope<ChatStartPayload>,
   ) {
     const requestId = envelope.requestId;
     const sessionId = envelope.sessionId;
+
+    if (!envelope.userId && client.data.user?.id) {
+      envelope.userId = client.data.user.id;
+    }
 
     if (this.activeStreams.has(requestId)) {
       return;
@@ -190,12 +220,88 @@ export class SimulationWsGateway
       });
   }
 
+  @SubscribeMessage(WsMessageType.CONVERSATION_START)
+  async handleConversationStart(
+    @ConnectedSocket() client: SimulationSocket,
+    @MessageBody() envelope: WsEnvelope<ConversationStartPayload>,
+  ) {
+    const requestId = envelope.requestId;
+    const sessionId = envelope.sessionId;
+
+    if (this.activeStreams.has(requestId)) {
+      return;
+    }
+
+    try {
+      const result = await firstValueFrom(
+        this.simulationService.send<ConversationProcessResult>(
+          SIMULATION_SERVICE_PATTERNS.CONVERSATION_PROCESS,
+          envelope,
+        ),
+      );
+
+      const textPayload: ConversationTextPayload = {
+        text: result.text,
+        usage: result.usage,
+      };
+
+      client.emit(
+        WsMessageType.CONVERSATION_TEXT,
+        WsEnvelopeFactory.conversationText(
+          requestId,
+          sessionId,
+          textPayload,
+          envelope.turnId,
+        ),
+      );
+
+      const audioPayload: ConversationAudioReadyPayload = {
+        audioBase64: result.audioBase64,
+        contentType: result.contentType,
+        text: result.text,
+      };
+
+      client.emit(
+        WsMessageType.CONVERSATION_AUDIO_READY,
+        WsEnvelopeFactory.conversationAudioReady(
+          requestId,
+          sessionId,
+          audioPayload,
+          envelope.turnId,
+        ),
+      );
+
+      client.emit(WsMessageType.CONVERSATION_END, {
+        requestId,
+        sessionId,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      this.logger.error('Conversation processing failed', error);
+
+      const errorPayload: ConversationErrorPayload = {
+        error: (error as Error)?.message || 'Conversation processing error',
+        stage: 'llm',
+      };
+
+      client.emit(
+        WsMessageType.CONVERSATION_ERROR,
+        WsEnvelopeFactory.conversationError(
+          requestId,
+          sessionId,
+          errorPayload,
+          envelope.turnId,
+        ),
+      );
+    }
+  }
+
   @SubscribeMessage(WsMessageType.PING)
-  handlePing(@ConnectedSocket() client: Socket) {
+  handlePing(@ConnectedSocket() client: SimulationSocket) {
     client.emit(WsMessageType.PONG, { timestamp: new Date().toISOString() });
   }
 
-  private extractToken(client: Socket): string | null {
+  private extractToken(client: SimulationSocket): string | null {
     const authToken = client.handshake.auth?.token as string | undefined;
     if (authToken && typeof authToken === 'string') return authToken;
 

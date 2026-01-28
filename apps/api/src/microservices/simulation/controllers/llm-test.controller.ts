@@ -360,7 +360,7 @@ export class LLMTestController {
     try {
       const provider = this.providerRegistry.getProvider(providerNameLower);
       return effectiveModels.filter((model) => provider.supportsModel(model));
-    } catch (error) {
+    } catch {
       return effectiveModels;
     }
   }

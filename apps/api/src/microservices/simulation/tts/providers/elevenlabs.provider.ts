@@ -15,7 +15,7 @@ export class ElevenLabsTtsProvider implements TtsProvider {
   readonly description = 'ElevenLabs neural text-to-speech';
 
   private readonly apiKey: string;
-  private readonly defaultVoice: string;
+  private readonly configuredDefaultVoice: string | undefined;
   private readonly modelId: string;
   private readonly outputFormat: string;
 
@@ -25,8 +25,9 @@ export class ElevenLabsTtsProvider implements TtsProvider {
   private voicesCache: string[] = [];
   constructor(private readonly config: ConfigService) {
     this.apiKey = this.config.getOrThrow<string>('ELEVENLABS_API_KEY');
-    this.defaultVoice =
-      this.config.get<string>('ELEVENLABS_DEFAULT_VOICE') || 'Rachel';
+    this.configuredDefaultVoice = this.config.get<string>(
+      'ELEVENLABS_DEFAULT_VOICE',
+    );
 
     this.modelId =
       this.config.get<string>('ELEVENLABS_MODEL_ID') || 'eleven_v2_flash';
@@ -35,7 +36,14 @@ export class ElevenLabsTtsProvider implements TtsProvider {
       this.config.get<string>('ELEVENLABS_OUTPUT_FORMAT') || 'mp3_44100_128';
 
     this.client = new ElevenLabsClient({ apiKey: this.apiKey });
-    this.ensureVoicesLoaded().catch((err) => {});
+    this.ensureVoicesLoaded().catch(() => {});
+  }
+
+  private get defaultVoice(): string | undefined {
+    if (this.configuredDefaultVoice) {
+      return this.configuredDefaultVoice;
+    }
+    return this.voicesCache.length > 0 ? this.voicesCache[0] : undefined;
   }
 
   get voices(): string[] {
@@ -44,13 +52,24 @@ export class ElevenLabsTtsProvider implements TtsProvider {
 
   async synthesize(text: string, options?: TtsOptions): Promise<TtsResult> {
     try {
-      const requested = (options?.voice || this.defaultVoice).trim();
-      const voiceId = this.resolveVoiceId(requested);
+      await this.ensureVoicesLoaded();
+
+      const requested = options?.voice || this.defaultVoice;
+      if (!requested) {
+        throw new BadRequestException(
+          'No voice specified and no default voice available. Please specify a voice or configure ELEVENLABS_DEFAULT_VOICE.',
+        );
+      }
+      const voiceId = this.resolveVoiceId(requested.trim());
+
+      const outputFormat = this.outputFormat as unknown as Parameters<
+        ElevenLabsClient['textToSpeech']['convert']
+      >[1]['outputFormat'];
 
       const audioStream = await this.client.textToSpeech.convert(voiceId, {
         text,
         modelId: this.modelId,
-        outputFormat: this.outputFormat as any,
+        outputFormat,
       });
 
       const audioBuffer = await this.readWebStreamToBuffer(audioStream);

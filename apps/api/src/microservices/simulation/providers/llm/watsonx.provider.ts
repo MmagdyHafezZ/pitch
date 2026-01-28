@@ -21,6 +21,25 @@ import {
 import { LLMPricingService } from '../../services/llm/llm-pricing.service';
 import { RedisKeys } from '../../services/redis/redis-key-patterns';
 
+interface WatsonxGenerationResult {
+  generated_text: string;
+  stop_reason?: string;
+}
+
+interface WatsonxGenerationResponse {
+  results?: WatsonxGenerationResult[];
+  model_version?: string;
+}
+
+interface WatsonxStreamResponse {
+  results?: Array<{ generated_text?: string }>;
+}
+
+interface WatsonxAuthResponse {
+  access_token?: string;
+  expires_in?: number;
+}
+
 /**
  * IBM WatsonX Provider
  * Adapter for IBM WatsonX AI models (Granite, Llama, etc.)
@@ -87,7 +106,7 @@ export class WatsonxProvider implements ILLMProvider {
       const startTime = Date.now();
       const prompt = this.convertMessagesToPrompt(messages);
 
-      const response = await this.client.post(
+      const response = await this.client.post<WatsonxGenerationResponse>(
         '/ml/v1/text/generation',
         {
           model_id: config.model,
@@ -110,11 +129,12 @@ export class WatsonxProvider implements ILLMProvider {
       );
 
       const latencyMs = Date.now() - startTime;
-      const result = response.data.results[0];
+      const result = response.data.results?.[0];
+      const generatedText = result?.generated_text ?? '';
 
       const capabilities = this.getModelCapabilities(config.model);
       const promptTokens = this.estimateTokens(prompt);
-      const completionTokens = this.estimateTokens(result.generated_text);
+      const completionTokens = this.estimateTokens(generatedText);
       const totalTokens = promptTokens + completionTokens;
       const costUsd = this.calculateCost(
         promptTokens,
@@ -123,7 +143,7 @@ export class WatsonxProvider implements ILLMProvider {
       );
 
       return {
-        content: result.generated_text,
+        content: generatedText,
         usage: {
           promptTokens,
           completionTokens,
@@ -132,10 +152,13 @@ export class WatsonxProvider implements ILLMProvider {
           estimated: true,
         },
         providerMeta: {
-          requestId: response.data.model_version || undefined,
+          requestId:
+            typeof response.data.model_version === 'string'
+              ? response.data.model_version
+              : undefined,
           latencyMs,
           model: config.model,
-          finishReason: result.stop_reason || 'stop',
+          finishReason: result?.stop_reason || 'stop',
         },
       };
     } catch (error) {
@@ -150,17 +173,15 @@ export class WatsonxProvider implements ILLMProvider {
     this.validateConfig(config);
 
     return new Observable((subscriber) => {
-      const startTime = Date.now();
-      let accumulatedContent = '';
       let accumulatedTokens = 0;
 
-      (async () => {
+      void (async () => {
         try {
           await this.ensureAuthenticated();
 
           const prompt = this.convertMessagesToPrompt(messages);
 
-          const response = await this.client.post(
+          const response = await this.client.post<NodeJS.ReadableStream>(
             '/ml/v1/text/generation_stream',
             {
               model_id: config.model,
@@ -218,11 +239,10 @@ export class WatsonxProvider implements ILLMProvider {
                 }
 
                 try {
-                  const parsed = JSON.parse(data);
+                  const parsed = JSON.parse(data) as WatsonxStreamResponse;
                   const token = parsed.results?.[0]?.generated_text;
 
                   if (token) {
-                    accumulatedContent += token;
                     accumulatedTokens++;
 
                     subscriber.next({
@@ -230,7 +250,7 @@ export class WatsonxProvider implements ILLMProvider {
                       done: false,
                     });
                   }
-                } catch (parseError) {
+                } catch {
                   this.logger.warn('Failed to parse stream chunk:', data);
                 }
               }
@@ -263,8 +283,8 @@ export class WatsonxProvider implements ILLMProvider {
             }
           });
 
-          stream.on('error', (error: any) => {
-            subscriber.error(this.handleError(error));
+          stream.on('error', (streamError: unknown) => {
+            subscriber.error(this.handleError(streamError));
           });
         } catch (error) {
           subscriber.error(this.handleError(error));
@@ -430,7 +450,7 @@ export class WatsonxProvider implements ILLMProvider {
         return;
       }
 
-      const response = await axios.post(
+      const response = await axios.post<WatsonxAuthResponse>(
         'https://iam.cloud.ibm.com/identity/token',
         new URLSearchParams({
           grant_type: 'urn:ibm:params:oauth:grant-type:apikey',
@@ -443,15 +463,23 @@ export class WatsonxProvider implements ILLMProvider {
         },
       );
 
-      this.accessToken = response.data.access_token;
-      const expiresIn = response.data.expires_in ?? 3600;
+      const accessToken =
+        typeof response.data.access_token === 'string'
+          ? response.data.access_token
+          : null;
+      const expiresIn =
+        typeof response.data.expires_in === 'number'
+          ? response.data.expires_in
+          : 3600;
+
+      this.accessToken = accessToken;
       this.tokenExpiry = now + expiresIn * 1000;
       if (this.accessToken) {
         await this.cacheToken(this.accessToken, expiresIn);
       }
 
       this.logger.log('Successfully authenticated with WatsonX');
-    } catch (error) {
+    } catch (error: unknown) {
       this.logger.error('Failed to authenticate with WatsonX:', error);
       throw new ProviderAuthError(this.name, {
         message: 'Failed to obtain access token',
@@ -503,12 +531,20 @@ export class WatsonxProvider implements ILLMProvider {
   /**
    * Handle WatsonX errors
    */
-  private handleError(error: any): Error {
+  private handleError(error: unknown): Error {
     this.logger.error('WatsonX API error:', error);
 
     if (axios.isAxiosError(error)) {
       const status = error.response?.status;
-      const message = error.response?.data?.error || error.message;
+      const responseData: unknown = error.response?.data;
+      const responseDataRecord =
+        responseData && typeof responseData === 'object'
+          ? (responseData as Record<string, unknown>)
+          : undefined;
+      const message =
+        responseDataRecord && typeof responseDataRecord.error === 'string'
+          ? responseDataRecord.error
+          : error.message;
 
       if (status === 401 || status === 403) {
         return new ProviderAuthError(this.name, {
@@ -518,10 +554,15 @@ export class WatsonxProvider implements ILLMProvider {
       }
 
       if (status === 429) {
-        const retryAfter = error.response?.headers?.['retry-after'];
+        const headers = error.response?.headers as
+          | Record<string, string | string[] | undefined>
+          | undefined;
+        const retryAfterHeader = headers?.['retry-after'];
+        const retryAfter =
+          typeof retryAfterHeader === 'string' ? retryAfterHeader : undefined;
         return new ProviderRateLimitError(
           this.name,
-          retryAfter ? parseInt(retryAfter) * 1000 : undefined,
+          retryAfter ? parseInt(retryAfter, 10) * 1000 : undefined,
           { message },
         );
       }
@@ -537,11 +578,8 @@ export class WatsonxProvider implements ILLMProvider {
       return new ProviderError(this.name, 'API_ERROR', message, { status });
     }
 
-    return new ProviderError(
-      this.name,
-      'UNKNOWN_ERROR',
-      error.message || 'Unknown error occurred',
-      error,
-    );
+    const message =
+      error instanceof Error ? error.message : 'Unknown error occurred';
+    return new ProviderError(this.name, 'UNKNOWN_ERROR', message, error);
   }
 }

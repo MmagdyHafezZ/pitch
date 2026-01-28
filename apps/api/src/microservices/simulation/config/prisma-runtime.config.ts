@@ -29,7 +29,7 @@ export const resolvePrismaRuntimeConfig = (
   accelerateUrl?: string,
   directUrl?: string,
 ): PrismaRuntimeConfig => {
-  const mode = normalizeDbMode(process.env.PRISMA_DB_MODE);
+  const mode = normalizeDbMode(process.env.DEP_MODE);
   const useDirect = mode === 'docker' || mode === 'local' || mode === 'direct';
   const url = useDirect
     ? (directUrl ?? accelerateUrl)

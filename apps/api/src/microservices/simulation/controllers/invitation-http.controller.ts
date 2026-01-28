@@ -17,7 +17,6 @@ import {
   ApiCreatedResponse,
   ApiNotFoundResponse,
   ApiBadRequestResponse,
-  ApiInternalServerErrorResponse,
   ApiQuery,
   ApiParam,
 } from '@nestjs/swagger';
@@ -80,16 +79,15 @@ export class InvitationHttpController {
   async createInvitations(
     @Param('sessionId') sessionId: string,
     @Body() createInvitationDto: CreateInvitationDto,
+    @Query('inviterId') inviterId?: string,
   ): Promise<BulkCreateInvitationsResponseDto> {
     this.logger.log(
       `Creating ${createInvitationDto.inviteeIds.length} invitations for session ${sessionId}`,
     );
 
-    const inviterId = 'test_user_123';
-
     return await this.invitationService.createInvitations(
       sessionId,
-      inviterId,
+      inviterId || 'test_user_123',
       createInvitationDto,
     );
   }
@@ -117,13 +115,17 @@ export class InvitationHttpController {
   @ApiOkResponse({ type: InvitationListResponseDto })
   async getMyInvitations(
     @Query('status') status?: InvitationStatus,
+    @Query('userId') userId?: string,
   ): Promise<InvitationListResponseDto> {
-    const userId = 'test_user_456';
+    const resolvedUserId = userId || 'test_user_456';
 
     this.logger.log(
-      `Getting invitations for user ${userId}, status: ${status || 'all'}`,
+      `Getting invitations for user ${resolvedUserId}, status: ${status || 'all'}`,
     );
-    return await this.invitationService.findInvitationsForUser(userId, status);
+    return await this.invitationService.findInvitationsForUser(
+      resolvedUserId,
+      status,
+    );
   }
 
   /**
@@ -135,14 +137,15 @@ export class InvitationHttpController {
   @ApiOkResponse({ type: InvitationListResponseDto })
   async getSentInvitations(
     @Query('status') status?: InvitationStatus,
+    @Query('userId') userId?: string,
   ): Promise<InvitationListResponseDto> {
-    const userId = 'test_user_123';
+    const resolvedUserId = userId || 'test_user_123';
 
     this.logger.log(
-      `Getting sent invitations for user ${userId}, status: ${status || 'all'}`,
+      `Getting sent invitations for user ${resolvedUserId}, status: ${status || 'all'}`,
     );
     return await this.invitationService.findInvitationsSentByUser(
-      userId,
+      resolvedUserId,
       status,
     );
   }
@@ -171,11 +174,12 @@ export class InvitationHttpController {
   @ApiBadRequestResponse({ type: HttpErrorResponseDto })
   async acceptInvitation(
     @Param('id') id: string,
+    @Query('userId') userId?: string,
   ): Promise<InvitationResponseDto> {
-    const userId = 'test_user_456';
+    const resolvedUserId = userId || 'test_user_456';
 
-    this.logger.log(`User ${userId} accepting invitation ${id}`);
-    return await this.invitationService.acceptInvitation(id, userId);
+    this.logger.log(`User ${resolvedUserId} accepting invitation ${id}`);
+    return await this.invitationService.acceptInvitation(id, resolvedUserId);
   }
 
   /**
@@ -189,11 +193,12 @@ export class InvitationHttpController {
   @ApiBadRequestResponse({ type: HttpErrorResponseDto })
   async declineInvitation(
     @Param('id') id: string,
+    @Query('userId') userId?: string,
   ): Promise<InvitationResponseDto> {
-    const userId = 'test_user_456';
+    const resolvedUserId = userId || 'test_user_456';
 
-    this.logger.log(`User ${userId} declining invitation ${id}`);
-    return await this.invitationService.declineInvitation(id, userId);
+    this.logger.log(`User ${resolvedUserId} declining invitation ${id}`);
+    return await this.invitationService.declineInvitation(id, resolvedUserId);
   }
 
   /**
@@ -207,11 +212,12 @@ export class InvitationHttpController {
   @ApiBadRequestResponse({ type: HttpErrorResponseDto })
   async revokeInvitation(
     @Param('id') id: string,
+    @Query('userId') userId?: string,
   ): Promise<DeleteInvitationResponseDto> {
-    const userId = 'test_user_123';
+    const resolvedUserId = userId || 'test_user_123';
 
-    this.logger.log(`User ${userId} revoking invitation ${id}`);
-    return await this.invitationService.revokeInvitation(id, userId);
+    this.logger.log(`User ${resolvedUserId} revoking invitation ${id}`);
+    return await this.invitationService.revokeInvitation(id, resolvedUserId);
   }
 
   /**

@@ -27,6 +27,12 @@ export enum WsMessageType {
   TTS_READY = 'tts.ready',
   TTS_ERROR = 'tts.error',
 
+  CONVERSATION_START = 'conversation.start',
+  CONVERSATION_TEXT = 'conversation.text',
+  CONVERSATION_AUDIO_READY = 'conversation.audio_ready',
+  CONVERSATION_ERROR = 'conversation.error',
+  CONVERSATION_END = 'conversation.end',
+
   PING = 'ping',
   PONG = 'pong',
 }
@@ -44,6 +50,14 @@ export class WsEnvelope<T = any> {
 
   @IsString()
   sessionId: string;
+
+  @IsString()
+  @IsOptional()
+  sessionMemberId?: string;
+
+  @IsString()
+  @IsOptional()
+  userId?: string;
 
   @IsString()
   @IsOptional()
@@ -281,6 +295,86 @@ export class TTSErrorPayload {
 }
 
 /**
+ * Conversation Start Payload
+ * Initiates a voice conversation with text input (STT -> LLM -> TTS)
+ */
+export class ConversationStartPayload {
+  @IsString()
+  text: string;
+
+  @IsString()
+  @IsOptional()
+  personaId?: string;
+
+  @ValidateNested({ each: true })
+  @Type(() => LLMMessageDto)
+  @IsOptional()
+  messages?: LLMMessageDto[];
+
+  @ValidateNested()
+  @Type(() => LLMConfigDto)
+  @IsOptional()
+  config?: LLMConfigDto;
+
+  @IsObject()
+  @IsOptional()
+  ttsConfig?: {
+    provider?: string;
+    voice?: string;
+  };
+}
+
+/**
+ * Conversation Text Payload
+ * Text response from LLM (before TTS)
+ */
+export class ConversationTextPayload {
+  @IsString()
+  text: string;
+
+  @IsObject()
+  @IsOptional()
+  usage?: {
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+    costUsd?: number;
+  };
+}
+
+/**
+ * Conversation Audio Ready Payload
+ * Audio response is ready for playback
+ */
+export class ConversationAudioReadyPayload {
+  @IsString()
+  audioBase64: string;
+
+  @IsString()
+  contentType: string;
+
+  @IsString()
+  @IsOptional()
+  text?: string;
+}
+
+/**
+ * Conversation Error Payload
+ */
+export class ConversationErrorPayload {
+  @IsString()
+  error: string;
+
+  @IsString()
+  @IsOptional()
+  code?: string;
+
+  @IsString()
+  @IsOptional()
+  stage?: 'llm' | 'tts';
+}
+
+/**
  * Type-safe WebSocket Envelope factory
  */
 export class WsEnvelopeFactory {
@@ -388,5 +482,50 @@ export class WsEnvelopeFactory {
     payload: TTSReadyPayload,
   ): WsEnvelope<TTSReadyPayload> {
     return this.create(WsMessageType.TTS_READY, requestId, sessionId, payload);
+  }
+
+  static conversationText(
+    requestId: string,
+    sessionId: string,
+    payload: ConversationTextPayload,
+    turnId?: string,
+  ): WsEnvelope<ConversationTextPayload> {
+    return this.create(
+      WsMessageType.CONVERSATION_TEXT,
+      requestId,
+      sessionId,
+      payload,
+      turnId,
+    );
+  }
+
+  static conversationAudioReady(
+    requestId: string,
+    sessionId: string,
+    payload: ConversationAudioReadyPayload,
+    turnId?: string,
+  ): WsEnvelope<ConversationAudioReadyPayload> {
+    return this.create(
+      WsMessageType.CONVERSATION_AUDIO_READY,
+      requestId,
+      sessionId,
+      payload,
+      turnId,
+    );
+  }
+
+  static conversationError(
+    requestId: string,
+    sessionId: string,
+    payload: ConversationErrorPayload,
+    turnId?: string,
+  ): WsEnvelope<ConversationErrorPayload> {
+    return this.create(
+      WsMessageType.CONVERSATION_ERROR,
+      requestId,
+      sessionId,
+      payload,
+      turnId,
+    );
   }
 }

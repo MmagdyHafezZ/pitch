@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ClientsModule, Transport } from '@nestjs/microservices';
-import { JwtModule } from '@nestjs/jwt';
+import { JwtModule, type JwtSignOptions } from '@nestjs/jwt';
 import { UserGatewayController } from './controllers/userManagement/user-gateway.controller';
 import { AuthGatewayController } from './controllers/userManagement/auth-gateway.controller';
 import { SessionGatewayController } from './controllers/simulation/session-gateway.controller';
@@ -25,7 +25,9 @@ import { SimulationWsGateway } from './controllers/simulation/simulation-ws.gate
   imports: [
     JwtModule.register({
       secret: getJwtSecret(),
-      signOptions: { expiresIn: getJwtAccessExpiration() },
+      signOptions: {
+        expiresIn: getJwtAccessExpiration() as JwtSignOptions['expiresIn'],
+      },
     }),
     ClientsModule.register(
       MICROSERVICES_CONFIG.map(({ name, queue }) => ({

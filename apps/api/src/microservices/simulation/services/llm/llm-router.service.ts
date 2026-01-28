@@ -598,7 +598,7 @@ export class LLMRouterService {
     const retryOn =
       strategy?.retryOn ??
       (['RATE_LIMIT', 'TIMEOUT', 'API_ERROR', 'UNKNOWN_ERROR'] as const);
-    return retryOn.includes(error.code as any);
+    return retryOn.some((code) => code === error.code);
   }
 
   private withinAttemptLimit(
@@ -618,12 +618,26 @@ export class LLMRouterService {
     model?: string,
   ): ProviderError {
     if (error instanceof ProviderError) {
-      if (model && !error.details?.model) {
+      const detailRecord =
+        error.details && typeof error.details === 'object'
+          ? (error.details as Record<string, unknown>)
+          : undefined;
+      const detailModel =
+        typeof detailRecord?.model === 'string'
+          ? detailRecord.model
+          : undefined;
+
+      if (model && !detailModel) {
         // Create a new error with updated details since details is readonly
-        return new ProviderError(error.provider, error.code, error.message, {
-          ...(error.details ?? {}),
-          model,
-        });
+        const mergedDetails = detailRecord
+          ? { ...detailRecord, model }
+          : { model };
+        return new ProviderError(
+          error.provider,
+          error.code,
+          error.message,
+          mergedDetails,
+        );
       }
       return error;
     }

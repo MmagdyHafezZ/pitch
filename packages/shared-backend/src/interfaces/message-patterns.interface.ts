@@ -38,6 +38,9 @@ export const SIMULATION_SERVICE_PATTERNS = {
   UPDATE_SESSION: 'simulation.session.update',
   DELETE_SESSION: 'simulation.session.delete',
   LIST_SESSIONS: 'simulation.session.list',
+  ADD_SESSION_MEMBERS: 'simulation.session.members.add',
+  LIST_SESSION_MEMBERS: 'simulation.session.members.list',
+  REMOVE_SESSION_MEMBER: 'simulation.session.members.remove',
 
   CREATE_INVITATIONS: 'simulation.invitation.create',
   GET_INVITATION: 'simulation.invitation.get',
@@ -57,6 +60,8 @@ export const SIMULATION_SERVICE_PATTERNS = {
   CHAT_COMPLETE: 'simulation.chat.complete',
   CHAT_STREAM: 'simulation.chat.stream',
   CHAT_CANCEL: 'simulation.chat.cancel',
+
+  CONVERSATION_PROCESS: 'simulation.conversation.process',
 
   LLM_ROUTING_GET: 'simulation.llm.routing.get',
   LLM_ROUTING_UPSERT: 'simulation.llm.routing.upsert',

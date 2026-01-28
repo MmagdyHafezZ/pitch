@@ -24,6 +24,7 @@ import {
   ApiQuery,
 } from '@nestjs/swagger';
 import { SessionService } from '../services/session.service';
+import { SessionMemberService } from '../services/session-member.service';
 import {
   CreateSessionDto,
   UpdateSessionDto,
@@ -33,6 +34,12 @@ import {
   SessionListResponseDto,
   DeleteSessionResponseDto,
 } from '../dto/session.dto';
+import {
+  AddSessionMembersDto,
+  BulkAddSessionMembersResponseDto,
+  RemoveSessionMemberResponseDto,
+  SessionMemberListResponseDto,
+} from '../dto/session-member.dto';
 import { HttpErrorResponseDto } from '../dto/http-error.dto';
 
 /**
@@ -48,7 +55,10 @@ import { HttpErrorResponseDto } from '../dto/http-error.dto';
 export class SessionHttpController {
   private readonly logger = new Logger(SessionHttpController.name);
 
-  constructor(private readonly sessionService: SessionService) {}
+  constructor(
+    private readonly sessionService: SessionService,
+    private readonly sessionMemberService: SessionMemberService,
+  ) {}
 
   /**
    * Health check endpoint
@@ -93,14 +103,14 @@ export class SessionHttpController {
   })
   async createSession(
     @Body() createSessionDto: CreateSessionDto,
+    @Query('userId') userId?: string,
   ): Promise<SessionResponseDto> {
     this.logger.log(`Creating session for org: ${createSessionDto.orgId}`);
 
     try {
-      const TEST_USER_ID = 'test-user-http-endpoint';
       const session = await this.sessionService.create(
         createSessionDto,
-        TEST_USER_ID,
+        userId || 'test-user-http-endpoint',
       );
       this.logger.log(`Created session: ${session.id}`);
       return session;
@@ -132,11 +142,12 @@ export class SessionHttpController {
   })
   async listSessions(
     @Query() query: ListSessionsQueryDto,
+    @Query('userId') userId?: string,
   ): Promise<SessionListResponseDto> {
     this.logger.log(`Listing sessions with filters: ${JSON.stringify(query)}`);
 
     try {
-      const result = await this.sessionService.findAll(query);
+      const result = await this.sessionService.findAll(query, userId);
       this.logger.log(
         `Found ${result.sessions.length} sessions out of ${result.total} total`,
       );
@@ -203,11 +214,16 @@ export class SessionHttpController {
   async updateSession(
     @Param('id') id: string,
     @Body() updateSessionDto: UpdateSessionDto,
+    @Query('userId') userId?: string,
   ): Promise<SessionResponseDto> {
     this.logger.log(`Updating session: ${id}`);
 
     try {
-      const session = await this.sessionService.update(id, updateSessionDto);
+      const session = await this.sessionService.update(
+        id,
+        updateSessionDto,
+        userId || 'test-user-http-endpoint',
+      );
       this.logger.log(`Updated session: ${session.id}`);
       return session;
     } catch (error) {
@@ -245,13 +261,18 @@ export class SessionHttpController {
   async endSession(
     @Param('id') id: string,
     @Body() endSessionDto: EndSessionDto,
+    @Query('userId') userId?: string,
   ): Promise<SessionResponseDto> {
     this.logger.log(
       `Ending session: ${id} with reason: ${endSessionDto.reason}`,
     );
 
     try {
-      const session = await this.sessionService.end(id, endSessionDto);
+      const session = await this.sessionService.end(
+        id,
+        endSessionDto,
+        userId || 'test-user-http-endpoint',
+      );
       this.logger.log(`Ended session: ${session.id}`);
       return session;
     } catch (error) {
@@ -285,11 +306,15 @@ export class SessionHttpController {
   })
   async deleteSession(
     @Param('id') id: string,
+    @Query('userId') userId?: string,
   ): Promise<DeleteSessionResponseDto> {
     this.logger.log(`Deleting session: ${id}`);
 
     try {
-      const result = await this.sessionService.remove(id);
+      const result = await this.sessionService.remove(
+        id,
+        userId || 'test-user-http-endpoint',
+      );
       this.logger.log(`Deleted session: ${id}`);
       return result;
     } catch (error) {
@@ -300,6 +325,81 @@ export class SessionHttpController {
       }
       throw error;
     }
+  }
+
+  /**
+   * Add members to a session
+   *
+   * POST /simulation/sessions/:id/members
+   */
+  @Post(':id/members')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Add members to a session' })
+  @ApiOkResponse({ type: BulkAddSessionMembersResponseDto })
+  @ApiBadRequestResponse({ type: HttpErrorResponseDto })
+  @ApiNotFoundResponse({ type: HttpErrorResponseDto })
+  async addSessionMembers(
+    @Param('id') sessionId: string,
+    @Body() payload: AddSessionMembersDto,
+    @Query('userId') userId?: string,
+  ): Promise<BulkAddSessionMembersResponseDto> {
+    const requesterId = userId || 'test-user-http-endpoint';
+    this.logger.log(
+      `Adding members to session ${sessionId} - Requested by: ${requesterId}`,
+    );
+
+    return await this.sessionMemberService.addMembers(
+      sessionId,
+      requesterId,
+      payload,
+    );
+  }
+
+  /**
+   * List members of a session
+   *
+   * GET /simulation/sessions/:id/members
+   */
+  @Get(':id/members')
+  @ApiOperation({ summary: 'List members of a session' })
+  @ApiOkResponse({ type: SessionMemberListResponseDto })
+  async listSessionMembers(
+    @Param('id') sessionId: string,
+    @Query('userId') userId?: string,
+  ): Promise<SessionMemberListResponseDto> {
+    const requesterId = userId || 'test-user-http-endpoint';
+    this.logger.log(
+      `Listing members for session ${sessionId} - Requested by: ${requesterId}`,
+    );
+
+    return await this.sessionMemberService.listMembers(sessionId, requesterId);
+  }
+
+  /**
+   * Remove a member from a session
+   *
+   * DELETE /simulation/sessions/:id/members/:userId
+   */
+  @Delete(':id/members/:userId')
+  @ApiOperation({ summary: 'Remove a member from a session' })
+  @ApiOkResponse({ type: RemoveSessionMemberResponseDto })
+  @ApiBadRequestResponse({ type: HttpErrorResponseDto })
+  @ApiNotFoundResponse({ type: HttpErrorResponseDto })
+  async removeSessionMember(
+    @Param('id') sessionId: string,
+    @Param('userId') memberUserId: string,
+    @Query('userId') userId?: string,
+  ): Promise<RemoveSessionMemberResponseDto> {
+    const requesterId = userId || 'test-user-http-endpoint';
+    this.logger.log(
+      `Removing member ${memberUserId} from session ${sessionId} - Requested by: ${requesterId}`,
+    );
+
+    return await this.sessionMemberService.removeMember(
+      sessionId,
+      requesterId,
+      memberUserId,
+    );
   }
 
   /**

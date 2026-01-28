@@ -240,4 +240,96 @@ export class SessionGatewayController {
         }),
       );
   }
+
+  /**
+   * Add members to a session
+   *
+   * POST /v1/simulation/sessions/:id/members
+   */
+  @Post(':id/members')
+  @ApiOperation({ summary: 'Add members to a session' })
+  @ApiResponse({ status: 201, description: 'Members added successfully' })
+  @ApiResponse({ status: 400, description: 'Invalid input data' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  addMembers(
+    @Param('id') id: string,
+    @Body() payload: any,
+    @UserClaims() userClaims: UserClaimsType,
+  ) {
+    return this.simulationService
+      .send(SIMULATION_SERVICE_PATTERNS.ADD_SESSION_MEMBERS, {
+        sessionId: id,
+        ...payload,
+        userClaims,
+      })
+      .pipe(
+        timeout(5000),
+        catchError((err: unknown) => {
+          const error = normalizeError(err);
+          const message = error.message ?? 'Failed to add session members';
+          const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
+          return throwError(() => new HttpException(message, status));
+        }),
+      );
+  }
+
+  /**
+   * List members of a session
+   *
+   * GET /v1/simulation/sessions/:id/members
+   */
+  @Get(':id/members')
+  @ApiOperation({ summary: 'List session members' })
+  @ApiResponse({ status: 200, description: 'Members retrieved successfully' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  listMembers(
+    @Param('id') id: string,
+    @UserClaims() userClaims: UserClaimsType,
+  ) {
+    return this.simulationService
+      .send(SIMULATION_SERVICE_PATTERNS.LIST_SESSION_MEMBERS, {
+        sessionId: id,
+        userClaims,
+      })
+      .pipe(
+        timeout(5000),
+        catchError((err: unknown) => {
+          const error = normalizeError(err);
+          const message = error.message ?? 'Failed to list session members';
+          const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
+          return throwError(() => new HttpException(message, status));
+        }),
+      );
+  }
+
+  /**
+   * Remove a member from a session
+   *
+   * DELETE /v1/simulation/sessions/:id/members/:userId
+   */
+  @Delete(':id/members/:userId')
+  @ApiOperation({ summary: 'Remove a member from a session' })
+  @ApiResponse({ status: 200, description: 'Member removed successfully' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  removeMember(
+    @Param('id') id: string,
+    @Param('userId') userId: string,
+    @UserClaims() userClaims: UserClaimsType,
+  ) {
+    return this.simulationService
+      .send(SIMULATION_SERVICE_PATTERNS.REMOVE_SESSION_MEMBER, {
+        sessionId: id,
+        userId,
+        userClaims,
+      })
+      .pipe(
+        timeout(5000),
+        catchError((err: unknown) => {
+          const error = normalizeError(err);
+          const message = error.message ?? 'Failed to remove session member';
+          const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
+          return throwError(() => new HttpException(message, status));
+        }),
+      );
+  }
 }

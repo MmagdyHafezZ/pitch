@@ -4,6 +4,7 @@ import {
   ProviderInvalidRequestError,
 } from '../../providers/llm/llm-provider.interface';
 import { LLMMessageDto } from '../../dto/llm.dto';
+import OpenAI from 'openai';
 
 jest.mock(
   'openai',
@@ -123,7 +124,6 @@ describe('OpenAIProvider', () => {
 
   it('maps rate limit and timeout errors', () => {
     const provider = createProvider();
-    const OpenAI = require('openai').default;
 
     const rateLimitError = new OpenAI.APIError('rate limited', 429);
     rateLimitError.headers = { 'retry-after': '2' };
@@ -138,7 +138,6 @@ describe('OpenAIProvider', () => {
 
   it('maps invalid request and unknown errors', () => {
     const provider = createProvider();
-    const OpenAI = require('openai').default;
 
     const invalidError = new OpenAI.APIError('bad request', 400);
     const apiError = new OpenAI.APIError('server error', 500);
@@ -197,6 +196,7 @@ describe('OpenAIProvider', () => {
     const client = (provider as any).client;
 
     async function* streamGenerator() {
+      await Promise.resolve();
       yield {
         choices: [{ delta: { content: 'Hel' }, finish_reason: null }],
       };
@@ -228,6 +228,7 @@ describe('OpenAIProvider', () => {
     const client = (provider as any).client;
 
     async function* streamGenerator() {
+      await Promise.resolve();
       yield {
         choices: [{ delta: { content: 'Hel' }, finish_reason: null }],
       };
@@ -256,6 +257,7 @@ describe('OpenAIProvider', () => {
     const client = (provider as any).client;
 
     async function* streamGenerator() {
+      await Promise.resolve();
       yield {
         choices: [{ delta: { content: 'Hi' }, finish_reason: null }],
       };
@@ -278,7 +280,6 @@ describe('OpenAIProvider', () => {
   it('maps OpenAI auth errors', async () => {
     const provider = createProvider();
     const client = (provider as any).client;
-    const OpenAI = require('openai').default;
 
     client.chat.completions.create.mockRejectedValue(
       new OpenAI.APIError('unauthorized', 401),

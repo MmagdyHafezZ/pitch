@@ -10,6 +10,7 @@ import { SimulationModule } from './simulation.module';
 import { MicroserviceExceptionFilter } from '@pitch/shared-backend/filters/microservice-exception.filter';
 import { PrismaClientExceptionFilter } from '@pitch/shared-backend/filters/prisma-exception.filter';
 import { RpcExceptionLoggingFilter } from '@pitch/shared-backend/filters/rpc-exception.filter';
+import { getRabbitMQUrl } from '../../config/microservices.config';
 
 async function bootstrap() {
   const logger = new Logger('SimulationMicroservice');
@@ -25,7 +26,7 @@ async function bootstrap() {
   const microservice = app.connectMicroservice<MicroserviceOptions>({
     transport: Transport.RMQ,
     options: {
-      urls: [process.env.RABBITMQ_URL || 'amqp://localhost:5672'],
+      urls: [getRabbitMQUrl()],
       queue: 'simulation_queue',
       queueOptions: {
         durable: true,
@@ -62,8 +63,13 @@ async function bootstrap() {
       'bearer',
     )
     .build();
-  const swaggerDocument = SwaggerModule.createDocument(app, swaggerConfig);
-  SwaggerModule.setup(swaggerPath, app, swaggerDocument, {
+  type SwaggerApp = Parameters<typeof SwaggerModule.createDocument>[0];
+  const swaggerApp = app as unknown as SwaggerApp;
+  const swaggerDocument = SwaggerModule.createDocument(
+    swaggerApp,
+    swaggerConfig,
+  );
+  SwaggerModule.setup(swaggerPath, swaggerApp, swaggerDocument, {
     swaggerOptions: { persistAuthorization: true },
     customSiteTitle:
       process.env.SIMULATION_SWAGGER_SITE_TITLE ?? 'Simulation API Docs',

@@ -1,4 +1,5 @@
 import { PassThrough } from 'stream';
+import axios from 'axios';
 import { WatsonxProvider } from '../../providers/llm/watsonx.provider';
 import {
   ProviderAuthError,
@@ -18,8 +19,6 @@ jest.mock(
   },
   { virtual: true },
 );
-
-const axios = require('axios');
 
 const messages: LLMMessageDto[] = [{ role: 'user', content: 'Hello' }];
 
@@ -238,7 +237,7 @@ describe('WatsonxProvider', () => {
     setImmediate(() => {
       stream.emit(
         'data',
-        Buffer.from('data: {\"results\":[{\"generated_text\":\"Hi\"}]}\\n'),
+        Buffer.from('data: {"results":[{"generated_text":"Hi"}]}\n'),
       );
       stream.emit('end');
     });
