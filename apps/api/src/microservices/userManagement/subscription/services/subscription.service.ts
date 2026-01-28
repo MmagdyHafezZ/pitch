@@ -3,7 +3,7 @@ import {
   NotFoundException,
   ConflictException,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/user-client';
+import { Prisma, BillingInterval } from '@prisma/user-client';
 import {
   Subscription,
   CreateSubscriptionDto,
@@ -261,12 +261,24 @@ export class SubscriptionService {
     return this.subscriptionRepository.findDueForRollover(new Date(now));
   }
 
-  private addInterval(d: Date, interval: string) {
+  public addInterval(d: Date, interval: BillingInterval) {
     const date = new Date(d);
-    if (interval === 'MONTH') date.setMonth(date.getMonth() + 1);
-    if (interval === 'QUARTER') date.setMonth(date.getMonth() + 3);
-    if (interval === 'SEMIANNUAL') date.setMonth(date.getMonth() + 6);
-    if (interval === 'ANNUAL') date.setFullYear(date.getFullYear() + 1);
+    switch (interval) {
+      case BillingInterval.MONTH:
+        date.setMonth(date.getMonth() + 1);
+        break;
+      case BillingInterval.QUARTER:
+        date.setMonth(date.getMonth() + 3);
+        break;
+      case BillingInterval.SEMIANNUAL:
+        date.setMonth(date.getMonth() + 6);
+        break;
+      case BillingInterval.ANNUAL:
+        date.setFullYear(date.getFullYear() + 1);
+        break;
+      default:
+        throw new Error(`Unsupported interval "${interval}"`);
+    }
     return date;
   }
 }

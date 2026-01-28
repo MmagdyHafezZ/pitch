@@ -2,9 +2,8 @@ import {
   Injectable,
   NotFoundException,
   ConflictException,
-  Logger,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/user-client';
+import { Prisma, Role } from '@prisma/user-client';
 import {
   Team,
   TeamMembership,
@@ -12,7 +11,6 @@ import {
   UpdateTeamDto,
   AddMemberDto,
   UpdateMemberDto,
-  Role,
 } from '@pitch/shared-backend/interfaces/user.interface';
 import { TeamRepository } from '../repositories/team.repository';
 

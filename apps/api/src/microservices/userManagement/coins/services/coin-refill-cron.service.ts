@@ -1,8 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Cron } from '@nestjs/schedule';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import { SubscriptionService } from '../../subscription/services/subscription.service';
 import { CoinAccountingService } from './coin-accounting.service';
 import { CoinRefillService } from './coin-refill.service';
+import { SubscriptionWithPlan } from '../../subscription/repositories/subscription.repository';
 
 @Injectable()
 export class CoinRefillCron {
@@ -14,9 +15,8 @@ export class CoinRefillCron {
     private readonly subscriptionService: SubscriptionService,
   ) {}
 
-  @Cron('59 23 * * *')
+  @Cron(CronExpression.EVERY_DAY_AT_11PM)
   async rolloverSubscriptions() {
-    const now = new Date();
     this.logger.log('Starting daily coin rollover job');
 
     const subs = await this.subscriptionService.findDueForRollover();
@@ -36,7 +36,7 @@ export class CoinRefillCron {
     );
   }
 
-  private async processSubscription(sub: any) {
+  private async processSubscription(sub: SubscriptionWithPlan) {
     const { id: subscriptionId, teamId, plan } = sub;
 
     if (sub.cancelAtPeriodEnd) {
@@ -47,7 +47,11 @@ export class CoinRefillCron {
     const oldStart = new Date(sub.currentPeriodStart);
     const oldEnd = new Date(sub.currentPeriodEnd);
 
-    const oldPeriodKey = this.buildPeriodKey(subscriptionId, oldStart, oldEnd);
+    const oldPeriodKey = this.coinRefillService.buildPeriodKey(
+      subscriptionId,
+      oldStart,
+      oldEnd,
+    );
 
     const balance = await this.coinAccountingService.getRemainingCoins(teamId, {
       periodKey: oldPeriodKey,
@@ -60,8 +64,12 @@ export class CoinRefillCron {
     const debt = Math.max(0, -oldRemaining);
 
     const newStart = oldEnd;
-    const newEnd = this.addInterval(newStart, sub.plan.interval);
-    const newPeriodKey = this.buildPeriodKey(subscriptionId, newStart, newEnd);
+    const newEnd = this.subscriptionService.addInterval(newStart, sub.interval);
+    const newPeriodKey = this.coinRefillService.buildPeriodKey(
+      subscriptionId,
+      newStart,
+      newEnd,
+    );
 
     await this.coinRefillService.refillAfterRollover({
       teamId,
@@ -77,19 +85,5 @@ export class CoinRefillCron {
       start: newStart,
       end: newEnd,
     });
-  }
-
-  // helpers
-  private buildPeriodKey(subscriptionId: string, start: Date, end: Date) {
-    return `${subscriptionId}:${start.getTime()}-${end.getTime()}`;
-  }
-
-  private addInterval(d: Date, interval: string) {
-    const date = new Date(d);
-    if (interval === 'MONTH') date.setMonth(date.getMonth() + 1);
-    if (interval === 'QUARTER') date.setMonth(date.getMonth() + 3);
-    if (interval === 'SEMIANNUAL') date.setMonth(date.getMonth() + 6);
-    if (interval === 'ANNUAL') date.setFullYear(date.getFullYear() + 1);
-    return date;
   }
 }

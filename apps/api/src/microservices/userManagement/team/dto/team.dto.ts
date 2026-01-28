@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { Prisma } from '@prisma/user-client';
+import { Prisma, Role } from '@prisma/user-client';
 import {
   IsBoolean,
   IsDate,
@@ -13,7 +13,6 @@ import {
   Matches,
   Min,
 } from 'class-validator';
-import { Role } from '@prisma/user-client';
 
 export class CreateTeamRequestDto {
   @ApiProperty({ description: 'Required Team Name', example: 'My Team' })

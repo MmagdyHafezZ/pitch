@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { CoinRedisService } from './coin-redis.service';
 import { CoinLedgerRepository } from '../repositories/coin-ledger.repository';
 import { CoinBalanceRepository } from '../repositories/coin-balance.repository';
@@ -12,7 +12,7 @@ export class CoinRefillService {
     private readonly coinBalanceRepo: CoinBalanceRepository,
   ) {}
 
-  private buildPeriodKey(subscriptionId: string, start: Date, end: Date) {
+  public buildPeriodKey(subscriptionId: string, start: Date, end: Date) {
     return `${subscriptionId}:${start.getTime()}-${end.getTime()}`;
   }
 
@@ -94,50 +94,81 @@ export class CoinRefillService {
       60,
       Math.ceil((newPeriodEnd.getTime() - Date.now()) / 1000),
     );
-
-    await this.coinRedis.initRemainingIfMissing(
-      teamId,
-      newPeriodKey,
-      allowance,
-      ttlSeconds,
-    );
+    try {
+      await this.coinRedis.initRemainingIfMissing(
+        teamId,
+        newPeriodKey,
+        allowance,
+        ttlSeconds,
+      );
+      Logger.log(`[REDIS INIT OK] ${newPeriodKey}`);
+    } catch (err) {
+      Logger.error(`[REDIS INIT FAIL] period=${newPeriodKey} err=${err}`);
+      throw err;
+    }
 
     const eventId = `refill:${teamId}:${newPeriodKey}`;
+    let adj: any;
+    try {
+      adj = await this.coinRedis.applyDeltaIdempotent({
+        teamId,
+        periodKey: newPeriodKey,
+        deltaCoins: debt,
+        eventId,
+        ttlSeconds,
+      });
 
-    const adj = await this.coinRedis.applyDeltaIdempotent({
-      teamId,
-      periodKey: newPeriodKey,
-      deltaCoins: debt,
-      eventId,
-      ttlSeconds,
-    });
+      Logger.log(
+        `[DELTA OK] event=${eventId} delta=${debt} result=${JSON.stringify(adj)}`,
+      );
+    } catch (err) {
+      Logger.error(`[DELTA FAIL] event=${eventId} delta=${debt} err=${err}`);
+      throw err;
+    }
 
-    const remainingAfter = adj.remainingAfter ?? allowance - debt;
+    const remainingAfter = adj?.remainingAfter ?? allowance - debt;
 
-    await this.coinLedgerRepo.createRefillIfNotExists({
-      userId: 'system',
-      eventId,
-      teamId,
-      subscriptionId,
-      planId,
-      requestId: eventId,
-      reservationId: eventId,
-      periodKey: newPeriodKey,
-      allowance,
-      debtApplied: debt,
-      remainingAfter,
-    });
+    try {
+      await this.coinLedgerRepo.createRefillIfNotExists({
+        userId: 'system',
+        eventId,
+        teamId,
+        subscriptionId,
+        planId,
+        requestId: eventId,
+        reservationId: eventId,
+        periodKey: newPeriodKey,
+        allowance,
+        debtApplied: debt,
+        remainingAfter,
+      });
 
-    await this.coinBalanceRepo.upsertRefill({
-      teamId,
-      subscriptionId,
-      periodKey: newPeriodKey,
-      allowance,
-      remainingAfter,
-      debtApplied: debt,
-      eventId,
-    });
+      Logger.log(`[LEDGER OK] ${eventId}`);
+    } catch (err) {
+      Logger.error(`[LEDGER FAIL] event=${eventId} err=${err}`);
+      throw err;
+    }
 
+    try {
+      await this.coinBalanceRepo.upsertRefill({
+        teamId,
+        subscriptionId,
+        periodKey: newPeriodKey,
+        allowance,
+        remainingAfter,
+        debtApplied: debt,
+        eventId,
+      });
+
+      Logger.log(`[BALANCE OK] ${eventId}`);
+    } catch (err) {
+      Logger.error(`[BALANCE FAIL] event=${eventId} err=${err}`);
+      throw err;
+    }
+
+    Logger.log(
+      `[REFILL DONE] team=${teamId} period=${newPeriodKey} remaining=${remainingAfter}`,
+    );
     return { remainingAfter };
   }
 }

@@ -7,8 +7,7 @@ import {
   IsOptional,
   IsString,
 } from 'class-validator';
-import { BillingInterval as BillingIntervalEnum } from '@prisma/user-client';
-import type { BillingInterval } from '@pitch/shared-backend/interfaces/user.interface';
+import { BillingInterval } from '@prisma/user-client';
 
 export class CreateSubscriptionRequestDTO {
   @ApiProperty({
@@ -38,7 +37,7 @@ export class CreateSubscriptionRequestDTO {
     description: 'Billing interval',
     example: 'MONTH',
   })
-  @IsEnum(BillingIntervalEnum)
+  @IsEnum(BillingInterval)
   interval!: BillingInterval;
 
   @ApiProperty({
@@ -78,7 +77,7 @@ export class UpdateSubscriptionRequestDTO {
     description: 'Billing interval',
     example: 'MONTH',
   })
-  @IsEnum(BillingIntervalEnum)
+  @IsEnum(BillingInterval)
   interval?: BillingInterval;
 
   @ApiProperty({
@@ -119,7 +118,7 @@ export class UpgradeSubscriptionRequestDTO {
     description: 'Billing interval',
     example: 'MONTH',
   })
-  @IsEnum(BillingIntervalEnum)
+  @IsEnum(BillingInterval)
   interval!: BillingInterval;
 
   @ApiProperty({

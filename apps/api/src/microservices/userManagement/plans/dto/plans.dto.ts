@@ -1,16 +1,14 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { Prisma } from '@prisma/user-client';
+import { PlanLevel } from '@prisma/user-client';
 import {
   IsBoolean,
   IsEnum,
   IsNumber,
-  IsObject,
   IsOptional,
   IsString,
   Length,
   Min,
 } from 'class-validator';
-import { PlanLevel } from '@prisma/user-client';
 
 export class CreatePlanRequestDTO {
   @ApiProperty({ description: 'Plan name', example: 'Pro Plan' })

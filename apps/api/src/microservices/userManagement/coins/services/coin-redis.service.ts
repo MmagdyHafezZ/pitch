@@ -47,14 +47,19 @@ export class CoinRedisService {
     ttlSeconds: number,
   ) {
     const key = this.keyRemaining(teamId, periodKey);
-    await this.redis.call(
-      'SET',
-      key,
-      String(allowance),
-      'EX',
-      ttlSeconds,
-      'NX',
-    );
+    let res: string | unknown;
+    try {
+      res = await this.redis.call(
+        'SET',
+        key,
+        String(allowance),
+        'EX',
+        ttlSeconds,
+        'NX',
+      );
+    } catch (err) {
+      throw new Error(`Redis SET failed for key=${key}: ${err}`);
+    }
   }
 
   /**
