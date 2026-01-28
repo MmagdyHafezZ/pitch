@@ -7,6 +7,7 @@ import { TeamGatewayController } from './controllers/userManagement/team-gateway
 import { SalesforceGatewayController } from './controllers/crm/salesforce-gateway.controller';
 import { GlobalJwtAuthGuard } from './guards/global-jwt-auth.guard';
 import { UserClaimsInterceptor } from './interceptors/user-claims.interceptor';
+import { TtsGatewayController } from './controllers/simulation/tts.controller';
 import {
   MICROSERVICES_CONFIG,
   getRabbitMQUrl,
@@ -41,6 +42,7 @@ import { APP_GUARD } from '@nestjs/core';
     AuthGatewayController,
     TeamGatewayController,
     SalesforceGatewayController,
+    TtsGatewayController,
   ],
   providers: [
     { provide: APP_GUARD, useClass: GlobalJwtAuthGuard },

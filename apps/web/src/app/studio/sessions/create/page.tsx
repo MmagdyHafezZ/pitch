@@ -379,7 +379,7 @@ export default function CreateSessionPage() {
             </Button>
           ) : (
             <Button
-              onClick={() => router.push('/sessions/live')}
+              onClick={() => router.push('/studio/sessions/live')}
               size="lg"
               style={{ minWidth: 200 }}
             >

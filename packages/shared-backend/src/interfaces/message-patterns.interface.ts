@@ -16,6 +16,7 @@ export const USER_SERVICE_PATTERNS = {
   DELETE_TEAM: 'delete_team',
   GET_TEAM: 'get_team',
   GET_TEAMS: 'get_teams',
+  GET_USER_TEAMS: 'get_user_teams',
   ADD_TEAM_MEMBER: 'add_team_member',
   UPDATE_TEAM_MEMBER: 'update_team_member',
   DELETE_TEAM_MEMBER: 'delete_team_member',
@@ -48,3 +49,9 @@ export type UserServicePattern = (typeof USER_SERVICE_PATTERNS)[keyof typeof USE
 export type BusinessServicePattern =
   (typeof BUSINESS_SERVICE_PATTERNS)[keyof typeof BUSINESS_SERVICE_PATTERNS]
 export type CrmServicePattern = (typeof CRM_SERVICE_PATTERNS)[keyof typeof CRM_SERVICE_PATTERNS]
+
+export const TTS_SERVICE_PATTERNS = {
+  SPEAK: 'tts.speak',
+  LIST_PROVIDERS: 'tts.providers',
+  GET_VOICES: 'tts.voices',
+} as const
