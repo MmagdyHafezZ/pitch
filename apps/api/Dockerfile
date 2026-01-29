@@ -36,9 +36,9 @@ COPY . .
 
 RUN pnpm --filter @pitch/shared-backend build
 
-RUN cd apps/api && pnpm run db:generate:all
+RUN pnpm --filter api db:generate:all
 
-RUN cd apps/api && pnpm build
+RUN pnpm --filter api build
 
 # =============================================================================
 # Runner - Production image that can run any microservice
