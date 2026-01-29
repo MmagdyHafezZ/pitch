@@ -53,11 +53,6 @@ RUN --mount=type=cache,id=pnpm-store,target=/pnpm-store \
     pnpm config set store-dir /pnpm-store \
  && pnpm --filter ./apps/api... build
 
-# Optional: reduce runtime size (remove if you need dev deps at runtime)
-RUN --mount=type=cache,id=pnpm-store,target=/pnpm-store \
-    pnpm config set store-dir /pnpm-store \
- && pnpm prune --prod
-
 # -----------------------------------------------------------------------------
 # Runner
 # -----------------------------------------------------------------------------
