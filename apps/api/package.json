@@ -72,6 +72,7 @@
     "db:deploy:all": "pnpm run db:deploy:userManagement && pnpm run db:deploy:simulation && pnpm run db:deploy:support && pnpm run db:deploy:analytics && pnpm run db:deploy:crm"
   },
   "dependencies": {
+    "@elevenlabs/elevenlabs-js": "^2.33.0",
     "@langchain/core": "^0.3.80",
     "@langchain/langgraph": "^0.4.9",
     "@nestjs/common": "^11.0.1",

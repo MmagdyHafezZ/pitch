@@ -1,4 +1,3 @@
-/* eslint-disable */
 import {
   BadRequestException,
   InternalServerErrorException,
@@ -63,7 +62,7 @@ describe('ElevenLabsTtsProvider', () => {
 
     (global.fetch as jest.Mock).mockResolvedValue({
       ok: true,
-      json: async () => ({ voices: [] }),
+      json: () => Promise.resolve({ voices: [] }),
     });
 
     const provider = new ElevenLabsTtsProvider(configService as any);
@@ -81,9 +80,10 @@ describe('ElevenLabsTtsProvider', () => {
 
     (global.fetch as jest.Mock).mockResolvedValue({
       ok: true,
-      json: async () => ({
-        voices: [{ voice_id: 'voice-1', name: 'Test Voice' }],
-      }),
+      json: () =>
+        Promise.resolve({
+          voices: [{ voice_id: 'voice-1', name: 'Test Voice' }],
+        }),
     });
 
     convertMock.mockResolvedValue(createStream([[1, 2, 3]]));
@@ -104,7 +104,7 @@ describe('ElevenLabsTtsProvider', () => {
     (global.fetch as jest.Mock).mockResolvedValue({
       ok: false,
       status: 500,
-      text: async () => 'boom',
+      text: () => Promise.resolve('boom'),
     });
 
     const provider = new ElevenLabsTtsProvider(configService as any);
