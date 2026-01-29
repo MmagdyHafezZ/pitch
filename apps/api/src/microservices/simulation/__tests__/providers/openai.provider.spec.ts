@@ -118,7 +118,7 @@ describe('OpenAIProvider', () => {
     expect((converted[1].content as any[])[1].image_url.url).toBe(
       'https://example.com/img.png',
     );
-    expect((converted[1].content as any[])[2].type).toBe('audio');
+    expect((converted[1].content as any[])[1].image_url.detail).toBe('low');
   });
 
   it('estimates tokens for string messages', () => {
