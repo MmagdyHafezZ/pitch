@@ -51,11 +51,11 @@ RUN --mount=type=cache,id=pnpm-store,target=/pnpm-store \
 
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm-store \
     pnpm config set store-dir /pnpm-store \
- && cd apps/api \
- && pnpm db:generate:all \
- && pnpm build \
- && test -d dist \
- && ls -lah dist
+ && pnpm --filter ./apps/api... db:generate:all \
+ && pnpm --filter ./apps/api... exec nest build \
+ && test -d apps/api/dist \
+ && ls -lah apps/api/dist
+
 
 # -----------------------------------------------------------------------------
 # Runner
