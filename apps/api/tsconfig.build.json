@@ -3,13 +3,12 @@
   "compilerOptions": {
     "outDir": "./dist",
     "rootDir": "./src",
-    "baseUrl": "./src",
     "paths": {
+      "@gateway/*": ["src/gateway/*"],
+      "@microservices/*": ["src/microservices/*"],
       "@pitch/shared/*": ["../../packages/shared/src/*"],
       "@pitch/shared-backend": ["../../packages/shared-backend/src"],
-      "@pitch/shared-backend/*": ["../../packages/shared-backend/src/*"],
-      "@gateway/*": ["gateway/*"],
-      "@microservices/*": ["microservices/*"]
+      "@pitch/shared-backend/*": ["../../packages/shared-backend/src/*"]
     }
   },
   "exclude": ["node_modules", "test", "dist", "**/*spec.ts"]
