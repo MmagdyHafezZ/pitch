@@ -34,6 +34,7 @@ RUN --mount=type=cache,id=pnpm-store,target=/pnpm-store \
 # Builder
 # -----------------------------------------------------------------------------
 FROM base AS builder
+ENV CI=true
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/apps/api/node_modules ./apps/api/node_modules
