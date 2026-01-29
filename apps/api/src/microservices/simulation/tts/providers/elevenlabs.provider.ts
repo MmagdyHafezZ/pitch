@@ -15,55 +15,61 @@ export class ElevenLabsTtsProvider implements TtsProvider {
   readonly description = 'ElevenLabs neural text-to-speech';
 
   private readonly apiKey: string;
-  private readonly defaultVoice: string;
+  private readonly configuredDefaultVoice: string | undefined;
   private readonly modelId: string;
   private readonly outputFormat: string;
 
   private readonly client: ElevenLabsClient;
 
-  // Cached voice directory
   private voiceNameToId: Map<string, string> | null = null;
   private voicesCache: string[] = [];
-  // private voices: string[] = [];
-
   constructor(private readonly config: ConfigService) {
     this.apiKey = this.config.getOrThrow<string>('ELEVENLABS_API_KEY');
-    this.defaultVoice =
-      this.config.get<string>('ELEVENLABS_DEFAULT_VOICE') || 'Rachel';
+    this.configuredDefaultVoice = this.config.get<string>(
+      'ELEVENLABS_DEFAULT_VOICE',
+    );
 
-    // Align with SDK naming
     this.modelId =
       this.config.get<string>('ELEVENLABS_MODEL_ID') || 'eleven_v2_flash';
 
-    // Example: mp3_44100_128 (matches your snippet style)
     this.outputFormat =
       this.config.get<string>('ELEVENLABS_OUTPUT_FORMAT') || 'mp3_44100_128';
 
-    // Initialize SDK client with explicit apiKey (recommended in Nest)
     this.client = new ElevenLabsClient({ apiKey: this.apiKey });
-    // Preload voices
-    this.ensureVoicesLoaded().catch((err) => {
-      console.error('Failed to load ElevenLabs voices on startup:', err);
-    });
+    this.ensureVoicesLoaded().catch(() => {});
   }
 
-  // Expose names for your /tts/voices endpoint
+  private get defaultVoice(): string | undefined {
+    if (this.configuredDefaultVoice) {
+      return this.configuredDefaultVoice;
+    }
+    return this.voicesCache.length > 0 ? this.voicesCache[0] : undefined;
+  }
+
   get voices(): string[] {
     return this.voicesCache;
   }
 
   async synthesize(text: string, options?: TtsOptions): Promise<TtsResult> {
     try {
-      const requested = (options?.voice || this.defaultVoice).trim();
-      const voiceId = this.resolveVoiceId(requested);
+      await this.ensureVoicesLoaded();
 
-      // SDK call (matches your snippet conceptually)
+      const requested = options?.voice || this.defaultVoice;
+      if (!requested) {
+        throw new BadRequestException(
+          'No voice specified and no default voice available. Please specify a voice or configure ELEVENLABS_DEFAULT_VOICE.',
+        );
+      }
+      const voiceId = this.resolveVoiceId(requested.trim());
+
+      const outputFormat = this.outputFormat as unknown as Parameters<
+        ElevenLabsClient['textToSpeech']['convert']
+      >[1]['outputFormat'];
+
       const audioStream = await this.client.textToSpeech.convert(voiceId, {
         text,
         modelId: this.modelId,
-        outputFormat: this.outputFormat as any,
-        // Optional: if you later extend TtsOptions with stability/similarity,
-        // you can pass them here as well.
+        outputFormat,
       });
 
       const audioBuffer = await this.readWebStreamToBuffer(audioStream);
@@ -75,7 +81,6 @@ export class ElevenLabsTtsProvider implements TtsProvider {
           : 'application/octet-stream',
       };
     } catch (err) {
-      // Preserve explicit BadRequestException behavior for unknown voices
       if (err instanceof BadRequestException) throw err;
 
       throw new InternalServerErrorException('ElevenLabs TTS failed');
@@ -83,18 +88,15 @@ export class ElevenLabsTtsProvider implements TtsProvider {
   }
 
   private resolveVoiceId(input: string): string {
-    // Exact name match
     if (this.voiceNameToId?.has(input)) {
       return this.voiceNameToId.get(input)!;
     }
 
-    // Case-insensitive name match
     const lower = input.toLowerCase();
     for (const [name, id] of this.voiceNameToId ?? []) {
       if (name.toLowerCase() === lower) return id;
     }
 
-    // If it looks like an ID, accept it and let ElevenLabs validate
     if (/^[a-zA-Z0-9_-]{10,}$/.test(input)) {
       return input;
     }

@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { UserPrismaService } from '../../prisma/user-prisma.service';
 import {
   AuthProvider,
@@ -27,13 +27,17 @@ export interface CreateOAuthAccountData {
 
 @Injectable()
 export class UserRepository {
-  constructor(private readonly prisma: UserPrismaService) {}
+  constructor(
+    private readonly prisma: UserPrismaService,
+    private readonly logger: Logger,
+  ) {}
 
   async findMany(): Promise<User[]> {
     return await this.prisma.user.findMany();
   }
 
   async findById(id: string): Promise<User | null> {
+    this.logger.log('findById called with id:', id);
     return await this.prisma.user.findUnique({
       where: { id },
       include: { oauthAccounts: true },

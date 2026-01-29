@@ -11,14 +11,60 @@ import {
   Avatar,
   ActionIcon,
   Badge,
-  Card,
+  TextInput,
+  ScrollArea,
+  Loader,
 } from '@mantine/core'
-import { IconPhone, IconPlayerPause, IconMicrophone, IconArrowRight } from '@tabler/icons-react'
-import { useRouter } from 'next/navigation'
+import {
+  IconPhone,
+  IconPlayerPause,
+  IconMicrophone,
+  IconArrowRight,
+  IconSend,
+} from '@tabler/icons-react'
+import { useRouter, useParams } from 'next/navigation'
+import { useConversation } from '@/features/conversation'
+import { useSpeechToText } from '@/features/stt'
 
 export default function LiveSessionPage() {
   const router = useRouter()
+  const params = useParams()
+  const sessionId = params.id as string
   const [time, setTime] = useState(615)
+  const [textInput, setTextInput] = useState('')
+
+  const {
+    isConnected,
+    isConnecting,
+    isProcessing,
+    messages,
+    error: conversationError,
+    sendMessage,
+  } = useConversation({
+    sessionId,
+    autoConnect: true,
+    onError: (error) => {},
+  })
+
+  const {
+    isListening,
+    transcript,
+    interimTranscript,
+    error: sttError,
+    isSupported: isSttSupported,
+    toggleListening,
+    resetTranscript,
+  } = useSpeechToText({
+    continuous: true,
+    interimResults: true,
+    onResult: (text, isFinal) => {
+      if (isFinal && text.trim()) {
+        sendMessage(text.trim())
+        resetTranscript()
+      }
+    },
+    onError: (error) => {},
+  })
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -31,6 +77,13 @@ export default function LiveSessionPage() {
     const mins = Math.floor(seconds / 60)
     const secs = seconds % 60
     return `${mins}:${secs.toString().padStart(2, '0')}`
+  }
+
+  const handleSendText = () => {
+    if (textInput.trim() && isConnected) {
+      sendMessage(textInput.trim())
+      setTextInput('')
+    }
   }
 
   const hints = [
@@ -95,6 +148,22 @@ export default function LiveSessionPage() {
             <Text c="dimmed">Wednesday</Text>
             <Text c="dimmed">Oct 8, 2025</Text>
             <Group gap="xs">
+              {isConnecting && <Loader size="sm" color="white" />}
+              {conversationError && (
+                <Text size="xs" c="red">
+                  {conversationError}
+                </Text>
+              )}
+              {isConnected && !isConnecting && (
+                <Box
+                  style={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: '50%',
+                    backgroundColor: 'green',
+                  }}
+                />
+              )}
               <ActionIcon size="lg" variant="subtle" color="white">
                 <IconPhone size={20} />
               </ActionIcon>
@@ -136,27 +205,23 @@ export default function LiveSessionPage() {
           </Stack>
         </Paper>
 
-        {/* Center - Main Content */}
-        <Box style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-          {/* Video/Audio Visualization */}
+        <Box style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 24 }}>
           <Paper
             withBorder
             radius="lg"
             p="xl"
             style={{
-              flex: 1,
               backgroundColor: 'white',
               display: 'flex',
               flexDirection: 'column',
               justifyContent: 'space-between',
-              marginBottom: 24,
+              flex: 1,
             }}
           >
             <Box style={{ display: 'flex', justifyContent: 'flex-end' }}>
               <Avatar size={120} radius="md" />
             </Box>
 
-            {/* Audio Waveform */}
             <Box
               style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', flex: 1 }}
             >
@@ -173,17 +238,26 @@ export default function LiveSessionPage() {
                   padding: 60,
                 }}
               >
-                {[...Array(15)].map((_, i) => (
-                  <Box
-                    key={i}
-                    style={{
-                      width: 6,
-                      height: `${Math.random() * 100 + 20}%`,
-                      backgroundColor: 'var(--mantine-color-blue-6)',
-                      borderRadius: 3,
-                    }}
-                  />
-                ))}
+                {isListening || isProcessing ? (
+                  [...Array(15)].map((_, i) => (
+                    <Box
+                      key={i}
+                      style={{
+                        width: 6,
+                        height: `${Math.random() * 100 + 20}%`,
+                        backgroundColor: 'var(--mantine-color-blue-6)',
+                        borderRadius: 3,
+                        animation: isProcessing ? 'pulse 1s infinite' : 'none',
+                      }}
+                    />
+                  ))
+                ) : (
+                  <Text c="dimmed" size="sm" ta="center">
+                    {isSttSupported
+                      ? 'Click microphone or type to start conversation'
+                      : 'Type to start conversation'}
+                  </Text>
+                )}
               </Box>
             </Box>
 
@@ -217,16 +291,55 @@ export default function LiveSessionPage() {
                 size={80}
                 radius="xl"
                 variant="filled"
-                color="dark"
+                color={isListening ? 'red' : 'dark'}
                 style={{ border: '4px solid white', boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}
+                onClick={toggleListening}
+                disabled={!isSttSupported || !isConnected}
+                title={
+                  !isSttSupported
+                    ? 'Speech recognition not supported'
+                    : !isConnected
+                      ? 'Connecting...'
+                      : isListening
+                        ? 'Stop listening'
+                        : 'Start listening'
+                }
               >
                 <IconMicrophone size={32} />
               </ActionIcon>
             </Group>
           </Paper>
 
+          {/* Text Input */}
+          <Paper withBorder radius="lg" p="md" style={{ backgroundColor: 'white' }}>
+            <Group gap="xs" align="flex-end">
+              <TextInput
+                placeholder="Type your message..."
+                value={textInput}
+                onChange={(e) => setTextInput(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && handleSendText()}
+                style={{ flex: 1 }}
+                disabled={!isConnected}
+              />
+              <ActionIcon
+                size="lg"
+                variant="filled"
+                color="blue"
+                onClick={handleSendText}
+                disabled={!textInput.trim() || !isConnected}
+              >
+                <IconSend size={20} />
+              </ActionIcon>
+            </Group>
+            {(interimTranscript || transcript) && (
+              <Text size="sm" c="dimmed" mt="xs">
+                Listening: {interimTranscript || transcript}
+              </Text>
+            )}
+          </Paper>
+
           {/* Transcript */}
-          <Paper withBorder radius="lg" p="lg" style={{ backgroundColor: 'white' }}>
+          <Paper withBorder radius="lg" p="lg" style={{ backgroundColor: 'white', maxHeight: 300 }}>
             <Box
               mb="md"
               px="md"
@@ -238,22 +351,49 @@ export default function LiveSessionPage() {
               }}
             >
               <Text c="white" fw={600}>
-                Transcript
+                Transcript ({messages.length} messages)
               </Text>
             </Box>
-            <Stack gap="xs">
-              {[...Array(6)].map((_, i) => (
-                <Box
-                  key={i}
-                  h={8}
-                  bg="gray.3"
-                  style={{
-                    borderRadius: 4,
-                    width: i === 5 ? '40%' : '100%',
-                  }}
-                />
-              ))}
-            </Stack>
+            <ScrollArea style={{ height: 200 }}>
+              <Stack gap="md">
+                {messages.length === 0 ? (
+                  <Text c="dimmed" size="sm" ta="center">
+                    No messages yet. Start the conversation!
+                  </Text>
+                ) : (
+                  messages.map((msg) => (
+                    <Box
+                      key={msg.id}
+                      p="sm"
+                      style={{
+                        backgroundColor:
+                          msg.role === 'user'
+                            ? 'var(--mantine-color-blue-0)'
+                            : 'var(--mantine-color-gray-1)',
+                        borderRadius: 8,
+                        borderLeft: `4px solid ${msg.role === 'user' ? 'var(--mantine-color-blue-6)' : 'var(--mantine-color-gray-6)'}`,
+                      }}
+                    >
+                      <Group justify="space-between" mb="xs">
+                        <Badge color={msg.role === 'user' ? 'blue' : 'gray'}>
+                          {msg.role === 'user' ? 'You' : 'AI'}
+                        </Badge>
+                        <Text size="xs" c="dimmed">
+                          {msg.timestamp.toLocaleTimeString()}
+                        </Text>
+                      </Group>
+                      <Text size="sm">{msg.text}</Text>
+                      {msg.usage && (
+                        <Text size="xs" c="dimmed" mt="xs">
+                          Tokens: {msg.usage.totalTokens}
+                          {msg.usage.costUsd && ` ($${msg.usage.costUsd.toFixed(4)})`}
+                        </Text>
+                      )}
+                    </Box>
+                  ))
+                )}
+              </Stack>
+            </ScrollArea>
           </Paper>
         </Box>
 

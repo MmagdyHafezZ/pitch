@@ -1,0 +1,11 @@
+[build]
+# Run Netlify builds from the frontend workspace so the Next.js runtime is detected.
+base = "apps/web"
+publish = ".next"
+command = "pnpm build"
+
+[dev]
+# Allow `netlify dev` to proxy to the Next.js dev server.
+command = "pnpm dev"
+targetPort = 3000
+port = 8888

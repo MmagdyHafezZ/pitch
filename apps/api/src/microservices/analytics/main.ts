@@ -6,6 +6,8 @@ import { NestFactory } from '@nestjs/core';
 import { MicroserviceOptions, Transport } from '@nestjs/microservices';
 import { ValidationPipe } from '@nestjs/common';
 import { AnalyticsModule } from './analytics.module';
+import { RpcExceptionLoggingFilter } from '@pitch/shared-backend/filters/rpc-exception.filter';
+import { getRabbitMQUrl } from '../../config/microservices.config';
 
 async function bootstrap() {
   const app = await NestFactory.createMicroservice<MicroserviceOptions>(
@@ -13,7 +15,7 @@ async function bootstrap() {
     {
       transport: Transport.RMQ,
       options: {
-        urls: [process.env.RABBITMQ_URL || 'amqp://localhost:5672'],
+        urls: [getRabbitMQUrl()],
         queue: 'analytics_queue',
         queueOptions: {
           durable: true,
@@ -31,6 +33,7 @@ async function bootstrap() {
       transform: true,
     }),
   );
+  app.useGlobalFilters(new RpcExceptionLoggingFilter());
 
   await app.listen();
 }

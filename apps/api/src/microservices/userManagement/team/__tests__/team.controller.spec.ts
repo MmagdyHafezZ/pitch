@@ -364,7 +364,7 @@ describe('TeamController', () => {
     const controller = new TeamController(service);
 
     await expect(
-      controller.getTeam({ id: 'team-1', ...basePayload } as any),
+      controller.getTeam({ teamId: 'team-1', ...basePayload } as any),
     ).rejects.toThrow(rpcError);
   });
 

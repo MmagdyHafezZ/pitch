@@ -45,7 +45,7 @@ export class TtsMicroserviceController {
         contentType: result.contentType,
       };
     } catch (error) {
-      this.logger.error('TTS speak failed', error as any);
+      this.logger.error('TTS speak failed', error);
       throw toRpcException(error);
     }
   }
@@ -56,7 +56,7 @@ export class TtsMicroserviceController {
       this.logger.log('TTS list providers');
       return this.ttsService.listProviders();
     } catch (error) {
-      this.logger.error('Failed to list providers', error as any);
+      this.logger.error('Failed to list providers', error);
       throw toRpcException(error);
     }
   }
@@ -70,7 +70,7 @@ export class TtsMicroserviceController {
         voices: this.ttsService.getVoices(data.provider),
       };
     } catch (error) {
-      this.logger.error('Failed to get voices', error as any);
+      this.logger.error('Failed to get voices', error);
       throw toRpcException(error);
     }
   }

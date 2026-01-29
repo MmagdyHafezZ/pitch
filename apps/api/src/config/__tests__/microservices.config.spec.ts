@@ -8,12 +8,24 @@ import {
 
 describe('microservices.config', () => {
   const originalEnv = process.env.RABBITMQ_URL;
+  const originalCloudEnv = process.env.CLOUDAMQP_URL;
+  const originalDepMode = process.env.DEP_MODE;
 
   afterEach(() => {
     if (originalEnv === undefined) {
       delete process.env.RABBITMQ_URL;
     } else {
       process.env.RABBITMQ_URL = originalEnv;
+    }
+    if (originalCloudEnv === undefined) {
+      delete process.env.CLOUDAMQP_URL;
+    } else {
+      process.env.CLOUDAMQP_URL = originalCloudEnv;
+    }
+    if (originalDepMode === undefined) {
+      delete process.env.DEP_MODE;
+    } else {
+      process.env.DEP_MODE = originalDepMode;
     }
   });
 
@@ -31,6 +43,7 @@ describe('microservices.config', () => {
   });
 
   it('builds microservice options using the queue name', () => {
+    process.env.DEP_MODE = 'local';
     process.env.RABBITMQ_URL = 'amqp://custom';
 
     const options = createMicroserviceOptions('sample_queue');
@@ -47,10 +60,26 @@ describe('microservices.config', () => {
     });
   });
 
+  it('uses CloudAMQP when DEP_MODE is prod', () => {
+    process.env.DEP_MODE = 'prod';
+    process.env.CLOUDAMQP_URL = 'amqp://cloud';
+
+    expect(getRabbitMQUrl()).toBe('amqp://cloud');
+  });
+
   it('throws error when RABBITMQ_URL environment variable is missing', () => {
+    process.env.DEP_MODE = 'local';
     delete process.env.RABBITMQ_URL;
     expect(() => getRabbitMQUrl()).toThrow(
       'RABBITMQ_URL environment variable is required. Format: amqp://username:password@host:port/vhost',
+    );
+  });
+
+  it('throws error when CLOUDAMQP_URL environment variable is missing in prod', () => {
+    process.env.DEP_MODE = 'prod';
+    delete process.env.CLOUDAMQP_URL;
+    expect(() => getRabbitMQUrl()).toThrow(
+      'CLOUDAMQP_URL environment variable is required. Format: amqp://username:password@host:port/vhost',
     );
   });
 

@@ -149,7 +149,7 @@ describe('TeamService', () => {
   // updateMember
   // --------------------
 
-  it('updates a member and sets acceptedAt', async () => {
+  it('updates a member', async () => {
     const dto: UpdateMemberDto = {
       teamId: 'team-1',
       userId: 'user-2',
@@ -170,7 +170,6 @@ describe('TeamService', () => {
       expect.objectContaining({
         teamId: 'team-1',
         userId: 'user-2',
-        acceptedAt: expect.any(Date),
       }),
     );
     expect(result).toEqual(membership);

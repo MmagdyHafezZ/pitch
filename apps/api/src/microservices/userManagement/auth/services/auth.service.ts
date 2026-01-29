@@ -4,7 +4,7 @@ import {
   NotFoundException,
   Logger,
 } from '@nestjs/common';
-import { JwtService } from '@nestjs/jwt';
+import { JwtService, JwtSignOptions } from '@nestjs/jwt';
 import { UserRepository } from '../../user/repositories/user.repository';
 import { AuthRepository } from '../repositories/auth.repository';
 import { AuthProvider } from '../factories/oauth-provider.factory';
@@ -111,11 +111,13 @@ export class AuthService {
     };
 
     const access_token = this.jwtService.sign(payload, {
-      expiresIn: process.env.JWT_ACCESS_EXPIRATION || '15m',
+      expiresIn: (process.env.JWT_ACCESS_EXPIRATION ||
+        '15m') as JwtSignOptions['expiresIn'],
     });
 
     const refresh_token = this.jwtService.sign(payload, {
-      expiresIn: process.env.JWT_REFRESH_EXPIRATION || '7d',
+      expiresIn: (process.env.JWT_REFRESH_EXPIRATION ||
+        '7d') as JwtSignOptions['expiresIn'],
     });
 
     return {
