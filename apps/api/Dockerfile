@@ -52,19 +52,9 @@ RUN --mount=type=cache,id=pnpm-store,target=/pnpm-store \
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm-store \
     pnpm config set store-dir /pnpm-store \
  && pnpm --filter ./apps/api... db:generate:all \
- && echo "=== node/pnpm ===" \
- && node -v && pnpm -v \
- && echo "=== where am I ===" \
- && pwd && ls -lah \
- && echo "=== api files ===" \
- && ls -lah apps/api \
- && echo "=== nest bin resolution ===" \
- && (pnpm --filter ./apps/api... exec which nest || true) \
- && (pnpm --filter ./apps/api... exec nest --version || true) \
- && echo "=== NEST BUILD (verbose) ===" \
- && pnpm --filter ./apps/api... exec nest build --debug --verbose
-
-
+ && pnpm --filter ./apps/api... exec nest build \
+ && test -d apps/api/dist \
+ && ls -lah apps/api/dist
 
 # -----------------------------------------------------------------------------
 # Runner
