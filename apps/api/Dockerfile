@@ -1,71 +1,106 @@
 # =============================================================================
-# Single Dockerfile for all PITCH Microservices
-# Builds once, runs any service via SERVICE_NAME environment variable
+# Single Dockerfile for PITCH (apps/api) + its microservices
+# Builds once, runs any service via SERVICE_NAME env var
+# Optimized for: correct pnpm filters, caching, smaller runtime, deterministic builds
 # =============================================================================
 
+ARG NODE_IMAGE=node:22-alpine
 ARG SERVICE_NAME=gateway
 
-FROM node:22-alpine AS base
-RUN apk add --no-cache libc6-compat openssl
+# -----------------------------------------------------------------------------
+# Base
+# -----------------------------------------------------------------------------
+FROM ${NODE_IMAGE} AS base
 WORKDIR /app
-RUN corepack enable pnpm
+RUN apk add --no-cache libc6-compat openssl \
+  && corepack enable pnpm
 
-# =============================================================================
-# Dependencies - Install all project dependencies
-# =============================================================================
+# -----------------------------------------------------------------------------
+# Deps (cache-friendly install)
+# -----------------------------------------------------------------------------
 FROM base AS deps
 
+# Workspace + root manifests
 COPY pnpm-workspace.yaml ./
 COPY package.json pnpm-lock.yaml ./
 COPY turbo.json ./
 
+# Copy ONLY package manifests to maximize layer cache reuse
 COPY apps/api/package.json ./apps/api/
 COPY packages/*/package.json ./packages/
 
-RUN pnpm install --frozen-lockfile
+# Cache pnpm store across builds (works great in GitHub Actions with BuildKit)
+RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
+    pnpm config set store-dir /pnpm/store \
+ && pnpm install --frozen-lockfile
 
-# =============================================================================
-# Builder - Generate Prisma clients and build all microservices
-# =============================================================================
+# -----------------------------------------------------------------------------
+# Builder (build API + generate prisma)
+# -----------------------------------------------------------------------------
 FROM base AS builder
 
+# Bring node_modules from deps
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/apps/api/node_modules ./apps/api/node_modules
+COPY --from=deps /pnpm /pnpm
 
+# Copy full repo
 COPY . .
 
-RUN pnpm --filter @pitch/shared-backend build
+# Build shared packages first (adjust if your shared-backend build script differs)
+RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
+    pnpm config set store-dir /pnpm/store \
+ && pnpm --filter @pitch/shared-backend... build
 
-RUN pnpm --filter api db:generate:all
+# Generate prisma (filter by PATH so it always matches)
+RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
+    pnpm config set store-dir /pnpm/store \
+ && pnpm --filter ./apps/api... db:generate:all
 
-RUN pnpm --filter api build
+# Build API (Nest should output to apps/api/dist by default; if not, fix build config or adjust runner COPY)
+RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
+    pnpm config set store-dir /pnpm/store \
+ && pnpm --filter ./apps/api... build
 
-# =============================================================================
-# Runner - Production image that can run any microservice
-# =============================================================================
-FROM base AS runner
+# Optional: prune dev deps to reduce runtime size (keeps prod deps only)
+# This works best if your repo scripts don’t require dev deps at runtime.
+RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
+    pnpm config set store-dir /pnpm/store \
+ && pnpm prune --prod
 
+# -----------------------------------------------------------------------------
+# Runner (small(er) production image)
+# -----------------------------------------------------------------------------
+FROM ${NODE_IMAGE} AS runner
+WORKDIR /app
 ENV NODE_ENV=production
+
 ARG SERVICE_NAME
 ENV SERVICE_NAME=${SERVICE_NAME}
 
-RUN addgroup --system --gid 1001 nodejs && \
-    adduser --system --uid 1001 nestjs
+RUN apk add --no-cache libc6-compat openssl \
+ && addgroup --system --gid 1001 nodejs \
+ && adduser  --system --uid 1001 nestjs
 
-COPY --from=builder --chown=nestjs:nodejs /app/package.json ./
+# Copy only what runtime needs
+COPY --from=builder --chown=nestjs:nodejs /app/package.json ./package.json
 COPY --from=builder --chown=nestjs:nodejs /app/node_modules ./node_modules
 
-COPY --from=builder --chown=nestjs:nodejs /app/apps/api/package.json ./apps/api/
-
+COPY --from=builder --chown=nestjs:nodejs /app/apps/api/package.json ./apps/api/package.json
 COPY --from=builder --chown=nestjs:nodejs /app/apps/api/dist ./apps/api/dist
 
+# Prisma engines / clients (needed at runtime if Prisma used)
 COPY --from=builder --chown=nestjs:nodejs /app/node_modules/@prisma ./node_modules/@prisma
 
-COPY --from=builder --chown=nestjs:nodejs /app/apps/api/src/microservices/*/prisma ./apps/api/src/microservices/
+# If your runtime needs schema/migrations/prisma folders for each microservice, copy the whole microservices tree.
+# This preserves folder structure (unlike copying */prisma into a flattened dir).
+COPY --from=builder --chown=nestjs:nodejs /app/apps/api/src/microservices ./apps/api/src/microservices
 
+# Shared backend package runtime code (if imported at runtime)
 COPY --from=builder --chown=nestjs:nodejs /app/packages/shared-backend ./packages/shared-backend
 
 USER nestjs
 WORKDIR /app/apps/api
 
+# Runs gateway by default (dist/main.js). For other services: dist/src/microservices/<SERVICE_NAME>/main.js
 CMD ["sh", "-c", "if [ \"$SERVICE_NAME\" = \"gateway\" ]; then node dist/main.js; else node dist/src/microservices/${SERVICE_NAME}/main.js; fi"]
