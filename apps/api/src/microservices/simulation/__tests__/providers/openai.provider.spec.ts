@@ -11,9 +11,18 @@ jest.mock(
   () => {
     class APIError extends Error {
       status: number;
-      constructor(message: string, status: number) {
+      headers: Record<string, string> | undefined;
+      error: object | undefined;
+      constructor(
+        status: number,
+        error: object | undefined,
+        message: string | undefined,
+        headers: Record<string, string> | undefined,
+      ) {
         super(message);
         this.status = status;
+        this.headers = headers;
+        this.error = error;
       }
     }
 
@@ -125,9 +134,18 @@ describe('OpenAIProvider', () => {
   it('maps rate limit and timeout errors', () => {
     const provider = createProvider();
 
-    const rateLimitError = new OpenAI.APIError('rate limited', 429);
-    rateLimitError.headers = { 'retry-after': '2' };
-    const timeoutError = new OpenAI.APIError('timeout', 504);
+    const rateLimitError = new OpenAI.APIError(
+      429,
+      { error: 'rate limited' },
+      'rate limited',
+      { 'retry-after': '2' } as any,
+    );
+    const timeoutError = new OpenAI.APIError(
+      504,
+      { error: 'timeout' },
+      'timeout',
+      undefined,
+    );
 
     const rateLimitMapped = (provider as any).handleError(rateLimitError);
     const timeoutMapped = (provider as any).handleError(timeoutError);
@@ -139,8 +157,18 @@ describe('OpenAIProvider', () => {
   it('maps invalid request and unknown errors', () => {
     const provider = createProvider();
 
-    const invalidError = new OpenAI.APIError('bad request', 400);
-    const apiError = new OpenAI.APIError('server error', 500);
+    const invalidError = new OpenAI.APIError(
+      400,
+      { error: 'bad request' },
+      'bad request',
+      undefined,
+    );
+    const apiError = new OpenAI.APIError(
+      500,
+      { error: 'server error' },
+      'server error',
+      undefined,
+    );
     const unknown = new Error('boom');
 
     expect((provider as any).handleError(invalidError).name).toBe(
@@ -282,7 +310,12 @@ describe('OpenAIProvider', () => {
     const client = (provider as any).client;
 
     client.chat.completions.create.mockRejectedValue(
-      new OpenAI.APIError('unauthorized', 401),
+      new OpenAI.APIError(
+        401,
+        { error: 'unauthorized' },
+        'unauthorized',
+        undefined,
+      ),
     );
 
     await expect(

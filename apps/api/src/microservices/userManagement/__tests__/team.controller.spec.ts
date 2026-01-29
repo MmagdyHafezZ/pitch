@@ -305,7 +305,7 @@ describe('TeamController', () => {
     const rpcError = new RpcException('rpc');
 
     service.createTeam.mockRejectedValue(error);
-    toRpcExceptionMock.mockReturnValueOnce(rpcError);
+    toRpcExceptionMock.mockReturnValueOnce(rpcError as any);
 
     const controller = new TeamController(service);
 
@@ -325,7 +325,7 @@ describe('TeamController', () => {
     const rpcError = new RpcException('rpc');
 
     service.updateTeam.mockRejectedValue(error);
-    toRpcExceptionMock.mockReturnValueOnce(rpcError);
+    toRpcExceptionMock.mockReturnValueOnce(rpcError as any);
 
     const controller = new TeamController(service);
 
@@ -344,7 +344,7 @@ describe('TeamController', () => {
     const rpcError = new RpcException('rpc');
 
     service.removeTeam.mockRejectedValue(error);
-    toRpcExceptionMock.mockReturnValueOnce(rpcError);
+    toRpcExceptionMock.mockReturnValueOnce(rpcError as any);
 
     const controller = new TeamController(service);
 
@@ -359,7 +359,7 @@ describe('TeamController', () => {
     const rpcError = new RpcException('rpc');
 
     service.findById.mockRejectedValue(error);
-    toRpcExceptionMock.mockReturnValueOnce(rpcError);
+    toRpcExceptionMock.mockReturnValueOnce(rpcError as any);
 
     const controller = new TeamController(service);
 
@@ -374,7 +374,7 @@ describe('TeamController', () => {
     const rpcError = new RpcException('rpc');
 
     service.findAll.mockRejectedValue(error);
-    toRpcExceptionMock.mockReturnValueOnce(rpcError);
+    toRpcExceptionMock.mockReturnValueOnce(rpcError as any);
 
     const controller = new TeamController(service);
 
@@ -387,7 +387,7 @@ describe('TeamController', () => {
     const rpcError = new RpcException('rpc');
 
     service.findUserTeams.mockRejectedValue(error);
-    toRpcExceptionMock.mockReturnValueOnce(rpcError);
+    toRpcExceptionMock.mockReturnValueOnce(rpcError as any);
 
     const controller = new TeamController(service);
 
@@ -402,7 +402,7 @@ describe('TeamController', () => {
     const rpcError = new RpcException('rpc');
 
     service.addMember.mockRejectedValue(error);
-    toRpcExceptionMock.mockReturnValueOnce(rpcError);
+    toRpcExceptionMock.mockReturnValueOnce(rpcError as any);
 
     const controller = new TeamController(service);
 
@@ -422,7 +422,7 @@ describe('TeamController', () => {
     const rpcError = new RpcException('rpc');
 
     service.updateMember.mockRejectedValue(error);
-    toRpcExceptionMock.mockReturnValueOnce(rpcError);
+    toRpcExceptionMock.mockReturnValueOnce(rpcError as any);
 
     const controller = new TeamController(service);
 
@@ -442,7 +442,7 @@ describe('TeamController', () => {
     const rpcError = new RpcException('rpc');
 
     service.removeTeamMember.mockRejectedValue(error);
-    toRpcExceptionMock.mockReturnValueOnce(rpcError);
+    toRpcExceptionMock.mockReturnValueOnce(rpcError as any);
 
     const controller = new TeamController(service);
 

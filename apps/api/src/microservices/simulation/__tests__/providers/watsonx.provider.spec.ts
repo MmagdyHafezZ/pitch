@@ -23,6 +23,7 @@ jest.mock(
 const messages: LLMMessageDto[] = [{ role: 'user', content: 'Hello' }];
 
 describe('WatsonxProvider', () => {
+  const isAxiosErrorMock = axios.isAxiosError as unknown as jest.Mock;
   const configService = {
     get: jest.fn((key: string) => {
       if (key === 'WATSONX_API_KEY') return 'watson-key';
@@ -56,7 +57,7 @@ describe('WatsonxProvider', () => {
     (axios.post as jest.Mock).mockResolvedValue({
       data: { access_token: 'token', expires_in: 3600 },
     });
-    axios.isAxiosError.mockReturnValue(false);
+    isAxiosErrorMock.mockReturnValue(false);
   });
 
   it('supports WatsonX model names', () => {
@@ -301,7 +302,7 @@ describe('WatsonxProvider', () => {
   it('maps WatsonX API errors', () => {
     const provider = new WatsonxProvider(configService);
 
-    axios.isAxiosError.mockReturnValue(true);
+    isAxiosErrorMock.mockReturnValue(true);
 
     const rateLimitError = {
       response: { status: 429, headers: { 'retry-after': '2' }, data: {} },
@@ -339,7 +340,7 @@ describe('WatsonxProvider', () => {
 
   it('maps unknown errors to ProviderError', () => {
     const provider = new WatsonxProvider(configService);
-    axios.isAxiosError.mockReturnValue(false);
+    isAxiosErrorMock.mockReturnValue(false);
 
     const err = new Error('boom');
     const mapped = (provider as any).handleError(err);

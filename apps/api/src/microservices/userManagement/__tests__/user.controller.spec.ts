@@ -1,7 +1,6 @@
 import { UserController } from '../controllers/user.controller';
 import type { UserService } from '../services/user.service';
 import { toRpcException } from '@pitch/shared-backend/helpers/exceptions';
-import { RpcException } from '@nestjs/microservices';
 import type { OAuthProviderFactory } from '../factories/oauth-provider.factory';
 import type { User } from '@pitch/shared-backend/interfaces/user.interface';
 import type { MessageWithUserClaims } from '@pitch/shared-backend/interfaces/user-claims.interface';
@@ -128,9 +127,9 @@ describe('UserController', () => {
     const service = createServiceMock();
     const oauthProviderFactory = createOauthProviderFactoryMock();
     const error = new Error('failure');
-    const rpcError = new RpcException('rpc');
+    const rpcError = new Error('rpc');
     service.findAll.mockRejectedValue(error);
-    toRpcExceptionMock.mockReturnValueOnce(rpcError);
+    toRpcExceptionMock.mockReturnValueOnce(rpcError as any);
     const controller = new UserController(service, oauthProviderFactory);
 
     await expect(controller.getUsers(basePayload)).rejects.toThrow(rpcError);
@@ -141,9 +140,9 @@ describe('UserController', () => {
     const service = createServiceMock();
     const oauthProviderFactory = createOauthProviderFactoryMock();
     const error = new Error('failure');
-    const rpcError = new RpcException('rpc');
+    const rpcError = new Error('rpc');
     service.findOne.mockRejectedValue(error);
-    toRpcExceptionMock.mockReturnValueOnce(rpcError);
+    toRpcExceptionMock.mockReturnValueOnce(rpcError as any);
     const controller = new UserController(service, oauthProviderFactory);
 
     await expect(
@@ -155,9 +154,9 @@ describe('UserController', () => {
     const service = createServiceMock();
     const oauthProviderFactory = createOauthProviderFactoryMock();
     const error = new Error('failure');
-    const rpcError = new RpcException('rpc');
+    const rpcError = new Error('rpc');
     service.create.mockRejectedValue(error);
-    toRpcExceptionMock.mockReturnValueOnce(rpcError);
+    toRpcExceptionMock.mockReturnValueOnce(rpcError as any);
     const controller = new UserController(service, oauthProviderFactory);
 
     await expect(
@@ -173,9 +172,9 @@ describe('UserController', () => {
     const service = createServiceMock();
     const oauthProviderFactory = createOauthProviderFactoryMock();
     const error = new Error('failure');
-    const rpcError = new RpcException('rpc');
+    const rpcError = new Error('rpc');
     service.update.mockRejectedValue(error);
-    toRpcExceptionMock.mockReturnValueOnce(rpcError);
+    toRpcExceptionMock.mockReturnValueOnce(rpcError as any);
     const controller = new UserController(service, oauthProviderFactory);
 
     await expect(
@@ -191,9 +190,9 @@ describe('UserController', () => {
     const service = createServiceMock();
     const oauthProviderFactory = createOauthProviderFactoryMock();
     const error = new Error('failure');
-    const rpcError = new RpcException('rpc');
+    const rpcError = new Error('rpc');
     service.remove.mockRejectedValue(error);
-    toRpcExceptionMock.mockReturnValueOnce(rpcError);
+    toRpcExceptionMock.mockReturnValueOnce(rpcError as any);
     const controller = new UserController(service, oauthProviderFactory);
 
     await expect(
