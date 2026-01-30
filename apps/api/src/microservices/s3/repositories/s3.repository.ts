@@ -30,9 +30,11 @@ export class S3Repository {
     }
 
     this.defaultBucket = process.env.AWS_S3_BUCKET;
+    const endpoint = process.env.AWS_ENDPOINT;
     this.client = new S3Client({
       region,
       credentials: { accessKeyId, secretAccessKey },
+      ...(endpoint ? { endpoint, forcePathStyle: true } : {}),
     });
   }
 
