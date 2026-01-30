@@ -1,86 +1,86 @@
 # =============================================================================
-# Single Dockerfile for PITCH (apps/api) + its microservices
-# Builds once, runs any service via SERVICE_NAME env var
+# Refined Dockerfile for Monorepo with Microservices
 # =============================================================================
 
 ARG NODE_IMAGE=node:22-alpine
 ARG SERVICE_NAME=gateway
 
 # -----------------------------------------------------------------------------
-# Base
+# 1. Base (Shared OS setup)
 # -----------------------------------------------------------------------------
-FROM ${NODE_IMAGE} AS base
+FROM ${NODE_IMAGE} AS alpine
+RUN apk update && apk add --no-cache libc6-compat openssl
+
+# -----------------------------------------------------------------------------
+# 2. Prune (Isolate API dependencies)
+# -----------------------------------------------------------------------------
+FROM alpine AS pruner
 WORKDIR /app
-RUN apk add --no-cache libc6-compat openssl \
-  && corepack enable pnpm
+RUN npm install -g turbo
+COPY . .
+RUN turbo prune --scope=api --docker
 
 # -----------------------------------------------------------------------------
-# Deps (cache-friendly install)
+# 3. Builder (Full Deps + Build + Generate)
 # -----------------------------------------------------------------------------
-FROM base AS deps
+FROM alpine AS builder
+WORKDIR /app
+RUN corepack enable pnpm
 
-COPY pnpm-workspace.yaml ./
-COPY package.json pnpm-lock.yaml ./
-COPY turbo.json ./
-
-COPY apps/api/package.json ./apps/api/
-COPY packages/*/package.json ./packages/
+COPY --from=pruner /app/out/json/ .
+COPY --from=pruner /app/out/pnpm-lock.yaml ./pnpm-lock.yaml
 
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm-store \
     pnpm config set store-dir /pnpm-store \
- && pnpm install --frozen-lockfile
+    && HUSKY=0 pnpm install --frozen-lockfile
+
+COPY --from=pruner /app/out/full/ .
+COPY turbo.json turbo.json
+
+RUN pnpm turbo run build --filter=api...
+
+RUN pnpm --filter=api db:generate:all
 
 # -----------------------------------------------------------------------------
-# Builder
+# 4. Prod Deps (Clean Production Dependencies)
 # -----------------------------------------------------------------------------
-FROM base AS builder
+FROM alpine AS prod_deps
+WORKDIR /app
+RUN corepack enable pnpm
+
 ENV CI=true
 
-COPY --from=deps /app/node_modules ./node_modules
-COPY --from=deps /app/apps/api/node_modules ./apps/api/node_modules
+COPY --from=pruner /app/out/json/ .
+COPY --from=pruner /app/out/pnpm-lock.yaml ./pnpm-lock.yaml
 
-COPY . .
-
-RUN --mount=type=cache,id=pnpm-store,target=/pnpm-store \
-    pnpm config set store-dir /pnpm-store \
- && pnpm --filter @pitch/shared-backend... build
+RUN npm pkg delete scripts.prepare
 
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm-store \
     pnpm config set store-dir /pnpm-store \
- && pnpm --filter ./apps/api... db:generate:all
-
-RUN --mount=type=cache,id=pnpm-store,target=/pnpm-store \
-    pnpm config set store-dir /pnpm-store \
- && pnpm --filter ./apps/api... db:generate:all \
- && pnpm --filter ./apps/api... exec nest build \
- && test -d apps/api/dist \
- && ls -lah apps/api/dist
+    && HUSKY=0 pnpm install --prod --frozen-lockfile
 
 # -----------------------------------------------------------------------------
-# Runner
+# 5. Runner (Final Production Image)
 # -----------------------------------------------------------------------------
-FROM ${NODE_IMAGE} AS runner
+FROM alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
-
 ARG SERVICE_NAME
 ENV SERVICE_NAME=${SERVICE_NAME}
 
-RUN apk add --no-cache libc6-compat openssl \
- && addgroup --system --gid 1001 nodejs \
- && adduser  --system --uid 1001 nestjs
+RUN addgroup --system --gid 1001 nodejs \
+    && adduser --system --uid 1001 nestjs
 
-COPY --from=builder --chown=nestjs:nodejs /app/package.json ./package.json
-COPY --from=builder --chown=nestjs:nodejs /app/node_modules ./node_modules
+COPY --from=prod_deps --chown=nestjs:nodejs /app/node_modules /app/node_modules
+COPY --from=builder --chown=nestjs:nodejs /app/apps/api/node_modules/@prisma /app/node_modules/@prisma
 
-COPY --from=builder --chown=nestjs:nodejs /app/apps/api/package.json ./apps/api/package.json
-COPY --from=builder --chown=nestjs:nodejs /app/apps/api/dist ./apps/api/dist
+COPY --from=builder --chown=nestjs:nodejs /app/apps/api/dist /app/apps/api/dist
+COPY --from=builder --chown=nestjs:nodejs /app/apps/api/package.json /app/apps/api/package.json
 
-COPY --from=builder --chown=nestjs:nodejs /app/node_modules/@prisma ./node_modules/@prisma
-COPY --from=builder --chown=nestjs:nodejs /app/apps/api/src/microservices ./apps/api/src/microservices
-COPY --from=builder --chown=nestjs:nodejs /app/packages/shared-backend ./packages/shared-backend
+COPY --from=builder --chown=nestjs:nodejs /app/packages /app/packages
 
 USER nestjs
 WORKDIR /app/apps/api
 
-CMD ["sh", "-c", "if [ \"$SERVICE_NAME\" = \"gateway\" ]; then node dist/main.js; else node dist/src/microservices/${SERVICE_NAME}/main.js; fi"]
+# Dynamic Entrypoint
+CMD ["sh", "-c", "if [ \"$SERVICE_NAME\" = \"gateway\" ]; then node dist/main.js; else node dist/microservices/${SERVICE_NAME}/main.js; fi"]
