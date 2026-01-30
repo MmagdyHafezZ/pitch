@@ -14,6 +14,7 @@ export class LaunchService {
   constructor(private readonly repository: LtiRepository) {}
 
   handleLaunch(_data: LaunchData) {
+    void _data;
     return { success: true };
   }
 }

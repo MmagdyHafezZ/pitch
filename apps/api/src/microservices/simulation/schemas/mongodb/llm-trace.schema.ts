@@ -15,26 +15,23 @@ import { Schema, Document } from 'mongoose';
 export interface ILLMMessage {
   role: 'system' | 'user' | 'assistant' | 'tool';
   content: string;
-  name?: string; // For tool/function calls
+  name?: string;
   toolCallId?: string;
 }
 
 export interface ILLMTrace extends Document {
   _id: string;
-  sessionId: string;
+  sessionMemberId: string;
   turnId?: string;
   toolCallId?: string;
   messageId?: string;
 
-  // LLM provider and model
-  provider: string; // "openai" | "anthropic" | "azure" | "custom"
-  llmModel: string; // "gpt-4" | "claude-3-opus" | etc.
+  provider: string;
+  llmModel: string;
   modelVersion?: string;
 
-  // Request data
   request: {
     messages: ILLMMessage[];
-    // Model parameters
     temperature?: number;
     maxTokens?: number;
     topP?: number;
@@ -53,11 +50,10 @@ export interface ILLMTrace extends Document {
     toolChoice?: string | Record<string, any>;
   };
 
-  // Response data
   response: {
     content?: string;
     role?: string;
-    finishReason?: string; // "stop" | "length" | "tool_calls" | "content_filter"
+    finishReason?: string;
     toolCalls?: Array<{
       id: string;
       type: string;
@@ -68,30 +64,27 @@ export interface ILLMTrace extends Document {
     }>;
   };
 
-  // Usage and performance
   usage: {
     promptTokens: number;
     completionTokens: number;
     totalTokens: number;
-    cost?: number; // Estimated cost in USD
+    cost?: number;
   };
 
   performance: {
     latencyMs: number;
     timeToFirstTokenMs?: number;
     tokensPerSecond?: number;
-    requestId?: string; // Provider request ID
+    requestId?: string;
   };
 
-  // Context and metadata
   context?: {
     userId?: string;
     orgId?: string;
     traceId?: string;
-    purpose?: string; // "chat" | "tool_call" | "evaluation" | "enrichment"
+    purpose?: string;
   };
 
-  // Error tracking
   error?: {
     occurred: boolean;
     type?: string;
@@ -106,7 +99,7 @@ export interface ILLMTrace extends Document {
 export const LLMTraceSchema = new Schema<ILLMTrace>(
   {
     _id: { type: String, required: true },
-    sessionId: { type: String, required: true, index: true },
+    sessionMemberId: { type: String, required: true, index: true },
     turnId: { type: String, index: true },
     toolCallId: { type: String, index: true },
     messageId: { type: String, index: true },
@@ -204,8 +197,7 @@ export const LLMTraceSchema = new Schema<ILLMTrace>(
   },
 );
 
-// Indexes for common queries and analytics
-LLMTraceSchema.index({ sessionId: 1, createdAt: -1 });
+LLMTraceSchema.index({ sessionMemberId: 1, createdAt: -1 });
 LLMTraceSchema.index({ provider: 1, llmModel: 1 });
 LLMTraceSchema.index({ 'context.orgId': 1, createdAt: -1 });
 LLMTraceSchema.index({ 'context.purpose': 1 });
@@ -213,7 +205,6 @@ LLMTraceSchema.index({ 'usage.totalTokens': -1 });
 LLMTraceSchema.index({ 'performance.latencyMs': -1 });
 LLMTraceSchema.index({ 'error.occurred': 1 });
 
-// TTL index - auto-delete traces older than 180 days
 LLMTraceSchema.index(
   { createdAt: 1 },
   { expireAfterSeconds: 180 * 24 * 60 * 60 },

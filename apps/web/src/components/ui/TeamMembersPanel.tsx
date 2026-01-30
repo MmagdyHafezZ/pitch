@@ -113,7 +113,15 @@ export function TeamMembersPanel() {
   }
 
   return (
-    <Card withBorder radius="md" shadow="xs" p="lg">
+    <Card
+      withBorder
+      radius="md"
+      shadow="xs"
+      p="lg"
+      style={{
+        background: 'var(--mantine-color-gray-1)'
+      }}
+    >
       {!currentTeam ? (
         <Text size="sm" c="dimmed">
           No team selected. Choose a team first.

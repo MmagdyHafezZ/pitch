@@ -15,80 +15,53 @@
  * Key Pattern Generators
  */
 export const RedisKeys = {
-  // ===== Session Cache =====
-  // Stores active session state for low-latency reads
-  // TTL: 24 hours (extended on activity)
   session: (sessionId: string) => `sim:session:${sessionId}`,
   sessionContext: (sessionId: string) => `sim:session:${sessionId}:context`,
 
-  // ===== Persona & Scenario Cache =====
-  // Caches frequently accessed persona/scenario config
-  // TTL: 1 hour
   persona: (personaId: string) => `sim:persona:${personaId}`,
   scenario: (scenarioId: string) => `sim:scenario:${scenarioId}`,
 
-  // ===== SSE (Server-Sent Events) State =====
-  // Tracks SSE connection state and last event ID
-  // TTL: 1 hour
   sseChannel: (sessionId: string) => `sim:sse:${sessionId}`,
   sseLastEventId: (sessionId: string) => `sim:sse:${sessionId}:lastEventId`,
 
-  // ===== WebRTC Signaling =====
-  // Ephemeral WebRTC signaling state before finalization
-  // TTL: 5 minutes (short-lived)
+  wsConnection: (sessionId: string) => `sim:ws:${sessionId}`,
+  wsRequestState: (requestId: string) => `sim:ws:request:${requestId}`,
+
   webrtcOffer: (callId: string) => `sim:webrtc:${callId}:offer`,
   webrtcAnswer: (callId: string) => `sim:webrtc:${callId}:answer`,
   webrtcIceCandidate: (callId: string, index: number) =>
     `sim:webrtc:${callId}:ice:${index}`,
   webrtcState: (callId: string) => `sim:webrtc:${callId}:state`,
 
-  // ===== STT (Speech-to-Text) Partials =====
-  // Stores partial transcription results during streaming
-  // TTL: 5 minutes (discarded after finalization)
   sttPartial: (callId: string) => `sim:stt:${callId}:partial`,
   sttBuffer: (callId: string) => `sim:stt:${callId}:buffer`,
 
-  // ===== Rate Limiting =====
-  // Per-org and per-user rate limit counters
-  // TTL: Sliding window (e.g., 1 minute, 1 hour)
   rateLimitOrg: (orgId: string, window: string) =>
     `sim:ratelimit:org:${orgId}:${window}`,
   rateLimitUser: (userId: string, window: string) =>
     `sim:ratelimit:user:${userId}:${window}`,
 
-  // ===== Idempotency Keys =====
-  // Prevents duplicate processing of requests
-  // TTL: 24 hours
   idempotencyKey: (key: string) => `sim:idempotency:${key}`,
 
-  // ===== Job Locks =====
-  // Distributed locks for background jobs
-  // TTL: 10 minutes (with heartbeat)
   jobLock: (jobType: string, jobId: string) => `sim:lock:${jobType}:${jobId}`,
 
-  // ===== Turn Context =====
-  // Temporary context during turn processing
-  // TTL: 10 minutes
   turnContext: (sessionId: string, turnId: string) =>
     `sim:turn:${sessionId}:${turnId}:ctx`,
 
-  // ===== LLM Streaming State =====
-  // Tracks LLM streaming state and partial responses
-  // TTL: 5 minutes
   llmStream: (sessionId: string, turnId: string) =>
     `sim:llm:${sessionId}:${turnId}:stream`,
 
-  // ===== VAD (Voice Activity Detection) State =====
-  // Tracks VAD state during real-time audio processing
-  // TTL: 5 minutes
   vadState: (callId: string) => `sim:vad:${callId}:state`,
+
+  llmPricing: (provider: string) => `sim:llm:pricing:${provider}`,
+  llmCatalog: (provider: string) => `sim:llm:catalog:${provider}`,
+  llmAuthToken: (provider: string) => `sim:llm:auth:${provider}`,
 } as const;
 
 /**
  * TypeScript Interfaces for Redis Data Structures
  */
 
-// Session Cache
 export interface ISessionCache {
   id: string;
   userId: string;
@@ -99,12 +72,11 @@ export interface ISessionCache {
   status: 'active' | 'ended';
   language?: string;
   crmContextId?: string;
-  createdAt: string; // ISO timestamp
-  lastActivityAt: string; // ISO timestamp
+  createdAt: string;
+  lastActivityAt: string;
   turnCount?: number;
 }
 
-// Session Context (expanded for turn processing)
 export interface ISessionContext {
   sessionId: string;
   scenario?: {
@@ -125,26 +97,44 @@ export interface ISessionContext {
   metadata?: Record<string, any>;
 }
 
-// SSE Channel State
 export interface ISSEChannelState {
   sessionId: string;
   isActive: boolean;
   lastEventId: string;
-  connectedAt: string; // ISO timestamp
-  lastPingAt: string; // ISO timestamp
+  connectedAt: string;
+  lastPingAt: string;
 }
 
-// WebRTC State
+export interface IWSConnectionState {
+  sessionId: string;
+  userId: string;
+  orgId: string;
+  isActive: boolean;
+  connectedAt: string;
+  lastActivityAt: string;
+  activeRequests: string[];
+}
+
+export interface IWSRequestState {
+  requestId: string;
+  sessionId: string;
+  turnId?: string;
+  type: string;
+  status: 'pending' | 'streaming' | 'completed' | 'error';
+  startedAt: string;
+  completedAt?: string;
+  error?: string;
+}
+
 export interface IWebRTCState {
   callId: string;
   sessionId: string;
   status: 'created' | 'offered' | 'answered' | 'connected' | 'ended';
-  tracks: string[]; // ["audio", "video"]
+  tracks: string[];
   createdAt: string;
   updatedAt: string;
 }
 
-// STT Partial Result
 export interface ISTTPartial {
   callId: string;
   text: string;
@@ -156,18 +146,16 @@ export interface ISTTPartial {
     endMs: number;
     confidence?: number;
   }>;
-  timestamp: string; // ISO timestamp
+  timestamp: string;
 }
 
-// Rate Limit Counter
 export interface IRateLimitCounter {
   count: number;
-  windowStart: string; // ISO timestamp
-  windowEnd: string; // ISO timestamp
+  windowStart: string;
+  windowEnd: string;
   limit: number;
 }
 
-// Idempotency Record
 export interface IIdempotencyRecord {
   key: string;
   requestHash: string;
@@ -177,17 +165,15 @@ export interface IIdempotencyRecord {
   expiresAt: string;
 }
 
-// Job Lock
 export interface IJobLock {
   jobType: string;
   jobId: string;
-  lockedBy: string; // Worker/instance ID
+  lockedBy: string;
   lockedAt: string;
   expiresAt: string;
   heartbeatAt: string;
 }
 
-// Turn Context
 export interface ITurnContext {
   sessionId: string;
   turnId: string;
@@ -206,7 +192,6 @@ export interface ITurnContext {
   metadata?: Record<string, any>;
 }
 
-// LLM Streaming State
 export interface ILLMStreamState {
   sessionId: string;
   turnId: string;
@@ -219,7 +204,6 @@ export interface ILLMStreamState {
   lastChunkAt: string;
 }
 
-// VAD State
 export interface IVADState {
   callId: string;
   isSpeaking: boolean;
@@ -233,18 +217,22 @@ export interface IVADState {
  * Redis TTL Constants (in seconds)
  */
 export const RedisTTL = {
-  SESSION_CACHE: 24 * 60 * 60, // 24 hours
-  SESSION_CONTEXT: 24 * 60 * 60, // 24 hours
-  PERSONA_CACHE: 60 * 60, // 1 hour
-  SCENARIO_CACHE: 60 * 60, // 1 hour
-  SSE_STATE: 60 * 60, // 1 hour
-  WEBRTC_STATE: 5 * 60, // 5 minutes
-  STT_PARTIAL: 5 * 60, // 5 minutes
-  RATE_LIMIT_1MIN: 60, // 1 minute
-  RATE_LIMIT_1HOUR: 60 * 60, // 1 hour
-  IDEMPOTENCY_KEY: 24 * 60 * 60, // 24 hours
-  JOB_LOCK: 10 * 60, // 10 minutes
-  TURN_CONTEXT: 10 * 60, // 10 minutes
-  LLM_STREAM: 5 * 60, // 5 minutes
-  VAD_STATE: 5 * 60, // 5 minutes
+  SESSION_CACHE: 24 * 60 * 60,
+  SESSION_CONTEXT: 24 * 60 * 60,
+  PERSONA_CACHE: 60 * 60,
+  SCENARIO_CACHE: 60 * 60,
+  SSE_STATE: 60 * 60,
+  WS_CONNECTION: 60 * 60,
+  WS_REQUEST: 5 * 60,
+  WEBRTC_STATE: 5 * 60,
+  STT_PARTIAL: 5 * 60,
+  RATE_LIMIT_1MIN: 60,
+  RATE_LIMIT_1HOUR: 60 * 60,
+  IDEMPOTENCY_KEY: 24 * 60 * 60,
+  JOB_LOCK: 10 * 60,
+  TURN_CONTEXT: 10 * 60,
+  LLM_STREAM: 5 * 60,
+  VAD_STATE: 5 * 60,
+  LLM_PRICING: 6 * 60 * 60,
+  LLM_MODEL_CATALOG: 6 * 60 * 60,
 } as const;

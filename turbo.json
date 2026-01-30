@@ -10,9 +10,11 @@
       "outputs": ["dist/**", ".next/**", "build/**"]
     },
     "lint": {
+      "dependsOn": ["^build", "db:generate:all"],
       "outputs": []
     },
     "lint:fix": {
+      "dependsOn": ["^build", "db:generate:all"],
       "outputs": []
     },
     "test": {

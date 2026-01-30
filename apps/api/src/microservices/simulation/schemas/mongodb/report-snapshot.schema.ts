@@ -13,14 +13,12 @@ import { Schema, Document } from 'mongoose';
  */
 
 export interface IReportSnapshot extends Document {
-  _id: string; // Same as PostgreSQL ReportRequest.id (cuid)
-  sessionId: string;
-  format: 'json'; // Only JSON reports stored here; PDF in S3
+  _id: string;
+  sessionMemberId: string;
+  format: 'json';
   generatedAt: Date;
 
-  // Report data
   data: {
-    // Session summary
     session: {
       id: string;
       mode: string;
@@ -32,13 +30,12 @@ export interface IReportSnapshot extends Document {
         name: string;
         traits?: Record<string, any>;
       };
-      duration?: number; // milliseconds
+      duration?: number;
       startedAt: Date;
       endedAt?: Date;
       status: string;
     };
 
-    // Turn history
     turns?: Array<{
       order: number;
       role: string;
@@ -47,7 +44,6 @@ export interface IReportSnapshot extends Document {
       metadata?: Record<string, any>;
     }>;
 
-    // Transcript summary
     transcript?: {
       id: string;
       language?: string;
@@ -66,7 +62,6 @@ export interface IReportSnapshot extends Document {
       };
     };
 
-    // Scorecard results
     scorecard?: {
       id: string;
       rubric: {
@@ -89,7 +84,6 @@ export interface IReportSnapshot extends Document {
       }>;
     };
 
-    // Performance metrics
     metrics?: {
       tokensInput?: number;
       tokensOutput?: number;
@@ -98,7 +92,6 @@ export interface IReportSnapshot extends Document {
       cost?: number;
     };
 
-    // Benchmarks comparison
     benchmarks?: Array<{
       name: string;
       metric: string;
@@ -107,7 +100,6 @@ export interface IReportSnapshot extends Document {
       percentile?: number;
     }>;
 
-    // Key insights
     insights?: {
       strengths?: string[];
       areasForImprovement?: string[];
@@ -119,7 +111,6 @@ export interface IReportSnapshot extends Document {
       }>;
     };
 
-    // Evaluation artifacts summary
     evaluations?: Array<{
       kind: string;
       score: number;
@@ -127,10 +118,9 @@ export interface IReportSnapshot extends Document {
     }>;
   };
 
-  // Report metadata
   metadata?: {
-    version: string; // Report schema version
-    generatedBy?: string; // Service/user that generated report
+    version: string;
+    generatedBy?: string;
     templateVersion?: string;
     locale?: string;
     includeTranscript?: boolean;
@@ -144,8 +134,8 @@ export interface IReportSnapshot extends Document {
 
 export const ReportSnapshotSchema = new Schema<IReportSnapshot>(
   {
-    _id: { type: String, required: true }, // Same as Postgres ReportRequest.id
-    sessionId: { type: String, required: true, index: true },
+    _id: { type: String, required: true },
+    sessionMemberId: { type: String, required: true },
     format: { type: String, enum: ['json'], default: 'json' },
     generatedAt: { type: Date, required: true },
 
@@ -279,12 +269,10 @@ export const ReportSnapshotSchema = new Schema<IReportSnapshot>(
   },
 );
 
-// Indexes for common queries
-ReportSnapshotSchema.index({ sessionId: 1 });
+ReportSnapshotSchema.index({ sessionMemberId: 1 });
 ReportSnapshotSchema.index({ generatedAt: -1 });
 ReportSnapshotSchema.index({ 'data.session.startedAt': -1 });
 
-// TTL index - auto-delete snapshots older than 1 year
 ReportSnapshotSchema.index(
   { createdAt: 1 },
   { expireAfterSeconds: 365 * 24 * 60 * 60 },
