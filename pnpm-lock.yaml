@@ -178,6 +178,9 @@ importers:
       compression:
         specifier: ^1.8.1
         version: 1.8.1
+      cookie-parser:
+        specifier: ^1.4.7
+        version: 1.4.7
       dotenv:
         specifier: ^17.2.2
         version: 17.2.2
@@ -196,6 +199,9 @@ importers:
       morgan:
         specifier: ^1.10.1
         version: 1.10.1
+      nodemailer:
+        specifier: ^7.0.13
+        version: 7.0.13
       openai:
         specifier: ^4.96.0
         version: 4.104.0(ws@8.19.0)(zod@3.25.76)
@@ -264,7 +270,7 @@ importers:
         specifier: ^1.8.1
         version: 1.8.1
       "@types/express":
-        specifier: ^5.0.0
+        specifier: ^5.0.3
         version: 5.0.3
       "@types/jest":
         specifier: ^30.0.0
@@ -448,7 +454,7 @@ importers:
         version: 15.4.11(@babel/core@7.28.3)(@playwright/test@1.55.1)(babel-plugin-macros@3.1.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
       next-auth:
         specifier: ^4.24.13
-        version: 4.24.13(next@15.4.11(@babel/core@7.28.3)(@playwright/test@1.55.1)(babel-plugin-macros@3.1.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
+        version: 4.24.13(next@15.4.11(@babel/core@7.28.3)(@playwright/test@1.55.1)(babel-plugin-macros@3.1.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(nodemailer@7.0.13)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
       react:
         specifier: 19.1.0
         version: 19.1.0
@@ -7713,6 +7719,19 @@ packages:
       }
     engines: { node: ">=6" }
 
+  cookie-parser@1.4.7:
+    resolution:
+      {
+        integrity: sha512-nGUvgXnotP3BsjiLX2ypbQnWoGUPIIfHQNZkkC668ntrzGWEZVW70HDEB1qnNGMicPje6EttlIgzo51YSwNQGw==,
+      }
+    engines: { node: ">= 0.8.0" }
+
+  cookie-signature@1.0.6:
+    resolution:
+      {
+        integrity: sha512-QADzlaHc8icV8I7vbaJXJwod9HWYp8uCqf1xa4OfNu1T7JVxQIrUgOWtHdNDtPiywmFbiS12VjotIXLrKM3orQ==,
+      }
+
   cookie-signature@1.2.2:
     resolution:
       {
@@ -11985,6 +12004,13 @@ packages:
       {
         integrity: sha512-nmh3lCkYZ3grZvqcCH+fjmQ7X+H0OeZgP40OierEaAptX4XofMh5kwNbWh7lBduUzCcV/8kZ+NDLCwm2iorIlA==,
       }
+
+  nodemailer@7.0.13:
+    resolution:
+      {
+        integrity: sha512-PNDFSJdP+KFgdsG3ZzMXCgquO7I6McjY2vlqILjtJd0hy8wEvtugS9xKRF2NWlPNGxvLCXlTNIae4serI7dinw==,
+      }
+    engines: { node: ">=6.0.0" }
 
   normalize-package-data@2.5.0:
     resolution:
@@ -20973,6 +20999,13 @@ snapshots:
       lodash.clonedeep: 4.5.0
       yargs-parser: 20.2.9
 
+  cookie-parser@1.4.7:
+    dependencies:
+      cookie: 0.7.2
+      cookie-signature: 1.0.6
+
+  cookie-signature@1.0.6: {}
+
   cookie-signature@1.2.2: {}
 
   cookie@0.7.2: {}
@@ -21539,7 +21572,7 @@ snapshots:
       "@typescript-eslint/parser": 8.54.0(eslint@9.33.0(jiti@1.21.7))(typescript@5.9.2)
       eslint: 9.33.0(jiti@1.21.7)
       eslint-import-resolver-node: 0.3.9
-      eslint-import-resolver-typescript: 3.10.1(eslint-plugin-import@2.32.0)(eslint@9.33.0(jiti@1.21.7))
+      eslint-import-resolver-typescript: 3.10.1(eslint-plugin-import@2.32.0(@typescript-eslint/parser@8.54.0(eslint@9.33.0(jiti@1.21.7))(typescript@5.9.2))(eslint@9.33.0(jiti@1.21.7)))(eslint@9.33.0(jiti@1.21.7))
       eslint-plugin-import: 2.32.0(@typescript-eslint/parser@8.54.0(eslint@9.33.0(jiti@1.21.7))(typescript@5.9.2))(eslint-import-resolver-typescript@3.10.1)(eslint@9.33.0(jiti@1.21.7))
       eslint-plugin-jsx-a11y: 6.10.2(eslint@9.33.0(jiti@1.21.7))
       eslint-plugin-react: 7.37.5(eslint@9.33.0(jiti@1.21.7))
@@ -21563,7 +21596,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  eslint-import-resolver-typescript@3.10.1(eslint-plugin-import@2.32.0)(eslint@9.33.0(jiti@1.21.7)):
+  eslint-import-resolver-typescript@3.10.1(eslint-plugin-import@2.32.0(@typescript-eslint/parser@8.54.0(eslint@9.33.0(jiti@1.21.7))(typescript@5.9.2))(eslint@9.33.0(jiti@1.21.7)))(eslint@9.33.0(jiti@1.21.7)):
     dependencies:
       "@nolyfill/is-core-module": 1.0.39
       debug: 4.4.3
@@ -21578,14 +21611,14 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  eslint-module-utils@2.12.1(@typescript-eslint/parser@8.54.0(eslint@9.33.0(jiti@1.21.7))(typescript@5.9.2))(eslint-import-resolver-node@0.3.9)(eslint-import-resolver-typescript@3.10.1)(eslint@9.33.0(jiti@1.21.7)):
+  eslint-module-utils@2.12.1(@typescript-eslint/parser@8.54.0(eslint@9.33.0(jiti@1.21.7))(typescript@5.9.2))(eslint-import-resolver-node@0.3.9)(eslint-import-resolver-typescript@3.10.1(eslint-plugin-import@2.32.0(@typescript-eslint/parser@8.54.0(eslint@9.33.0(jiti@1.21.7))(typescript@5.9.2))(eslint@9.33.0(jiti@1.21.7)))(eslint@9.33.0(jiti@1.21.7)))(eslint@9.33.0(jiti@1.21.7)):
     dependencies:
       debug: 3.2.7
     optionalDependencies:
       "@typescript-eslint/parser": 8.54.0(eslint@9.33.0(jiti@1.21.7))(typescript@5.9.2)
       eslint: 9.33.0(jiti@1.21.7)
       eslint-import-resolver-node: 0.3.9
-      eslint-import-resolver-typescript: 3.10.1(eslint-plugin-import@2.32.0)(eslint@9.33.0(jiti@1.21.7))
+      eslint-import-resolver-typescript: 3.10.1(eslint-plugin-import@2.32.0(@typescript-eslint/parser@8.54.0(eslint@9.33.0(jiti@1.21.7))(typescript@5.9.2))(eslint@9.33.0(jiti@1.21.7)))(eslint@9.33.0(jiti@1.21.7))
     transitivePeerDependencies:
       - supports-color
 
@@ -21600,7 +21633,7 @@ snapshots:
       doctrine: 2.1.0
       eslint: 9.33.0(jiti@1.21.7)
       eslint-import-resolver-node: 0.3.9
-      eslint-module-utils: 2.12.1(@typescript-eslint/parser@8.54.0(eslint@9.33.0(jiti@1.21.7))(typescript@5.9.2))(eslint-import-resolver-node@0.3.9)(eslint-import-resolver-typescript@3.10.1)(eslint@9.33.0(jiti@1.21.7))
+      eslint-module-utils: 2.12.1(@typescript-eslint/parser@8.54.0(eslint@9.33.0(jiti@1.21.7))(typescript@5.9.2))(eslint-import-resolver-node@0.3.9)(eslint-import-resolver-typescript@3.10.1(eslint-plugin-import@2.32.0(@typescript-eslint/parser@8.54.0(eslint@9.33.0(jiti@1.21.7))(typescript@5.9.2))(eslint@9.33.0(jiti@1.21.7)))(eslint@9.33.0(jiti@1.21.7)))(eslint@9.33.0(jiti@1.21.7))
       hasown: 2.0.2
       is-core-module: 2.16.1
       is-glob: 4.0.3
@@ -22439,7 +22472,7 @@ snapshots:
       isstream: 0.1.2
       jsonwebtoken: 9.0.3
       mime-types: 2.1.35
-      retry-axios: 2.6.0(axios@1.13.3(debug@4.4.3))
+      retry-axios: 2.6.0(axios@1.13.3)
       tough-cookie: 4.1.4
     transitivePeerDependencies:
       - supports-color
@@ -24094,7 +24127,7 @@ snapshots:
 
   neo-async@2.6.2: {}
 
-  next-auth@4.24.13(next@15.4.11(@babel/core@7.28.3)(@playwright/test@1.55.1)(babel-plugin-macros@3.1.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(react-dom@19.1.0(react@19.1.0))(react@19.1.0):
+  next-auth@4.24.13(next@15.4.11(@babel/core@7.28.3)(@playwright/test@1.55.1)(babel-plugin-macros@3.1.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(nodemailer@7.0.13)(react-dom@19.1.0(react@19.1.0))(react@19.1.0):
     dependencies:
       "@babel/runtime": 7.28.6
       "@panva/hkdf": 1.2.1
@@ -24108,6 +24141,8 @@ snapshots:
       react: 19.1.0
       react-dom: 19.1.0(react@19.1.0)
       uuid: 8.3.2
+    optionalDependencies:
+      nodemailer: 7.0.13
 
   next@15.4.11(@babel/core@7.28.3)(@playwright/test@1.55.1)(babel-plugin-macros@3.1.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0):
     dependencies:
@@ -24156,6 +24191,8 @@ snapshots:
   node-releases@2.0.19: {}
 
   node-releases@2.0.27: {}
+
+  nodemailer@7.0.13: {}
 
   normalize-package-data@2.5.0:
     dependencies:
@@ -25067,7 +25104,7 @@ snapshots:
       onetime: 7.0.0
       signal-exit: 4.1.0
 
-  retry-axios@2.6.0(axios@1.13.3(debug@4.4.3)):
+  retry-axios@2.6.0(axios@1.13.3):
     dependencies:
       axios: 1.13.3(debug@4.4.3)
 
