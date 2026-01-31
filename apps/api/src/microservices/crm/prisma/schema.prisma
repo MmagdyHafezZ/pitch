@@ -49,9 +49,358 @@ model Integration {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // Relations
+  contacts      Contact[]
+  accounts      Account[]
+  opportunities Opportunity[]
+  leads         Lead[]
+
   @@unique([userId, provider])
   @@index([userId])
   @@index([provider])
   @@index([status])
   @@map("integrations")
+}
+
+// Contact - CRM contacts stored locally
+model Contact {
+  id        String   @id @default(cuid())
+  userId    String   // Owner of this contact
+  orgId     String?  // Organization ID for multi-tenancy
+  
+  // Integration tracking
+  integrationId String?
+  integration   Integration? @relation(fields: [integrationId], references: [id], onDelete: SetNull)
+  externalId    String?      // ID from external provider (Salesforce, HubSpot)
+  provider      IntegrationProvider?
+  
+  // Contact information
+  firstName     String
+  lastName      String
+  email         String?
+  phone         String?
+  title         String?
+  company       String?
+  
+  // Address
+  street        String?
+  city          String?
+  state         String?
+  postalCode    String?
+  country       String?
+  
+  // Additional data
+  description   String?
+  website       String?
+  linkedIn      String?
+  twitter       String?
+  
+  // Custom fields from provider
+  customFields  Json?
+  
+  // Sync tracking
+  lastSyncedAt  DateTime?
+  syncStatus    String?      @default("synced") // synced, pending, failed
+  
+  // AI Session reference (for linking to simulation sessions)
+  sessionId     String?
+  
+  // Metadata
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  
+  // Relations
+  accountId     String?
+  account       Account?     @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  opportunities Opportunity[]
+  activities    Activity[]
+  notes         Note[]
+  
+  @@unique([userId, externalId, provider])
+  @@index([userId])
+  @@index([orgId])
+  @@index([email])
+  @@index([integrationId])
+  @@index([accountId])
+  @@index([sessionId])
+  @@map("contacts")
+}
+
+// Account - CRM accounts/companies stored locally
+model Account {
+  id            String   @id @default(cuid())
+  userId        String   // Owner of this account
+  orgId         String?  // Organization ID for multi-tenancy
+  
+  // Integration tracking
+  integrationId String?
+  integration   Integration? @relation(fields: [integrationId], references: [id], onDelete: SetNull)
+  externalId    String?      // ID from external provider
+  provider      IntegrationProvider?
+  
+  // Account information
+  name          String
+  website       String?
+  phone         String?
+  industry      String?
+  employees     Int?
+  annualRevenue Decimal?
+  
+  // Address
+  street        String?
+  city          String?
+  state         String?
+  postalCode    String?
+  country       String?
+  
+  // Additional data
+  description   String?
+  type          String?      // Customer, Partner, Prospect, etc.
+  
+  // Custom fields from provider
+  customFields  Json?
+  
+  // Sync tracking
+  lastSyncedAt  DateTime?
+  syncStatus    String?      @default("synced")
+  
+  // AI Session reference (for linking to simulation sessions)
+  sessionId     String?
+  
+  // Metadata
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  
+  // Relations
+  contacts      Contact[]
+  opportunities Opportunity[]
+  activities    Activity[]
+  notes         Note[]
+  
+  @@unique([userId, externalId, provider])
+  @@index([userId])
+  @@index([orgId])
+  @@index([name])
+  @@index([integrationId])
+  @@index([sessionId])
+  @@map("accounts")
+}
+
+// Opportunity - CRM opportunities/deals stored locally
+model Opportunity {
+  id            String   @id @default(cuid())
+  userId        String   // Owner of this opportunity
+  orgId         String?  // Organization ID for multi-tenancy
+  
+  // Integration tracking
+  integrationId String?
+  integration   Integration? @relation(fields: [integrationId], references: [id], onDelete: SetNull)
+  externalId    String?      // ID from external provider
+  provider      IntegrationProvider?
+  
+  // Opportunity information
+  name          String
+  amount        Decimal?
+  stage         String
+  probability   Int?         // 0-100
+  closeDate     DateTime?
+  
+  // Relations
+  accountId     String?
+  account       Account?     @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  contactId     String?
+  contact       Contact?     @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  
+  // Additional data
+  description   String?
+  nextStep      String?
+  type          String?      // New Business, Existing Business, etc.
+  leadSource    String?
+  
+  // Status
+  isClosed      Boolean      @default(false)
+  isWon         Boolean      @default(false)
+  
+  // Custom fields from provider
+  customFields  Json?
+  
+  // Sync tracking
+  lastSyncedAt  DateTime?
+  syncStatus    String?      @default("synced")
+  
+  // AI Session reference (for linking to simulation sessions)
+  sessionId     String?
+  
+  // Metadata
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  
+  // Relations
+  activities    Activity[]
+  notes         Note[]
+  
+  @@unique([userId, externalId, provider])
+  @@index([userId])
+  @@index([orgId])
+  @@index([stage])
+  @@index([closeDate])
+  @@index([integrationId])
+  @@index([accountId])
+  @@index([contactId])
+  @@index([sessionId])
+  @@map("opportunities")
+}
+
+// Lead - CRM leads stored locally
+model Lead {
+  id            String   @id @default(cuid())
+  userId        String   // Owner of this lead
+  orgId         String?  // Organization ID for multi-tenancy
+  
+  // Integration tracking
+  integrationId String?
+  integration   Integration? @relation(fields: [integrationId], references: [id], onDelete: SetNull)
+  externalId    String?      // ID from external provider
+  provider      IntegrationProvider?
+  
+  // Lead information
+  firstName     String
+  lastName      String
+  email         String?
+  phone         String?
+  company       String?
+  title         String?
+  
+  // Lead details
+  status        String       @default("New") // New, Contacted, Qualified, Unqualified
+  rating        String?      // Hot, Warm, Cold
+  leadSource    String?
+  
+  // Address
+  street        String?
+  city          String?
+  state         String?
+  postalCode    String?
+  country       String?
+  
+  // Additional data
+  description   String?
+  website       String?
+  
+  // Conversion tracking
+  isConverted   Boolean      @default(false)
+  convertedDate DateTime?
+  convertedContactId String?
+  convertedAccountId String?
+  convertedOpportunityId String?
+  
+  // Custom fields from provider
+  customFields  Json?
+  
+  // Sync tracking
+  lastSyncedAt  DateTime?
+  syncStatus    String?      @default("synced")
+  
+  // AI Session reference (for linking to simulation sessions)
+  sessionId     String?
+  
+  // Metadata
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  
+  // Relations
+  activities    Activity[]
+  notes         Note[]
+  
+  @@unique([userId, externalId, provider])
+  @@index([userId])
+  @@index([orgId])
+  @@index([email])
+  @@index([status])
+  @@index([integrationId])
+  @@index([sessionId])
+  @@map("leads")
+}
+
+// Activity - Track activities related to CRM entities
+model Activity {
+  id          String   @id @default(cuid())
+  userId      String   // Owner of this activity
+  orgId       String?  // Organization ID for multi-tenancy
+  
+  // Activity details
+  type        String   // Call, Email, Meeting, Task, etc.
+  subject     String
+  description String?
+  status      String   @default("Planned") // Planned, Completed, Cancelled
+  priority    String?  // High, Medium, Low
+  
+  // Scheduling
+  dueDate     DateTime?
+  completedAt DateTime?
+  
+  // Relations (can be linked to any CRM entity)
+  contactId     String?
+  contact       Contact?     @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  accountId     String?
+  account       Account?     @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  opportunityId String?
+  opportunity   Opportunity? @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+  leadId        String?
+  lead          Lead?        @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  
+  // AI Session reference (for linking to simulation sessions)
+  sessionId   String?      // Reference to simulation session ID
+  
+  // Metadata
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  
+  @@index([userId])
+  @@index([orgId])
+  @@index([type])
+  @@index([dueDate])
+  @@index([contactId])
+  @@index([accountId])
+  @@index([opportunityId])
+  @@index([leadId])
+  @@index([sessionId])
+  @@map("activities")
+}
+
+// Note - Notes for CRM entities
+model Note {
+  id          String   @id @default(cuid())
+  userId      String   // Owner of this note
+  orgId       String?  // Organization ID for multi-tenancy
+  
+  // Note content
+  title       String?
+  content     String
+  
+  // Relations (can be linked to any CRM entity)
+  contactId     String?
+  contact       Contact?     @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  accountId     String?
+  account       Account?     @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  opportunityId String?
+  opportunity   Opportunity? @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+  leadId        String?
+  lead          Lead?        @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  
+  // AI Session reference
+  sessionId   String?      // Reference to simulation session ID
+  
+  // Metadata
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  
+  @@index([userId])
+  @@index([orgId])
+  @@index([contactId])
+  @@index([accountId])
+  @@index([opportunityId])
+  @@index([leadId])
+  @@index([sessionId])
+  @@map("notes")
 }

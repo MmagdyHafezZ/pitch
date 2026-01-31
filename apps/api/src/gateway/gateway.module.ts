@@ -5,6 +5,7 @@ import { UserGatewayController } from './controllers/userManagement/user-gateway
 import { AuthGatewayController } from './controllers/userManagement/auth-gateway.controller';
 import { TeamGatewayController } from './controllers/userManagement/team-gateway.controller';
 import { SalesforceGatewayController } from './controllers/crm/salesforce-gateway.controller';
+import { SessionCrmGatewayController } from './controllers/crm/session-crm-gateway.controller';
 import { GlobalJwtAuthGuard } from './guards/global-jwt-auth.guard';
 import { UserClaimsInterceptor } from './interceptors/user-claims.interceptor';
 import {
@@ -41,6 +42,7 @@ import { APP_GUARD } from '@nestjs/core';
     AuthGatewayController,
     TeamGatewayController,
     SalesforceGatewayController,
+    SessionCrmGatewayController,
   ],
   providers: [
     { provide: APP_GUARD, useClass: GlobalJwtAuthGuard },

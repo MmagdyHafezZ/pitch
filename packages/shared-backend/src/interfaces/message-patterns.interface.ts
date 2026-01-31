@@ -31,17 +31,23 @@ export const BUSINESS_SERVICE_PATTERNS = {
 } as const
 
 export const CRM_SERVICE_PATTERNS = {
-  // Salesforce Integration
+  // Salesforce Integration - Live Data (Real-time from Salesforce)
   SALESFORCE_CONNECT: 'salesforce.connect',
   SALESFORCE_CALLBACK: 'salesforce.callback',
   SALESFORCE_GET_STATUS: 'salesforce.getStatus',
-  SALESFORCE_GET_CONTACTS: 'salesforce.getContacts',
-  SALESFORCE_GET_ACCOUNTS: 'salesforce.getAccounts',
-  SALESFORCE_GET_OPPORTUNITIES: 'salesforce.getOpportunities',
-  SALESFORCE_GET_LEADS: 'salesforce.getLeads',
+  SALESFORCE_GET_CONTACTS: 'salesforce.getContacts', // Live from Salesforce
+  SALESFORCE_GET_ACCOUNTS: 'salesforce.getAccounts', // Live from Salesforce
+  SALESFORCE_GET_OPPORTUNITIES: 'salesforce.getOpportunities', // Live from Salesforce
+  SALESFORCE_GET_LEADS: 'salesforce.getLeads', // Live from Salesforce
   SALESFORCE_QUERY: 'salesforce.query',
   SALESFORCE_SEARCH: 'salesforce.search',
   SALESFORCE_DISCONNECT: 'salesforce.disconnect',
+
+  // Session CRM Data (Stored in DB, attached to sessions)
+  SESSION_ATTACH_CRM_DATA: 'session.attachCrmData', // Attach selected CRM data to session
+  SESSION_GET_CRM_DATA: 'session.getCrmData', // Get CRM data for session
+  SESSION_REFRESH_CRM_DATA: 'session.refreshCrmData', // Refresh from Salesforce
+  SESSION_DELETE_CRM_DATA: 'session.deleteCrmData', // Delete when session deleted
 } as const
 
 export type UserServicePattern = (typeof USER_SERVICE_PATTERNS)[keyof typeof USER_SERVICE_PATTERNS]
