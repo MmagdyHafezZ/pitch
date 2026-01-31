@@ -1,7 +1,7 @@
 import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { withAccelerate } from '@prisma/extension-accelerate';
 import { PrismaClient as SupportPrismaClient } from '@prisma/support-client';
-import { resolvePrismaRuntimeConfig } from 'config/prisma-runtime.config';
+import { resolvePrismaRuntimeConfig } from './config/prisma-runtime.config';
 
 @Injectable()
 export class SupportPrismaService implements OnModuleInit, OnModuleDestroy {
