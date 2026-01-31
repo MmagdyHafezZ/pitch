@@ -121,7 +121,9 @@ export type BusinessServicePattern =
 export type CrmServicePattern = (typeof CRM_SERVICE_PATTERNS)[keyof typeof CRM_SERVICE_PATTERNS]
 export type SimulationServicePattern =
   (typeof SIMULATION_SERVICE_PATTERNS)[keyof typeof SIMULATION_SERVICE_PATTERNS]
-
+export const SUPPORT_SERVICE_PATTERNS = {
+  EMAIL_SEND_VERIFICATION_CODE: 'support.email.sendVerificationCode',
+} as const
 export const TTS_SERVICE_PATTERNS = {
   SPEAK: 'tts.speak',
   LIST_PROVIDERS: 'tts.providers',
