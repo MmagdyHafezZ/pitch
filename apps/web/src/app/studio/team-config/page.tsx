@@ -3,14 +3,22 @@
 import {
   Box,
   Button,
-  Card,
+  Badge,
+  ActionIcon,
+  Avatar,
+  Checkbox,
   Group,
+  Table,
+  ScrollArea,
   Stack,
   Text,
   TextInput,
   Title,
   SimpleGrid,
   Paper,
+  Divider,
+  Menu,
+  Select,
 } from '@mantine/core'
 import { Suspense, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
@@ -18,10 +26,19 @@ import { useTeams } from '@/features/teams/hooks/useTeams'
 import { useAuth } from '@/features/auth'
 import { useCreateTeamForm } from '@/features/teams/hooks/useTeamForm'
 import { TeamMembersPanel } from '@/components/ui/TeamMembersPanel'
+import {
+  IconFilter,
+  IconMail,
+  IconSearch,
+  IconTrash,
+  IconSettings,
+  IconChartBar,
+  IconChevronDown,
+} from '@tabler/icons-react'
 
 export default function TeamConfigPage() {
   return (
-    <Suspense fallback={<div>Loading team configuration…</div>}>
+    <Suspense fallback={<div>Loading team configuration...</div>}>
       <TeamConfigInner />
     </Suspense>
   )
@@ -31,9 +48,20 @@ function TeamConfigInner() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const isCreateMode = searchParams.get('mode') === 'create'
+  const isMyTeamsTab = searchParams.get('teamTab') === 'my'
 
-  const { logout } = useAuth()
-  const { currentTeam, updateTeam } = useTeams()
+  const { user } = useAuth()
+  const {
+    currentTeam,
+    updateTeam,
+    teams,
+    fetchTeamById,
+    activeTeamId,
+    addMember,
+    updateMember,
+    deleteMember,
+    loading: teamsLoading,
+  } = useTeams()
   const { values, errors, setField, submit, submitting, apiError } = useCreateTeamForm()
   const [editValues, setEditValues] = useState({
     name: '',
@@ -46,6 +74,11 @@ function TeamConfigInner() {
   })
   const [editError, setEditError] = useState<string | null>(null)
   const [savingEdit, setSavingEdit] = useState(false)
+  const [memberSearch, setMemberSearch] = useState('')
+  const [roleFilter, setRoleFilter] = useState<'ALL' | 'OWNER' | 'ADMIN' | 'MEMBER'>('ALL')
+  const [inviteUserId, setInviteUserId] = useState('')
+  const [inviting, setInviting] = useState(false)
+  const [selectedMembers, setSelectedMembers] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     if (!isCreateMode && currentTeam) {
@@ -123,8 +156,438 @@ function TeamConfigInner() {
     : 'Manage your team details, billing information, and members.'
   const primaryLabel = isCreateMode ? 'Create team' : 'Save changes'
 
+  const handleEditTeam = async (teamId: string) => {
+    await fetchTeamById(teamId)
+    router.push('/studio/team-config')
+  }
+
+  const handleInvite = async (teamId: string) => {
+    const userId = inviteUserId.trim()
+    if (!userId) return
+    setInviting(true)
+    try {
+      await addMember(teamId, { userId, role: 'MEMBER' })
+      setInviteUserId('')
+    } finally {
+      setInviting(false)
+    }
+  }
+
+  const handleRoleChange = async (teamId: string, userId: string, role: string) => {
+    await updateMember(teamId, userId, { role: role as any })
+  }
+
+  const handleTokenLimitChange = async (teamId: string, userId: string, current?: number) => {
+    const next = window.prompt('Set token limit', String(current ?? 0))
+    if (next === null) return
+    const parsed = Number(next)
+    if (Number.isNaN(parsed) || parsed < 0) return
+    await updateMember(teamId, userId, { tokenLimit: parsed })
+  }
+
+  const toggleMemberSelected = (userId: string) => {
+    setSelectedMembers((prev) => {
+      const next = new Set(prev)
+      if (next.has(userId)) {
+        next.delete(userId)
+      } else {
+        next.add(userId)
+      }
+      return next
+    })
+  }
+
+  const clearSelection = () => {
+    setSelectedMembers(new Set())
+  }
+
+  const selectAllFiltered = (members: { userId: string }[]) => {
+    const next = new Set<string>()
+    members.forEach((member) => next.add(member.userId))
+    setSelectedMembers(next)
+  }
+
+  const handleBulkRoleChange = async (teamId: string, role: string) => {
+    if (!selectedMembers.size) return
+    await Promise.all(
+      Array.from(selectedMembers).map((userId) => updateMember(teamId, userId, { role: role as any }))
+    )
+  }
+
+  const handleBulkRemove = async (teamId: string) => {
+    if (!selectedMembers.size) return
+    await Promise.all(Array.from(selectedMembers).map((userId) => deleteMember(teamId, userId)))
+    clearSelection()
+  }
+
+  if (isMyTeamsTab) {
+    const activeTeam =
+      currentTeam ?? teams.find((team) => (activeTeamId ? team.id === activeTeamId : false))
+    const membership =
+      activeTeam?.memberships?.find((m) => m.userId === user?.id) ??
+      activeTeam?.memberships?.find(
+        (m) => user?.email && m.user?.email?.toLowerCase() === user.email.toLowerCase()
+      )
+    const role = membership?.role ?? 'MEMBER'
+    const isOwner = role === 'OWNER'
+    const members = (activeTeam?.memberships ?? []).filter((m) => m.isActive !== false)
+    const filteredMembers = members.filter((member) => {
+      const q = memberSearch.trim().toLowerCase()
+      if (roleFilter !== 'ALL' && member.role !== roleFilter) return false
+      if (!q) return true
+      const name = member.user?.name?.toLowerCase() ?? ''
+      const email = member.user?.email?.toLowerCase() ?? ''
+      return name.includes(q) || email.includes(q)
+    })
+    return (
+      <Paper
+        p="xl"
+        radius="xl"
+        shadow="sm"
+        withBorder
+        style={{ background: 'var(--mantine-color-gray-0)' }}
+      >
+        <Stack gap="lg">
+
+          {!activeTeam ? (
+            <Stack gap="xs">
+              <Text size="sm" fw={600}>
+                No team selected.
+              </Text>
+              <Text size="sm" c="dimmed">
+                Choose a team from the sidebar to view details here.
+              </Text>
+            </Stack>
+          ) : (
+            <Stack gap="lg">
+              <Box
+                p="lg"
+                style={{
+                  margin:
+                    'calc(-1 * var(--mantine-spacing-xl)) calc(-1 * var(--mantine-spacing-xl)) 0',
+                  borderRadius: '30px 30px 0 0',
+                  background:
+                    'linear-gradient(90deg, rgba(248, 249, 250, 0.55) 0%, rgba(234,243,255,0.35) 45%, rgba(77, 160, 233, 0.65) 100%)',
+                }}
+              >
+                <Stack gap="xs">
+                  <Title order={3}>Team Management</Title>
+                  <Text size="sm" c="dimmed">
+                    Manage your team members or invite new members to your team.
+                  </Text>
+                </Stack>
+              </Box>
+
+              <Stack gap="sm">
+                <Group justify="space-between" align="center">
+                  <Stack gap={2}>
+                    <Text size="xs" c="dimmed" tt="uppercase" fw={600}>
+                      Team
+                    </Text>
+                    <Group gap="xs">
+                      <Title order={3}>{activeTeam.name}</Title>
+                      <Badge variant="light">{role.toLowerCase()}</Badge>
+                    </Group>
+                    <Text size="sm" c="dimmed">
+                      {members.length} member{members.length === 1 ? '' : 's'}
+                      {activeTeam.billingEmail ? ` - ${activeTeam.billingEmail}` : ''}
+                    </Text>
+                  </Stack>
+                  <Button size="sm" onClick={() => void handleEditTeam(activeTeam.id)}>
+                    Edit team
+                  </Button>
+                </Group>
+
+                <Group justify="space-between" align="center">
+                  <Stack gap={2}>
+                    <Title order={4}>Invite new member</Title>
+                    <Text size="sm" c="dimmed">
+                      Invite a member by email.
+                    </Text>
+                  </Stack>
+                </Group>
+
+                <Group gap="md" align="flex-end" wrap="nowrap">
+                  <TextInput
+                    leftSection={<IconMail size={16} />}
+                    placeholder="Email address"
+                    value={inviteUserId}
+                    onChange={(e) => setInviteUserId(e.currentTarget.value)}
+                    disabled={!isOwner}
+                    styles={{
+                      input: { background: 'white' },
+                    }}
+                    style={{ width: 260 }}
+                  />
+                  <Button
+                    onClick={() => void handleInvite(activeTeam.id)}
+                    loading={inviting || teamsLoading}
+                    disabled={!isOwner}
+                  >
+                    Send invite
+                  </Button>
+                </Group>
+                {!isOwner && (
+                  <Text size="xs" c="dimmed">
+                    Only owners can invite or remove members.
+                  </Text>
+                )}
+              </Stack>
+
+              <Divider />
+
+              <Stack gap="sm">
+                <Title order={4}>Members</Title>
+                <Group gap="sm" align="flex-end" wrap="nowrap">
+                  <TextInput
+                    leftSection={<IconSearch size={16} />}
+                    placeholder="Search by name or role"
+                    value={memberSearch}
+                    onChange={(e) => setMemberSearch(e.currentTarget.value)}
+                    style={{ width: 360 }}
+                  />
+                  <Menu width={180} position="bottom-end" withArrow>
+                    <Menu.Target>
+                      <Button
+                        variant={roleFilter === 'ALL' ? 'default' : 'light'}
+                        leftSection={<IconFilter size={16} />}
+                      >
+                        {roleFilter === 'ALL' ? 'Filters' : 'Filters - ' + roleFilter}
+                      </Button>
+                    </Menu.Target>
+                    <Menu.Dropdown>
+                      <Menu.Label>Role</Menu.Label>
+                      <Menu.Item onClick={() => setRoleFilter('ALL')}>
+                        {roleFilter === 'ALL' ? '* ' : ''}All
+                      </Menu.Item>
+                      <Menu.Item onClick={() => setRoleFilter('OWNER')}>
+                        {roleFilter === 'OWNER' ? '* ' : ''}Owner
+                      </Menu.Item>
+                      <Menu.Item onClick={() => setRoleFilter('ADMIN')}>
+                        {roleFilter === 'ADMIN' ? '* ' : ''}Admin
+                      </Menu.Item>
+                      <Menu.Item onClick={() => setRoleFilter('MEMBER')}>
+                        {roleFilter === 'MEMBER' ? '* ' : ''}Member
+                      </Menu.Item>
+                    </Menu.Dropdown>
+                  </Menu>
+                  {isOwner && selectedMembers.size > 0 && (
+                    <>
+                      <Menu width={180} position="bottom-end" withArrow>
+                        <Menu.Target>
+                          <Button variant="light" disabled={!selectedMembers.size}>
+                            Change role
+                          </Button>
+                        </Menu.Target>
+                        <Menu.Dropdown>
+                          <Menu.Item onClick={() => void handleBulkRoleChange(activeTeam.id, 'OWNER')}>
+                            Owner
+                          </Menu.Item>
+                          <Menu.Item onClick={() => void handleBulkRoleChange(activeTeam.id, 'ADMIN')}>
+                            Admin
+                          </Menu.Item>
+                          <Menu.Item onClick={() => void handleBulkRoleChange(activeTeam.id, 'MEMBER')}>
+                            Member
+                          </Menu.Item>
+                        </Menu.Dropdown>
+                      </Menu>
+                      <Button
+                        color="red"
+                        variant="light"
+                        disabled={!selectedMembers.size}
+                        onClick={() => void handleBulkRemove(activeTeam.id)}
+                      >
+                        Remove
+                      </Button>
+                    </>
+                  )}
+                </Group>
+
+                <ScrollArea h={320} type="auto">
+                  <Table withColumnBorders={false} striped highlightOnHover>
+                    <Table.Thead>
+                      <Table.Tr>
+                        <Table.Th style={{ width: 28, paddingRight: 0 }}>
+                          {selectedMembers.size > 0 && (
+                            <Checkbox
+                              size="xs"
+                              checked={
+                                filteredMembers.length > 0 &&
+                                filteredMembers.every((member) =>
+                                  selectedMembers.has(member.userId)
+                                )
+                              }
+                              indeterminate={
+                                selectedMembers.size > 0 &&
+                                filteredMembers.some((member) =>
+                                  selectedMembers.has(member.userId)
+                                ) &&
+                                !filteredMembers.every((member) =>
+                                  selectedMembers.has(member.userId)
+                                )
+                              }
+                              onChange={() => {
+                                const allSelected =
+                                  filteredMembers.length > 0 &&
+                                  filteredMembers.every((member) =>
+                                    selectedMembers.has(member.userId)
+                                  )
+                                if (allSelected) {
+                                  clearSelection()
+                                } else {
+                                  selectAllFiltered(filteredMembers)
+                                }
+                              }}
+                              styles={{ input: { width: 14, height: 14 } }}
+                            />
+                          )}
+                        </Table.Th>
+                        <Table.Th>Name</Table.Th>
+                        <Table.Th>Role</Table.Th>
+                        <Table.Th>Actions</Table.Th>
+                      </Table.Tr>
+                    </Table.Thead>
+                    <Table.Tbody>
+                      {filteredMembers.length === 0 ? (
+                        <Table.Tr>
+                          <Table.Td colSpan={4}>
+                            <Text size="sm" c="dimmed">
+                              No matching members.
+                            </Text>
+                          </Table.Td>
+                        </Table.Tr>
+                      ) : (
+                        filteredMembers.map((member) => (
+                          <Table.Tr key={member.id}>
+                          <Table.Td style={{ paddingRight: 0 }}>
+                            <Checkbox
+                              size="xs"
+                              checked={selectedMembers.has(member.userId)}
+                              onChange={() => toggleMemberSelected(member.userId)}
+                              styles={{ input: { width: 14, height: 14 } }}
+                            />
+                          </Table.Td>
+                            <Table.Td>
+                              <Group gap="sm" wrap="nowrap">
+                                <Avatar
+                                  src={member.user?.avatar ?? undefined}
+                                  radius="xl"
+                                  size={32}
+                                />
+                                <Stack gap={2}>
+                                  <Text size="sm" fw={600}>
+                                    {member.user?.name ?? 'Unknown'}
+                                  </Text>
+                                  <Text size="xs" c="dimmed">
+                                    {member.user?.email ?? ''}
+                                  </Text>
+                                </Stack>
+                              </Group>
+                            </Table.Td>
+                            <Table.Td>
+                              {isOwner ? (
+                                <Select
+                                  size="xs"
+                                  variant="unstyled"
+                                  value={member.role}
+                                  data={[
+                                    { value: 'OWNER', label: 'Owner' },
+                                    { value: 'ADMIN', label: 'Admin' },
+                                    { value: 'MEMBER', label: 'Member' },
+                                  ]}
+                                  onChange={(value) => {
+                                    if (!value) return
+                                    void handleRoleChange(activeTeam.id, member.userId, value)
+                                  }}
+                                  rightSection={
+                                    <IconChevronDown size={14} color="var(--mantine-color-blue-6)" />
+                                  }
+                                  rightSectionPointerEvents="none"
+                                  styles={{
+                                    input: {
+                                      padding: 0,
+                                      minHeight: 'unset',
+                                      height: 'auto',
+                                      border: 'none',
+                                      background: 'transparent',
+                                      fontSize: '0.875rem',
+                                    },
+                                  }}
+                                  w={90}
+                                />
+                              ) : (
+                                <Text size="sm">{member.role.toLowerCase()}</Text>
+                              )}
+                            </Table.Td>
+                            <Table.Td>
+                              {isOwner ? (
+                                <Menu position="bottom-end" withArrow>
+                                  <Menu.Target>
+                                    <ActionIcon variant="subtle">
+                                      <IconSettings size={16} />
+                                    </ActionIcon>
+                                  </Menu.Target>
+                                  <Menu.Dropdown>
+                                    <Menu.Label>Member actions</Menu.Label>
+                                    <Menu.Item
+                                      leftSection={<IconSettings size={14} />}
+                                      onClick={() =>
+                                        void handleTokenLimitChange(
+                                          activeTeam.id,
+                                          member.userId,
+                                          member.tokenLimit
+                                        )
+                                      }
+                                    >
+                                      Set token limit
+                                    </Menu.Item>
+                                    <Menu.Item
+                                      leftSection={<IconChartBar size={14} />}
+                                      onClick={() =>
+                                        router.push(`/studio/analytics?memberId=${member.userId}`)
+                                      }
+                                    >
+                                      View analytics
+                                    </Menu.Item>
+                                    <Menu.Divider />
+                                    <Menu.Item
+                                      color="red"
+                                      leftSection={<IconTrash size={14} />}
+                                      onClick={() => void deleteMember(activeTeam.id, member.userId)}
+                                      disabled={member.userId === user?.id}
+                                    >
+                                      Remove member
+                                    </Menu.Item>
+                                  </Menu.Dropdown>
+                                </Menu>
+                              ) : (
+                                <Text size="xs" c="dimmed">
+                                  —
+                                </Text>
+                              )}
+                            </Table.Td>
+                          </Table.Tr>
+                        ))
+                      )}
+                    </Table.Tbody>
+                  </Table>
+                </ScrollArea>
+              </Stack>
+            </Stack>
+          )}
+        </Stack>
+      </Paper>
+    )
+  }
+
   return (
-    <Paper p="xl" radius="md" shadow="xs" withBorder>
+    <Paper
+      p="xl"
+      radius="xl"
+      shadow="sm"
+      withBorder
+      style={{ background: 'var(--mantine-color-gray-0)' }}
+    >
       {/* header */}
       <Group justify="space-between" align="flex-start" mb="md">
         <Stack gap={4}>
@@ -143,6 +606,7 @@ function TeamConfigInner() {
           </Button>
         </Group>
       </Group>
+      <Divider my="md" />
 
       {/* error banner */}
       {bannerError && (
@@ -197,7 +661,9 @@ function TeamConfigInner() {
             />
           </Stack>
 
-          <Stack gap="sm" mt="md">
+          <Divider />
+
+          <Stack gap="sm">
             <Group justify="space-between">
               <Title order={3}>Billing address</Title>
               <Text size="xs" c="dimmed">
@@ -271,11 +737,7 @@ function TeamConfigInner() {
         </Stack>
 
         {/* RIGHT: members management only makes sense in edit mode */}
-        {!isCreateMode && (
-          <Card withBorder radius="md" shadow="xs" p="lg">
-            <TeamMembersPanel />
-          </Card>
-        )}
+        {!isCreateMode && <TeamMembersPanel />}
       </SimpleGrid>
 
       {/* Light-weight hint in create mode so we don't waste a full column */}
@@ -284,9 +746,9 @@ function TeamConfigInner() {
           mt="xl"
           p="md"
           style={{
-            borderRadius: 8,
-            background: 'var(--mantine-color-gray-0)',
+            borderRadius: 14,
             border: '1px solid var(--mantine-color-gray-3)',
+            background: 'white',
           }}
         >
           <Text size="sm" c="dimmed">
@@ -298,3 +760,11 @@ function TeamConfigInner() {
     </Paper>
   )
 }
+
+
+
+
+
+
+
+

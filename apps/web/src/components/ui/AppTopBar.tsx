@@ -206,11 +206,15 @@ function ActionConfig({
   value,
   onChange,
   isCompact,
+  teamTab,
+  onTeamTabChange,
 }: {
   currentPage: PageKey | undefined
   value?: string
   onChange?: (v: string) => void
   isCompact?: boolean
+  teamTab?: string
+  onTeamTabChange?: (tab: string) => void
 }) {
   const router = useRouter()
   const [tabsByPage, setTabsByPage] = useState<Record<PageKey, string>>({
@@ -270,18 +274,26 @@ function ActionConfig({
         />
       )
     case 'Teams':
-      return (
-        <ActionBar
-          enableSearch={true}
-          searchPlaceholder="Search teams"
-          availableTabs={['All', 'My Teams']}
-          selectedTab={tabsByPage.Teams}
-          onTabChange={handleTabChange}
-          value={value}
-          onChange={onChange}
-          isCompact={isCompact}
-        />
-      )
+      {
+        const effectiveTeamTab = teamTab ?? tabsByPage.Teams
+        const handleTeamsTabChange = (tab: string) => {
+          handleTabChange(tab)
+          onTeamTabChange?.(tab)
+        }
+
+        return (
+          <ActionBar
+            enableSearch={true}
+            searchPlaceholder="Search teams"
+            availableTabs={['All', 'My Teams']}
+            selectedTab={effectiveTeamTab}
+            onTabChange={handleTeamsTabChange}
+            value={value}
+            onChange={onChange}
+            isCompact={isCompact}
+          />
+        )
+      }
     case 'Analytics':
       return (
         <ActionBar
@@ -331,6 +343,7 @@ export function AppTopBar({
   const searchParams = useSearchParams()
   const pathname = usePathname()
   const sessionQuery = useMemo(() => searchParams.get('q') ?? '', [searchParams])
+  const teamTabQuery = useMemo(() => searchParams.get('teamTab'), [searchParams])
   const handleSessionSearch = (next: string) => {
     const params = new URLSearchParams(searchParams.toString())
     if (next.trim()) {
@@ -344,6 +357,20 @@ export function AppTopBar({
   const effectiveValue = value ?? (currentPage === 'Sessions' ? sessionQuery : undefined)
   const effectiveOnChange =
     onChange ?? (currentPage === 'Sessions' ? handleSessionSearch : undefined)
+  const effectiveTeamTab =
+    teamTabQuery === 'my' ? 'My Teams' : teamTabQuery === 'all' ? 'All' : undefined
+  const handleTeamTabChange = (tab: string) => {
+    if (currentPage !== 'Teams') return
+
+    const params = new URLSearchParams(searchParams.toString())
+    if (tab === 'My Teams') {
+      params.set('teamTab', 'my')
+    } else {
+      params.delete('teamTab')
+    }
+    const query = params.toString()
+    router.replace(query ? `${pathname}?${query}` : pathname)
+  }
 
   const unreadCountQuery = useQuery({
     queryKey: ['notifications', 'unread-count', currentUser?.id],
@@ -400,6 +427,8 @@ export function AppTopBar({
       value={effectiveValue}
       onChange={effectiveOnChange}
       isCompact={isMobile}
+      teamTab={effectiveTeamTab}
+      onTeamTabChange={handleTeamTabChange}
     />
   )
   const showActionArea = Boolean(rightSlot || currentPage)
