@@ -45,10 +45,10 @@ export function TeamSideBar({ teams, activeTeamId, onSelectTeam }: TeamSideBarPr
       style={{
         width: 60,
         height: '100%',
-        background: 'var(--mantine-color-dark-9)',
+        background: 'var(--pitch-nav-bg)',
         borderTopRightRadius: 24,
         borderBottomRightRadius: 24,
-        border: '1px solid rgba(59, 130, 246, 0.4)',
+        border: '1px solid var(--pitch-nav-text-dim)',
         display: 'flex',
         flexDirection: 'column',
         padding: '8px 4px',
@@ -84,18 +84,25 @@ export function TeamSideBar({ teams, activeTeamId, onSelectTeam }: TeamSideBarPr
                   radius="xl"
                   size="lg"
                   variant={isActive ? 'filled' : 'light'}
-                  color={isActive ? 'blue' : 'white'}
+                  color={isActive ? 'brand' : 'white'}
                   onClick={() => handleTeamClick(team.id)}
                   style={{
                     width: 36,
                     height: 36,
-                    border: isActive ? '2px solid var(--mantine-color-blue-4)' : '1px solid #444',
+                    border: isActive
+                      ? '2px solid var(--pitch-accent-strong)'
+                      : '1px solid var(--pitch-nav-text-dim)',
                     background: isActive
-                      ? 'var(--mantine-color-blue-6)'
-                      : 'var(--mantine-color-dark-7)',
+                      ? 'var(--pitch-accent-strong)'
+                      : 'var(--pitch-nav-accent-soft)',
+                    color: isActive ? 'var(--pitch-nav-text)' : 'var(--pitch-nav-text-dim)',
                   }}
                 >
-                  <Text fw={700} size="sm">
+                  <Text
+                    fw={700}
+                    size="sm"
+                    c={isActive ? 'var(--pitch-nav-text)' : 'var(--pitch-nav-text-dim)'}
+                  >
                     {deriveInitials(team.name)}
                   </Text>
                 </ActionIcon>
@@ -111,13 +118,13 @@ export function TeamSideBar({ teams, activeTeamId, onSelectTeam }: TeamSideBarPr
             style={{
               width: 36,
               height: 36,
-              border: '1px solid #444',
-              background: 'var(--mantine-color-dark-9)',
+              border: '1px solid var(--pitch-nav-text-dim)',
+              background: 'var(--pitch-nav-accent-soft)',
               marginTop: 8,
             }}
             onClick={handleCreateTeam}
           >
-            <Text fw={700} size="sm" c="white">
+            <Text fw={700} size="sm" c="var(--pitch-nav-text)">
               +
             </Text>
           </ActionIcon>

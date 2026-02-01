@@ -396,8 +396,8 @@ export default function CreateSessionPage() {
                         radius="md"
                         style={{
                           cursor: 'pointer',
-                          border: isSelected ? '2px solid var(--mantine-color-blue-6)' : undefined,
-                          backgroundColor: isSelected ? 'var(--mantine-color-blue-0)' : undefined,
+                          border: isSelected ? '2px solid var(--pitch-accent-strong)' : undefined,
+                          backgroundColor: isSelected ? 'var(--pitch-accent-soft)' : undefined,
                         }}
                         onClick={() => {
                           setSelectedPersona(selectedPersona === persona.id ? null : persona.id)
@@ -405,7 +405,7 @@ export default function CreateSessionPage() {
                       >
                         <Stack gap="xs" align="center">
                           <Box pos="relative">
-                            <Avatar size={80} radius="md" color="blue">
+                            <Avatar size={80} radius="md" color="brand">
                               <IconUser size={40} />
                             </Avatar>
                             {isSelected && (
@@ -414,7 +414,7 @@ export default function CreateSessionPage() {
                                   position: 'absolute',
                                   top: -8,
                                   right: -8,
-                                  background: 'var(--mantine-color-blue-6)',
+                                  background: 'var(--pitch-accent-strong)',
                                   borderRadius: '50%',
                                   width: 24,
                                   height: 24,

@@ -70,7 +70,7 @@ const getProviderProps = (name: string) => {
     case 'microsoft':
       return baseStyle
     default:
-      return { variant: 'filled' as const, color: 'blue' }
+      return { variant: 'filled' as const, color: 'brand' }
   }
 }
 
@@ -101,7 +101,7 @@ export function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
       notifications.show({
         title: 'Redirecting...',
         message: `Redirecting to ${provider.displayName} to create your account`,
-        color: 'blue',
+        color: 'brand',
       })
 
       // Use utility function to redirect to OAuth provider (same flow for signup and login)

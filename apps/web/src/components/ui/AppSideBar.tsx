@@ -13,6 +13,7 @@ import { Dispatch, SetStateAction, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { WeekCalendar } from '@/components/ui/WeekCalendar'
 import { SettingsModal } from './SettingsModal'
+import classes from './AppSideBar.module.css'
 
 export type SidebarLink = {
   icon: React.ComponentType<{ size?: number }>
@@ -60,7 +61,7 @@ export function AppSidebar({
       >
         <Box
           style={{
-            background: 'var(--mantine-color-dark-9)',
+            background: 'var(--pitch-nav-bg)',
             borderTopLeftRadius: 0,
             borderTopRightRadius: 0,
             borderBottomLeftRadius: 0,
@@ -83,36 +84,16 @@ export function AppSidebar({
                 }}
                 leftSection={<Icon size={18} />}
                 label={
-                  <Text size="sm" fw={active === label ? 700 : 600} style={{ fontSize: 14 }}>
+                  <Text size="sm" className={classes.navLabel}>
                     {label}
                   </Text>
                 }
                 variant="subtle"
-                styles={{
-                  root: {
-                    borderRadius: rem(10),
-                    paddingTop: rem(8),
-                    paddingBottom: rem(8),
-                    paddingLeft: rem(10),
-                    paddingRight: rem(8),
-                    color: 'var(--mantine-color-gray-3)',
-                    transition: 'background 120ms, color 120ms',
-                    '&:hover': { background: 'rgba(255,255,255,0.04)' },
-                    '&[dataActive="true"]': {
-                      background: 'rgba(255,255,255,0.08)',
-                      color: 'var(--mantine-color-blue-4)',
-                    },
-                  },
-                  section: {
-                    color:
-                      active === label
-                        ? 'var(--mantine-color-blue-4)'
-                        : 'var(--mantine-color-gray-4)',
-                  },
-                  body: {
-                    color: active === label ? 'var(--mantine-color-blue-4)' : 'inherit',
-                  },
-                  label: { fontSize: 14 },
+                classNames={{
+                  root: classes.navLink,
+                  section: classes.navSection,
+                  body: classes.navBody,
+                  label: classes.navLabel,
                 }}
               />
             ))}
@@ -123,9 +104,9 @@ export function AppSidebar({
               pb={10}
               style={{
                 width: '100%',
-                background: 'var(--mantine-color-dark-9)',
+                background: 'var(--pitch-nav-bg)',
                 borderRadius: 12,
-                border: '1px solid rgba(255,255,255,0.08)',
+                border: '1px solid var(--pitch-nav-text-dim)',
                 overflow: 'hidden',
               }}
             >
