@@ -35,6 +35,7 @@ import {
   IconChartBar,
   IconChevronDown,
 } from '@tabler/icons-react'
+import Image from 'next/image'
 
 export default function TeamConfigPage() {
   return (
@@ -261,13 +262,9 @@ function TeamConfigInner() {
           ) : (
             <Stack gap="lg">
               <Box
-                p="lg"
                 style={{
-                  margin:
-                    'calc(-1 * var(--mantine-spacing-xl)) calc(-1 * var(--mantine-spacing-xl)) 0',
-                  borderRadius: '30px 30px 0 0',
-                  background:
-                    'linear-gradient(90deg, rgba(248, 249, 250, 0.55) 0%, rgba(234,243,255,0.35) 45%, rgba(77, 160, 233, 0.65) 100%)',
+                  position: 'relative',
+                  paddingRight: 240,
                 }}
               >
                 <Stack gap="xs">
@@ -276,27 +273,49 @@ function TeamConfigInner() {
                     Manage your team members or invite new members to your team.
                   </Text>
                 </Stack>
+                <Box style={{ position: 'absolute', top: 0, right: 350, pointerEvents: 'none' }}>
+                  <Image
+                    src="/teamsMascots.png"
+                    alt="Team mascots"
+                    width={330}
+                    height={270}
+                    style={{
+                      objectFit: 'contain',
+                    }}
+                  />
+                </Box>
               </Box>
 
               <Stack gap="sm">
-                <Group justify="space-between" align="center">
-                  <Stack gap={2}>
-                    <Text size="xs" c="dimmed" tt="uppercase" fw={600}>
-                      Team
-                    </Text>
-                    <Group gap="xs">
-                      <Title order={3}>{activeTeam.name}</Title>
-                      <Badge variant="light">{role.toLowerCase()}</Badge>
-                    </Group>
-                    <Text size="sm" c="dimmed">
-                      {members.length} member{members.length === 1 ? '' : 's'}
-                      {activeTeam.billingEmail ? ` - ${activeTeam.billingEmail}` : ''}
-                    </Text>
-                  </Stack>
-                  <Button size="sm" onClick={() => void handleEditTeam(activeTeam.id)}>
-                    Edit team
-                  </Button>
-                </Group>
+                <Paper
+                  p="md"
+                  radius="lg"
+                  withBorder
+                  style={{
+                    background:
+                      'linear-gradient(135deg, rgba(225,235,255,0.7), rgba(245,248,255,0.85))',
+                    borderColor: 'rgba(59,130,246,0.12)',
+                  }}
+                >
+                  <Group justify="space-between" align="center" wrap="nowrap">
+                    <Stack gap={2}>
+                      <Text size="xs" c="dimmed" tt="uppercase" fw={600}>
+                        Team
+                      </Text>
+                      <Group gap="xs">
+                        <Title order={3}>{activeTeam.name}</Title>
+                        <Badge variant="light">{role.toLowerCase()}</Badge>
+                      </Group>
+                      <Text size="sm" c="dimmed">
+                        {members.length} member{members.length === 1 ? '' : 's'}
+                        {activeTeam.billingEmail ? ` - ${activeTeam.billingEmail}` : ''}
+                      </Text>
+                    </Stack>
+                    <Button ml="auto" size="l" onClick={() => void handleEditTeam(activeTeam.id)}>
+                      Edit team
+                    </Button>
+                  </Group>
+                </Paper>
 
                 <Group justify="space-between" align="center">
                   <Stack gap={2}>
@@ -338,7 +357,7 @@ function TeamConfigInner() {
 
               <Stack gap="sm">
                 <Title order={4}>Members</Title>
-                <Group gap="sm" align="flex-end" wrap="nowrap">
+                <Group gap="sm" align="flex-end" wrap="nowrap" w="100%">
                   <TextInput
                     leftSection={<IconSearch size={16} />}
                     placeholder="Search by name or role"
@@ -371,6 +390,7 @@ function TeamConfigInner() {
                       </Menu.Item>
                     </Menu.Dropdown>
                   </Menu>
+                 
                   {isOwner && selectedMembers.size > 0 && (
                     <>
                       <Menu width={180} position="bottom-end" withArrow>
@@ -760,11 +780,6 @@ function TeamConfigInner() {
     </Paper>
   )
 }
-
-
-
-
-
 
 
 
