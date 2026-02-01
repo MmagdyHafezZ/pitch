@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Logger, Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { UserController } from './controllers/user.controller';
@@ -39,6 +39,7 @@ import { GoogleStrategy } from './strategies/google.strategy';
   ],
   providers: [
     UserPrismaService,
+    Logger,
     UserRepository,
     AuthRepository,
     TeamRepository,

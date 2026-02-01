@@ -30,7 +30,7 @@ import { GlobalJwtAuthGuard } from '../../guards/global-jwt-auth.guard';
 import { UserClaimsInterceptor } from '../../interceptors/user-claims.interceptor';
 import { UserClaims } from '../../decorators/user-claims.decorator';
 import type { UserClaims as UserClaimsType } from '@pitch/shared-backend/interfaces/user-claims.interface';
-import type { ServiceError } from '@pitch/shared-backend/interfaces/error.interface';
+import { normalizeError } from '@pitch/shared-backend/helpers/exceptions';
 
 @ApiTags('users')
 @Controller({ path: 'users', version: '1' })
@@ -51,7 +51,7 @@ export class UserGatewayController {
       .pipe(
         timeout(5000),
         catchError((err: unknown) => {
-          const error = err as ServiceError;
+          const error = normalizeError(err);
           const message = error.message ?? 'Failed to get users';
           const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
           return throwError(() => new HttpException(message, status));
@@ -59,23 +59,23 @@ export class UserGatewayController {
       );
   }
 
-  @Get(':id')
+  @Get(':userId')
   @ApiOperation({ summary: 'Get user by ID' })
   @ApiResponse({ status: 200, description: 'User retrieved successfully' })
   @ApiResponse({ status: 404, description: 'User not found' })
   getUserById(
-    @Param('id') id: string,
+    @Param('userId') userId: string,
     @UserClaims() userClaims: UserClaimsType,
   ) {
     return this.userService
       .send(USER_SERVICE_PATTERNS.GET_USER, {
-        id,
+        userId,
         userClaims,
       })
       .pipe(
         timeout(5000),
         catchError((err: unknown) => {
-          const error = err as ServiceError;
+          const error = normalizeError(err);
           const message = error.message ?? 'Failed to get user';
           const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
           return throwError(() => new HttpException(message, status));
@@ -99,7 +99,7 @@ export class UserGatewayController {
       .pipe(
         timeout(5000),
         catchError((err: unknown) => {
-          const error = err as ServiceError;
+          const error = normalizeError(err);
           const message = error.message ?? 'Failed to create user';
           const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
           return throwError(() => new HttpException(message, status));
@@ -107,25 +107,25 @@ export class UserGatewayController {
       );
   }
 
-  @Put(':id')
+  @Put(':userId')
   @ApiOperation({ summary: 'Update user' })
   @ApiResponse({ status: 200, description: 'User updated successfully' })
   @ApiResponse({ status: 404, description: 'User not found' })
   updateUser(
-    @Param('id') id: string,
+    @Param('userId') userId: string,
     @Body() updateUserDto: UpdateUserDto,
     @UserClaims() userClaims: UserClaimsType,
   ) {
     return this.userService
       .send(USER_SERVICE_PATTERNS.UPDATE_USER, {
-        id,
+        userId,
         ...updateUserDto,
         userClaims,
       })
       .pipe(
         timeout(5000),
         catchError((err: unknown) => {
-          const error = err as ServiceError;
+          const error = normalizeError(err);
           const message = error.message ?? 'Failed to update user';
           const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
           return throwError(() => new HttpException(message, status));
@@ -133,23 +133,23 @@ export class UserGatewayController {
       );
   }
 
-  @Delete(':id')
+  @Delete(':userId')
   @ApiOperation({ summary: 'Delete user' })
   @ApiResponse({ status: 200, description: 'User deleted successfully' })
   @ApiResponse({ status: 404, description: 'User not found' })
   deleteUser(
-    @Param('id') id: string,
+    @Param('userId') userId: string,
     @UserClaims() userClaims: UserClaimsType,
   ) {
     return this.userService
       .send(USER_SERVICE_PATTERNS.DELETE_USER, {
-        id,
+        userId,
         userClaims,
       })
       .pipe(
         timeout(5000),
         catchError((err: unknown) => {
-          const error = err as ServiceError;
+          const error = normalizeError(err);
           const message = error.message ?? 'Failed to delete user';
           const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
           return throwError(() => new HttpException(message, status));

@@ -65,6 +65,7 @@ export interface ServiceError {
   status?: number
   message?: string
   stack?: string
+  code?: string
 }
 
 /**

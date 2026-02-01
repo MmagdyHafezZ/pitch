@@ -63,7 +63,7 @@ function AuthCallbackContent() {
 
         // Redirect to home after a brief delay
         setTimeout(() => {
-          router.push('/home')
+          router.push('/studio/home')
         }, 2000)
       } catch (error) {
         console.error('Auth callback error:', error)

@@ -134,6 +134,19 @@ NEXTAUTH_SECRET=your-secret-here
 NEXTAUTH_URL=http://localhost:3000
 ```
 
+## Netlify Deployment
+
+- A `netlify.toml` at the repo root mirrors the calnic setup but targets this
+  app (`apps/web`).
+- Create a **new** Netlify site (do not reuse the calnic instance) and connect
+  this repository.
+- Build settings (picked up automatically from `netlify.toml`): base `apps/web`,
+  command `pnpm build`, publish `.next`.
+- Set production environment variables in Netlify: `NEXT_PUBLIC_API_URL` (your
+  API base), `NEXTAUTH_URL` (site URL), and `NEXTAUTH_SECRET`.
+- For local parity, install the Netlify CLI and run `netlify dev` from the repo
+  root; it will proxy to `pnpm dev` on port 3000.
+
 ## Learn More
 
 - [Next.js Documentation](https://nextjs.org/docs)

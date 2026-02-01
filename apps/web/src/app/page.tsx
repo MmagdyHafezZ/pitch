@@ -13,7 +13,7 @@ export default function Home() {
     if (!isLoading && !isAuthenticated) {
       router.push('/auth/login')
     } else if (!isLoading && isAuthenticated) {
-      router.push('/home')
+      router.push('/studio/home')
     }
   }, [isAuthenticated, isLoading, router])
 

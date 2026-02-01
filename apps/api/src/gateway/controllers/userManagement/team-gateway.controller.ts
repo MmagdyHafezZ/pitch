@@ -28,7 +28,7 @@ import { GlobalJwtAuthGuard } from '../../guards/global-jwt-auth.guard';
 import { UserClaimsInterceptor } from '../../interceptors/user-claims.interceptor';
 import { UserClaims } from '../../decorators/user-claims.decorator';
 import type { UserClaims as UserClaimsType } from '@pitch/shared-backend/interfaces/user-claims.interface';
-import type { ServiceError } from '@pitch/shared-backend/interfaces/error.interface';
+import { normalizeError } from '@pitch/shared-backend/helpers/exceptions';
 import {
   CreateTeamRequestDto,
   UpdateTeamRequestDto,
@@ -69,7 +69,7 @@ export class TeamGatewayController {
       .pipe(
         timeout(5000),
         catchError((err: unknown) => {
-          const error = err as ServiceError;
+          const error = normalizeError(err);
           const message = error.message ?? 'Failed to create team';
           const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
           return throwError(() => new HttpException(message, status));
@@ -77,25 +77,25 @@ export class TeamGatewayController {
       );
   }
 
-  @Put(':id')
+  @Put(':teamId')
   @ApiOperation({ summary: 'Update Team' })
   @ApiResponse({ status: 200, description: 'Team updated successfully' })
   @ApiResponse({ status: 404, description: 'Team not found' })
   updateTeam(
-    @Param('id') id: string,
+    @Param('teamId') teamId: string,
     @Body() updateTeamDto: UpdateTeamRequestDto,
     @UserClaims() userClaims: UserClaimsType,
   ) {
     return this.teamService
       .send(USER_SERVICE_PATTERNS.UPDATE_TEAM, {
-        id,
+        teamId,
         ...updateTeamDto,
         userClaims,
       })
       .pipe(
         timeout(5000),
         catchError((err: unknown) => {
-          const error = err as ServiceError;
+          const error = normalizeError(err);
           const message = error.message ?? 'Failed to update team';
           const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
           return throwError(() => new HttpException(message, status));
@@ -103,23 +103,23 @@ export class TeamGatewayController {
       );
   }
 
-  @Delete(':id')
+  @Delete(':teamId')
   @ApiOperation({ summary: 'Delete team' })
   @ApiResponse({ status: 200, description: 'Team deleted successfully' })
   @ApiResponse({ status: 404, description: 'Team not found' })
   deleteTeam(
-    @Param('id') id: string,
+    @Param('teamId') teamId: string,
     @UserClaims() userClaims: UserClaimsType,
   ) {
     return this.teamService
       .send(USER_SERVICE_PATTERNS.DELETE_TEAM, {
-        id,
+        teamId,
         userClaims,
       })
       .pipe(
         timeout(5000),
         catchError((err: unknown) => {
-          const error = err as ServiceError;
+          const error = normalizeError(err);
           const message = error.message ?? 'Failed to delete team';
           const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
           return throwError(() => new HttpException(message, status));
@@ -138,7 +138,7 @@ export class TeamGatewayController {
       .pipe(
         timeout(5000),
         catchError((err: unknown) => {
-          const error = err as ServiceError;
+          const error = normalizeError(err);
           const message = error.message ?? 'Failed to get teams';
           const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
           return throwError(() => new HttpException(message, status));
@@ -146,23 +146,42 @@ export class TeamGatewayController {
       );
   }
 
-  @Get(':id')
-  @ApiOperation({ summary: 'Get team by ID' })
-  @ApiResponse({ status: 200, description: 'Team retrieved successfully' })
-  @ApiResponse({ status: 404, description: 'Team not found' })
-  getTeamById(
-    @Param('id') id: string,
-    @UserClaims() userClaims: UserClaimsType,
-  ) {
+  @Get('user-teams')
+  @ApiOperation({ summary: 'Get all teams that a user is a part of' })
+  @ApiResponse({ status: 200, description: 'Teams retrieved successfully' })
+  getUserTeams(@UserClaims() userClaims: UserClaimsType) {
     return this.teamService
-      .send(USER_SERVICE_PATTERNS.GET_TEAM, {
-        id,
+      .send(USER_SERVICE_PATTERNS.GET_USER_TEAMS, {
         userClaims,
       })
       .pipe(
         timeout(5000),
         catchError((err: unknown) => {
-          const error = err as ServiceError;
+          const error = normalizeError(err);
+          const message = error.message ?? 'Failed to get teams';
+          const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
+          return throwError(() => new HttpException(message, status));
+        }),
+      );
+  }
+
+  @Get(':teamId')
+  @ApiOperation({ summary: 'Get team by ID' })
+  @ApiResponse({ status: 200, description: 'Team retrieved successfully' })
+  @ApiResponse({ status: 404, description: 'Team not found' })
+  getTeamById(
+    @Param('teamId') teamId: string,
+    @UserClaims() userClaims: UserClaimsType,
+  ) {
+    return this.teamService
+      .send(USER_SERVICE_PATTERNS.GET_TEAM, {
+        teamId,
+        userClaims,
+      })
+      .pipe(
+        timeout(5000),
+        catchError((err: unknown) => {
+          const error = normalizeError(err);
           const message = error.message ?? 'Failed to get team';
           const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
           return throwError(() => new HttpException(message, status));
@@ -190,7 +209,7 @@ export class TeamGatewayController {
       .pipe(
         timeout(5000),
         catchError((err: unknown) => {
-          const error = err as ServiceError;
+          const error = normalizeError(err);
           const message = error.message ?? 'Failed to add Team Member';
           const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
           return throwError(() => new HttpException(message, status));
@@ -210,7 +229,7 @@ export class TeamGatewayController {
     @UserClaims() userClaims: UserClaimsType,
   ) {
     return this.teamService
-      .send(USER_SERVICE_PATTERNS.ADD_TEAM_MEMBER, {
+      .send(USER_SERVICE_PATTERNS.UPDATE_TEAM_MEMBER, {
         teamId,
         userId,
         ...updateMemberDto,
@@ -219,7 +238,7 @@ export class TeamGatewayController {
       .pipe(
         timeout(5000),
         catchError((err: unknown) => {
-          const error = err as ServiceError;
+          const error = normalizeError(err);
           const message = error.message ?? 'Failed to update Team Member';
           const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
           return throwError(() => new HttpException(message, status));
@@ -246,7 +265,7 @@ export class TeamGatewayController {
       .pipe(
         timeout(5000),
         catchError((err: unknown) => {
-          const error = err as ServiceError;
+          const error = normalizeError(err);
           const message = error.message ?? 'Failed to delete team';
           const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
           return throwError(() => new HttpException(message, status));

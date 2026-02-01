@@ -4,6 +4,8 @@
     "outDir": "./dist",
     "rootDir": "./src",
     "baseUrl": "./src",
+    "diagnostics": true,
+    "extendedDiagnostics": true,
     "paths": {
       "@pitch/shared/*": ["../../packages/shared/src/*"],
       "@pitch/shared-backend": ["../../packages/shared-backend/src"],

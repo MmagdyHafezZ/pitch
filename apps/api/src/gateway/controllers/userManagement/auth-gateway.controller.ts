@@ -29,7 +29,7 @@ import {
   AuthResponseDto,
   UserResponseDto,
 } from '../../../microservices/userManagement/dto/auth.dto';
-import type { ServiceError } from '@pitch/shared-backend/interfaces/error.interface';
+import { normalizeError } from '@pitch/shared-backend/helpers/exceptions';
 import { UserClaims } from '../../decorators/user-claims.decorator';
 import type { UserClaims as UserClaimsType } from '@pitch/shared-backend/interfaces/user-claims.interface';
 
@@ -69,7 +69,7 @@ export class AuthGatewayController {
           },
         }),
         catchError((err: unknown) => {
-          const error = err as ServiceError;
+          const error = normalizeError(err);
           const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
           const message = error.message ?? 'Registration failed';
           const stack = error.stack ?? JSON.stringify(err);
@@ -97,7 +97,7 @@ export class AuthGatewayController {
     return this.userService.send('auth.login', loginDto).pipe(
       timeout(10000),
       catchError((err: unknown) => {
-        const error = err as ServiceError;
+        const error = normalizeError(err);
         const stack = error.stack ?? JSON.stringify(err);
         this.logger.error(`Login failed for ${loginDto.email}`, stack);
         const status = error.status ?? HttpStatus.UNAUTHORIZED;
@@ -122,7 +122,7 @@ export class AuthGatewayController {
       .pipe(
         timeout(10000),
         catchError((err: unknown) => {
-          const error = err as ServiceError;
+          const error = normalizeError(err);
           const stack = error.stack ?? JSON.stringify(err);
           this.logger.error('Token refresh failed', stack);
           const status = error.status ?? HttpStatus.UNAUTHORIZED;
@@ -151,7 +151,7 @@ export class AuthGatewayController {
       .pipe(
         timeout(10000),
         catchError((err: unknown) => {
-          const error = err as ServiceError;
+          const error = normalizeError(err);
           const stack = error.stack ?? JSON.stringify(err);
           this.logger.error(`Logout failed for user: ${userId}`, stack);
           const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
@@ -178,11 +178,11 @@ export class AuthGatewayController {
     this.logger.log(`Profile request for user: ${userId}`);
 
     return this.userService
-      .send(USER_SERVICE_PATTERNS.GET_USER, { id: userId, userClaims })
+      .send(USER_SERVICE_PATTERNS.GET_USER, { userId, userClaims })
       .pipe(
         timeout(10000),
         catchError((err: unknown) => {
-          const error = err as ServiceError;
+          const error = normalizeError(err);
           const stack = error.stack ?? JSON.stringify(err);
           this.logger.error(`Failed to get profile for user: ${userId}`, stack);
           const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
@@ -242,7 +242,7 @@ export class AuthGatewayController {
     return this.userService.send(pattern, {}).pipe(
       timeout(10000),
       catchError((err: unknown) => {
-        const error = err as ServiceError;
+        const error = normalizeError(err);
         const stack = error.stack ?? JSON.stringify(err);
         this.logger.error('Gateway: Failed to get OAuth providers', stack);
         const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
@@ -305,7 +305,7 @@ export class AuthGatewayController {
       .pipe(
         timeout(10000),
         catchError((err: unknown) => {
-          const error = err as ServiceError;
+          const error = normalizeError(err);
           const stack = error.stack ?? JSON.stringify(err);
           this.logger.error('Email check failed', stack);
           const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
