@@ -1,0 +1,27 @@
+.input {
+  background: var(--pitch-input-bg);
+  border: 1px solid var(--pitch-border);
+  color: var(--pitch-input-text);
+}
+
+.input::placeholder {
+  color: var(--pitch-input-placeholder);
+}
+
+.input:focus,
+.input:focus-within {
+  border-color: var(--pitch-accent-strong);
+  outline: 2px solid color-mix(in srgb, var(--pitch-accent-strong) 35%, transparent);
+  outline-offset: 2px;
+}
+
+.label {
+  color: var(--pitch-surface-text-dim);
+  font-weight: 500;
+  margin-bottom: 8px;
+}
+
+.section,
+.rightSection {
+  color: var(--pitch-surface-text-dim);
+}

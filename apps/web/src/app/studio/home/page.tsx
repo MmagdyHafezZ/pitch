@@ -49,7 +49,14 @@ export default function DashboardHome() {
               <Text fw={700}>3 sessions this week!</Text>
             </Box>
           </Group>
-          <Button fullWidth radius="md">
+          <Button
+            fullWidth
+            radius="md"
+            style={{
+              background: 'var(--pitch-accent-strong)',
+              color: 'var(--pitch-surface-text)',
+            }}
+          >
             Start New Session
           </Button>
         </Stack>
@@ -58,11 +65,11 @@ export default function DashboardHome() {
       {/* Organization */}
       <Card shadow="sm" padding="lg" radius="md" withBorder>
         <Stack gap="md" align="center">
-          <ThemeIcon size={48} variant="light" color="blue">
+          <ThemeIcon size={48} variant="light" color="brand">
             <IconUsers size={26} />
           </ThemeIcon>
           <Title order={3}>Organization</Title>
-          <Button variant="subtle" c="blue">
+          <Button variant="subtle" c="var(--pitch-accent-strong)">
             View all
           </Button>
         </Stack>
@@ -71,11 +78,11 @@ export default function DashboardHome() {
       {/* Teams */}
       <Card shadow="sm" padding="lg" radius="md" withBorder>
         <Stack gap="md" align="center">
-          <ThemeIcon size={48} variant="light" color="blue">
+          <ThemeIcon size={48} variant="light" color="brand">
             <IconUsersGroup size={26} />
           </ThemeIcon>
           <Title order={3}>Teams</Title>
-          <Button variant="subtle" c="blue">
+          <Button variant="subtle" c="var(--pitch-accent-strong)">
             View all
           </Button>
         </Stack>
@@ -102,15 +109,15 @@ export default function DashboardHome() {
             h={160}
             data={trend}
             dataKey="month"
-            series={[{ name: 'sessions', color: 'blue.6' }]}
+            series={[{ name: 'sessions', color: 'var(--pitch-accent-strong)' }]}
             curveType="linear"
             gridAxis="none"
           />
           <Box mt="xs">
             <Title order={4}>Top Strengths</Title>
             <Stack gap="xs" mt="xs">
-              <Progress value={85} size="sm" color="blue" />
-              <Progress value={70} size="sm" color="blue" />
+              <Progress value={85} size="sm" color="brand" />
+              <Progress value={70} size="sm" color="brand" />
             </Stack>
           </Box>
         </Stack>
@@ -121,7 +128,7 @@ export default function DashboardHome() {
         <Stack gap="md">
           <Title order={3}>Goals & Progress</Title>
           <Group justify="space-between" wrap="nowrap">
-            <Progress value={75} size="lg" color="blue" style={{ flex: 1 }} />
+            <Progress value={75} size="lg" color="brand" style={{ flex: 1 }} />
             <Text fw={700} ml="sm">
               75%
             </Text>

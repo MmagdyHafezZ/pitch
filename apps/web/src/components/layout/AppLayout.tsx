@@ -22,13 +22,13 @@ export function AppLayout({ header, navbar, children }: Props) {
       navbar={{ width: 300, breakpoint: 'md', collapsed: { mobile: !opened } }}
       styles={{
         header: {
-          background: 'var(--mantine-color-dark-9)',
+          background: 'var(--pitch-nav-bg, var(--mantine-color-dark-9))',
         },
         navbar: {
-          background: 'var(--mantine-color-dark-9)',
+          background: 'var(--pitch-nav-bg, var(--mantine-color-dark-9))',
         },
         main: {
-          background: 'var(--mantine-color-dark-9)',
+          background: 'var(--pitch-app-bg, var(--pitch-surface-bg, var(--mantine-color-dark-9)))',
           height: `calc(100vh - ${headerHeight})`,
           overflow: 'hidden',
         },
@@ -44,6 +44,7 @@ export function AppLayout({ header, navbar, children }: Props) {
             height: '100%',
             width: '100%',
             overflow: 'hidden',
+            background: 'var(--pitch-app-bg, var(--pitch-surface-bg, var(--mantine-color-body)))',
           }}
         >
           <Box
@@ -51,9 +52,9 @@ export function AppLayout({ header, navbar, children }: Props) {
               position: 'absolute',
               inset: 0,
               background:
-                'linear-gradient(180deg, rgba(241, 245, 249, 0.9) 0%, rgba(248, 250, 252, 0.98) 100%)',
-              borderTop: '1px solid #e2e8f0',
-              borderLeft: '1px solid #e2e8f0',
+                'var(--pitch-window-gradient, var(--pitch-surface-bg, var(--mantine-color-body)))',
+              borderTop: '1px solid var(--mantine-color-default-border)',
+              borderLeft: '1px solid var(--mantine-color-default-border)',
               borderTopLeftRadius: curveRadius,
               pointerEvents: 'none',
             }}
@@ -66,6 +67,7 @@ export function AppLayout({ header, navbar, children }: Props) {
               padding: rem(16),
               borderTopLeftRadius: curveRadius,
               overflowX: 'hidden',
+              background: 'var(--pitch-app-bg, var(--pitch-surface-bg, var(--mantine-color-body)))',
             }}
           >
             {children}

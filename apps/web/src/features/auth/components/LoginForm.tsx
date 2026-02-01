@@ -83,7 +83,7 @@ const getProviderProps = (name: string) => {
     case 'microsoft':
       return baseStyle
     default:
-      return { variant: 'filled' as const, color: 'blue' }
+      return { variant: 'filled' as const, color: 'brand' }
   }
 }
 
@@ -129,7 +129,7 @@ export function LoginForm({ onSwitchToRegister }: LoginFormProps) {
         notifications.show({
           title: 'Redirecting...',
           message: result.message,
-          color: 'blue',
+          color: 'brand',
         })
 
         redirectToOAuthProvider(baseUrl, result.provider, email.trim())
@@ -152,7 +152,7 @@ export function LoginForm({ onSwitchToRegister }: LoginFormProps) {
       notifications.show({
         title: 'Redirecting...',
         message: `Redirecting to ${provider.displayName} for authentication`,
-        color: 'blue',
+        color: 'brand',
       })
 
       redirectToOAuthProvider(baseUrl, provider.name, email.trim() || undefined)
