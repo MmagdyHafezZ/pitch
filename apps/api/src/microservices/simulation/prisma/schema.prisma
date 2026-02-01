@@ -11,14 +11,23 @@ generator client {
 datasource db {
   provider  = "postgresql"
   url       = env("SIMULATION_DATABASE_URL")
+  directUrl = env("SIMULATION_DIRECT_URL")
 }
 
-/* =================== Enums =================== */
+/**
+ * =================== Enums ===================
+ */
 
-enum SessionMode {
+enum SessionType {
   text
   voice
   video
+}
+
+enum SessionMemberRole {
+  owner
+  editor
+  viewer
 }
 
 enum TurnRole {
@@ -62,129 +71,156 @@ enum ReportFormat {
   json
 }
 
-/* =================== Orchestrator Core =================== */
-/* Users/Orgs are EXTERNAL. Store only opaque IDs + optional snapshots. */
+/**
+ * =================== Orchestrator Core ===================
+ */
+/**
+ * Users/Orgs are EXTERNAL. Store only opaque IDs + optional snapshots.
+ */
 
 model Session {
-  id            String      @id @default(cuid())
-  userId        String
-  orgId         String
+  id    String @id @default(cuid())
+  orgId String
 
-  // Denormalized snapshots captured at session creation time for audit/reporting
-  // userSnapshot shape: { id, email, name, timezone, role }
-  // orgSnapshot shape: { id, name, region, tier }
-  userSnapshot  Json?
+  // Session is now a shared resource
+  name          String?
+  type          SessionType
+  tags          String[]
+  sessionConfig Json?
   orgSnapshot   Json?
 
-  mode          SessionMode
-  scenarioId    String?
-  scenario      Scenario?   @relation(fields: [scenarioId], references: [id])
-  personaId     String?
-  persona       Persona?    @relation(fields: [personaId], references: [id])
-  language      String?
-  crmContextId  String?
-  status        String      @default("active") // active|ended
-  endedReason   String?
+  scenarioId   String?
+  scenario     Scenario? @relation(fields: [scenarioId], references: [id])
+  personaId    String?
+  persona      Persona?  @relation(fields: [personaId], references: [id])
+  language     String?
+  crmContextId String?
+  status       String    @default("active") // active|ended
+  endedReason  String?
 
-  // Relations
-  turns         Turn[]
-  events        Event[]
-  metrics       Metric[]
-  calls         CallSession[]
-  scorecards    Scorecard[]
-  drafts        DraftEmail[]
-  messages      Message[]
-  reportRequests ReportRequest[]
-  evalArtifacts EvalArtifact[]
-  transcripts   Transcript[]
-  mediaAssets   MediaAsset[]
-  toolCalls     ToolCall[]
+  // Multi-user access control
+  members SessionMember[]
 
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
   endedAt       DateTime?
 
-  @@index([orgId, userId])
+  @@index([orgId])
   @@index([status])
   @@index([scenarioId])
   @@index([personaId])
 }
 
+model SessionMember {
+  id        String  @id @default(cuid())
+  sessionId String
+  session   Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  userId String
+  role   SessionMemberRole @default(viewer)
+
+  // User-specific data relations
+  turns          Turn[]
+  events         Event[]
+  metrics        Metric[]
+  calls          CallSession[]
+  scorecards     Scorecard[]
+  drafts         DraftEmail[]
+  messages       Message[]
+  reportRequests ReportRequest[]
+  evalArtifacts  EvalArtifact[]
+  transcripts    Transcript[]
+  mediaAssets    MediaAsset[]
+  toolCalls      ToolCall[]
+
+  // Denormalized user snapshot at join time
+  userSnapshot Json?
+
+  joinedAt  DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([sessionId, userId])
+  @@index([userId])
+  @@index([sessionId, role])
+}
+
+// SessionInvitation moved to MongoDB
+
 model Turn {
-  id            String    @id @default(cuid())
-  sessionId     String
-  session       Session   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  role          TurnRole
-  text          String?
-  audioAssetId  String?
-  attachments   Json?   // AssetRef[] - small structured metadata
-  metadata      Json?   // small structured metadata only
-  order         Int
+  id              String        @id @default(cuid())
+  sessionMemberId String
+  sessionMember   SessionMember @relation(fields: [sessionMemberId], references: [id], onDelete: Cascade)
+  role            TurnRole
+  text            String?
+  audioAssetId    String?
+  attachments     Json? // AssetRef[] - small structured metadata
+  metadata        Json? // small structured metadata only
+  order           Int
 
   messages      Message[]
   toolCalls     ToolCall[]
   evalArtifacts EvalArtifact[]
 
-  createdAt     DateTime  @default(now())
+  createdAt DateTime @default(now())
 
-  @@index([sessionId, order])
+  @@index([sessionMemberId, order])
   @@index([role])
 }
 
 model Message {
-  id        String   @id @default(cuid())
-  sessionId String
-  session   Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  turnId    String?
-  turn      Turn?    @relation(fields: [turnId], references: [id], onDelete: SetNull)
-  role      TurnRole
-  content   String?  // Core text content only
-  redaction Json?    // PII span annotations (small structured data)
-  language  String?
+  id              String        @id @default(cuid())
+  sessionMemberId String
+  sessionMember   SessionMember @relation(fields: [sessionMemberId], references: [id], onDelete: Cascade)
+  turnId          String?
+  turn            Turn?         @relation(fields: [turnId], references: [id], onDelete: SetNull)
+  role            TurnRole
+  content         String? // Core text content only
+  redaction       Json? // PII span annotations (small structured data)
+  language        String?
 
   redactionSpans RedactionSpan[]
 
   createdAt DateTime @default(now())
 
-  @@index([sessionId, turnId])
+  @@index([sessionMemberId, turnId])
 }
 
 model ToolCall {
-  id         String   @id @default(cuid())
-  sessionId  String
-  session    Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  turnId     String?
-  turn       Turn?    @relation(fields: [turnId], references: [id], onDelete: SetNull)
-  name       String
-  input      Json     // Small structured input
-  output     Json?    // Small structured output
-  latencyMs  Int?
-  success    Boolean?
+  id              String        @id @default(cuid())
+  sessionMemberId String
+  sessionMember   SessionMember @relation(fields: [sessionMemberId], references: [id], onDelete: Cascade)
+  turnId          String?
+  turn            Turn?         @relation(fields: [turnId], references: [id], onDelete: SetNull)
+  name            String
+  input           Json // Small structured input
+  output          Json? // Small structured output
+  latencyMs       Int?
+  success         Boolean?
 
-  createdAt  DateTime @default(now())
+  createdAt DateTime @default(now())
 
-  @@index([sessionId, turnId, name])
+  @@index([sessionMemberId, turnId, name])
 }
 
 model Event {
-  id         String    @id @default(cuid())
-  sessionId  String
-  session    Session   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  type       EventType
+  id              String        @id @default(cuid())
+  sessionMemberId String
+  sessionMember   SessionMember @relation(fields: [sessionMemberId], references: [id], onDelete: Cascade)
+  type            EventType
   // SMALL payload only (< 1KB). For verbose payloads, use EventLog in MongoDB
-  payload    Json?
+  payload         Json?
   // Optional: reference to MongoDB EventLog document for large payloads
   mongoEventLogId String?
 
-  createdAt  DateTime  @default(now())
+  createdAt DateTime @default(now())
 
-  @@index([sessionId, type, createdAt])
+  @@index([sessionMemberId, type, createdAt])
 }
 
 model Metric {
-  id           String   @id @default(cuid())
-  sessionId    String
-  session      Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  id              String        @id @default(cuid())
+  sessionMemberId String
+  sessionMember   SessionMember @relation(fields: [sessionMemberId], references: [id], onDelete: Cascade)
 
   // One Metric row per session or per turn (define strict semantics)
   // Aggregate metrics for the session
@@ -192,37 +228,46 @@ model Metric {
   tokensOutput Int?
   toolCount    Int?
   latencyMs    Int?
+  costUsd      Float? // Total cost in USD for LLM/STT/TTS operations
   model        String?
 
-  createdAt    DateTime @default(now())
+  createdAt DateTime @default(now())
 
-  @@index([sessionId, createdAt])
+  @@index([sessionMemberId, createdAt])
 }
 
-/* =================== Configuration (owned by this service) =================== */
+/**
+ * =================== LLM Routing ===================
+ */
+
+model LlmRoutingConfig {
+  id       String  @id @default(cuid())
+  scope    String  @default("global") // global|org|user
+  orgId    String?
+  userId   String?
+  name     String  @default("default")
+  isActive Boolean @default(true)
+  config   Json
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([scope, orgId, userId, isActive])
+  @@index([name])
+}
+
+/**
+ * =================== Configuration (owned by this service) ===================
+ */
 
 model Scenario {
-  id          String   @id @default(cuid())
-  orgId       String   // external
+  id          String  @id @default(cuid())
+  orgId       String // external
   name        String
   description String?
-  config      Json?    // Small structured config
+  config      Json? // Small structured config
 
-  sessions    Session[]
-
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  @@index([orgId])
-}
-
-model Persona {
-  id        String   @id @default(cuid())
-  orgId     String   // external
-  name      String
-  traits    Json?    // Small structured traits
-
-  sessions  Session[]
+  sessions Session[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -230,265 +275,292 @@ model Persona {
   @@index([orgId])
 }
 
-/* =================== Chat (text) =================== */
+model Persona {
+  id     String @id @default(cuid())
+  orgId  String // external
+  name   String
+  traits Json? // Small structured traits
 
-model DraftEmail {
-  id         String   @id @default(cuid())
-  sessionId  String
-  session    Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  audience   String
-  purpose    String
-  tone       String?
-  bullets    Json?    // string[] - small array
-  body       String?
+  sessions Session[]
 
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  @@index([sessionId, createdAt])
+  @@index([orgId])
 }
 
-/* =================== Voice/Video =================== */
+/**
+ * =================== Chat (text) ===================
+ */
+
+model DraftEmail {
+  id              String        @id @default(cuid())
+  sessionMemberId String
+  sessionMember   SessionMember @relation(fields: [sessionMemberId], references: [id], onDelete: Cascade)
+  audience        String
+  purpose         String
+  tone            String?
+  bullets         Json? // string[] - small array
+  body            String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([sessionMemberId, createdAt])
+}
+
+/**
+ * =================== Voice/Video ===================
+ */
 
 model CallSession {
-  id          String    @id @default(cuid())
-  sessionId   String
-  session     Session   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  tracks      String[]  // ["audio","video"]
+  id              String        @id @default(cuid())
+  sessionMemberId String
+  sessionMember   SessionMember @relation(fields: [sessionMemberId], references: [id], onDelete: Cascade)
+  tracks          String[] // ["audio","video"]
   // Keep SDP offers/answers (small strings ~1-5KB)
-  sdpOffer    String?
-  sdpAnswer   String?
-  status      String    @default("created") // created|active|ended
+  sdpOffer        String?
+  sdpAnswer       String?
+  status          String   @default("created") // created|active|ended
 
-  recordings  Recording[]
+  recordings Recording[]
 
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Recording {
-  id         String      @id @default(cuid())
+  id         String           @id @default(cuid())
   callId     String
-  call       CallSession @relation(fields: [callId], references: [id], onDelete: Cascade)
+  call       CallSession      @relation(fields: [callId], references: [id], onDelete: Cascade)
   layout     RecordingLayout?
   tracks     String[]
   assetId    String
-  asset      MediaAsset  @relation(fields: [assetId], references: [id])
+  asset      MediaAsset       @relation(fields: [assetId], references: [id])
   durationMs Int?
 
-  createdAt  DateTime    @default(now())
+  createdAt DateTime @default(now())
 
   @@index([callId, createdAt])
   @@index([assetId])
 }
 
 model MediaAsset {
-  id             String   @id @default(cuid())
-  mimeType       String
-  sizeBytes      BigInt
-  storageKey     String   // s3/minio key
-  url            String?  // ephemeral pre-signed URL if needed
-  ownerSessionId String?
-  ownerSession   Session? @relation(fields: [ownerSessionId], references: [id], onDelete: SetNull)
+  id                     String   @id @default(cuid())
+  mimeType               String
+  sizeBytes              BigInt
+  storageKey             String // s3/minio key
+  url                    String? // ephemeral pre-signed URL if needed
+  ownerSessionMemberId   String?
+  ownerSessionMember     SessionMember? @relation(fields: [ownerSessionMemberId], references: [id], onDelete: SetNull)
 
-  recordings     Recording[]
-  transcripts    Transcript[]
-  ingestionJobs  IngestionJob[]
+  recordings    Recording[]
+  transcripts   Transcript[]
+  ingestionJobs IngestionJob[]
 
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([storageKey])
 }
 
-/* =================== Media Ingestion (batch) =================== */
+/**
+ * =================== Media Ingestion (batch) ===================
+ */
 
 model IngestionJob {
-  id           String        @id @default(cuid())
+  id           String         @id @default(cuid())
   assetId      String
-  asset        MediaAsset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  asset        MediaAsset     @relation(fields: [assetId], references: [id], onDelete: Cascade)
   pipeline     IngestPipeline
-  status       IngestStatus  @default(queued)
+  status       IngestStatus   @default(queued)
   error        String?
-  transcriptId String?       // FK to Transcript.id (stub)
+  transcriptId String? // FK to Transcript.id (stub)
   startedAt    DateTime?
   completedAt  DateTime?
 
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([assetId, status])
 }
 
-/* =================== Transcripts (Stub in Postgres, Full Document in MongoDB) =================== */
+/**
+ * =================== Transcripts (Stub in Postgres, Full Document in MongoDB) ===================
+ */
 // Postgres: Lightweight stub for indexing and foreign keys
 // MongoDB: Full enriched transcript with segments, speakers, enrichment
 
 model Transcript {
-  id          String      @id @default(cuid())
-  assetId     String
-  asset       MediaAsset  @relation(fields: [assetId], references: [id], onDelete: Cascade)
-  sessionId   String?
-  session     Session?    @relation(fields: [sessionId], references: [id], onDelete: SetNull)
-  language    String?
+  id              String        @id @default(cuid())
+  assetId         String
+  asset           MediaAsset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  sessionMemberId String?
+  sessionMember   SessionMember? @relation(fields: [sessionMemberId], references: [id], onDelete: SetNull)
+  language        String?
 
   // Keep aggregate text summary and metadata for quick access
-  text        String?     // Full text summary for search/preview
-  metadata    Json?       // Small metadata (duration, speaker count, etc.)
+  text     String? // Full text summary for search/preview
+  metadata Json? // Small metadata (duration, speaker count, etc.)
 
   // MongoDB reference: EnrichedTranscript document with same ID
   // Contains: segments[], speakers[], enrichment{}
 
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([assetId])
-  @@index([sessionId])
-  @@index([sessionId, createdAt])
+  @@index([sessionMemberId])
+  @@index([sessionMemberId, createdAt])
 }
 
-/* =================== Redactions & Evals =================== */
+/**
+ * =================== Redactions & Evals ===================
+ */
 
 model RedactionSpan {
-  id         String   @id @default(cuid())
-  messageId  String
-  message    Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
-  spans      Json     // [{start, end, label}] - small structured array
+  id        String  @id @default(cuid())
+  messageId String
+  message   Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  spans     Json // [{start, end, label}] - small structured array
 
-  createdAt  DateTime @default(now())
+  createdAt DateTime @default(now())
 
   @@index([messageId])
 }
 
 model EvalArtifact {
-  id         String   @id @default(cuid())
-  sessionId  String
-  session    Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  turnId     String?
-  turn       Turn?    @relation(fields: [turnId], references: [id], onDelete: SetNull)
-  kind       String   // "prompt_eval" | "ragas" | "deepeval" | "llm_judge"
-  score      Float?
+  id              String        @id @default(cuid())
+  sessionMemberId String
+  sessionMember   SessionMember @relation(fields: [sessionMemberId], references: [id], onDelete: Cascade)
+  turnId          String?
+  turn            Turn?         @relation(fields: [turnId], references: [id], onDelete: SetNull)
+  kind            String // "prompt_eval" | "ragas" | "deepeval" | "llm_judge"
+  score           Float?
 
   // MongoDB reference: EvalArtifactData document with same ID
   // Contains: full evaluation artifact, reasoning traces, detailed metrics
 
-  createdAt  DateTime @default(now())
+  createdAt DateTime @default(now())
 
-  @@index([sessionId, kind])
+  @@index([sessionMemberId, kind])
   @@index([turnId])
 }
 
-/* =================== RAG: pgvector in Postgres =================== */
-// Add the actual vector column & indexes via SQL migrations
+/**
+ * =================== RAG: pgvector in Postgres ===================
+ */
 
 model EmbeddingRow {
-  id         String  @id @default(cuid())
+  id        String                @id @default(cuid())
   // Actual vector column added via SQL migration (e.g., vector(1536))
-  embedding  Unsupported("vector")
-  namespace  String   // "kb" | "transcript" | "previous_calls"
-  refType    String   // "TranscriptSegment" | "Doc" | "Message"
-  refId      String
-  metadata   Json?    // Small structured metadata
+  embedding Unsupported("vector")
+  namespace String // "kb" | "transcript" | "previous_calls"
+  refType   String // "TranscriptSegment" | "Doc" | "Message"
+  refId     String
+  metadata  Json? // Small structured metadata
 
-  createdAt  DateTime @default(now())
+  createdAt DateTime @default(now())
 
   @@index([namespace])
   @@index([refType, refId])
 }
 
-/* =================== Feedback Engine =================== */
+/**
+ * =================== Feedback Engine ===================
+ */
 
 model Rubric {
-  id        String     @id @default(cuid())
-  orgId     String
-  name      String
-  version   Int        @default(1)
+  id      String @id @default(cuid())
+  orgId   String
+  name    String
+  version Int    @default(1)
 
-  criteria  Criterion[]
+  criteria   Criterion[]
   scorecards Scorecard[]
 
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([orgId, name, version])
   @@index([orgId])
 }
 
 model Criterion {
-  id         String   @id @default(cuid())
-  rubricId   String
-  rubric     Rubric   @relation(fields: [rubricId], references: [id], onDelete: Cascade)
-  label      String
-  maxPoints  Int      // Source of truth for max points
-  weight     Float?
-  order      Int
+  id        String @id @default(cuid())
+  rubricId  String
+  rubric    Rubric @relation(fields: [rubricId], references: [id], onDelete: Cascade)
+  label     String
+  maxPoints Int // Source of truth for max points
+  weight    Float?
+  order     Int
 
   scoreItems ScoreItem[]
 
-  createdAt  DateTime @default(now())
+  createdAt DateTime @default(now())
 
   @@index([rubricId, order])
 }
 
 model Scorecard {
-  id          String    @id @default(cuid())
-  sessionId   String
-  session     Session   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  rubricId    String?
-  rubric      Rubric?   @relation(fields: [rubricId], references: [id], onDelete: SetNull)
-  totalScore  Float?
-  maxScore    Float?
-  locale      String?
+  id              String        @id @default(cuid())
+  sessionMemberId String
+  sessionMember   SessionMember @relation(fields: [sessionMemberId], references: [id], onDelete: Cascade)
+  rubricId        String?
+  rubric          Rubric?       @relation(fields: [rubricId], references: [id], onDelete: SetNull)
+  totalScore      Float?
+  maxScore        Float?
+  locale          String?
 
-  items       ScoreItem[]
-  coachTips   CoachTip[]
+  items     ScoreItem[]
+  coachTips CoachTip[]
 
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  @@index([sessionId])
+  @@index([sessionMemberId])
   @@index([rubricId])
 }
 
 model ScoreItem {
-  id           String     @id @default(cuid())
-  scorecardId  String
-  scorecard    Scorecard  @relation(fields: [scorecardId], references: [id], onDelete: Cascade)
-  criterionId  String?
-  criterion    Criterion? @relation(fields: [criterionId], references: [id], onDelete: SetNull)
-  score        Float?
+  id          String     @id @default(cuid())
+  scorecardId String
+  scorecard   Scorecard  @relation(fields: [scorecardId], references: [id], onDelete: Cascade)
+  criterionId String?
+  criterion   Criterion? @relation(fields: [criterionId], references: [id], onDelete: SetNull)
+  score       Float?
   // REMOVED: maxPoints (redundant, derive from criterion.maxPoints via JOIN)
-  details      Json?      // Small structured feedback
+  details     Json? // Small structured feedback
 
-  createdAt    DateTime   @default(now())
+  createdAt DateTime @default(now())
 
   @@index([scorecardId])
   @@index([criterionId])
 }
 
 model CoachTip {
-  id           String     @id @default(cuid())
-  scorecardId  String
-  scorecard    Scorecard  @relation(fields: [scorecardId], references: [id], onDelete: Cascade)
-  text         String
-  link         String?
-  excerptRef   String?    // Points to Message/Transcript/Doc id
+  id          String    @id @default(cuid())
+  scorecardId String
+  scorecard   Scorecard @relation(fields: [scorecardId], references: [id], onDelete: Cascade)
+  text        String
+  link        String?
+  excerptRef  String? // Points to Message/Transcript/Doc id
 
-  createdAt    DateTime   @default(now())
+  createdAt DateTime @default(now())
 
   @@index([scorecardId])
 }
 
 model Benchmark {
-  id        String   @id @default(cuid())
-  orgId     String
+  id     String  @id @default(cuid())
+  orgId  String
   // Clarified semantics:
   // name: dimension/category (e.g., "objection_handling", "product_knowledge")
   // metric: measurement type (e.g., "avg_score", "p95_latency", "completion_rate")
-  name      String
-  metric    String
-  value     Float
-  window    String?  // Time window: "7d", "30d", "all_time"
+  name   String
+  metric String
+  value  Float
+  window String? // Time window: "7d", "30d", "all_time"
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -497,22 +569,24 @@ model Benchmark {
   @@index([orgId, metric])
 }
 
-/* =================== Reports =================== */
+/**
+ * =================== Reports ===================
+ */
 
 model ReportRequest {
-  id         String       @id @default(cuid())
-  sessionId  String
-  session    Session      @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  format     ReportFormat
-  status     String       @default("queued") // queued|ready|failed
-  assetId    String?      // MediaAsset holding produced PDF/JSON
-  error      String?
+  id              String        @id @default(cuid())
+  sessionMemberId String
+  sessionMember   SessionMember @relation(fields: [sessionMemberId], references: [id], onDelete: Cascade)
+  format          ReportFormat
+  status          String        @default("queued") // queued|ready|failed
+  assetId         String? // MediaAsset holding produced PDF/JSON
+  error           String?
 
   // MongoDB reference: ReportSnapshot document with same ID (for JSON format)
   // Contains: full structured report data
 
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  @@index([sessionId, format, status])
+  @@index([sessionMemberId, format, status])
 }

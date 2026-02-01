@@ -13,27 +13,24 @@ import { Schema, Document } from 'mongoose';
  */
 
 export interface IEventLog extends Document {
-  _id: string; // Unique event log ID (can be different from Postgres Event.id)
-  eventId?: string; // Optional reference to PostgreSQL Event.id
-  sessionId: string;
-  type: string; // Event type (matches PostgreSQL EventType enum)
+  _id: string;
+  eventId?: string;
+  sessionMemberId: string;
+  type: string;
 
-  // Full event payload (can be very large)
   payload: Record<string, any>;
 
-  // Event context
   context?: {
     userId?: string;
     orgId?: string;
     traceId?: string;
     correlationId?: string;
-    source?: string; // Service/component that emitted the event
-    version?: string; // Event schema version
+    source?: string;
+    version?: string;
   };
 
-  // Event metadata
   metadata?: {
-    size?: number; // Payload size in bytes
+    size?: number;
     compressed?: boolean;
     retryCount?: number;
     processingTimeMs?: number;
@@ -47,7 +44,7 @@ export const EventLogSchema = new Schema<IEventLog>(
   {
     _id: { type: String, required: true },
     eventId: { type: String, index: true },
-    sessionId: { type: String, required: true, index: true },
+    sessionMemberId: { type: String, required: true, index: true },
     type: { type: String, required: true, index: true },
 
     payload: { type: Schema.Types.Mixed, required: true },
@@ -55,7 +52,7 @@ export const EventLogSchema = new Schema<IEventLog>(
     context: {
       userId: { type: String },
       orgId: { type: String, index: true },
-      traceId: { type: String, index: true },
+      traceId: { type: String },
       correlationId: { type: String, index: true },
       source: { type: String },
       version: { type: String },
@@ -74,14 +71,12 @@ export const EventLogSchema = new Schema<IEventLog>(
   },
 );
 
-// Indexes for common queries and filtering
-EventLogSchema.index({ sessionId: 1, type: 1 });
-EventLogSchema.index({ sessionId: 1, createdAt: -1 });
+EventLogSchema.index({ sessionMemberId: 1, type: 1 });
+EventLogSchema.index({ sessionMemberId: 1, createdAt: -1 });
 EventLogSchema.index({ type: 1, createdAt: -1 });
 EventLogSchema.index({ 'context.orgId': 1, createdAt: -1 });
 EventLogSchema.index({ 'context.traceId': 1 });
 
-// TTL index - auto-delete logs older than 90 days
 EventLogSchema.index(
   { createdAt: 1 },
   { expireAfterSeconds: 90 * 24 * 60 * 60 },

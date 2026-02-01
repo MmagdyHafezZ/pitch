@@ -107,7 +107,6 @@ export class TeamService {
       requesterId,
       updateMemberDto.teamId,
     );
-    updateMemberDto.acceptedAt = new Date();
     return this.teamRepository.updateMember({
       ...updateMemberDto,
     });
@@ -129,10 +128,14 @@ export class TeamService {
     return this.teamRepository.findMany();
   }
 
-  async findOne(id: string): Promise<Team> {
+  async findById(id: string): Promise<Team> {
     const team = await this.teamRepository.findById(id);
     if (!team) throw new NotFoundException(`Team with ID ${id} not found`);
     return team;
+  }
+
+  async findUserTeams(userId: string): Promise<Team[]> {
+    return this.teamRepository.findUserTeams(userId);
   }
 
   async findByName(name: string): Promise<Team | null> {

@@ -40,6 +40,22 @@ export class TeamRepository {
           },
         },
       },
+      include: {
+        memberships: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                email: true,
+                name: true,
+                avatar: true,
+                isActive: true,
+              },
+            },
+          },
+          orderBy: [{ role: 'asc' }, { invitedAt: 'asc' }],
+        },
+      },
     });
   }
 
@@ -57,6 +73,22 @@ export class TeamRepository {
         metadata: (data.metadata ?? undefined) as
           | Prisma.InputJsonValue
           | undefined,
+      },
+      include: {
+        memberships: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                email: true,
+                name: true,
+                avatar: true,
+                isActive: true,
+              },
+            },
+          },
+          orderBy: [{ role: 'asc' }, { invitedAt: 'asc' }],
+        },
       },
     });
   }
@@ -95,7 +127,7 @@ export class TeamRepository {
     });
   }
 
-  async deleteTeamMember(userId: string, teamId: string): Promise<void> {
+  async deleteTeamMember(teamId: string, userId: string): Promise<void> {
     await this.prisma.teamMembership.update({
       where: {
         userId_teamId: { userId: userId, teamId: teamId },
@@ -127,8 +159,8 @@ export class TeamRepository {
   }
 
   findById(id: string): Promise<Team | null> {
-    return this.prisma.team.findFirst({
-      where: { id, deletedAt: null },
+    return this.prisma.team.findUnique({
+      where: { id },
       include: {
         memberships: {
           include: {
@@ -146,6 +178,37 @@ export class TeamRepository {
         },
       },
     }) as unknown as Promise<Team | null>;
+  }
+
+  async findUserTeams(userId: string): Promise<Team[]> {
+    return this.prisma.team.findMany({
+      where: {
+        memberships: {
+          some: {
+            userId: userId,
+            isActive: true,
+            team: { isActive: true, deletedAt: null },
+          },
+        },
+        deletedAt: null,
+      },
+      include: {
+        memberships: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                email: true,
+                name: true,
+                avatar: true,
+                isActive: true,
+              },
+            },
+          },
+          orderBy: [{ role: 'asc' }, { invitedAt: 'asc' }],
+        },
+      },
+    });
   }
 
   async findBySlug(slug: string): Promise<Team | null> {

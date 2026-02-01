@@ -44,3 +44,9 @@ export {
   ReportSnapshotModel,
 } from './report-snapshot.schema';
 export type { IReportSnapshot } from './report-snapshot.schema';
+
+export {
+  SessionInvitationSchema,
+  SessionInvitationModel,
+} from './session-invitation.schema';
+export type { ISessionInvitation } from './session-invitation.schema';

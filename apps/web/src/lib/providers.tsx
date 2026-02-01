@@ -19,6 +19,7 @@ interface ProvidersProps {
 const theme = createTheme({
   colors: {
     blue: generateColors('#228be6'),
+    dark: generateColors('#0f172a'),
   },
 
   shadows: {
