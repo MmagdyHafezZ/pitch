@@ -23,7 +23,7 @@ import { useSessions, type Session } from '@/features/sessions'
 
 type Status = 'active' | 'ended'
 const statusColor: Record<Status, string> = {
-  active: 'blue',
+  active: 'brand',
   ended: 'green',
 }
 
@@ -51,11 +51,9 @@ function SessionCard({
       style={{
         cursor: 'pointer',
         transition: 'all 0.2s ease-in-out',
-        border: isSelected ? '2px solid var(--mantine-color-blue-6)' : undefined,
+        border: isSelected ? '2px solid var(--pitch-accent-strong)' : undefined,
         transform: isSelected ? 'scale(1.02)' : undefined,
-        boxShadow: isSelected
-          ? '0 4px 12px rgba(37, 99, 235, 0.2)'
-          : '0 1px 3px rgba(0, 0, 0, 0.1)',
+        boxShadow: isSelected ? '0 4px 12px rgba(0, 0, 0, 0.15)' : '0 1px 3px rgba(0, 0, 0, 0.1)',
       }}
     >
       <Stack gap="xs">
@@ -72,7 +70,7 @@ function SessionCard({
           {new Date(session.createdAt).toLocaleDateString()}
         </Text>
         <Group gap={6} wrap="wrap">
-          <Badge variant="outline" color="blue" radius="sm">
+          <Badge variant="outline" color="brand" radius="sm">
             {session.type}
           </Badge>
           {session.tags?.map((tag: string, idx: number) => (
@@ -192,7 +190,7 @@ function SessionDetailPanel({ session, onDismiss }: { session: Session; onDismis
             Type & Tags
           </Title>
           <Group gap="xs">
-            <Badge variant="filled" color="blue" radius="md" size="lg">
+            <Badge variant="filled" color="brand" radius="md" size="lg">
               {session.type}
             </Badge>
             {session.tags?.map((tag: string, idx: number) => (
@@ -275,7 +273,7 @@ function SessionDetailPanel({ session, onDismiss }: { session: Session; onDismis
           <Button
             size="lg"
             variant="light"
-            color="blue"
+            color="brand"
             onClick={() => router.push(`/studio/sessions/${session.id}/edit`)}
           >
             Edit
@@ -283,7 +281,7 @@ function SessionDetailPanel({ session, onDismiss }: { session: Session; onDismis
           <Button
             size="lg"
             variant="filled"
-            color="blue"
+            color="brand"
             onClick={() => router.push(`/session/${session.id}`)}
           >
             Launch
@@ -401,7 +399,7 @@ function SessionsPageInner() {
               </Text>
               <Button
                 variant="light"
-                color="blue"
+                color="brand"
                 onClick={() => router.push('/studio/sessions/create')}
               >
                 Create a session

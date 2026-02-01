@@ -3,6 +3,8 @@ import { ClientsModule, Transport } from '@nestjs/microservices';
 import { JwtModule, type JwtSignOptions } from '@nestjs/jwt';
 import { UserGatewayController } from './controllers/userManagement/user-gateway.controller';
 import { AuthGatewayController } from './controllers/userManagement/auth-gateway.controller';
+import { TeamGatewayController } from './controllers/userManagement/team-gateway.controller';
+import { SalesforceGatewayController } from './controllers/crm/salesforce-gateway.controller';
 import { SessionGatewayController } from './controllers/simulation/session-gateway.controller';
 import { InvitationGatewayController } from './controllers/simulation/invitation-gateway.controller';
 import { GlobalJwtAuthGuard } from './guards/global-jwt-auth.guard';
@@ -20,6 +22,7 @@ import {
 import { APP_GUARD } from '@nestjs/core';
 import { TeamGatewayController } from './controllers/userManagement/team-gateway.controller';
 import { S3GatewayController } from './controllers/s3/s3-gateway.controller';
+import { SimulationWsGateway } from './controllers/simulation/simulation-ws.gateway';
 import { SimulationWsGateway } from './controllers/simulation/simulation-ws.gateway';
 
 @Module({
@@ -47,6 +50,7 @@ import { SimulationWsGateway } from './controllers/simulation/simulation-ws.gate
     AuthGatewayController,
     TeamGatewayController,
     S3GatewayController,
+    SalesforceGatewayController,
     TtsGatewayController,
     SessionGatewayController,
     InvitationGatewayController,

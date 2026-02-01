@@ -86,7 +86,7 @@ function ActionBar({
               style={{
                 padding: `${rem(isCompact ? 6 : 8)} ${rem(isCompact ? 10 : 14)}`,
                 borderRadius: rem(999),
-                background: isActive ? 'var(--mantine-color-blue-6)' : 'transparent',
+                background: isActive ? 'var(--pitch-accent-strong)' : 'transparent',
                 color: isActive ? 'white' : 'var(--mantine-color-gray-3)',
                 fontWeight: isActive ? 700 : 600,
                 fontSize: isCompact ? rem(12) : rem(13),
@@ -219,7 +219,7 @@ function ActionConfig({
             <Button
               size={isCompact ? 'sm' : 'md'}
               variant="light"
-              color="blue"
+              color="brand"
               radius="md"
               onClick={() => router.push('/studio/sessions/create')}
               styles={{
@@ -338,7 +338,7 @@ export function AppTopBar({
                 px={rem(isMobile ? 16 : 32)}
                 size={rem(isMobile ? 22 : 28)}
                 fw={700}
-                c="var(--mantine-color-blue-4)"
+                c="var(--pitch-accent-strong)"
                 style={{ whiteSpace: 'nowrap' }}
               >
                 P.I.T.C.H

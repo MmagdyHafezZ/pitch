@@ -91,8 +91,10 @@ async function bootstrap() {
   );
 
   const config = new DocumentBuilder()
-    .setTitle(process.env.SWAGGER_TITLE ?? 'My API')
-    .setDescription(process.env.SWAGGER_DESCRIPTION ?? 'REST API documentation')
+    .setTitle(process.env.SWAGGER_TITLE ?? 'PITCH API')
+    .setDescription(
+      process.env.SWAGGER_DESCRIPTION ?? 'PITCH API documentation',
+    )
     .setVersion(process.env.SWAGGER_VERSION ?? '1.0.0')
     .addBearerAuth(
       { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' },
