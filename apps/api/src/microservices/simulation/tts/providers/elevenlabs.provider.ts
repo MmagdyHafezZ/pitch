@@ -87,6 +87,99 @@ export class ElevenLabsTtsProvider implements TtsProvider {
     }
   }
 
+  /**
+   * Streaming synthesis using ElevenLabs streaming API
+   */
+  async synthesizeStream(
+    text: string,
+    options?: TtsOptions,
+  ): Promise<import('./tts.provider').TtsStreamResult> {
+    try {
+      await this.ensureVoicesLoaded();
+
+      const requested = options?.voice || this.defaultVoice;
+      if (!requested) {
+        throw new BadRequestException(
+          'No voice specified and no default voice available. Please specify a voice or configure ELEVENLABS_DEFAULT_VOICE.',
+        );
+      }
+
+      const voiceId = this.resolveVoiceId(requested.trim());
+
+      // ElevenLabs streaming call
+      const audioSource = await this.client.textToSpeech.stream(voiceId, {
+        text,
+        modelId: this.modelId,
+      });
+
+      const audioStream = this.normalizeToAsyncIterable(audioSource);
+
+      const contentType = this.outputFormat.startsWith('mp3')
+        ? 'audio/mpeg'
+        : 'application/octet-stream';
+
+      return { audioStream, contentType };
+    } catch (err) {
+      if (err instanceof BadRequestException) throw err;
+
+      throw new InternalServerErrorException('ElevenLabs streaming TTS failed');
+    }
+  }
+
+  /**
+   * Normalize either a Web ReadableStream or an async iterable into an async iterable of Uint8Array
+   */
+  private normalizeToAsyncIterable(source: any): AsyncIterable<Uint8Array> {
+    if (source == null) {
+      throw new InternalServerErrorException(
+        'Empty audio stream from ElevenLabs',
+      );
+    }
+
+    // Web ReadableStream
+    if (typeof source.getReader === 'function') {
+      const reader = source.getReader();
+      return (async function* () {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          if (value) yield value;
+        }
+      })();
+    }
+
+    // Async iterable (for-await-of)
+    if (typeof source[Symbol.asyncIterator] === 'function') {
+      return (async function* () {
+        for await (const chunk of source as AsyncIterable<any>) {
+          if (chunk instanceof Uint8Array) {
+            yield chunk;
+          } else if (ArrayBuffer.isView(chunk)) {
+            yield new Uint8Array(chunk as ArrayBufferView);
+          } else if (chunk instanceof ArrayBuffer) {
+            yield new Uint8Array(chunk);
+          } else if (typeof chunk === 'string') {
+            yield Buffer.from(chunk);
+          } else if (chunk && chunk.data) {
+            // Some SDKs wrap chunk in an object
+            const d = chunk.data;
+            if (d instanceof Uint8Array) yield d;
+            else if (ArrayBuffer.isView(d))
+              yield new Uint8Array(d as ArrayBufferView);
+            else if (d instanceof ArrayBuffer) yield new Uint8Array(d);
+            else yield Buffer.from(String(d));
+          } else {
+            yield Buffer.from(String(chunk));
+          }
+        }
+      })();
+    }
+
+    throw new InternalServerErrorException(
+      'Unsupported audio stream from ElevenLabs',
+    );
+  }
+
   private resolveVoiceId(input: string): string {
     if (this.voiceNameToId?.has(input)) {
       return this.voiceNameToId.get(input)!;

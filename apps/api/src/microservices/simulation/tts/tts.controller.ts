@@ -3,6 +3,7 @@ import { MessagePattern, Payload } from '@nestjs/microservices';
 import { toRpcException } from '@pitch/shared-backend/helpers/exceptions';
 import { TtsService } from './tts.service';
 import { TTS_SERVICE_PATTERNS } from '@pitch/shared-backend/interfaces/message-patterns.interface';
+import { Observable } from 'rxjs';
 
 type SpeakRequest = {
   text: string;
@@ -46,6 +47,41 @@ export class TtsMicroserviceController {
       };
     } catch (error) {
       this.logger.error('TTS speak failed', error);
+      throw toRpcException(error);
+    }
+  }
+
+  @MessagePattern(TTS_SERVICE_PATTERNS.STREAM)
+  stream(@Payload() data: SpeakRequest): Observable<SpeakResponse> {
+    try {
+      this.logger.log(
+        `TTS stream - provider=${data.provider}, voice=${data.options?.voice ?? 'default'}`,
+      );
+
+      return new Observable<SpeakResponse>((subscriber) => {
+        (async () => {
+          try {
+            const result = await this.ttsService.synthesizeStream(
+              data.text,
+              data.provider,
+              data.options,
+            );
+
+            for await (const chunk of result.audioStream) {
+              subscriber.next({
+                audioBase64: Buffer.from(chunk).toString('base64'),
+                contentType: result.contentType,
+              });
+            }
+
+            subscriber.complete();
+          } catch (err) {
+            subscriber.error(err);
+          }
+        })();
+      });
+    } catch (error) {
+      this.logger.error('TTS stream failed', error);
       throw toRpcException(error);
     }
   }
