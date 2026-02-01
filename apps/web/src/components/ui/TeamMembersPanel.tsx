@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import {
-  Card,
+  Box,
   Stack,
   Group,
   Text,
@@ -113,15 +113,7 @@ export function TeamMembersPanel() {
   }
 
   return (
-    <Card
-      withBorder
-      radius="md"
-      shadow="xs"
-      p="lg"
-      style={{
-        background: 'var(--mantine-color-gray-1)'
-      }}
-    >
+    <Box style={{ width: '100%' }}>
       {!currentTeam ? (
         <Text size="sm" c="dimmed">
           No team selected. Choose a team first.
@@ -276,6 +268,6 @@ export function TeamMembersPanel() {
           )}
         </Stack>
       )}
-    </Card>
+    </Box>
   )
 }
