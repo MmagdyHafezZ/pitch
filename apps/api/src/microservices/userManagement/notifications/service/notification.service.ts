@@ -1,12 +1,12 @@
 import { Injectable, ServiceUnavailableException } from '@nestjs/common';
 import { Model, Types } from 'mongoose';
-import { MongoConnectionService } from '../services/mongo/mongo-connection.service';
+import { MongoConnectionService } from '../../services/mongo/mongo-connection.service';
 import {
   NotificationDocument,
   NotificationSchema,
   NotificationSeverity,
   NotificationSourceType,
-} from './notification.schema';
+} from '../schema/notification.schema';
 import {
   CreateNotificationDto,
   CreateNotificationBatchDto,
