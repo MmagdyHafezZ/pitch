@@ -87,6 +87,138 @@ export class ElevenLabsTtsProvider implements TtsProvider {
     }
   }
 
+  /**
+   * Streaming synthesis using ElevenLabs streaming API
+   */
+  async synthesizeStream(
+    text: string,
+    options?: TtsOptions,
+  ): Promise<import('./tts.provider').TtsStreamResult> {
+    try {
+      await this.ensureVoicesLoaded();
+
+      const requested = options?.voice || this.defaultVoice;
+      if (!requested) {
+        throw new BadRequestException(
+          'No voice specified and no default voice available. Please specify a voice or configure ELEVENLABS_DEFAULT_VOICE.',
+        );
+      }
+
+      const voiceId = this.resolveVoiceId(requested.trim());
+
+      // ElevenLabs streaming call
+      const audioSource = await this.client.textToSpeech.stream(voiceId, {
+        text,
+        modelId: this.modelId,
+      });
+
+      const audioStream = this.normalizeToAsyncIterable(audioSource);
+
+      const contentType = this.outputFormat.startsWith('mp3')
+        ? 'audio/mpeg'
+        : 'application/octet-stream';
+
+      return { audioStream, contentType };
+    } catch (err) {
+      if (err instanceof BadRequestException) throw err;
+
+      throw new InternalServerErrorException('ElevenLabs streaming TTS failed');
+    }
+  }
+
+  /**
+   * Normalize either a Web ReadableStream or an async iterable into an async iterable of Uint8Array
+   */
+  private normalizeToAsyncIterable(
+    source: ReadableStream<Uint8Array>,
+  ): AsyncIterable<Uint8Array> {
+    if (source == null) {
+      throw new InternalServerErrorException(
+        'Empty audio stream from ElevenLabs',
+      );
+    }
+
+    const bufferFromUnknown = (value: unknown): Buffer => {
+      if (value == null) return Buffer.from('');
+      if (typeof value === 'string') return Buffer.from(value);
+      if (
+        typeof value === 'number' ||
+        typeof value === 'bigint' ||
+        typeof value === 'boolean'
+      ) {
+        return Buffer.from(String(value));
+      }
+      if (typeof value === 'symbol') {
+        return Buffer.from(value.description ?? '');
+      }
+      if (value instanceof Uint8Array) return Buffer.from(value);
+      if (ArrayBuffer.isView(value)) {
+        return Buffer.from(value.buffer, value.byteOffset, value.byteLength);
+      }
+      if (value instanceof ArrayBuffer)
+        return Buffer.from(new Uint8Array(value));
+      try {
+        const json = JSON.stringify(value);
+        return Buffer.from(json ?? '');
+      } catch {
+        return Buffer.from('');
+      }
+    };
+
+    // Web ReadableStream
+    if (typeof source.getReader === 'function') {
+      const reader = source.getReader();
+      return (async function* () {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          if (value) yield value;
+        }
+      })();
+    }
+
+    // Async iterable (for-await-of)
+    if (typeof source[Symbol.asyncIterator] === 'function') {
+      return (async function* () {
+        for await (const chunk of source as AsyncIterable<
+          Uint8Array | ArrayBuffer | string | { data: unknown }
+        >) {
+          if (chunk instanceof Uint8Array) {
+            yield chunk;
+          } else if (ArrayBuffer.isView(chunk)) {
+            yield new Uint8Array(
+              chunk.buffer,
+              chunk.byteOffset,
+              chunk.byteLength,
+            );
+          } else if (chunk instanceof ArrayBuffer) {
+            yield new Uint8Array(chunk);
+          } else if (typeof chunk === 'string') {
+            yield Buffer.from(chunk);
+          } else if (
+            typeof chunk === 'object' &&
+            chunk !== null &&
+            'data' in chunk
+          ) {
+            // Some SDKs wrap chunk in an object
+            const d = (chunk as { data: unknown }).data;
+            if (d instanceof Uint8Array) yield d;
+            else if (ArrayBuffer.isView(d))
+              yield new Uint8Array(d.buffer, d.byteOffset, d.byteLength);
+            else if (d instanceof ArrayBuffer) yield new Uint8Array(d);
+            else yield bufferFromUnknown(d);
+          } else {
+            yield bufferFromUnknown(chunk);
+          }
+        }
+      })();
+    }
+
+    throw new InternalServerErrorException(
+      'Unsupported audio stream from ElevenLabs',
+    );
+  }
+
   private resolveVoiceId(input: string): string {
     if (this.voiceNameToId?.has(input)) {
       return this.voiceNameToId.get(input)!;

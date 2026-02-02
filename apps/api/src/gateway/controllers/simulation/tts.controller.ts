@@ -83,6 +83,58 @@ export class TtsGatewayController {
     res.send(audioBuffer);
   }
 
+  @Post('stream')
+  @ApiResponse({
+    status: 200,
+    description:
+      'Stream audio back to the client as it is generated (chunked response)',
+  })
+  stream(@Body() body: SpeakRequestDto, @Res() res: Response) {
+    const stream$ = this.ttsService.send<SpeakResponse>(
+      TTS_SERVICE_PATTERNS.STREAM,
+      {
+        text: body.text,
+        provider: body.provider,
+        options: { voice: body.voice },
+      },
+    );
+
+    let headersFlushed = false;
+
+    const subscription = stream$.subscribe({
+      next: (chunk) => {
+        try {
+          if (!headersFlushed) {
+            // Use the provider's content type for the whole stream
+            res.setHeader(
+              'Content-Type',
+              chunk.contentType || 'application/octet-stream',
+            );
+            res.setHeader('Transfer-Encoding', 'chunked');
+            res.setHeader('Cache-Control', 'no-cache');
+            res.flushHeaders();
+            headersFlushed = true;
+          }
+          const buf = Buffer.from(chunk.audioBase64, 'base64');
+          res.write(buf);
+        } catch (err) {
+          // swallow individual chunk errors and continue
+        }
+      },
+      error: () => {
+        res.end();
+      },
+      complete: () => {
+        res.end();
+      },
+    });
+
+    // If client disconnects, unsubscribe from the microservice stream
+    res.on('close', () => {
+      subscription.unsubscribe();
+    });
+  }
+
   @Get('providers')
   @ApiResponse({
     status: 200,

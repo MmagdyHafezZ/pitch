@@ -138,6 +138,7 @@ export const SUPPORT_SERVICE_PATTERNS = {
 } as const
 export const TTS_SERVICE_PATTERNS = {
   SPEAK: 'tts.speak',
+  STREAM: 'tts.stream',
   LIST_PROVIDERS: 'tts.providers',
   GET_VOICES: 'tts.voices',
 } as const

@@ -1,6 +1,10 @@
 import { Injectable, forwardRef, Inject } from '@nestjs/common';
 import { TtsProviderFactory } from './providers/tts.factory';
-import { TtsOptions, TtsResult } from './providers/tts.provider';
+import {
+  TtsOptions,
+  TtsResult,
+  TtsStreamResult,
+} from './providers/tts.provider';
 
 @Injectable()
 export class TtsService {
@@ -16,6 +20,21 @@ export class TtsService {
   ): Promise<TtsResult> {
     const provider = this.providerFactory.getProvider(providerName);
     return provider.synthesize(text, options);
+  }
+
+  async synthesizeStream(
+    text: string,
+    providerName?: string,
+    options?: TtsOptions,
+  ): Promise<TtsStreamResult> {
+    const provider = this.providerFactory.getProvider(providerName);
+    if (!provider.synthesizeStream) {
+      throw new Error(
+        `TTS provider "${providerName || provider.name}" does not support streaming`,
+      );
+    }
+
+    return provider.synthesizeStream(text, options);
   }
 
   listProviders() {
