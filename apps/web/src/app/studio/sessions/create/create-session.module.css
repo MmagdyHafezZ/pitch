@@ -1,0 +1,628 @@
+.page {
+  position: relative;
+  min-height: 100%;
+  color: var(--mantine-color-gray-0);
+  --mantine-color-dimmed: var(--mantine-color-gray-3);
+}
+
+.page :global(.mantine-InputWrapper-label) {
+  color: var(--mantine-color-gray-0);
+}
+
+.page :global(.mantine-InputWrapper-description) {
+  color: var(--mantine-color-gray-3);
+}
+
+.page :global(.mantine-Title-root) {
+  color: var(--mantine-color-gray-0);
+}
+
+.page :global(.mantine-Input-input),
+.page :global(.mantine-Select-input),
+.page :global(.mantine-MultiSelect-input) {
+  color: var(--mantine-color-gray-0);
+  background-color: color-mix(in srgb, var(--mantine-color-dark-8) 92%, transparent);
+  border-color: color-mix(in srgb, var(--mantine-color-dark-4) 40%, transparent);
+}
+
+.page :global(.mantine-Input-input::placeholder),
+.page :global(.mantine-Select-input::placeholder),
+.page :global(.mantine-MultiSelect-input::placeholder) {
+  color: var(--mantine-color-gray-4);
+}
+
+.page :global(.mantine-Slider-markLabel) {
+  color: var(--mantine-color-gray-3);
+}
+
+.hero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: 28px;
+}
+
+.heroCard {
+  padding: 24px;
+  border-radius: 20px;
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--mantine-color-blue-6) 18%, var(--mantine-color-dark-8)),
+    var(--mantine-color-dark-8)
+  );
+  border: 1px solid color-mix(in srgb, var(--mantine-color-blue-6) 30%, transparent);
+  box-shadow: 0 20px 50px color-mix(in srgb, var(--mantine-color-dark-9) 55%, transparent);
+  width: 100%;
+}
+
+.heroTitle {
+  font-size: clamp(28px, 3vw, 40px);
+  letter-spacing: -0.02em;
+}
+
+.heroSub {
+  color: var(--mantine-color-dimmed);
+  font-size: 14px;
+}
+
+.stepPanel {
+  position: sticky;
+  top: 96px;
+}
+
+.stepPanelCard {
+  background: color-mix(in srgb, var(--mantine-color-dark-8) 90%, transparent);
+  border: 1px solid color-mix(in srgb, var(--mantine-color-dark-4) 40%, transparent);
+  border-radius: 18px;
+}
+
+.contentCard {
+  background: color-mix(in srgb, var(--mantine-color-dark-8) 96%, transparent);
+  border-radius: 20px;
+  border: 1px solid color-mix(in srgb, var(--mantine-color-dark-4) 40%, transparent);
+  box-shadow: 0 18px 60px color-mix(in srgb, var(--mantine-color-dark-9) 65%, transparent);
+}
+
+.sectionTitle {
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.ghostDivider {
+  border-top: 1px dashed color-mix(in srgb, var(--mantine-color-dark-4) 50%, transparent);
+}
+
+.stepperRoot :global(.mantine-Stepper-stepLabel) {
+  color: var(--mantine-color-text);
+  font-weight: 600;
+}
+
+.stepperRoot :global(.mantine-Stepper-stepDescription) {
+  color: var(--mantine-color-dimmed);
+}
+
+.stepperRoot :global(.mantine-Stepper-stepBody) {
+  padding-bottom: 12px;
+}
+
+.stepperRoot :global(.mantine-Stepper-stepIcon) {
+  background: color-mix(in srgb, var(--mantine-color-blue-6) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--mantine-color-blue-6) 45%, transparent);
+}
+
+.selectionCard {
+  transition:
+    transform 180ms ease,
+    box-shadow 180ms ease,
+    border-color 180ms ease;
+}
+
+.selectionCard:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 18px 32px color-mix(in srgb, var(--mantine-color-dark-9) 50%, transparent);
+}
+
+.personaCarousel {
+  position: relative;
+  padding: 8px 36px;
+}
+
+.personaTrack {
+  display: flex;
+  gap: 16px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  padding: 8px 4px 16px;
+  scroll-behavior: smooth;
+  overflow-y: hidden;
+}
+
+.personaEmptyInline {
+  min-width: 220px;
+  padding: 16px;
+  border-radius: 16px;
+  border: 1px dashed color-mix(in srgb, var(--mantine-color-dark-4) 45%, transparent);
+  background: color-mix(in srgb, var(--mantine-color-dark-8) 90%, transparent);
+}
+
+.personaTrack::-webkit-scrollbar {
+  height: 6px;
+}
+
+.personaTrack::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--mantine-color-blue-6) 40%, transparent);
+  border-radius: 999px;
+}
+
+.personaArrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 2;
+  box-shadow: 0 8px 18px color-mix(in srgb, var(--mantine-color-dark-9) 60%, transparent);
+}
+
+.personaArrowLeft {
+  left: 0;
+}
+
+.personaArrowRight {
+  right: 0;
+}
+
+.personaCard {
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--mantine-color-dark-8) 96%, transparent);
+  border: 1px solid color-mix(in srgb, var(--mantine-color-dark-4) 40%, transparent);
+  min-height: 280px;
+  flex: 0 0 300px;
+  scroll-snap-align: center;
+  transition:
+    transform 200ms ease,
+    box-shadow 200ms ease,
+    border-color 200ms ease;
+}
+
+.personaCard::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    120deg,
+    transparent 20%,
+    color-mix(in srgb, var(--mantine-color-blue-6) 18%, transparent),
+    transparent 80%
+  );
+  pointer-events: none;
+}
+
+.personaCard[data-selected='true'] {
+  border-color: var(--mantine-color-blue-6);
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--mantine-color-blue-6) 18%, var(--mantine-color-dark-8)),
+    var(--mantine-color-dark-8)
+  );
+  box-shadow: 0 20px 44px color-mix(in srgb, var(--mantine-color-blue-6) 28%, transparent);
+  transform: translateY(-8px) scale(1.02);
+  opacity: 1;
+}
+
+.personaDropzone {
+  border: 2px dashed color-mix(in srgb, var(--mantine-color-blue-6) 45%, transparent);
+  border-radius: 24px;
+  padding: 20px;
+  min-height: 260px;
+  background: color-mix(in srgb, var(--mantine-color-dark-9) 65%, transparent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.personaSelectedCard {
+  box-shadow: 0 24px 60px color-mix(in srgb, var(--mantine-color-blue-6) 35%, transparent);
+}
+
+.personaHeader {
+  gap: 12px;
+}
+
+.personaStack {
+  height: 100%;
+  position: relative;
+  z-index: 1;
+}
+
+.personaCheck {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  background: var(--mantine-color-blue-6);
+  border-radius: 999px;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 8px 16px color-mix(in srgb, var(--mantine-color-blue-6) 45%, transparent);
+}
+
+.personaFlavorClamp {
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.personaVoice {
+  background: color-mix(in srgb, var(--mantine-color-dark-7) 55%, transparent);
+  padding: 6px 8px;
+  border-radius: 10px;
+}
+
+.personaMiniMetrics {
+  margin-top: 2px;
+}
+
+.personaMetric {
+  background: color-mix(in srgb, var(--mantine-color-dark-7) 55%, transparent);
+  padding: 6px 8px;
+  border-radius: 10px;
+}
+
+.personaTraits {
+  flex-wrap: wrap;
+}
+
+.personaPreview {
+  background: color-mix(in srgb, var(--mantine-color-dark-8) 92%, transparent);
+  border: 1px solid color-mix(in srgb, var(--mantine-color-dark-4) 40%, transparent);
+  box-shadow: 0 20px 50px color-mix(in srgb, var(--mantine-color-dark-9) 55%, transparent);
+  width: 100%;
+}
+
+.personaPreviewHeader {
+  gap: 12px;
+}
+
+.personaPreviewBlock {
+  background: color-mix(in srgb, var(--mantine-color-dark-7) 55%, transparent);
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+
+.personaPreviewBio {
+  line-height: 1.5;
+}
+
+.personaEmpty {
+  min-height: 240px;
+  justify-content: center;
+}
+
+@media (min-width: 1200px) {
+  .personaPreview {
+    position: sticky;
+    top: 96px;
+  }
+}
+
+.stepIcon {
+  width: 42px;
+  height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--mantine-color-blue-6) 18%, transparent);
+  color: var(--mantine-color-blue-4);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--mantine-color-blue-6) 18%, transparent);
+}
+
+.scenarioCard {
+  background: color-mix(in srgb, var(--mantine-color-dark-8) 94%, transparent);
+  border: 1px solid color-mix(in srgb, var(--mantine-color-dark-4) 40%, transparent);
+}
+
+.scenarioPreview {
+  background: color-mix(in srgb, var(--mantine-color-dark-7) 55%, transparent);
+  border-radius: 12px;
+}
+
+.crmCard {
+  background: color-mix(in srgb, var(--mantine-color-dark-8) 94%, transparent);
+  border: 1px solid color-mix(in srgb, var(--mantine-color-dark-4) 40%, transparent);
+}
+
+.basicsDetailCard {
+  background: color-mix(in srgb, var(--mantine-color-dark-8) 94%, transparent);
+  border: 1px solid color-mix(in srgb, var(--mantine-color-dark-4) 40%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--mantine-color-blue-6) 8%, transparent);
+}
+
+.brainShell {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(
+    140deg,
+    color-mix(in srgb, var(--mantine-color-dark-8) 92%, transparent),
+    color-mix(in srgb, var(--mantine-color-dark-9) 88%, transparent)
+  );
+  border: 1px solid color-mix(in srgb, var(--mantine-color-blue-6) 25%, transparent);
+  box-shadow: 0 24px 70px color-mix(in srgb, var(--mantine-color-dark-9) 60%, transparent);
+}
+
+.brainGlow {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(
+      circle at 15% 20%,
+      color-mix(in srgb, var(--mantine-color-blue-6) 22%, transparent),
+      transparent 45%
+    ),
+    radial-gradient(
+      circle at 85% 10%,
+      color-mix(in srgb, var(--mantine-color-blue-4) 16%, transparent),
+      transparent 45%
+    );
+  opacity: 0.8;
+  pointer-events: none;
+}
+
+.brainOrb {
+  position: absolute;
+  width: 180px;
+  height: 180px;
+  border-radius: 999px;
+  filter: blur(26px);
+  opacity: 0.45;
+  pointer-events: none;
+  animation: brainFloat 8s ease-in-out infinite;
+}
+
+.brainOrbA {
+  top: -40px;
+  right: -50px;
+  background: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--mantine-color-blue-6) 45%, transparent),
+    transparent 70%
+  );
+}
+
+.brainOrbB {
+  bottom: -60px;
+  left: -40px;
+  animation-delay: -2s;
+  background: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--mantine-color-blue-4) 35%, transparent),
+    transparent 70%
+  );
+}
+
+.brainScan {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    120deg,
+    transparent 0%,
+    color-mix(in srgb, var(--mantine-color-blue-6) 12%, transparent) 45%,
+    transparent 70%
+  );
+  opacity: 0.2;
+  transform: translateX(-40%);
+  animation: brainScan 10s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.brainHeader {
+  position: relative;
+  z-index: 1;
+  gap: 16px;
+  margin-bottom: var(--mantine-spacing-md);
+}
+
+.brainIconWrap {
+  width: 52px;
+  height: 52px;
+  border-radius: 16px;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--mantine-color-blue-6) 18%, var(--mantine-color-dark-8));
+  border: 1px solid color-mix(in srgb, var(--mantine-color-blue-6) 30%, transparent);
+  box-shadow: 0 12px 24px color-mix(in srgb, var(--mantine-color-blue-6) 25%, transparent);
+}
+
+.brainBadges {
+  flex-wrap: wrap;
+}
+
+.brainContent {
+  position: relative;
+  z-index: 1;
+}
+
+.brainCard {
+  background: color-mix(in srgb, var(--mantine-color-dark-8) 94%, transparent);
+  border: 1px solid color-mix(in srgb, var(--mantine-color-dark-4) 35%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--mantine-color-blue-6) 10%, transparent);
+}
+
+.modelCarousel {
+  position: relative;
+  padding: 4px 36px;
+}
+
+.modelTrack {
+  display: flex;
+  gap: 16px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  padding: 8px 4px 16px;
+}
+
+.modelTrack::-webkit-scrollbar {
+  height: 6px;
+}
+
+.modelTrack::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--mantine-color-blue-6) 40%, transparent);
+  border-radius: 999px;
+}
+
+.modelArrowLeft {
+  left: 0;
+}
+
+.modelArrowRight {
+  right: 0;
+}
+
+.modelCard {
+  flex: 0 0 320px;
+  scroll-snap-align: center;
+  cursor: pointer;
+  background: color-mix(in srgb, var(--mantine-color-dark-8) 96%, transparent);
+  border: 1px solid color-mix(in srgb, var(--mantine-color-dark-4) 35%, transparent);
+  transition:
+    transform 200ms ease,
+    box-shadow 200ms ease,
+    border-color 200ms ease;
+}
+
+.modelCard:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 18px 36px color-mix(in srgb, var(--mantine-color-dark-9) 55%, transparent);
+}
+
+.modelCardSelected {
+  border-color: var(--mantine-color-blue-6);
+  box-shadow: 0 18px 40px color-mix(in srgb, var(--mantine-color-blue-6) 30%, transparent);
+  transform: translateY(-6px);
+}
+
+.modelBadges {
+  flex-wrap: wrap;
+}
+
+.modelMeta {
+  border-top: 1px dashed color-mix(in srgb, var(--mantine-color-dark-4) 45%, transparent);
+  padding-top: 8px;
+}
+
+.modelPricing {
+  margin-top: 10px;
+  padding: 8px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--mantine-color-dark-7) 55%, transparent);
+}
+
+.styleCard {
+  background: color-mix(in srgb, var(--mantine-color-dark-8) 94%, transparent);
+  border: 1px solid color-mix(in srgb, var(--mantine-color-dark-4) 40%, transparent);
+}
+
+.optionCard {
+  cursor: pointer;
+  background: color-mix(in srgb, var(--mantine-color-dark-8) 96%, transparent);
+  border: 1px solid color-mix(in srgb, var(--mantine-color-dark-4) 35%, transparent);
+  transition:
+    transform 180ms ease,
+    box-shadow 180ms ease,
+    border-color 180ms ease;
+}
+
+.optionCard:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 18px 32px color-mix(in srgb, var(--mantine-color-dark-9) 50%, transparent);
+}
+
+.optionCardSelected {
+  border-color: var(--mantine-color-blue-6);
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--mantine-color-blue-6) 14%, var(--mantine-color-dark-8)),
+    var(--mantine-color-dark-8)
+  );
+  box-shadow: 0 18px 36px color-mix(in srgb, var(--mantine-color-blue-6) 30%, transparent);
+}
+
+.speechRateCard {
+  background: color-mix(in srgb, var(--mantine-color-dark-8) 96%, transparent);
+  border: 1px solid color-mix(in srgb, var(--mantine-color-dark-4) 35%, transparent);
+}
+
+.reviewStack {
+  gap: 16px;
+}
+
+.reviewSection {
+  background: color-mix(in srgb, var(--mantine-color-dark-8) 94%, transparent);
+  border: 1px solid color-mix(in srgb, var(--mantine-color-dark-4) 40%, transparent);
+}
+
+.reviewRow {
+  padding-bottom: 6px;
+  border-bottom: 1px dashed color-mix(in srgb, var(--mantine-color-dark-4) 35%, transparent);
+}
+
+.reviewRow:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+@keyframes brainFloat {
+  0%,
+  100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(12px);
+  }
+}
+
+@keyframes brainScan {
+  0% {
+    transform: translateX(-45%);
+  }
+  50% {
+    transform: translateX(10%);
+  }
+  100% {
+    transform: translateX(-45%);
+  }
+}
+
+@keyframes personaDrop {
+  0% {
+    transform: translateY(-16px) scale(0.98);
+  }
+  100% {
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes personaReturn {
+  0% {
+    transform: translateY(12px) scale(0.98);
+  }
+  100% {
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (max-width: 900px) {
+  .hero {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .stepPanel {
+    position: static;
+  }
+}
