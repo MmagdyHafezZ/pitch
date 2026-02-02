@@ -1,5 +1,4 @@
 import { QueryClient } from '@tanstack/react-query'
-import { get } from 'http'
 
 export const API_CONFIG = {
   baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1',
@@ -23,48 +22,196 @@ export const queryClient = new QueryClient({
   },
 })
 
-export async function apiRequest<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-  const url = `${API_CONFIG.baseURL}${endpoint}`
+let accessToken: string | null = null
+let refreshPromise: Promise<string | null> | null = null
+let accessTokenListener: ((token: string | null) => void) | null = null
 
-  const config: RequestInit = {
+export const setAccessToken = (token: string | null) => {
+  accessToken = token
+  if (accessTokenListener) {
+    accessTokenListener(token)
+  }
+}
+
+export const getAccessToken = () => accessToken
+
+export const setAccessTokenListener = (listener: ((token: string | null) => void) | null) => {
+  accessTokenListener = listener
+}
+
+export const refreshAccessToken = async (): Promise<string | null> => {
+  if (refreshPromise) {
+    return refreshPromise
+  }
+
+  refreshPromise = (async () => {
+    try {
+      const response = await fetch(`${API_CONFIG.baseURL}/auth/refresh`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+      })
+
+      if (!response.ok) {
+        setAccessToken(null)
+        return null
+      }
+
+      const data = (await response.json()) as { accessToken: string }
+      setAccessToken(data.accessToken)
+      return data.accessToken
+    } catch {
+      setAccessToken(null)
+      return null
+    } finally {
+      refreshPromise = null
+    }
+  })()
+
+  return refreshPromise
+}
+
+export async function apiRequest<T>(
+  endpoint: string,
+  options: RequestInit & { timeoutMs?: number } = {}
+): Promise<T> {
+  const url = `${API_CONFIG.baseURL}${endpoint}`
+  const allowRefreshRetry = !endpoint.startsWith('/auth/refresh')
+  let didRefresh = false
+  const { timeoutMs, ...fetchOptions } = options
+
+  const buildConfig = (token: string | null): RequestInit => ({
     headers: {
       'Content-Type': 'application/json',
-      ...options.headers,
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...fetchOptions.headers,
     },
-    ...options,
-  }
+    credentials: 'include',
+    ...fetchOptions,
+  })
 
-  const token = typeof window !== 'undefined' ? localStorage.getItem('authToken') : null
-  if (token) {
-    config.headers = {
-      ...config.headers,
-      Authorization: `Bearer ${token}`,
+  const attemptFetch = async (tokenOverride: string | null) => {
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs ?? API_CONFIG.timeout)
+
+    try {
+      const response = await fetch(url, {
+        ...buildConfig(tokenOverride),
+        signal: controller.signal,
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw { response, errorData }
+      }
+      return response.json() as Promise<T>
+    } finally {
+      clearTimeout(timeoutId)
     }
   }
-
-  const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), API_CONFIG.timeout)
 
   try {
-    const response = await fetch(url, {
-      ...config,
-      signal: controller.signal,
-    })
-
-    clearTimeout(timeoutId)
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}))
-      throw new Error(errorData.message || `HTTP ${response.status}: ${response.statusText}`)
+    return await attemptFetch(getAccessToken())
+  } catch (error: any) {
+    let resolvedError = error
+    const initialResponse = resolvedError?.response as Response | undefined
+    if (initialResponse?.status === 401 && allowRefreshRetry && !didRefresh) {
+      didRefresh = true
+      const refreshedToken = await refreshAccessToken()
+      if (refreshedToken) {
+        try {
+          return await attemptFetch(refreshedToken)
+        } catch (retryError) {
+          resolvedError = retryError
+        }
+      }
     }
 
-    return await response.json()
-  } catch (error) {
-    clearTimeout(timeoutId)
-    if (error instanceof Error && error.name === 'AbortError') {
+    const response = resolvedError?.response as Response | undefined
+    if (response) {
+      const message =
+        resolvedError?.errorData?.message || `HTTP ${response.status}: ${response.statusText}`
+      throw new Error(message)
+    }
+
+    if (resolvedError instanceof Error && resolvedError.name === 'AbortError') {
       throw new Error('Request timeout')
     }
-    throw error
+
+    throw resolvedError instanceof Error ? resolvedError : new Error('Request failed')
+  } finally {
+    // no-op
+  }
+}
+
+const getApiRoot = () => {
+  return API_CONFIG.baseURL.replace(/\/v\d+$/, '')
+}
+
+export async function apiRequestRoot<T>(
+  endpoint: string,
+  options: RequestInit & { timeoutMs?: number } = {}
+): Promise<T> {
+  const url = `${getApiRoot()}${endpoint}`
+  const allowRefreshRetry = !endpoint.startsWith('/auth/refresh')
+  let didRefresh = false
+  const { timeoutMs, ...fetchOptions } = options
+
+  const buildConfig = (token: string | null): RequestInit => ({
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...fetchOptions.headers,
+    },
+    credentials: 'include',
+    ...fetchOptions,
+  })
+
+  const attemptFetch = async (tokenOverride: string | null) => {
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs ?? API_CONFIG.timeout)
+
+    try {
+      const response = await fetch(url, {
+        ...buildConfig(tokenOverride),
+        signal: controller.signal,
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw { response, errorData }
+      }
+
+      return response.json() as Promise<T>
+    } finally {
+      clearTimeout(timeoutId)
+    }
+  }
+
+  try {
+    return await attemptFetch(getAccessToken())
+  } catch (error: any) {
+    let resolvedError = error
+    const initialResponse = resolvedError?.response as Response | undefined
+    if (initialResponse?.status === 401 && allowRefreshRetry && !didRefresh) {
+      didRefresh = true
+      const refreshedToken = await refreshAccessToken()
+      if (refreshedToken) {
+        try {
+          return await attemptFetch(refreshedToken)
+        } catch (retryError) {
+          resolvedError = retryError
+        }
+      }
+    }
+
+    if (resolvedError?.errorData?.message) {
+      throw new Error(resolvedError.errorData.message)
+    }
+
+    throw resolvedError
   }
 }
 
@@ -109,12 +256,12 @@ export const api = {
 
   auth: {
     login: (credentials: { email: string; password: string }) =>
-      apiRequest<{ token: string; user: any }>('/auth/login', {
+      apiRequest<{ accessToken: string; user: any }>('/auth/login', {
         method: 'POST',
         body: JSON.stringify(credentials),
       }),
     register: (userData: { email: string; password: string; name: string }) =>
-      apiRequest<{ token: string; user: any }>('/auth/register', {
+      apiRequest<{ accessToken: string; user: any }>('/auth/register', {
         method: 'POST',
         body: JSON.stringify(userData),
       }),
@@ -122,10 +269,13 @@ export const api = {
       apiRequest<void>('/auth/logout', {
         method: 'POST',
       }),
-    refreshToken: () =>
-      apiRequest<{ token: string }>('/auth/refresh', {
-        method: 'POST',
-      }),
+    refreshToken: async () => {
+      const token = await refreshAccessToken()
+      if (!token) {
+        throw new Error('Refresh token invalid or expired')
+      }
+      return { accessToken: token }
+    },
     me: () => apiRequest<any>('/auth/me'),
     checkEmail: (email: string) =>
       apiRequest<{
@@ -171,6 +321,64 @@ export const api = {
       apiRequest<{ access_token: string; refresh_token: string }>('/auth/oauth/refresh', {
         method: 'POST',
         body: JSON.stringify({ refresh_token: refreshToken }),
+      }),
+  },
+
+  notifications: {
+    create: (data: {
+      recipientUserId: string
+      title: string
+      message: string
+      type: string
+      severity?: string
+      sourceType: 'SYSTEM' | 'USER'
+      sourceUserId?: string
+      metadata?: Record<string, unknown>
+    }) =>
+      apiRequest<any>('/notifications', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    createBatch: (data: {
+      recipientUserIds: string[]
+      title: string
+      message: string
+      type: string
+      severity?: string
+      sourceType: 'SYSTEM' | 'USER'
+      sourceUserId?: string
+      metadata?: Record<string, unknown>
+    }) =>
+      apiRequest<any>('/notifications/batch', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    list: (params?: {
+      recipientUserId?: string
+      unreadOnly?: boolean
+      type?: string
+      skip?: number
+      limit?: number
+    }) => {
+      const query = new URLSearchParams()
+      if (params?.recipientUserId) query.set('recipientUserId', params.recipientUserId)
+      if (params?.unreadOnly !== undefined) query.set('unreadOnly', String(params.unreadOnly))
+      if (params?.type) query.set('type', params.type)
+      if (params?.skip !== undefined) query.set('skip', String(params.skip))
+      if (params?.limit !== undefined) query.set('limit', String(params.limit))
+      const suffix = query.toString()
+      return apiRequest<any>(`/notifications${suffix ? `?${suffix}` : ''}`)
+    },
+    unreadCount: (userId: string) =>
+      apiRequest<{ count: number }>(`/notifications/unread-count/${userId}`),
+    markRead: (data: { notificationIds: string[]; recipientUserId?: string }) =>
+      apiRequest<{ matched: number; modified: number }>('/notifications/mark-read', {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      }),
+    markAllRead: (userId: string) =>
+      apiRequest<{ matched: number; modified: number }>(`/notifications/mark-all-read/${userId}`, {
+        method: 'PATCH',
       }),
   },
 
@@ -259,6 +467,8 @@ export const api = {
         method: 'PUT',
         body: JSON.stringify(data),
       }),
+    timeline: (id: string, limit?: number) =>
+      apiRequest<any>(`/simulation/sessions/${id}/timeline${limit ? `?limit=${limit}` : ''}`),
     end: (id: string, data?: { reason?: string }) =>
       apiRequest<any>(`/simulation/sessions/${id}/end`, {
         method: 'POST',
@@ -268,6 +478,63 @@ export const api = {
       apiRequest<any>(`/simulation/sessions/${id}`, {
         method: 'DELETE',
       }),
+  },
+
+  scenarios: {
+    getAll: (params?: { orgId?: string }) => {
+      const query = new URLSearchParams()
+      if (params?.orgId) query.set('orgId', params.orgId)
+      const queryString = query.toString()
+      return apiRequest<any>(`/simulation/scenarios${queryString ? `?${queryString}` : ''}`)
+    },
+    getById: (id: string) => apiRequest<any>(`/simulation/scenarios/${id}`),
+    generate: (data: any) =>
+      apiRequest<any>('/simulation/scenarios/generate', {
+        method: 'POST',
+        body: JSON.stringify(data),
+        timeoutMs: 30000,
+      }),
+    generateBatch: (data: any) =>
+      apiRequest<any>('/simulation/scenarios/generate/batch', {
+        method: 'POST',
+        body: JSON.stringify(data),
+        timeoutMs: 30000,
+      }),
+  },
+
+  hints: {
+    history: (sessionId: string, limit?: number, type?: string) => {
+      const query = new URLSearchParams({ sessionId })
+      if (limit) query.set('limit', String(limit))
+      if (type) query.set('type', type)
+      return apiRequest<any>(`/simulation/hints/history?${query.toString()}`)
+    },
+    generate: (data: any) =>
+      apiRequest<any>('/simulation/hints/generate', {
+        method: 'POST',
+        body: JSON.stringify(data),
+        timeoutMs: 15000,
+      }),
+  },
+
+  crm: {
+    salesforce: {
+      connect: () => apiRequestRoot<any>('/crm/salesforce/connect'),
+      status: () => apiRequestRoot<any>('/crm/salesforce/status'),
+      accounts: (limit?: number) =>
+        apiRequestRoot<any>(`/crm/salesforce/accounts${limit ? `?limit=${limit}` : ''}`),
+      contacts: (limit?: number) =>
+        apiRequestRoot<any>(`/crm/salesforce/contacts${limit ? `?limit=${limit}` : ''}`),
+      opportunities: (limit?: number) =>
+        apiRequestRoot<any>(`/crm/salesforce/opportunities${limit ? `?limit=${limit}` : ''}`),
+      leads: (limit?: number) =>
+        apiRequestRoot<any>(`/crm/salesforce/leads${limit ? `?limit=${limit}` : ''}`),
+      search: (query: string) =>
+        apiRequestRoot<any>('/crm/salesforce/search', {
+          method: 'POST',
+          body: JSON.stringify({ query }),
+        }),
+    },
   },
 
   invitations: {
@@ -308,7 +575,7 @@ export const api = {
       apiRequest<{ provider: string; voices: string[] }>(`/tts/voices?provider=${provider}`),
     speak: async (data: { text: string; provider: string; voice: string }): Promise<Blob> => {
       const url = `${API_CONFIG.baseURL}/tts/speak`
-      const token = typeof window !== 'undefined' ? localStorage.getItem('authToken') : null
+      const token = getAccessToken()
 
       const response = await fetch(url, {
         method: 'POST',
@@ -316,6 +583,7 @@ export const api = {
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
+        credentials: 'include',
         body: JSON.stringify(data),
       })
 
@@ -338,5 +606,32 @@ export const api = {
       )
     },
     getById: (id: string) => apiRequest<any>(`/simulation/personas/${id}`),
+  },
+
+  llm: {
+    getProviders: () =>
+      apiRequest<{
+        providers: Array<{
+          name: string
+          enabled: boolean
+          models: string[]
+          modelDetails: Array<{
+            name: string
+            pricing: {
+              inputTokensPerMillion: number
+              outputTokensPerMillion: number
+              imageTokens?: number
+              audioSecondsToTokens?: number
+            }
+            maxTokens: number
+            maxOutputTokens?: number
+            supportsStreaming: boolean
+            supportsTools: boolean
+            supportsVision: boolean
+            supportsAudio: boolean
+            supportedModalities: Array<'text' | 'image' | 'audio'>
+          }>
+        }>
+      }>('/simulation/llm/providers'),
   },
 }

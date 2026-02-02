@@ -5,6 +5,7 @@ import { UserController } from './controllers/user.controller';
 import { AuthController } from './controllers/auth.controller';
 import { TeamController } from './controllers/team.controller';
 import { OAuthController } from './controllers/oauth.controller';
+import { NotificationModule } from './notifications/notification.module';
 import { UserService } from './services/user.service';
 import { AuthService } from './services/auth.service';
 import { AuthApplicationService } from './services/auth-application.service';
@@ -30,6 +31,7 @@ import { GoogleStrategy } from './strategies/google.strategy';
       secret: process.env.JWT_SECRET || 'your-secret-key',
       signOptions: { expiresIn: '15m' },
     }),
+    NotificationModule,
   ],
   controllers: [
     UserController,

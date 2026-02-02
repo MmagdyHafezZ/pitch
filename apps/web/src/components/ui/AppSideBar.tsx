@@ -61,7 +61,7 @@ export function AppSidebar({
       >
         <Box
           style={{
-            background: 'var(--pitch-nav-bg)',
+            background: 'var(--pitch-nav-bg, var(--mantine-color-nav-9))',
             borderTopLeftRadius: 0,
             borderTopRightRadius: 0,
             borderBottomLeftRadius: 0,
@@ -104,7 +104,7 @@ export function AppSidebar({
               pb={10}
               style={{
                 width: '100%',
-                background: 'var(--pitch-nav-bg)',
+                background: 'var(--pitch-nav-bg, var(--mantine-color-nav-9))',
                 borderRadius: 12,
                 border: '1px solid var(--pitch-nav-text-dim)',
                 overflow: 'hidden',

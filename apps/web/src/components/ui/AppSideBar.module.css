@@ -2,7 +2,9 @@
   border-radius: 10px;
   padding: 8px 8px 8px 10px;
   color: var(--pitch-nav-text);
-  transition: background 120ms, color 120ms;
+  transition:
+    background 120ms,
+    color 120ms;
 }
 
 .navLink:hover {
@@ -10,7 +12,7 @@
   color: var(--pitch-nav-text);
 }
 
-.navLink[data-active="true"] {
+.navLink[data-active='true'] {
   background: var(--pitch-nav-accent-soft);
   color: var(--pitch-accent-strong);
 }
@@ -19,7 +21,7 @@
   background-color: transparent;
 }
 
-.navLink[data-active="true"]::before {
+.navLink[data-active='true']::before {
   background-color: var(--pitch-accent-strong);
 }
 
@@ -42,9 +44,9 @@
   color: var(--pitch-nav-text);
 }
 
-.navLink[data-active="true"] .navSection,
-.navLink[data-active="true"] .navBody,
-.navLink[data-active="true"] .navLabel {
+.navLink[data-active='true'] .navSection,
+.navLink[data-active='true'] .navBody,
+.navLink[data-active='true'] .navLabel {
   color: var(--pitch-accent-strong);
   font-weight: 700;
 }

@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ChatController } from './controllers/chat.controller';
 import { LLMRoutingController } from './controllers/llm-routing.controller';
@@ -10,6 +10,9 @@ import { InvitationController } from './controllers/invitation.controller';
 import { InvitationHttpController } from './controllers/invitation-http.controller';
 import { ConversationController } from './controllers/conversation.controller';
 import { PersonaHttpController } from './controllers/persona-http.controller';
+import { ScenarioHttpController } from './controllers/scenario-http.controller';
+import { HintsController } from './controllers/hints.controller';
+import { TimelineController } from './controllers/timeline.controller';
 import { SimulationPrismaService } from './prisma/simulation-prisma.service';
 import { MongoConnectionService } from './services/mongo/mongo-connection.service';
 import { LLMService } from './services/llm/llm.service';
@@ -30,8 +33,14 @@ import { InvitationService } from './services/invitation.service';
 import { InvitationRepository } from './repositories/invitation.repository';
 import { PersonaService } from './services/persona.service';
 import { PersonaRepository } from './repositories/persona.repository';
+import { ScenarioRepository } from './repositories/scenario.repository';
+import { ScenarioService } from './services/scenario.service';
+import { HintsRepository } from './repositories/hints.repository';
+import { HintsService } from './services/hints.service';
+import { StageDetectorService } from './services/stage-detector.service';
 import { RedisModule } from '@pitch/shared-backend/redis/index';
 import { TtsModule } from './tts/tts.module';
+import { AssessmentModule } from './assessment/assessment.module';
 
 @Module({
   imports: [
@@ -44,6 +53,7 @@ import { TtsModule } from './tts/tts.module';
       inject: [ConfigService],
     }),
     TtsModule,
+    forwardRef(() => AssessmentModule),
   ],
   controllers: [
     ChatController,
@@ -56,6 +66,9 @@ import { TtsModule } from './tts/tts.module';
     InvitationHttpController,
     ConversationController,
     PersonaHttpController,
+    ScenarioHttpController,
+    HintsController,
+    TimelineController,
   ],
   providers: [
     SimulationPrismaService,
@@ -91,6 +104,11 @@ import { TtsModule } from './tts/tts.module';
     InvitationService,
     PersonaRepository,
     PersonaService,
+    ScenarioRepository,
+    ScenarioService,
+    HintsRepository,
+    HintsService,
+    StageDetectorService,
   ],
   exports: [
     LLMService,
@@ -98,6 +116,9 @@ import { TtsModule } from './tts/tts.module';
     SessionMemberService,
     InvitationService,
     PersonaService,
+    HintsService,
+    SimulationPrismaService,
+    MongoConnectionService,
   ],
 })
 export class SimulationModule {}

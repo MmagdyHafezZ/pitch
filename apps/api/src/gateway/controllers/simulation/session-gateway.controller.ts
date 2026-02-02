@@ -109,6 +109,39 @@ export class SessionGatewayController {
   }
 
   /**
+   * Get session timeline
+   *
+   * GET /v1/simulation/sessions/:id/timeline
+   */
+  @Get(':id/timeline')
+  @ApiOperation({ summary: 'Get session timeline' })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiResponse({ status: 200, description: 'Timeline retrieved successfully' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  getTimeline(
+    @Param('id') id: string,
+    @Query('limit') limit: string | undefined,
+    @UserClaims() userClaims: UserClaimsType,
+  ) {
+    const numericLimit = limit ? Number(limit) : undefined;
+    return this.simulationService
+      .send(SIMULATION_SERVICE_PATTERNS.SESSION_TIMELINE, {
+        sessionId: id,
+        limit: numericLimit,
+        userClaims,
+      })
+      .pipe(
+        timeout(10000),
+        catchError((err: unknown) => {
+          const error = normalizeError(err);
+          const message = error.message ?? 'Failed to fetch timeline';
+          const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
+          return throwError(() => new HttpException(message, status));
+        }),
+      );
+  }
+
+  /**
    * List sessions with optional filters
    *
    * GET /v1/simulation/sessions
