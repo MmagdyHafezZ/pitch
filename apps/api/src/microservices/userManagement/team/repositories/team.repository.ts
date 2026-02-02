@@ -40,6 +40,22 @@ export class TeamRepository {
           },
         },
       },
+      include: {
+        memberships: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                email: true,
+                name: true,
+                avatar: true,
+                isActive: true,
+              },
+            },
+          },
+          orderBy: [{ role: 'asc' }, { invitedAt: 'asc' }],
+        },
+      },
     });
   }
 
@@ -57,6 +73,22 @@ export class TeamRepository {
         metadata: (data.metadata ?? undefined) as
           | Prisma.InputJsonValue
           | undefined,
+      },
+      include: {
+        memberships: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                email: true,
+                name: true,
+                avatar: true,
+                isActive: true,
+              },
+            },
+          },
+          orderBy: [{ role: 'asc' }, { invitedAt: 'asc' }],
+        },
       },
     });
   }

@@ -245,7 +245,7 @@ export default function LiveSessionPage() {
                       style={{
                         width: 6,
                         height: `${Math.random() * 100 + 20}%`,
-                        backgroundColor: 'var(--mantine-color-blue-6)',
+                        backgroundColor: 'var(--pitch-accent-strong)',
                         borderRadius: 3,
                         animation: isProcessing ? 'pulse 1s infinite' : 'none',
                       }}
@@ -311,7 +311,12 @@ export default function LiveSessionPage() {
           </Paper>
 
           {/* Text Input */}
-          <Paper withBorder radius="lg" p="md" style={{ backgroundColor: 'white' }}>
+          <Paper
+            withBorder
+            radius="lg"
+            p="md"
+            style={{ backgroundColor: 'var(--pitch-surface-bg)' }}
+          >
             <Group gap="xs" align="flex-end">
               <TextInput
                 placeholder="Type your message..."
@@ -324,7 +329,7 @@ export default function LiveSessionPage() {
               <ActionIcon
                 size="lg"
                 variant="filled"
-                color="blue"
+                color="brand"
                 onClick={handleSendText}
                 disabled={!textInput.trim() || !isConnected}
               >
@@ -339,7 +344,12 @@ export default function LiveSessionPage() {
           </Paper>
 
           {/* Transcript */}
-          <Paper withBorder radius="lg" p="lg" style={{ backgroundColor: 'white', maxHeight: 300 }}>
+          <Paper
+            withBorder
+            radius="lg"
+            p="lg"
+            style={{ backgroundColor: 'var(--pitch-surface-bg)', maxHeight: 300 }}
+          >
             <Box
               mb="md"
               px="md"
@@ -368,14 +378,14 @@ export default function LiveSessionPage() {
                       style={{
                         backgroundColor:
                           msg.role === 'user'
-                            ? 'var(--mantine-color-blue-0)'
+                            ? 'var(--pitch-accent-soft)'
                             : 'var(--mantine-color-gray-1)',
                         borderRadius: 8,
-                        borderLeft: `4px solid ${msg.role === 'user' ? 'var(--mantine-color-blue-6)' : 'var(--mantine-color-gray-6)'}`,
+                        borderLeft: `4px solid ${msg.role === 'user' ? 'var(--pitch-accent-strong)' : 'var(--mantine-color-gray-6)'}`,
                       }}
                     >
                       <Group justify="space-between" mb="xs">
-                        <Badge color={msg.role === 'user' ? 'blue' : 'gray'}>
+                        <Badge color={msg.role === 'user' ? 'brand' : 'gray'}>
                           {msg.role === 'user' ? 'You' : 'AI'}
                         </Badge>
                         <Text size="xs" c="dimmed">
@@ -404,7 +414,7 @@ export default function LiveSessionPage() {
           p="lg"
           style={{
             width: 180,
-            backgroundColor: 'white',
+            backgroundColor: 'var(--pitch-surface-bg)',
             height: 'fit-content',
             flexShrink: 0,
           }}
@@ -438,15 +448,15 @@ export default function LiveSessionPage() {
                       height: event.active ? 16 : 8,
                       borderRadius: '50%',
                       backgroundColor: event.active
-                        ? 'var(--mantine-color-blue-6)'
+                        ? 'var(--pitch-accent-strong)'
                         : 'var(--mantine-color-gray-5)',
-                      border: event.active ? '2px solid var(--mantine-color-blue-2)' : 'none',
+                      border: event.active ? '2px solid var(--pitch-accent-soft)' : 'none',
                     }}
                   />
                   {event.active && event.progress && (
                     <Badge
                       variant="filled"
-                      color="blue"
+                      color="brand"
                       size="lg"
                       style={{
                         position: 'absolute',

@@ -1,0 +1,42 @@
+.themeCard {
+  position: relative;
+  background: var(--card-bg);
+  color: var(--card-text);
+  transition: background 150ms ease, color 150ms ease, border-color 150ms ease;
+  --card-text: var(--card-text);
+  --card-muted: var(--card-muted);
+}
+
+.deleteButton {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 2;
+  opacity: 0;
+  transition: opacity 150ms ease;
+}
+
+.themeCard:hover .deleteButton {
+  opacity: 1;
+}
+
+.themeCard:hover {
+  background: var(--card-hover-bg);
+  color: var(--card-hover-text);
+  --card-text: var(--card-hover-text);
+  --card-muted: var(--card-hover-muted);
+}
+
+.appearanceTab {
+  color: var(--pitch-surface-text);
+}
+
+.appearanceTab:hover {
+  background: var(--tab-hover-bg);
+  color: var(--tab-hover-text);
+}
+
+.appearanceTab[data-active="true"] {
+  background: var(--tab-active-bg);
+  color: var(--tab-active-text);
+}

@@ -5,7 +5,7 @@ import {
   NotFoundException,
   Logger,
 } from '@nestjs/common';
-import { JwtService, JwtSignOptions } from '@nestjs/jwt';
+import { JwtService, type JwtSignOptions } from '@nestjs/jwt';
 import { UserRepository } from '../../user/repositories/user.repository';
 import { AuthRepository } from '../repositories/auth.repository';
 import { RegisterDto, LoginDto, AuthResponseDto } from '../dto/auth.dto';

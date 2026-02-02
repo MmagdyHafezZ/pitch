@@ -114,7 +114,7 @@ export function WeekCalendar({ value, onChange }: WeekCalendarProps) {
           let opacity = 1
 
           if (isSelected) {
-            bg = 'var(--mantine-color-blue-6)'
+            bg = 'var(--pitch-accent-strong)'
             color = 'white'
           } else {
             if (isWeekend) {
