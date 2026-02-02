@@ -16,16 +16,18 @@ import {
   ChatErrorPayload,
   ChatStartPayload,
   ConversationStartPayload,
-  ConversationTextPayload,
   ConversationAudioReadyPayload,
   ConversationErrorPayload,
+  ConversationStreamDeltaPayload,
+  ConversationStreamCompletedPayload,
+  ConversationStageTransitionPayload,
   WsEnvelope,
   WsEnvelopeFactory,
   WsMessageType,
 } from '@microservices/simulation/dto/websocket.dto';
 import { SIMULATION_SERVICE_PATTERNS } from '@pitch/shared-backend/interfaces/message-patterns.interface';
 import { LLMStreamChunkDto } from '@microservices/simulation/dto/llm.dto';
-import { Subscription, firstValueFrom } from 'rxjs';
+import { Subscription } from 'rxjs';
 import { JwtTokenPayload, SocketUser } from '../../../types/socket';
 
 interface SimulationSocketData {
@@ -34,17 +36,52 @@ interface SimulationSocketData {
 
 type SimulationSocket = Socket<any, any, any, SimulationSocketData>;
 
-interface ConversationProcessResult {
-  text: string;
-  usage: {
-    promptTokens: number;
-    completionTokens: number;
-    totalTokens: number;
-    costUsd?: number;
-  };
-  audioBase64: string;
-  contentType: string;
-}
+type ConversationStreamEvent =
+  | {
+      type: 'delta';
+      data: {
+        delta: string;
+        isFirstChunk?: boolean;
+      };
+    }
+  | {
+      type: 'completed';
+      data: {
+        fullText: string;
+        usage?: {
+          promptTokens: number;
+          completionTokens: number;
+          totalTokens: number;
+          costUsd?: number;
+        };
+        stageInfo?: {
+          currentStage: string;
+          stageIndex: number;
+          stageTransition: boolean;
+          confidence: number;
+        };
+        progress?: number;
+      };
+    }
+  | {
+      type: 'stage_transition';
+      data: {
+        previousStage: string;
+        currentStage: string;
+        previousStageIndex?: number;
+        currentStageIndex?: number;
+        confidence?: number;
+        reasoning?: string;
+      };
+    }
+  | {
+      type: 'audio';
+      data: {
+        audioBase64: string;
+        contentType: string;
+        text?: string;
+      };
+    };
 
 interface StreamHandle {
   socketId: string;
@@ -221,79 +258,167 @@ export class SimulationWsGateway
   }
 
   @SubscribeMessage(WsMessageType.CONVERSATION_START)
-  async handleConversationStart(
+  handleConversationStart(
     @ConnectedSocket() client: SimulationSocket,
     @MessageBody() envelope: WsEnvelope<ConversationStartPayload>,
   ) {
     const requestId = envelope.requestId;
     const sessionId = envelope.sessionId;
 
+    if (!envelope.userId && client.data.user?.id) {
+      envelope.userId = client.data.user.id;
+    }
+
     if (this.activeStreams.has(requestId)) {
       return;
     }
 
-    try {
-      const result = await firstValueFrom(
-        this.simulationService.send<ConversationProcessResult>(
-          SIMULATION_SERVICE_PATTERNS.CONVERSATION_PROCESS,
-          envelope,
-        ),
-      );
+    // Use streaming conversation handler for real-time text
+    const stream$ = this.simulationService.send<
+      ConversationStreamEvent,
+      WsEnvelope<ConversationStartPayload>
+    >(SIMULATION_SERVICE_PATTERNS.CONVERSATION_STREAM, envelope);
 
-      const textPayload: ConversationTextPayload = {
-        text: result.text,
-        usage: result.usage,
-      };
+    const subscription = stream$.subscribe({
+      next: (event) => {
+        if (event.type === 'delta') {
+          // Emit streaming text delta
+          const deltaPayload: ConversationStreamDeltaPayload = {
+            delta: event.data.delta,
+            isFirstChunk: event.data.isFirstChunk,
+          };
 
-      client.emit(
-        WsMessageType.CONVERSATION_TEXT,
-        WsEnvelopeFactory.conversationText(
-          requestId,
-          sessionId,
-          textPayload,
-          envelope.turnId,
-        ),
-      );
+          client.emit(
+            WsMessageType.CONVERSATION_STREAM_DELTA,
+            WsEnvelopeFactory.create(
+              WsMessageType.CONVERSATION_STREAM_DELTA,
+              requestId,
+              sessionId,
+              deltaPayload,
+              envelope.turnId,
+            ),
+          );
+        } else if (event.type === 'completed') {
+          // Emit stream completed with full text and stage info
+          const completedPayload: ConversationStreamCompletedPayload = {
+            fullText: event.data.fullText,
+            usage: event.data.usage,
+            stageInfo: event.data.stageInfo,
+            progress: event.data.progress,
+          };
 
-      const audioPayload: ConversationAudioReadyPayload = {
-        audioBase64: result.audioBase64,
-        contentType: result.contentType,
-        text: result.text,
-      };
+          client.emit(
+            WsMessageType.CONVERSATION_STREAM_COMPLETED,
+            WsEnvelopeFactory.create(
+              WsMessageType.CONVERSATION_STREAM_COMPLETED,
+              requestId,
+              sessionId,
+              completedPayload,
+              envelope.turnId,
+            ),
+          );
+        } else if (event.type === 'stage_transition') {
+          // Emit stage transition event
+          const transitionPayload: ConversationStageTransitionPayload = {
+            previousStage: event.data.previousStage,
+            currentStage: event.data.currentStage,
+            previousStageIndex: event.data.previousStageIndex,
+            currentStageIndex: event.data.currentStageIndex ?? 0,
+            confidence: event.data.confidence,
+            reasoning: event.data.reasoning,
+          };
 
-      client.emit(
-        WsMessageType.CONVERSATION_AUDIO_READY,
-        WsEnvelopeFactory.conversationAudioReady(
-          requestId,
-          sessionId,
-          audioPayload,
-          envelope.turnId,
-        ),
-      );
+          client.emit(
+            WsMessageType.CONVERSATION_STAGE_TRANSITION,
+            WsEnvelopeFactory.create(
+              WsMessageType.CONVERSATION_STAGE_TRANSITION,
+              requestId,
+              sessionId,
+              transitionPayload,
+              envelope.turnId,
+            ),
+          );
+        } else if (event.type === 'audio') {
+          // Emit audio ready
+          const audioPayload: ConversationAudioReadyPayload = {
+            audioBase64: event.data.audioBase64,
+            contentType: event.data.contentType,
+            text: event.data.text,
+          };
 
-      client.emit(WsMessageType.CONVERSATION_END, {
-        requestId,
-        sessionId,
-        timestamp: new Date().toISOString(),
-      });
-    } catch (error) {
-      this.logger.error('Conversation processing failed', error);
+          client.emit(
+            WsMessageType.CONVERSATION_AUDIO_READY,
+            WsEnvelopeFactory.conversationAudioReady(
+              requestId,
+              sessionId,
+              audioPayload,
+              envelope.turnId,
+            ),
+          );
 
-      const errorPayload: ConversationErrorPayload = {
-        error: (error as Error)?.message || 'Conversation processing error',
-        stage: 'llm',
-      };
+          // Emit conversation end after audio
+          client.emit(WsMessageType.CONVERSATION_END, {
+            requestId,
+            sessionId,
+            timestamp: new Date().toISOString(),
+          });
 
-      client.emit(
-        WsMessageType.CONVERSATION_ERROR,
-        WsEnvelopeFactory.conversationError(
-          requestId,
-          sessionId,
-          errorPayload,
-          envelope.turnId,
-        ),
-      );
+          this.activeStreams.delete(requestId);
+        }
+      },
+      error: (error) => {
+        this.logger.error('Streaming conversation failed', error);
+
+        const errorPayload: ConversationErrorPayload = {
+          error: (error as Error)?.message || 'Conversation streaming error',
+          stage: 'llm',
+        };
+
+        client.emit(
+          WsMessageType.CONVERSATION_ERROR,
+          WsEnvelopeFactory.conversationError(
+            requestId,
+            sessionId,
+            errorPayload,
+            envelope.turnId,
+          ),
+        );
+
+        this.activeStreams.delete(requestId);
+      },
+      complete: () => {
+        this.activeStreams.delete(requestId);
+      },
+    });
+
+    this.activeStreams.set(requestId, {
+      socketId: client.id,
+      subscription,
+    });
+  }
+
+  @SubscribeMessage(WsMessageType.CONVERSATION_CANCEL)
+  handleConversationCancel(
+    @ConnectedSocket() client: SimulationSocket,
+    @MessageBody() payload: { requestId: string; sessionId: string },
+  ) {
+    const requestId = payload.requestId;
+
+    // If there's an active stream for this request, cancel it
+    const active = this.activeStreams.get(requestId);
+    if (active) {
+      active.subscription.unsubscribe();
+      this.activeStreams.delete(requestId);
     }
+
+    // Acknowledge cancellation to client
+    client.emit(WsMessageType.CONVERSATION_CANCEL, {
+      requestId,
+      sessionId: payload.sessionId,
+      timestamp: new Date().toISOString(),
+    });
+
+    this.logger.log(`Conversation cancelled: ${requestId}`);
   }
 
   @SubscribeMessage(WsMessageType.PING)

@@ -38,12 +38,16 @@ export interface CreateSessionData {
  * Interface for updating a session
  */
 export interface UpdateSessionData {
+  orgId?: string;
+  orgSnapshot?: Prisma.InputJsonValue;
   name?: string;
+  type?: SessionType;
   tags?: string[];
   sessionConfig?: Prisma.InputJsonValue;
   scenarioId?: string;
   personaId?: string;
   language?: string;
+  crmContextId?: string;
   status?: string;
   endedReason?: string;
   endedAt?: Date;

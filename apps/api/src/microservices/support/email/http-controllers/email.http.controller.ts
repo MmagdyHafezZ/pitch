@@ -9,7 +9,12 @@ import {
   UsePipes,
   ValidationPipe,
 } from '@nestjs/common';
-import { EmailService } from '../services/email.service';
+import {
+  EmailService,
+  type EmailContent,
+  type EmailFrom,
+  type SendEmailRequest,
+} from '../services/email.service';
 import {
   HtmlContentDto,
   SendEmailDto,
@@ -61,14 +66,26 @@ export class EmailHttpController {
       this.logger.log(
         `HTTP sendEmail to=${this.formatTo(dto.to)} subject="${dto.subject}"`,
       );
-      return await this.emailService.send({
+      const content: EmailContent =
+        dto.content.kind === 'text'
+          ? { kind: 'text', text: dto.content.text }
+          : {
+              kind: 'html',
+              html: dto.content.html,
+              textFallback: dto.content.textFallback,
+            };
+      const from: EmailFrom | undefined = dto.from
+        ? { name: dto.from.name, address: dto.from.address }
+        : undefined;
+      const request: SendEmailRequest = {
         to: dto.to,
         subject: dto.subject,
-        content: dto.content as any,
-        from: dto.from as any,
+        content,
+        from,
         replyTo: dto.replyTo,
         headers: dto.headers,
-      });
+      };
+      return await this.emailService.send(request);
     } catch (error) {
       this.logger.error('HTTP sendEmail failed', error as Error);
       throw error;

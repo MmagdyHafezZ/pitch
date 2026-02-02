@@ -119,7 +119,7 @@ export function TeamMembersPanel() {
       shadow="xs"
       p="lg"
       style={{
-        background: 'var(--mantine-color-gray-1)'
+        background: 'var(--mantine-color-gray-1)',
       }}
     >
       {!currentTeam ? (

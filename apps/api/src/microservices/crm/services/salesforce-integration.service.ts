@@ -6,6 +6,30 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from './prisma.service';
 import * as crypto from 'crypto';
+import type { Integration, Prisma } from '@prisma/crm-client';
+
+type SalesforceRecord = Record<string, unknown>;
+
+interface SalesforceTokenResponse {
+  access_token: string;
+  refresh_token?: string;
+  expires_in?: number;
+  instance_url?: string;
+}
+
+interface SalesforceUserInfoResponse {
+  user_id: string;
+  email?: string;
+  name?: string;
+}
+
+interface SalesforceQueryResult<
+  TRecord extends SalesforceRecord = SalesforceRecord,
+> {
+  totalSize?: number;
+  done?: boolean;
+  records: TRecord[];
+}
 
 /**
  * Salesforce Integration Service
@@ -34,7 +58,7 @@ export class SalesforceIntegrationService {
   /**
    * Get Salesforce integration for a user
    */
-  async getIntegration(userId: string) {
+  async getIntegration(userId: string): Promise<Integration> {
     const integration = await this.prisma.client.integration.findUnique({
       where: {
         userId_provider: {
@@ -80,7 +104,9 @@ export class SalesforceIntegrationService {
   /**
    * Refresh Salesforce access token if expired
    */
-  private async refreshTokenIfNeeded(integration: any) {
+  private async refreshTokenIfNeeded(
+    integration: Integration,
+  ): Promise<string | null> {
     const now = new Date();
 
     // Check if token is expired or will expire in next 5 minutes
@@ -124,7 +150,7 @@ export class SalesforceIntegrationService {
           );
         }
 
-        const data = await response.json();
+        const data = (await response.json()) as SalesforceTokenResponse;
 
         // Update token in database
         await this.prisma.client.integration.update({
@@ -143,19 +169,22 @@ export class SalesforceIntegrationService {
       }
     }
 
-    return integration.accessToken;
+    return integration.accessToken ?? null;
   }
 
   /**
    * Make authenticated request to Salesforce API
    */
-  private async makeRequest(
+  private async makeRequest<TResponse>(
     userId: string,
     endpoint: string,
     options: RequestInit = {},
-  ) {
+  ): Promise<TResponse> {
     const integration = await this.getIntegration(userId);
     const accessToken = await this.refreshTokenIfNeeded(integration);
+    if (!accessToken) {
+      throw new UnauthorizedException('Salesforce access token is missing');
+    }
 
     const instanceUrl =
       integration.instanceUrl || 'https://login.salesforce.com';
@@ -190,7 +219,8 @@ export class SalesforceIntegrationService {
       );
     }
 
-    return response.json();
+    const data = (await response.json()) as TResponse;
+    return data;
   }
 
   /**
@@ -212,7 +242,7 @@ export class SalesforceIntegrationService {
   /**
    * Generate OAuth URL for connecting Salesforce
    */
-  async getConnectUrl(userId: string, state?: string) {
+  getConnectUrl(userId: string, state?: string) {
     const clientId = process.env.SALESFORCE_CLIENT_ID;
     const redirectUri =
       process.env.SALESFORCE_REDIRECT_URI ||
@@ -285,7 +315,7 @@ export class SalesforceIntegrationService {
         throw new BadRequestException('Failed to connect to Salesforce');
       }
 
-      const tokenData = await tokenResponse.json();
+      const tokenData = (await tokenResponse.json()) as SalesforceTokenResponse;
 
       // Get user info from Salesforce
       const userInfoResponse = await fetch(
@@ -297,7 +327,9 @@ export class SalesforceIntegrationService {
         },
       );
 
-      const userInfo = await userInfoResponse.json();
+      const userInfo =
+        (await userInfoResponse.json()) as SalesforceUserInfoResponse;
+      const providerData = userInfo as unknown as Prisma.InputJsonValue;
 
       // Store integration in database
       await this.prisma.client.integration.upsert({
@@ -314,24 +346,24 @@ export class SalesforceIntegrationService {
           accessToken: tokenData.access_token,
           refreshToken: tokenData.refresh_token,
           expiresAt: new Date(
-            Date.now() + (tokenData.expires_in || 3600) * 1000,
+            Date.now() + (tokenData.expires_in ?? 3600) * 1000,
           ),
           instanceUrl: tokenData.instance_url,
           providerId: userInfo.user_id,
           providerEmail: userInfo.email,
-          providerData: userInfo,
+          providerData,
         },
         update: {
           status: 'CONNECTED',
           accessToken: tokenData.access_token,
           refreshToken: tokenData.refresh_token,
           expiresAt: new Date(
-            Date.now() + (tokenData.expires_in || 3600) * 1000,
+            Date.now() + (tokenData.expires_in ?? 3600) * 1000,
           ),
           instanceUrl: tokenData.instance_url,
           providerId: userInfo.user_id,
           providerEmail: userInfo.email,
-          providerData: userInfo,
+          providerData,
         },
       });
 
@@ -388,19 +420,22 @@ export class SalesforceIntegrationService {
   /**
    * Query Salesforce using SOQL
    */
-  async query(userId: string, soql: string) {
+  async query(userId: string, soql: string): Promise<SalesforceQueryResult> {
     this.logger.log(`Executing SOQL query for user ${userId}`);
 
     const encodedQuery = encodeURIComponent(soql);
     const endpoint = `/services/data/${this.SALESFORCE_API_VERSION}/query?q=${encodedQuery}`;
 
-    return this.makeRequest(userId, endpoint);
+    return this.makeRequest<SalesforceQueryResult>(userId, endpoint);
   }
 
   /**
    * Get Salesforce Accounts (Companies)
    */
-  async getAccounts(userId: string, limit: number = 100) {
+  async getAccounts(
+    userId: string,
+    limit: number = 100,
+  ): Promise<SalesforceRecord[]> {
     const soql = `SELECT Id, Name, Industry, Type, Phone, Website, BillingCity, BillingState, BillingCountry, CreatedDate FROM Account ORDER BY CreatedDate DESC LIMIT ${limit}`;
     const result = await this.query(userId, soql);
     return result.records;
@@ -409,7 +444,10 @@ export class SalesforceIntegrationService {
   /**
    * Get Salesforce Contacts
    */
-  async getContacts(userId: string, limit: number = 100) {
+  async getContacts(
+    userId: string,
+    limit: number = 100,
+  ): Promise<SalesforceRecord[]> {
     const soql = `SELECT Id, FirstName, LastName, Email, Phone, Title, AccountId, Account.Name, CreatedDate FROM Contact ORDER BY CreatedDate DESC LIMIT ${limit}`;
     const result = await this.query(userId, soql);
     return result.records;
@@ -418,7 +456,10 @@ export class SalesforceIntegrationService {
   /**
    * Get Salesforce Opportunities
    */
-  async getOpportunities(userId: string, limit: number = 100) {
+  async getOpportunities(
+    userId: string,
+    limit: number = 100,
+  ): Promise<SalesforceRecord[]> {
     const soql = `SELECT Id, Name, StageName, Amount, CloseDate, Probability, AccountId, Account.Name, CreatedDate FROM Opportunity ORDER BY CreatedDate DESC LIMIT ${limit}`;
     const result = await this.query(userId, soql);
     return result.records;
@@ -427,7 +468,10 @@ export class SalesforceIntegrationService {
   /**
    * Get Salesforce Leads
    */
-  async getLeads(userId: string, limit: number = 100) {
+  async getLeads(
+    userId: string,
+    limit: number = 100,
+  ): Promise<SalesforceRecord[]> {
     const soql = `SELECT Id, FirstName, LastName, Company, Email, Phone, Status, LeadSource, CreatedDate FROM Lead ORDER BY CreatedDate DESC LIMIT ${limit}`;
     const result = await this.query(userId, soql);
     return result.records;
@@ -436,13 +480,16 @@ export class SalesforceIntegrationService {
   /**
    * Search Salesforce using SOSL
    */
-  async search(userId: string, searchQuery: string) {
+  async search(
+    userId: string,
+    searchQuery: string,
+  ): Promise<SalesforceRecord[]> {
     this.logger.log(`Executing SOSL search for user ${userId}: ${searchQuery}`);
 
     const encodedQuery = encodeURIComponent(searchQuery);
     const endpoint = `/services/data/${this.SALESFORCE_API_VERSION}/search?q=${encodedQuery}`;
 
-    return this.makeRequest(userId, endpoint);
+    return this.makeRequest<SalesforceRecord[]>(userId, endpoint);
   }
 
   /**

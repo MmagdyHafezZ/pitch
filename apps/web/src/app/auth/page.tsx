@@ -1,11 +1,5 @@
-import { Metadata } from 'next'
-import { AuthPage } from '@/features/auth/components/AuthPage'
+import { redirect } from 'next/navigation'
 
-export const metadata: Metadata = {
-  title: 'Authentication | PITCH',
-  description: 'Sign in to your account or create a new one',
-}
-
-export default function AuthPageRoute() {
-  return <AuthPage />
+export default function AuthPage() {
+  redirect('/auth/login')
 }

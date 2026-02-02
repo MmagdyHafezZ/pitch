@@ -78,7 +78,8 @@
   height: 64vh;
   margin: 48px 0;
   align-self: center;
-  background: linear-gradient(
+  background:
+    linear-gradient(
       180deg,
       rgba(255, 255, 255, 0) 0%,
       rgba(255, 255, 255, 0.18) 20%,
@@ -335,5 +336,4 @@
   .heroTextSpacer {
     padding-right: 32px;
   }
-
 }
