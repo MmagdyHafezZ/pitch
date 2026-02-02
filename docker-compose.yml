@@ -179,6 +179,7 @@ volumes:
   postgres_analytics_data_local:
   postgres_crm_data_local:
   redis_data_local:
+  pitch_mongo_data:
   mongodb_data_local:
   mongodb_config_local:
   rabbitmq_data_local:
