@@ -1,5 +1,5 @@
 import { TeamService } from '../services/team.service';
-import { NotFoundException, ConflictException } from '@nestjs/common';
+import { NotFoundException } from '@nestjs/common';
 import type {
   Team,
   TeamMembership,
@@ -79,10 +79,8 @@ describe('TeamService', () => {
   // --------------------
 
   it('throws Conflict if name already exists', async () => {
-    // Existing team with some OLD name
     repo.confirmAuthorityOrThrow.mockResolvedValue(undefined);
 
-    // Existing team is team-1 with a different current name
     repo.findById.mockResolvedValue({
       ...baseTeam,
       id: 'team-1',
@@ -90,16 +88,15 @@ describe('TeamService', () => {
       slug: 'old-name',
     });
 
-    // We try to rename to "Engineering"
     const dto: UpdateTeamDto = { name: 'Engineering' };
 
-    // findByName returns another team already using that name
     repo.findByName.mockResolvedValue({
       ...baseTeam,
-      id: 'team-2', // different id => conflict
+      id: 'team-2',
       name: 'Engineering',
       slug: 'engineering',
     });
+    await expect(service.updateTeam('team-1', dto, 'user-1')).rejects.toThrow();
   });
 
   // --------------------

@@ -24,9 +24,16 @@ export class CoinRefillCron {
     for (const sub of subs) {
       try {
         await this.processSubscription(sub);
-      } catch (err: any) {
+      } catch (err: unknown) {
+        const message =
+          err instanceof Error
+            ? err.message
+            : typeof err === 'string'
+              ? err
+              : JSON.stringify(err);
+
         this.logger.error(
-          `Failed rollover for subscription=${sub.id}: ${err?.message ?? err}`,
+          `Failed rollover for subscription=${sub.id}: ${message}`,
         );
       }
     }

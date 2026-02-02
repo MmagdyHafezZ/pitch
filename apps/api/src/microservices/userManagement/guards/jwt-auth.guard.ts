@@ -16,8 +16,8 @@ export interface JwtUser {
 const isJwtUser = (user: unknown): user is JwtUser => {
   return Boolean(
     user &&
-      typeof user === 'object' &&
-      typeof (user as { id?: unknown }).id === 'string',
+    typeof user === 'object' &&
+    typeof (user as { id?: unknown }).id === 'string',
   );
 };
 

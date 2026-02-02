@@ -23,9 +23,11 @@ export class CoinBalanceRepository {
   ): Promise<number | null> {
     const doc = await this.model
       .findOne({ teamId, periodKey }, { remaining: 1 })
-      .lean();
-    if (!doc) return null;
-    const remaining = (doc as any).remaining;
+      .lean<{ remaining?: unknown }>();
+
+    const remaining = doc?.remaining;
+    if (remaining === undefined || remaining === null) return null;
+
     return typeof remaining === 'number' ? remaining : Number(remaining);
   }
 

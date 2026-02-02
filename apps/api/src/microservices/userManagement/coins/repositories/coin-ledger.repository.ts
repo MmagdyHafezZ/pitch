@@ -64,6 +64,6 @@ export class CoinLedgerRepository {
       allowance: args.allowance,
       debtApplied: args.debtApplied,
       remainingAfter: args.remainingAfter,
-    } as any);
+    } satisfies Partial<CoinLedger>);
   }
 }

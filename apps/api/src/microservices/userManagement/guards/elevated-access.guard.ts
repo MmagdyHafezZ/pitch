@@ -3,17 +3,41 @@ import { RpcException } from '@nestjs/microservices';
 import { toRpcException } from '@pitch/shared-backend/helpers/exceptions';
 import { TeamRepository } from '../team/repositories/team.repository';
 
+type UnknownRecord = Record<string, unknown>;
+
+function isRecord(v: unknown): v is UnknownRecord {
+  return typeof v === 'object' && v !== null;
+}
+
+function getPath(obj: unknown, path: readonly string[]): unknown {
+  let cur: unknown = obj;
+  for (const key of path) {
+    if (!isRecord(cur)) return undefined;
+    cur = cur[key];
+  }
+  return cur;
+}
+
+function getStringPath(
+  obj: unknown,
+  path: readonly string[],
+): string | undefined {
+  const v = getPath(obj, path);
+  return typeof v === 'string' ? v : undefined;
+}
+
 @Injectable()
 export class ElevatedAccessGuard implements CanActivate {
   constructor(private readonly teamRepository: TeamRepository) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    const data = context.switchToRpc().getData<any>() ?? {};
+    const raw: unknown = context.switchToRpc().getData();
+    const data: unknown = raw ?? {};
 
-    const userId: string | undefined =
-      data?.userClaims?.id ??
-      data?.payload?.userClaims?.id ??
-      data?.meta?.userClaims?.id;
+    const userId =
+      getStringPath(data, ['userClaims', 'id']) ??
+      getStringPath(data, ['payload', 'userClaims', 'id']) ??
+      getStringPath(data, ['meta', 'userClaims', 'id']);
 
     const teamId = this.extractTeamId(data);
 
@@ -28,21 +52,14 @@ export class ElevatedAccessGuard implements CanActivate {
     }
   }
 
-  private extractTeamId(data: any): string | undefined {
-    // flat
-    if (data?.teamId) return data.teamId;
-
-    // common wrappers people use
-    if (data?.payload?.teamId) return data.payload.teamId;
-    if (data?.payload?.params?.teamId) return data.payload.params.teamId;
-
-    // if your gateway sends { pattern, payload }
-    if (data?.data?.teamId) return data.data.teamId;
-
-    // nested object
-    if (data?.team?.id) return data.team.id;
-    if (data?.payload?.team?.id) return data.payload.team.id;
-
-    return undefined;
+  private extractTeamId(data: unknown): string | undefined {
+    return (
+      getStringPath(data, ['teamId']) ??
+      getStringPath(data, ['payload', 'teamId']) ??
+      getStringPath(data, ['payload', 'params', 'teamId']) ??
+      getStringPath(data, ['data', 'teamId']) ??
+      getStringPath(data, ['team', 'id']) ??
+      getStringPath(data, ['payload', 'team', 'id'])
+    );
   }
 }

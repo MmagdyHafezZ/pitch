@@ -8,7 +8,6 @@ import {
   CreatePlanDto,
   UpdatePlanDto,
 } from '@pitch/shared-backend/interfaces/user.interface';
-import { Prisma } from '@prisma/user-client';
 import { PlanService } from '../services/plans.service';
 
 @Controller()
@@ -27,7 +26,7 @@ export class PlanController {
       this.logger.log(
         `Creating plan - Requested by: ${data.userClaims.email} (${data.userClaims.id})`,
       );
-      const { userClaims: _userClaims, ...createPlanDto } = data;
+      const { ...createPlanDto } = data;
 
       const dto: CreatePlanDto = {
         name: createPlanDto.name,
@@ -56,7 +55,7 @@ export class PlanController {
       this.logger.log(
         `Updating plan ${data.id} - Requested by: ${data.userClaims.email} (${data.userClaims.id})`,
       );
-      const { userClaims: _userClaims, id, ...updateData } = data;
+      const { id, ...updateData } = data;
 
       const dto: UpdatePlanDto = {
         name: updateData.name,

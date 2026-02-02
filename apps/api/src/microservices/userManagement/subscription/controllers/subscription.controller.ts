@@ -77,7 +77,7 @@ export class SubscriptionController {
         `Updating subscription ${data.id} - Requested by: ${data.userClaims.email} (${data.userClaims.id})`,
       );
 
-      const { userClaims: _userClaims, id, ...updateData } = data;
+      const { id, ...updateData } = data;
 
       const dto: UpdateSubscriptionDto = {
         teamId: updateData.teamId,
@@ -107,7 +107,7 @@ export class SubscriptionController {
         `Updating subscription ${data.id} - Requested by: ${data.userClaims.email} (${data.userClaims.id})`,
       );
 
-      const { userClaims: _userClaims, id, ...updateData } = data;
+      const { id, ...updateData } = data;
 
       const dto: UpgradeSubscriptionDto = {
         planId: updateData.planId,

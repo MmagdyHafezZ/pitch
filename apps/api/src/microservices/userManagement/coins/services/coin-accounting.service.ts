@@ -283,7 +283,7 @@ export class CoinAccountingService {
     await this.coinBalanceRepo.upsertAdjust({
       teamId: event.teamId,
       periodKey: event.periodKey,
-      remainingAfter: res.remainingAfter!,
+      remainingAfter: res.remainingAfter,
       eventId: event.eventId,
       reservationId: event.reservationId,
       requestId: event.requestId,

@@ -219,7 +219,7 @@ export class SubscriptionService {
     });
   }
 
-  async checkExistingSubscription(teamId: string): Promise<Boolean> {
+  async checkExistingSubscription(teamId: string): Promise<boolean> {
     return (
       (await this.subscriptionRepository.findActiveByTeamId(teamId)) !== null
     );
@@ -261,24 +261,27 @@ export class SubscriptionService {
     return this.subscriptionRepository.findDueForRollover(new Date(now));
   }
 
-  public addInterval(d: Date, interval: BillingInterval) {
+  public addInterval(d: Date, interval: BillingInterval): Date {
     const date = new Date(d);
     switch (interval) {
       case BillingInterval.MONTH:
         date.setMonth(date.getMonth() + 1);
-        break;
+        return date;
       case BillingInterval.QUARTER:
         date.setMonth(date.getMonth() + 3);
-        break;
+        return date;
       case BillingInterval.SEMIANNUAL:
         date.setMonth(date.getMonth() + 6);
-        break;
+        return date;
       case BillingInterval.ANNUAL:
         date.setFullYear(date.getFullYear() + 1);
-        break;
+        return date;
       default:
-        throw new Error(`Unsupported interval "${interval}"`);
+        return assertNever(interval);
     }
-    return date;
   }
+}
+
+function assertNever(x: never): never {
+  throw new Error(`Unsupported interval: ${String(x)}`);
 }

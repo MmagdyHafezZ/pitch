@@ -45,11 +45,10 @@ export class CoinRedisService {
     periodKey: string,
     allowance: number,
     ttlSeconds: number,
-  ) {
+  ): Promise<void> {
     const key = this.keyRemaining(teamId, periodKey);
-    let res: string | unknown;
     try {
-      res = await this.redis.call(
+      await this.redis.call(
         'SET',
         key,
         String(allowance),
@@ -58,7 +57,7 @@ export class CoinRedisService {
         'NX',
       );
     } catch (err) {
-      throw new Error(`Redis SET failed for key=${key}: ${err}`);
+      throw new Error(`Redis SET failed for key=${key}: ${String(err)}`);
     }
   }
 

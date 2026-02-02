@@ -44,6 +44,10 @@ export class CoinLedger {
 
   @Prop() sessionId?: string;
   @Prop() model?: string;
+
+  @Prop() allowance?: number;
+  @Prop() debtApplied?: number;
+  @Prop() remainingAfter?: number;
 }
 
 export const CoinLedgerSchema = SchemaFactory.createForClass(CoinLedger);
