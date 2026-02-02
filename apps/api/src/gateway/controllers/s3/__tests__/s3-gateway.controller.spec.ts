@@ -25,6 +25,38 @@ describe('S3GatewayController', () => {
     });
   });
 
+  it('proxies presign download', async () => {
+    const client = createClientProxyMock();
+    client.send.mockReturnValueOnce(of({ url: 'download' }));
+    const controller = new S3GatewayController(client);
+
+    const result = await lastValueFrom(
+      controller.presignDownload({ bucket: 'b', key: 'k' }),
+    );
+
+    expect(result).toEqual({ url: 'download' });
+    expect(client.send).toHaveBeenCalledWith('s3.presign.download', {
+      bucket: 'b',
+      key: 'k',
+    });
+  });
+
+  it('proxies presign delete', async () => {
+    const client = createClientProxyMock();
+    client.send.mockReturnValueOnce(of({ url: 'delete' }));
+    const controller = new S3GatewayController(client);
+
+    const result = await lastValueFrom(
+      controller.presignDelete({ bucket: 'b', key: 'k' }),
+    );
+
+    expect(result).toEqual({ url: 'delete' });
+    expect(client.send).toHaveBeenCalledWith('s3.presign.delete', {
+      bucket: 'b',
+      key: 'k',
+    });
+  });
+
   it('proxies list files with parsed limit', async () => {
     const client = createClientProxyMock();
     client.send.mockReturnValueOnce(of({ keys: [] }));
@@ -36,6 +68,20 @@ describe('S3GatewayController', () => {
       bucket: 'b',
       prefix: 'p',
       limit: 5,
+    });
+  });
+
+  it('proxies delete by prefix', async () => {
+    const client = createClientProxyMock();
+    client.send.mockReturnValueOnce(of({ deleted: 2 }));
+    const controller = new S3GatewayController(client);
+
+    const result = await lastValueFrom(controller.deleteByPrefix('b', 'p'));
+
+    expect(result).toEqual({ deleted: 2 });
+    expect(client.send).toHaveBeenCalledWith('s3.files.deletePrefix', {
+      bucket: 'b',
+      prefix: 'p',
     });
   });
 
