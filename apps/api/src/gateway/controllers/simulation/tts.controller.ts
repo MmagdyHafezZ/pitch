@@ -89,7 +89,7 @@ export class TtsGatewayController {
     description:
       'Stream audio back to the client as it is generated (chunked response)',
   })
-  async stream(@Body() body: SpeakRequestDto, @Res() res: Response) {
+  stream(@Body() body: SpeakRequestDto, @Res() res: Response) {
     const stream$ = this.ttsService.send<SpeakResponse>(
       TTS_SERVICE_PATTERNS.STREAM,
       {

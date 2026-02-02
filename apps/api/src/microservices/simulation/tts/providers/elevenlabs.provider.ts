@@ -129,12 +129,41 @@ export class ElevenLabsTtsProvider implements TtsProvider {
   /**
    * Normalize either a Web ReadableStream or an async iterable into an async iterable of Uint8Array
    */
-  private normalizeToAsyncIterable(source: any): AsyncIterable<Uint8Array> {
+  private normalizeToAsyncIterable(
+    source: ReadableStream<Uint8Array>,
+  ): AsyncIterable<Uint8Array> {
     if (source == null) {
       throw new InternalServerErrorException(
         'Empty audio stream from ElevenLabs',
       );
     }
+
+    const bufferFromUnknown = (value: unknown): Buffer => {
+      if (value == null) return Buffer.from('');
+      if (typeof value === 'string') return Buffer.from(value);
+      if (
+        typeof value === 'number' ||
+        typeof value === 'bigint' ||
+        typeof value === 'boolean'
+      ) {
+        return Buffer.from(String(value));
+      }
+      if (typeof value === 'symbol') {
+        return Buffer.from(value.description ?? '');
+      }
+      if (value instanceof Uint8Array) return Buffer.from(value);
+      if (ArrayBuffer.isView(value)) {
+        return Buffer.from(value.buffer, value.byteOffset, value.byteLength);
+      }
+      if (value instanceof ArrayBuffer)
+        return Buffer.from(new Uint8Array(value));
+      try {
+        const json = JSON.stringify(value);
+        return Buffer.from(json ?? '');
+      } catch {
+        return Buffer.from('');
+      }
+    };
 
     // Web ReadableStream
     if (typeof source.getReader === 'function') {
@@ -151,25 +180,35 @@ export class ElevenLabsTtsProvider implements TtsProvider {
     // Async iterable (for-await-of)
     if (typeof source[Symbol.asyncIterator] === 'function') {
       return (async function* () {
-        for await (const chunk of source as AsyncIterable<any>) {
+        for await (const chunk of source as AsyncIterable<
+          Uint8Array | ArrayBuffer | string | { data: unknown }
+        >) {
           if (chunk instanceof Uint8Array) {
             yield chunk;
           } else if (ArrayBuffer.isView(chunk)) {
-            yield new Uint8Array(chunk as ArrayBufferView);
+            yield new Uint8Array(
+              chunk.buffer,
+              chunk.byteOffset,
+              chunk.byteLength,
+            );
           } else if (chunk instanceof ArrayBuffer) {
             yield new Uint8Array(chunk);
           } else if (typeof chunk === 'string') {
             yield Buffer.from(chunk);
-          } else if (chunk && chunk.data) {
+          } else if (
+            typeof chunk === 'object' &&
+            chunk !== null &&
+            'data' in chunk
+          ) {
             // Some SDKs wrap chunk in an object
-            const d = chunk.data;
+            const d = (chunk as { data: unknown }).data;
             if (d instanceof Uint8Array) yield d;
             else if (ArrayBuffer.isView(d))
-              yield new Uint8Array(d as ArrayBufferView);
+              yield new Uint8Array(d.buffer, d.byteOffset, d.byteLength);
             else if (d instanceof ArrayBuffer) yield new Uint8Array(d);
-            else yield Buffer.from(String(d));
+            else yield bufferFromUnknown(d);
           } else {
-            yield Buffer.from(String(chunk));
+            yield bufferFromUnknown(chunk);
           }
         }
       })();
