@@ -1,12 +1,45 @@
 'use client'
 
-import { Box, Group, TextInput, ActionIcon, Text, rem, UnstyledButton, Button } from '@mantine/core'
+import {
+  Box,
+  Group,
+  TextInput,
+  ActionIcon,
+  Text,
+  rem,
+  UnstyledButton,
+  Button,
+  Modal,
+  Stack,
+  Paper,
+  Badge,
+  ScrollArea,
+  Divider,
+  Indicator,
+  Loader,
+} from '@mantine/core'
 import { IconSearch, IconBell, IconUser } from '@tabler/icons-react'
 import dayjs from 'dayjs'
 import { ReactNode, useMemo, useState } from 'react'
 import { SettingsModal } from './SettingsModal'
 import { useMediaQuery } from '@mantine/hooks'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { api } from '@/lib/client'
+import { useAuthStore } from '@/features/auth'
+
+type NotificationItem = {
+  id: string
+  title: string
+  message: string
+  type: string
+  severity: 'INFO' | 'WARNING' | 'CRITICAL'
+  sourceType: 'SYSTEM' | 'USER'
+  sourceUserId?: string
+  metadata?: Record<string, unknown>
+  readAt?: string | null
+  createdAt: string
+}
 
 export type HeaderProps = {
   value?: string
@@ -70,8 +103,8 @@ function ActionBar({
           gap: rem(6),
           padding: rem(4),
           borderRadius: rem(999),
-          background: 'var(--mantine-color-dark-8)',
-          border: '1px solid var(--mantine-color-dark-5)',
+          background: 'var(--pitch-nav-accent-soft)',
+          border: '1px solid var(--pitch-nav-text-dim)',
           width: '100%',
         }}
       >
@@ -86,8 +119,8 @@ function ActionBar({
               style={{
                 padding: `${rem(isCompact ? 6 : 8)} ${rem(isCompact ? 10 : 14)}`,
                 borderRadius: rem(999),
-                background: isActive ? 'var(--mantine-color-blue-6)' : 'transparent',
-                color: isActive ? 'white' : 'var(--mantine-color-gray-3)',
+                background: isActive ? 'var(--pitch-accent-strong)' : 'transparent',
+                color: isActive ? 'var(--mantine-color-white)' : 'var(--pitch-nav-text-dim)',
                 fontWeight: isActive ? 700 : 600,
                 fontSize: isCompact ? rem(12) : rem(13),
                 lineHeight: 1,
@@ -123,12 +156,15 @@ function ActionBar({
         size={isCompact ? 'sm' : 'md'}
         styles={{
           input: {
-            background: 'var(--mantine-color-dark-7)',
-            borderColor: 'var(--mantine-color-dark-4)',
-            color: 'var(--mantine-color-gray-0)',
+            background: 'var(--pitch-nav-accent-soft)',
+            borderColor: 'var(--pitch-nav-text-dim)',
+            color: 'var(--pitch-nav-text)',
+            '&::placeholder': {
+              color: 'var(--pitch-nav-text-dim)',
+            },
           },
           section: {
-            color: 'var(--mantine-color-gray-4)',
+            color: 'var(--pitch-nav-text-dim)',
           },
         }}
       />
@@ -219,7 +255,7 @@ function ActionConfig({
             <Button
               size={isCompact ? 'sm' : 'md'}
               variant="light"
-              color="blue"
+              color="brand"
               radius="md"
               onClick={() => router.push('/studio/sessions/create')}
               styles={{
@@ -286,9 +322,12 @@ export function AppTopBar({
   const weekday = useMemo(() => dayjs(date).format('dddd'), [date])
   const shortDate = useMemo(() => dayjs(date).format('MMM D, YYYY'), [date])
   const [settingsOpened, setSettingsOpened] = useState(false)
+  const [notificationsOpened, setNotificationsOpened] = useState(false)
   const router = useRouter()
   const isMobile = useMediaQuery('(max-width: 768px)')
   const isNarrow = useMediaQuery('(max-width: 520px)')
+  const queryClient = useQueryClient()
+  const currentUser = useAuthStore((state) => state.user)
   const searchParams = useSearchParams()
   const pathname = usePathname()
   const sessionQuery = useMemo(() => searchParams.get('q') ?? '', [searchParams])
@@ -306,6 +345,55 @@ export function AppTopBar({
   const effectiveOnChange =
     onChange ?? (currentPage === 'Sessions' ? handleSessionSearch : undefined)
 
+  const unreadCountQuery = useQuery({
+    queryKey: ['notifications', 'unread-count', currentUser?.id],
+    queryFn: () => api.notifications.unreadCount(currentUser!.id),
+    enabled: !!currentUser?.id,
+    refetchInterval: 60_000,
+  })
+
+  const notificationsQuery = useQuery({
+    queryKey: ['notifications', 'list', currentUser?.id],
+    queryFn: () =>
+      api.notifications.list({
+        recipientUserId: currentUser!.id,
+        skip: 0,
+        limit: 20,
+      }),
+    enabled: notificationsOpened && !!currentUser?.id,
+  })
+
+  const markReadMutation = useMutation({
+    mutationFn: (notificationIds: string[]) =>
+      api.notifications.markRead({
+        notificationIds,
+        recipientUserId: currentUser?.id,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['notifications'] })
+    },
+  })
+
+  const markAllReadMutation = useMutation({
+    mutationFn: () => api.notifications.markAllRead(currentUser!.id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['notifications'] })
+    },
+  })
+
+  const unreadCount = unreadCountQuery.data?.count ?? 0
+  const notifications = (notificationsQuery.data?.data ?? []) as NotificationItem[]
+  const severityColor = (severity: NotificationItem['severity']) => {
+    switch (severity) {
+      case 'CRITICAL':
+        return 'red'
+      case 'WARNING':
+        return 'yellow'
+      default:
+        return 'blue'
+    }
+  }
+
   const actionArea = rightSlot ?? (
     <ActionConfig
       currentPage={currentPage}
@@ -319,9 +407,86 @@ export function AppTopBar({
   return (
     <>
       <SettingsModal opened={settingsOpened} onClose={() => setSettingsOpened(false)} />
+      <Modal
+        opened={notificationsOpened}
+        onClose={() => setNotificationsOpened(false)}
+        title="Notifications"
+        centered
+        size="lg"
+        styles={{
+          title: { fontWeight: 700 },
+        }}
+      >
+        <Stack gap="md">
+          <Group justify="space-between" align="center">
+            <Text size="sm" c="dimmed">
+              {unreadCount} unread
+            </Text>
+            <Button
+              size="xs"
+              variant="light"
+              disabled={!currentUser?.id || unreadCount === 0}
+              loading={markAllReadMutation.isPending}
+              onClick={() => markAllReadMutation.mutate()}
+            >
+              Mark all as read
+            </Button>
+          </Group>
+          <Divider />
+          {notificationsQuery.isLoading ? (
+            <Group justify="center" py="md">
+              <Loader size="sm" />
+            </Group>
+          ) : notifications.length === 0 ? (
+            <Text size="sm" c="dimmed">
+              No notifications yet.
+            </Text>
+          ) : (
+            <ScrollArea h={360}>
+              <Stack gap="sm">
+                {notifications.map((notification) => {
+                  const isUnread = !notification.readAt
+                  return (
+                    <Paper
+                      key={notification.id}
+                      withBorder
+                      p="sm"
+                      radius="md"
+                      onClick={() =>
+                        isUnread ? markReadMutation.mutate([notification.id]) : undefined
+                      }
+                      style={{
+                        cursor: isUnread ? 'pointer' : 'default',
+                        background: isUnread
+                          ? 'color-mix(in srgb, var(--pitch-surface-bg) 85%, var(--pitch-accent) 15%)'
+                          : 'var(--pitch-surface-bg)',
+                      }}
+                    >
+                      <Group justify="space-between" align="center">
+                        <Text fw={600} size="sm">
+                          {notification.title}
+                        </Text>
+                        <Badge color={severityColor(notification.severity)} variant="light">
+                          {notification.severity}
+                        </Badge>
+                      </Group>
+                      <Text size="sm" c="dimmed" mt={4}>
+                        {notification.message}
+                      </Text>
+                      <Text size="xs" c="gray.5" mt={6}>
+                        {dayjs(notification.createdAt).format('MMM D, YYYY HH:mm')}
+                      </Text>
+                    </Paper>
+                  )
+                })}
+              </Stack>
+            </ScrollArea>
+          )}
+        </Stack>
+      </Modal>
       <Box
         style={{
-          background: 'var(--mantine-color-dark-9)',
+          background: 'var(--pitch-nav-bg, var(--mantine-color-nav-9))',
           borderBottomLeftRadius: 0,
           height: '100%',
           paddingInline: rem(isMobile ? 12 : 16),
@@ -338,7 +503,7 @@ export function AppTopBar({
                 px={rem(isMobile ? 16 : 32)}
                 size={rem(isMobile ? 22 : 28)}
                 fw={700}
-                c="var(--mantine-color-blue-4)"
+                c="var(--pitch-accent-strong)"
                 style={{ whiteSpace: 'nowrap' }}
               >
                 P.I.T.C.H
@@ -351,30 +516,39 @@ export function AppTopBar({
           <Group align="center" gap={isNarrow ? 8 : 12}>
             {!isNarrow && (
               <Box ta="right" lh={1}>
-                <Text size="xs" fw={700} c="gray.2">
+                <Text size="xs" fw={700} c="var(--pitch-nav-text)">
                   {weekday}
                 </Text>
-                <Text size="xs" c="gray.5">
+                <Text size="xs" c="var(--pitch-nav-text-dim)">
                   {shortDate}
                 </Text>
               </Box>
             )}
 
-            <ActionIcon
-              aria-label="Notifications"
-              size={isNarrow ? 26 : 28}
-              radius="md"
-              variant="default"
-              styles={{
-                root: {
-                  background: 'white',
-                  color: 'var(--mantine-color-dark-7)',
-                  boxShadow: '0 0 0 1px rgba(0,0,0,0.06)',
-                },
-              }}
+            <Indicator
+              disabled={unreadCount === 0}
+              label={unreadCount > 99 ? '99+' : unreadCount}
+              size={16}
+              color="red"
+              offset={6}
             >
-              <IconBell size={16} />
-            </ActionIcon>
+              <ActionIcon
+                aria-label="Notifications"
+                size={isNarrow ? 26 : 28}
+                radius="md"
+                variant="default"
+                onClick={() => setNotificationsOpened(true)}
+                styles={{
+                  root: {
+                    background: 'var(--pitch-nav-accent-soft)',
+                    color: 'var(--pitch-nav-text)',
+                    boxShadow: '0 0 0 1px var(--pitch-nav-text-dim)',
+                  },
+                }}
+              >
+                <IconBell size={16} />
+              </ActionIcon>
+            </Indicator>
 
             <ActionIcon
               aria-label="Account"
@@ -384,9 +558,9 @@ export function AppTopBar({
               onClick={() => setSettingsOpened(true)}
               styles={{
                 root: {
-                  background: 'white',
-                  color: 'var(--mantine-color-dark-7)',
-                  boxShadow: '0 0 0 1px rgba(0,0,0,0.06)',
+                  background: 'var(--pitch-nav-accent-soft)',
+                  color: 'var(--pitch-nav-text)',
+                  boxShadow: '0 0 0 1px var(--pitch-nav-text-dim)',
                   cursor: 'pointer',
                 },
               }}

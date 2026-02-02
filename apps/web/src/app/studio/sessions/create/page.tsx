@@ -1,37 +1,30 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import {
   Stepper,
   Button,
   Group,
-  TextInput,
-  Select,
-  Stack,
   Box,
   Title,
   Text,
-  Textarea,
-  MultiSelect,
-  Loader,
   Alert,
-  NumberInput,
   Paper,
   Container,
   ActionIcon,
-  Card,
-  Avatar,
-  SimpleGrid,
   Badge,
-  Checkbox,
+  Grid,
 } from '@mantine/core'
 import {
   IconAlertCircle,
   IconCheck,
   IconArrowLeft,
-  IconPlus,
-  IconX,
   IconUser,
+  IconBrain,
+  IconSparkles,
+  IconAdjustments,
+  IconChecklist,
+  IconDatabase,
 } from '@tabler/icons-react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/features/auth'
@@ -40,31 +33,22 @@ import { useSessions, type SessionType, type CreateSessionInput } from '@/featur
 import { useTtsProviders } from '@/features/tts'
 import { notifications } from '@mantine/notifications'
 import { api } from '@/lib/client'
+import { useLLMProviders } from '@/features/sessions/hooks/useLLMProviders'
+import { Space_Grotesk, Fraunces } from 'next/font/google'
+import { useMediaQuery } from '@mantine/hooks'
+import classes from './create-session.module.css'
+import { BasicsStep } from './components/BasicsStep'
+import { ScenarioStep, type ScenarioOption } from './components/ScenarioStep'
+import { PersonaStep } from './components/PersonaStep'
+import { AIBrainStep } from './components/AIBrainStep'
+import { CrmStep } from './components/CrmStep'
+import { StyleStep } from './components/StyleStep'
+import { ReviewStep } from './components/ReviewStep'
+import { SessionConfigForm, Persona, PersonaTraits } from './lib/types'
+import { useCrm } from '@/features/crm'
 
-interface SessionConfigForm {
-  multiTurnEnabled: boolean
-  accent: string
-  tone: string
-  speechRate: string
-  difficulty: number
-  [key: string]: any
-}
-
-interface Persona {
-  id: string
-  name: string
-  orgId: string
-  traits: {
-    role: string
-    level: string
-    personality: string
-    voice?: {
-      provider: string
-      voiceName: string
-      language: string
-    }
-  }
-}
+const spaceGrotesk = Space_Grotesk({ subsets: ['latin'], display: 'swap' })
+const fraunces = Fraunces({ subsets: ['latin'], display: 'swap' })
 
 export default function CreateSessionPage() {
   const router = useRouter()
@@ -72,6 +56,8 @@ export default function CreateSessionPage() {
   const { teams, activeTeamId, fetchUserTeams, loading: teamsLoading } = useTeams()
   const { createSession, loading, error } = useSessions()
   const { providers: ttsProviders, loading: ttsLoading } = useTtsProviders()
+  const { data: llmProvidersData, isLoading: llmProvidersLoading } = useLLMProviders()
+  const isStepperCompact = useMediaQuery('(max-width: 900px)')
 
   const [active, setActive] = useState(0)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -80,22 +66,58 @@ export default function CreateSessionPage() {
   const [sessionName, setSessionName] = useState('')
   const [sessionType, setSessionType] = useState<SessionType | null>(null)
   const [tags, setTags] = useState<string[]>([])
-  const [newTag, setNewTag] = useState('')
   const [language, setLanguage] = useState('en-US')
+  const [durationMinutes, setDurationMinutes] = useState(30)
+
+  const [scenarios, setScenarios] = useState<ScenarioOption[]>([])
+  const [scenariosLoading, setScenariosLoading] = useState(false)
+  const [selectedScenarioId, setSelectedScenarioId] = useState<string | null>(null)
+  const [scenarioTopic, setScenarioTopic] = useState('')
+  const [scenarioObjective, setScenarioObjective] = useState('')
+  const [scenarioContext, setScenarioContext] = useState('')
+  const [aiRole, setAiRole] = useState('')
+  const [scenarioGenerating, setScenarioGenerating] = useState(false)
+  const [scenarioCount, setScenarioCount] = useState(3)
+
+  const [llmProvider, setLlmProvider] = useState<string | null>(null)
+  const [llmModel, setLlmModel] = useState<string | null>(null)
 
   const [selectedPersona, setSelectedPersona] = useState<string | null>(null)
   const [personas, setPersonas] = useState<Persona[]>([])
   const [personasLoading, setPersonasLoading] = useState(false)
+  const [personaSearch, setPersonaSearch] = useState('')
+  const selectedPersonaData = personas.find((persona) => persona.id === selectedPersona) ?? null
 
   const [multiTurnEnabled, setMultiTurnEnabled] = useState(true)
   const [ttsProvider, setTtsProvider] = useState('elevenlabs')
   const [ttsVoice, setTtsVoice] = useState('Rachel')
-  const [accent, setAccent] = useState('British')
+  const [accent, setAccent] = useState('Persona-based')
   const [tone, setTone] = useState('Formal')
   const [speechRate, setSpeechRate] = useState('Normal')
   const [difficulty, setDifficulty] = useState(5)
+  const [modelSearch, setModelSearch] = useState('')
+
+  const {
+    status: crmStatus,
+    loadingStatus: crmStatusLoading,
+    loadingData: crmDataLoading,
+    accounts: crmAccounts,
+    opportunities: crmOpportunities,
+    leads: crmLeads,
+    contacts: crmContacts,
+    fetchStatus: fetchCrmStatus,
+    connect: connectCrm,
+    loadData: loadCrmData,
+  } = useCrm()
+  const [selectedAccounts, setSelectedAccounts] = useState<string[]>([])
+  const [selectedOpportunities, setSelectedOpportunities] = useState<string[]>([])
+  const [selectedLeads, setSelectedLeads] = useState<string[]>([])
+  const [selectedContacts, setSelectedContacts] = useState<string[]>([])
 
   const [errors, setErrors] = useState<Record<string, string>>({})
+
+  const personaScrollRef = useRef<HTMLDivElement | null>(null)
+  const modelScrollRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     if (user?.id) {
@@ -118,7 +140,7 @@ export default function CreateSessionPage() {
       } catch (err) {
         notifications.show({
           title: 'Warning',
-          message: 'Failed to load personas. Using default options.',
+          message: 'Failed to load personas.',
           color: 'yellow',
         })
       } finally {
@@ -130,6 +152,29 @@ export default function CreateSessionPage() {
   }, [])
 
   useEffect(() => {
+    const orgId = selectedTeamId || user?.id
+    if (!orgId) return
+    const fetchScenarios = async () => {
+      setScenariosLoading(true)
+      try {
+        const response = await api.scenarios.getAll({ orgId })
+        const list = response?.scenarios ?? response ?? []
+        setScenarios(list)
+      } catch (err) {
+        notifications.show({
+          title: 'Warning',
+          message: 'Failed to load scenarios.',
+          color: 'yellow',
+        })
+      } finally {
+        setScenariosLoading(false)
+      }
+    }
+
+    fetchScenarios()
+  }, [selectedTeamId, user?.id])
+
+  useEffect(() => {
     if (!ttsLoading && ttsProviders.length > 0 && !ttsVoice) {
       const provider = ttsProviders.find((p) => p.name === ttsProvider)
       if (provider && provider.voices.length > 0) {
@@ -138,11 +183,112 @@ export default function CreateSessionPage() {
     }
   }, [ttsLoading, ttsProviders, ttsProvider, ttsVoice])
 
+  useEffect(() => {
+    if (!selectedPersonaData?.traits) {
+      setAccent('Persona-based')
+      return
+    }
+    const traits = selectedPersonaData.traits as PersonaTraits
+    if (traits.voice?.provider) {
+      setTtsProvider(traits.voice.provider)
+    }
+    if (traits.voice?.voiceName) {
+      setTtsVoice(traits.voice.voiceName)
+    }
+    const derivedAccent = traits.voice?.language || traits.voiceProfile || 'Persona-based'
+    setAccent(derivedAccent)
+  }, [selectedPersonaData])
+
+  const filteredPersonas = personas.filter((persona) => {
+    const term = personaSearch.trim().toLowerCase()
+    if (!term) return true
+    const traits = (persona.traits ?? {}) as PersonaTraits
+    return (
+      persona.name.toLowerCase().includes(term) ||
+      (traits.role ?? '').toLowerCase().includes(term) ||
+      (traits.level ?? '').toLowerCase().includes(term) ||
+      (traits.personality ?? '').toLowerCase().includes(term) ||
+      (traits.archetype ?? '').toLowerCase().includes(term)
+    )
+  })
+
+  useEffect(() => {
+    if (!llmProvidersLoading && llmProvidersData && !llmProvider) {
+      const firstEnabledProvider = llmProvidersData.providers.find((p) => p.enabled)
+      if (firstEnabledProvider) {
+        setLlmProvider(firstEnabledProvider.name)
+        if (firstEnabledProvider.modelDetails.length > 0) {
+          const preferredModel = firstEnabledProvider.modelDetails.find(
+            (m) => m.name === 'gpt-4o-mini'
+          )
+          setLlmModel(preferredModel?.name || firstEnabledProvider.modelDetails[0].name)
+        }
+      }
+    }
+  }, [llmProvidersLoading, llmProvidersData, llmProvider])
+
+  useEffect(() => {
+    if (sessionType && errors.sessionType) {
+      setErrors(({ sessionType: _sessionType, ...rest }) => rest)
+    }
+  }, [sessionType, errors.sessionType])
+
+  useEffect(() => {
+    if (selectedPersona && errors.persona) {
+      setErrors(({ persona: _persona, ...rest }) => rest)
+    }
+  }, [selectedPersona, errors.persona])
+
+  useEffect(() => {
+    if (llmProvider && errors.llmProvider) {
+      setErrors(({ llmProvider: _llmProvider, ...rest }) => rest)
+    }
+  }, [llmProvider, errors.llmProvider])
+
+  useEffect(() => {
+    if (llmModel && errors.llmModel) {
+      setErrors(({ llmModel: _llmModel, ...rest }) => rest)
+    }
+  }, [llmModel, errors.llmModel])
+
+  useEffect(() => {
+    if (durationMinutes > 0 && errors.durationMinutes) {
+      setErrors(({ durationMinutes: _durationMinutes, ...rest }) => rest)
+    }
+  }, [durationMinutes, errors.durationMinutes])
+
+  useEffect(() => {
+    if (scenarioTopic.trim() && errors.scenarioTopic) {
+      setErrors(({ scenarioTopic: _scenarioTopic, ...rest }) => rest)
+    }
+  }, [scenarioTopic, errors.scenarioTopic])
+
+  useEffect(() => {
+    if (user?.id) {
+      fetchCrmStatus(true)
+    }
+  }, [user?.id, fetchCrmStatus])
+
   const validateStep = (step: number): boolean => {
     const newErrors: Record<string, string> = {}
 
     if (step === 0) {
       if (!sessionType) newErrors.sessionType = 'Session type is required'
+    }
+
+    if (step === 1) {
+      if (!durationMinutes || durationMinutes <= 0) {
+        newErrors.durationMinutes = 'Session length must be greater than 0'
+      }
+    }
+
+    if (step === 2) {
+      if (!selectedPersona) newErrors.persona = 'Please select a persona to continue'
+    }
+
+    if (step === 3) {
+      if (!llmProvider) newErrors.llmProvider = 'LLM provider is required'
+      if (!llmModel) newErrors.llmModel = 'LLM model is required'
     }
 
     setErrors(newErrors)
@@ -151,24 +297,13 @@ export default function CreateSessionPage() {
 
   const nextStep = () => {
     if (validateStep(active)) {
-      setActive((current) => (current < 3 ? current + 1 : current))
+      setActive((current) => (current < steps.length - 1 ? current + 1 : current))
     }
   }
 
   const prevStep = () => {
     setActive((current) => (current > 0 ? current - 1 : current))
     setErrors({})
-  }
-
-  const addTag = () => {
-    if (newTag.trim() && !tags.includes(newTag.trim())) {
-      setTags([...tags, newTag.trim()])
-      setNewTag('')
-    }
-  }
-
-  const removeTag = (tagToRemove: string) => {
-    setTags(tags.filter((tag) => tag !== tagToRemove))
   }
 
   const handleSubmit = async () => {
@@ -192,6 +327,26 @@ export default function CreateSessionPage() {
       return
     }
 
+    if (!selectedPersona) {
+      notifications.show({
+        title: 'Error',
+        message: 'Please select a persona before creating a session',
+        color: 'red',
+        icon: <IconAlertCircle />,
+      })
+      return
+    }
+
+    if (!llmProvider || !llmModel) {
+      notifications.show({
+        title: 'Error',
+        message: 'Please select an AI provider and model',
+        color: 'red',
+        icon: <IconAlertCircle />,
+      })
+      return
+    }
+
     setIsSubmitting(true)
 
     try {
@@ -201,15 +356,42 @@ export default function CreateSessionPage() {
         tone,
         speechRate,
         difficulty,
+        durationMinutes,
+        aiRole: aiRole.trim() || undefined,
+      }
+
+      if (llmProvider && llmModel) {
+        sessionConfig.llm = {
+          provider: llmProvider,
+          model: llmModel,
+        }
+      }
+
+      sessionConfig.scenario = {
+        topic: scenarioTopic,
+        objective: scenarioObjective,
+        context: scenarioContext,
+        scenarioId: selectedScenarioId,
+      }
+
+      sessionConfig.crm = {
+        provider: 'salesforce',
+        connected: crmStatus?.connected ?? false,
+        selections: {
+          accounts: selectedAccounts,
+          opportunities: selectedOpportunities,
+          leads: selectedLeads,
+          contacts: selectedContacts,
+        },
       }
 
       if (sessionType === 'voice' || sessionType === 'video') {
         sessionConfig.ttsProvider = ttsProvider
         sessionConfig.ttsVoice = ttsVoice
-      }
-
-      if (!sessionType) {
-        throw new Error('Session type is required')
+        sessionConfig.voice = {
+          provider: ttsProvider,
+          voice: ttsVoice,
+        }
       }
 
       const sessionData: CreateSessionInput = {
@@ -219,6 +401,7 @@ export default function CreateSessionPage() {
         tags: tags.length > 0 ? tags : undefined,
         language: language || undefined,
         personaId: selectedPersona ?? undefined,
+        scenarioId: selectedScenarioId ?? undefined,
         sessionConfig,
       }
 
@@ -244,438 +427,375 @@ export default function CreateSessionPage() {
     }
   }
 
+  const scrollPersona = (direction: 'left' | 'right') => {
+    const container = personaScrollRef.current
+    if (!container) return
+    const amount = container.clientWidth * 0.8
+    container.scrollBy({ left: direction === 'left' ? -amount : amount, behavior: 'smooth' })
+  }
+
+  const scrollModels = (direction: 'left' | 'right') => {
+    const container = modelScrollRef.current
+    if (!container) return
+    const amount = container.clientWidth * 0.8
+    container.scrollBy({ left: direction === 'left' ? -amount : amount, behavior: 'smooth' })
+  }
+
+  const handleGenerateScenario = async () => {
+    const orgId = selectedTeamId || user?.id
+    if (!orgId) {
+      notifications.show({
+        title: 'Missing organization',
+        message: 'Select a team or log in to generate a scenario.',
+        color: 'yellow',
+      })
+      return
+    }
+
+    if (!scenarioTopic.trim()) {
+      setErrors((current) => ({
+        ...current,
+        scenarioTopic: 'Provide a topic before generating.',
+      }))
+      return
+    }
+
+    setScenarioGenerating(true)
+    try {
+      const response = await api.scenarios.generateBatch({
+        orgId,
+        name: scenarioTopic.trim(),
+        type: sessionType || undefined,
+        tags,
+        language,
+        sessionConfig: {
+          difficulty,
+          durationMinutes,
+        },
+        personaId: selectedPersona || undefined,
+        crmContextId: undefined,
+        userSnapshot: user ? { id: user.id, email: user.email, name: user.name } : undefined,
+        orgSnapshot: undefined,
+        objective: scenarioObjective,
+        context: scenarioContext,
+        requestedBy: user?.id,
+        count: scenarioCount,
+      })
+
+      const generated = response?.scenarios ?? []
+      if (generated.length > 0) {
+        setSelectedScenarioId(generated[0].id)
+        setScenarios((current) => {
+          const existingIds = new Set(current.map((scenario) => scenario.id))
+          const next = [
+            ...generated.filter((scenario: ScenarioOption) => !existingIds.has(scenario.id)),
+            ...current,
+          ]
+          return next
+        })
+        notifications.show({
+          title: 'Scenario generated',
+          message: `We created ${generated.length} scenarios and selected one.`,
+          color: 'green',
+        })
+      }
+    } catch (err) {
+      notifications.show({
+        title: 'Generation failed',
+        message: 'Unable to generate a scenario right now.',
+        color: 'red',
+      })
+    } finally {
+      setScenarioGenerating(false)
+    }
+  }
+
+  const handleCrmConnect = async () => {
+    try {
+      const response = await connectCrm()
+      if (response?.authUrl) {
+        window.open(response.authUrl, '_blank', 'noopener,noreferrer')
+        return
+      }
+      notifications.show({
+        title: 'Connection unavailable',
+        message: 'Salesforce connect URL was not returned. Please try again.',
+        color: 'yellow',
+      })
+    } catch (err) {
+      notifications.show({
+        title: 'Connection failed',
+        message: 'Unable to start Salesforce connection.',
+        color: 'red',
+      })
+    }
+  }
+
+  const steps = [
+    {
+      label: 'Basics',
+      description: 'Type and details',
+      icon: <IconSparkles size={18} />,
+      content: (
+        <BasicsStep
+          sessionType={sessionType}
+          setSessionType={(value) => setSessionType(value)}
+          errors={errors}
+          sessionName={sessionName}
+          setSessionName={setSessionName}
+          teamsLoading={teamsLoading}
+          selectedTeamId={selectedTeamId}
+          setSelectedTeamId={setSelectedTeamId}
+          teams={teams}
+          language={language}
+          setLanguage={setLanguage}
+          tags={tags}
+          setTags={setTags}
+        />
+      ),
+    },
+    {
+      label: 'Scenario',
+      description: 'Topic & setup',
+      icon: <IconSparkles size={18} />,
+      content: (
+        <ScenarioStep
+          scenariosLoading={scenariosLoading}
+          scenarios={scenarios}
+          selectedScenarioId={selectedScenarioId}
+          setSelectedScenarioId={setSelectedScenarioId}
+          scenarioTopic={scenarioTopic}
+          setScenarioTopic={setScenarioTopic}
+          scenarioObjective={scenarioObjective}
+          setScenarioObjective={setScenarioObjective}
+          scenarioContext={scenarioContext}
+          setScenarioContext={setScenarioContext}
+          aiRole={aiRole}
+          setAiRole={setAiRole}
+          durationMinutes={durationMinutes}
+          setDurationMinutes={setDurationMinutes}
+          scenarioCount={scenarioCount}
+          setScenarioCount={setScenarioCount}
+          onGenerate={handleGenerateScenario}
+          isGenerating={scenarioGenerating}
+          errors={errors}
+        />
+      ),
+    },
+    {
+      label: 'Persona',
+      description: 'Choose who speaks',
+      icon: <IconUser size={18} />,
+      content: (
+        <PersonaStep
+          personasLoading={personasLoading}
+          personas={personas}
+          filteredPersonas={filteredPersonas}
+          personaSearch={personaSearch}
+          setPersonaSearch={setPersonaSearch}
+          scrollPersona={scrollPersona}
+          personaScrollRef={personaScrollRef}
+          selectedPersona={selectedPersona}
+          setSelectedPersona={setSelectedPersona}
+          errors={errors}
+          selectedPersonaData={selectedPersonaData}
+        />
+      ),
+    },
+    {
+      label: 'AI Brain',
+      description: 'Model & cost',
+      icon: <IconBrain size={18} />,
+      content: (
+        <AIBrainStep
+          llmProvidersLoading={llmProvidersLoading}
+          llmProvidersData={llmProvidersData}
+          llmProvider={llmProvider}
+          setLlmProvider={setLlmProvider}
+          setLlmModel={setLlmModel}
+          setModelSearch={setModelSearch}
+          errors={errors}
+          modelSearch={modelSearch}
+          llmModel={llmModel}
+          scrollModels={scrollModels}
+          modelScrollRef={modelScrollRef}
+        />
+      ),
+    },
+    {
+      label: 'CRM',
+      description: 'Salesforce context',
+      icon: <IconDatabase size={18} />,
+      content: (
+        <CrmStep
+          crmStatus={crmStatus}
+          loadingStatus={crmStatusLoading}
+          onConnect={handleCrmConnect}
+          onRefreshStatus={() => fetchCrmStatus(true)}
+          onLoadData={loadCrmData}
+          loadingData={crmDataLoading}
+          accounts={crmAccounts}
+          opportunities={crmOpportunities}
+          leads={crmLeads}
+          contacts={crmContacts}
+          selectedAccounts={selectedAccounts}
+          setSelectedAccounts={setSelectedAccounts}
+          selectedOpportunities={selectedOpportunities}
+          setSelectedOpportunities={setSelectedOpportunities}
+          selectedLeads={selectedLeads}
+          setSelectedLeads={setSelectedLeads}
+          selectedContacts={selectedContacts}
+          setSelectedContacts={setSelectedContacts}
+        />
+      ),
+    },
+    {
+      label: 'Style',
+      description: 'Voice & tone',
+      icon: <IconAdjustments size={18} />,
+      content: (
+        <StyleStep
+          tone={tone}
+          setTone={setTone}
+          speechRate={speechRate}
+          setSpeechRate={setSpeechRate}
+          difficulty={difficulty}
+          setDifficulty={setDifficulty}
+          multiTurnEnabled={multiTurnEnabled}
+          setMultiTurnEnabled={setMultiTurnEnabled}
+        />
+      ),
+    },
+    {
+      label: 'Review',
+      description: 'Finalize',
+      icon: <IconChecklist size={18} />,
+      content: (
+        <ReviewStep
+          sessionName={sessionName}
+          selectedTeamId={selectedTeamId}
+          teams={teams}
+          sessionType={sessionType}
+          language={language}
+          tags={tags}
+          selectedPersona={selectedPersona}
+          personas={personas}
+          selectedPersonaData={selectedPersonaData}
+          accent={accent}
+          scenarioTopic={scenarioTopic}
+          scenarioObjective={scenarioObjective}
+          scenarioContext={scenarioContext}
+          scenarioId={selectedScenarioId}
+          scenarios={scenarios}
+          durationMinutes={durationMinutes}
+          crmSelections={{
+            accounts: selectedAccounts,
+            opportunities: selectedOpportunities,
+            leads: selectedLeads,
+            contacts: selectedContacts,
+          }}
+          crmConnected={crmStatus?.connected ?? false}
+          llmProvider={llmProvider}
+          llmModel={llmModel}
+          llmProvidersData={llmProvidersData}
+          tone={tone}
+          speechRate={speechRate}
+          difficulty={difficulty}
+          multiTurnEnabled={multiTurnEnabled}
+        />
+      ),
+    },
+  ]
+
   return (
-    <Container size="lg" py="xl">
-      <Group mb="xl">
-        <ActionIcon variant="subtle" size="lg" onClick={() => router.push('/studio/sessions')}>
-          <IconArrowLeft size={20} />
-        </ActionIcon>
-        <Title order={1}>Create New Session</Title>
-      </Group>
-      {error && (
-        <Alert icon={<IconAlertCircle size={16} />} title="Error" color="red" mb="md">
-          {error}
-        </Alert>
-      )}
-      <Paper shadow="sm" p="xl" radius="md" withBorder>
-        <Stepper active={active} onStepClick={setActive} mb="xl">
-          <Stepper.Step label="Basic Info" description="Session details">
-            <Stack gap="md" mt="xl">
-              <Select
-                label="Team (Optional)"
-                placeholder={
-                  teamsLoading
-                    ? 'Loading teams...'
-                    : 'Select a team or leave empty for personal session'
-                }
-                value={selectedTeamId === '' ? '' : selectedTeamId}
-                onChange={(value) => {
-                  setSelectedTeamId(value || '')
-                }}
-                data={[
-                  { value: '', label: 'Personal Session (No Team)' },
-                  ...teams.map((team) => ({
-                    value: team.id,
-                    label: team.name,
-                  })),
-                ]}
-                description="Select a team to share this session, or create a personal session"
-                disabled={teamsLoading}
-                searchable
-                clearable
-              />
-
-              <TextInput
-                label="Session Name"
-                placeholder="Give this session a name"
-                value={sessionName}
-                onChange={(event) => setSessionName(event.currentTarget.value)}
-                description="Optional, but helpful for finding sessions later"
-              />
-
-              <Select
-                label="Session Type"
-                placeholder="Select type"
-                value={sessionType}
-                onChange={(value) => setSessionType(value)}
-                data={[
-                  { value: 'text', label: 'Text' },
-                  { value: 'voice', label: 'Voice' },
-                  { value: 'video', label: 'Video' },
-                ]}
-                error={errors.sessionType}
-                required
-                description="The type of simulation session"
-              />
-
-              <Box>
-                <Text size="sm" fw={500} mb={4}>
-                  Tags
-                </Text>
-                <Group gap="xs" mb="xs">
-                  {tags.map((tag) => (
-                    <Paper key={tag} px="sm" py={4} withBorder>
-                      <Group gap={4}>
-                        <Text size="sm">{tag}</Text>
-                        <ActionIcon
-                          size="xs"
-                          variant="subtle"
-                          color="gray"
-                          onClick={() => removeTag(tag)}
-                        >
-                          <IconX size={12} />
-                        </ActionIcon>
-                      </Group>
-                    </Paper>
-                  ))}
-                </Group>
-                <Group gap="xs">
-                  <TextInput
-                    placeholder="Add a tag"
-                    value={newTag}
-                    onChange={(e) => setNewTag(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault()
-                        addTag()
-                      }
-                    }}
-                    style={{ flex: 1 }}
-                  />
-                  <Button onClick={addTag} leftSection={<IconPlus size={16} />}>
-                    Add
-                  </Button>
-                </Group>
-                <Text size="xs" c="dimmed" mt={4}>
-                  Press Enter or click Add to add tags
-                </Text>
-              </Box>
-
-              <Select
-                label="Language"
-                placeholder="Select language"
-                value={language}
-                onChange={(value) => setLanguage(value || 'en-US')}
-                data={[
-                  { value: 'en-US', label: 'English (US)' },
-                  { value: 'en-GB', label: 'English (UK)' },
-                  { value: 'es-ES', label: 'Spanish' },
-                  { value: 'fr-FR', label: 'French' },
-                  { value: 'de-DE', label: 'German' },
-                ]}
-                description="Language for the session"
-              />
-            </Stack>
-          </Stepper.Step>
-
-          <Stepper.Step label="AI Persona" description="Select persona">
-            <Stack gap="md" mt="xl">
-              <Title order={3}>Select AI Persona</Title>
-              <Text size="sm" c="dimmed">
-                Choose the AI persona that will participate in this session
+    <Box className={`${spaceGrotesk.className} ${classes.page}`}>
+      <Container size="xl" py="xl">
+        <Group
+          style={{
+            width: '100vw',
+          }}
+          py="md"
+          className={classes.hero}
+        >
+          <Group
+            style={{
+              width: '80.6em',
+            }}
+            align="flex-start"
+          >
+            <ActionIcon variant="subtle" size="lg" onClick={() => router.push('/studio/sessions')}>
+              <IconArrowLeft size={20} />
+            </ActionIcon>
+            <Paper className={classes.heroCard}>
+              <Badge variant="light" color="blue" radius="md" mb={10}>
+                New Session Wizard
+              </Badge>
+              <Title order={1} className={`${fraunces.className} ${classes.heroTitle}`}>
+                Compose your next session
+              </Title>
+              <Text size="sm" className={classes.heroSub}>
+                Build a tailored experience in minutes with guided steps.
               </Text>
-
-              {personasLoading ? (
-                <Group justify="center" p="xl">
-                  <Loader />
-                  <Text c="dimmed">Loading personas...</Text>
-                </Group>
-              ) : personas.length === 0 ? (
-                <Alert color="yellow" title="No personas available">
-                  No personas found. Please contact support or try again later.
-                </Alert>
-              ) : (
-                <SimpleGrid cols={{ base: 1, sm: 2, md: 3, lg: 4 }} spacing="md">
-                  {personas.map((persona) => {
-                    const isSelected = selectedPersona === persona.id
-                    return (
-                      <Card
-                        key={persona.id}
-                        withBorder
-                        padding="md"
-                        radius="md"
-                        style={{
-                          cursor: 'pointer',
-                          border: isSelected ? '2px solid var(--mantine-color-blue-6)' : undefined,
-                          backgroundColor: isSelected ? 'var(--mantine-color-blue-0)' : undefined,
-                        }}
-                        onClick={() => {
-                          setSelectedPersona(selectedPersona === persona.id ? null : persona.id)
-                        }}
-                      >
-                        <Stack gap="xs" align="center">
-                          <Box pos="relative">
-                            <Avatar size={80} radius="md" color="blue">
-                              <IconUser size={40} />
-                            </Avatar>
-                            {isSelected && (
-                              <Box
-                                style={{
-                                  position: 'absolute',
-                                  top: -8,
-                                  right: -8,
-                                  background: 'var(--mantine-color-blue-6)',
-                                  borderRadius: '50%',
-                                  width: 24,
-                                  height: 24,
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                }}
-                              >
-                                <IconCheck size={16} color="white" />
-                              </Box>
-                            )}
-                          </Box>
-                          <Text fw={600} size="sm" ta="center">
-                            {persona.name}
-                          </Text>
-                          <Badge size="xs" variant="light">
-                            {persona.traits?.role || 'AI Assistant'}
-                          </Badge>
-                          <Text size="xs" c="dimmed" ta="center">
-                            {persona.traits?.level || 'Expert'}
-                          </Text>
-                        </Stack>
-                      </Card>
-                    )
-                  })}
-                </SimpleGrid>
-              )}
-
-              {selectedPersona && (
-                <Paper p="md" withBorder mt="md">
-                  <Group>
-                    <Text fw={500}>Selected Persona:</Text>
-                    <Text c="dimmed">
-                      {personas.find((p) => p.id === selectedPersona)?.name || selectedPersona}
-                    </Text>
-                  </Group>
-                </Paper>
-              )}
-            </Stack>
-          </Stepper.Step>
-
-          <Stepper.Step label="Configuration" description="Session settings">
-            <Stack gap="md" mt="xl">
-              <Title order={3}>Session Configuration</Title>
-
-              <Select
-                label="Accent"
-                value={accent}
-                onChange={(value) => setAccent(value || 'British')}
-                data={[
-                  { value: 'British', label: 'British' },
-                  { value: 'American', label: 'American' },
-                  { value: 'Australian', label: 'Australian' },
-                  { value: 'Canadian', label: 'Canadian' },
-                ]}
-                description="Voice accent for audio sessions"
-              />
-
-              <Select
-                label="Tone"
-                value={tone}
-                onChange={(value) => setTone(value || 'Formal')}
-                data={[
-                  { value: 'Formal', label: 'Formal' },
-                  { value: 'Casual', label: 'Casual' },
-                  { value: 'Friendly', label: 'Friendly' },
-                  { value: 'Professional', label: 'Professional' },
-                ]}
-                description="Conversation tone"
-              />
-
-              <Select
-                label="Speech Rate"
-                value={speechRate}
-                onChange={(value) => setSpeechRate(value || 'Normal')}
-                data={[
-                  { value: 'Slow', label: 'Slow' },
-                  { value: 'Normal', label: 'Normal' },
-                  { value: 'Fast', label: 'Fast' },
-                ]}
-                description="Speaking speed for audio sessions"
-              />
-
-              {(sessionType === 'voice' || sessionType === 'video') && (
-                <>
-                  <Select
-                    label="TTS Provider"
-                    value={ttsProvider}
-                    onChange={(value) => {
-                      const newProvider = value || 'elevenlabs'
-                      setTtsProvider(newProvider)
-                      const provider = ttsProviders.find((p) => p.name === newProvider)
-                      if (provider && provider.voices.length > 0) {
-                        setTtsVoice(provider.voices[0])
-                      } else {
-                        setTtsVoice('')
-                      }
-                    }}
-                    data={
-                      ttsLoading
-                        ? [{ value: 'elevenlabs', label: 'Loading...' }]
-                        : ttsProviders.map((provider) => ({
-                            value: provider.name,
-                            label: provider.description || provider.name,
-                          }))
-                    }
-                    description="Text-to-speech provider for voice sessions"
-                    disabled={ttsLoading}
-                  />
-
-                  <Select
-                    label="Voice"
-                    value={ttsVoice}
-                    onChange={(value) => setTtsVoice(value || '')}
-                    data={
-                      ttsProviders
-                        .find((p) => p.name === ttsProvider)
-                        ?.voices.map((voice) => ({
-                          value: voice,
-                          label: voice,
-                        })) || []
-                    }
-                    description="Voice to use for speech synthesis"
-                    searchable
-                    disabled={!ttsProvider}
-                  />
-                </>
-              )}
-
-              <NumberInput
-                label="Difficulty"
-                value={difficulty}
-                onChange={(value) => setDifficulty(Number(value))}
-                min={1}
-                max={10}
-                description="Session difficulty level (1-10)"
-              />
-
-              <Select
-                label="Multi-turn Enabled"
-                value={multiTurnEnabled ? 'yes' : 'no'}
-                onChange={(value) => setMultiTurnEnabled(value === 'yes')}
-                data={[
-                  { value: 'yes', label: 'Yes' },
-                  { value: 'no', label: 'No' },
-                ]}
-                description="Enable multiple conversation turns"
-              />
-            </Stack>
-          </Stepper.Step>
-
-          <Stepper.Step label="Review" description="Confirm details">
-            <Stack gap="lg" mt="xl">
-              <Title order={3}>Review Session Details</Title>
-
-              <Paper p="md" withBorder>
-                <Stack gap="xs">
-                  <Group justify="apart">
-                    <Text fw={500}>Session Name:</Text>
-                    <Text c="dimmed">{sessionName.trim() || 'Untitled session'}</Text>
-                  </Group>
-                  <Group justify="apart">
-                    <Text fw={500}>Team:</Text>
-                    <Text c="dimmed">
-                      {selectedTeamId && selectedTeamId !== ''
-                        ? teams.find((t) => t.id === selectedTeamId)?.name || selectedTeamId
-                        : 'Personal Session'}
-                    </Text>
-                  </Group>
-                  <Group justify="apart">
-                    <Text fw={500}>Type:</Text>
-                    <Text c="dimmed">{sessionType || 'Not set'}</Text>
-                  </Group>
-                  <Group justify="apart">
-                    <Text fw={500}>Language:</Text>
-                    <Text c="dimmed">{language}</Text>
-                  </Group>
-                  {tags.length > 0 && (
-                    <Box>
-                      <Text fw={500} mb="xs">
-                        Tags:
-                      </Text>
-                      <Group gap="xs">
-                        {tags.map((tag) => (
-                          <Paper key={tag} px="sm" py={4} withBorder>
-                            <Text size="sm">{tag}</Text>
-                          </Paper>
-                        ))}
-                      </Group>
-                    </Box>
-                  )}
-                </Stack>
-              </Paper>
-
-              <Paper p="md" withBorder>
-                <Title order={4} mb="md">
-                  Configuration
-                </Title>
-                <Stack gap="xs">
-                  <Group justify="apart">
-                    <Text fw={500}>Multi-turn:</Text>
-                    <Text c="dimmed">{multiTurnEnabled ? 'Enabled' : 'Disabled'}</Text>
-                  </Group>
-                  <Group justify="apart">
-                    <Text fw={500}>Accent:</Text>
-                    <Text c="dimmed">{accent}</Text>
-                  </Group>
-                  <Group justify="apart">
-                    <Text fw={500}>Tone:</Text>
-                    <Text c="dimmed">{tone}</Text>
-                  </Group>
-                  <Group justify="apart">
-                    <Text fw={500}>Speech Rate:</Text>
-                    <Text c="dimmed">{speechRate}</Text>
-                  </Group>
-                  <Group justify="apart">
-                    <Text fw={500}>Difficulty:</Text>
-                    <Text c="dimmed">{difficulty}/10</Text>
-                  </Group>
-                </Stack>
-              </Paper>
-
-              {selectedPersona && (
-                <Paper p="md" withBorder>
-                  <Title order={4} mb="md">
-                    Selected Persona
-                  </Title>
-                  <Stack gap="xs">
-                    <Badge size="lg" variant="filled">
-                      {[
-                        { id: 'persona_1', name: 'Sarah - Sales Expert' },
-                        { id: 'persona_2', name: 'John - Product Manager' },
-                        { id: 'persona_3', name: 'Maria - Customer Success' },
-                        { id: 'persona_4', name: 'Alex - Technical Lead' },
-                      ].find((p) => p.id === selectedPersona)?.name || selectedPersona}
-                    </Badge>
-                  </Stack>
-                </Paper>
-              )}
-            </Stack>
-          </Stepper.Step>
-        </Stepper>
-
-        <Group justify="space-between" mt="xl">
-          <Button variant="default" onClick={prevStep} disabled={active === 0}>
-            Back
-          </Button>
-
-          {active < 3 ? (
-            <Button onClick={nextStep}>Next</Button>
-          ) : (
-            <Button
-              onClick={handleSubmit}
-              loading={isSubmitting || loading}
-              leftSection={<IconCheck size={16} />}
-            >
-              Create Session
-            </Button>
-          )}
+            </Paper>
+          </Group>
         </Group>
-      </Paper>
-    </Container>
+
+        {error && (
+          <Alert icon={<IconAlertCircle size={16} />} title="Error" color="red" mb="md">
+            {error}
+          </Alert>
+        )}
+
+        <Grid gutter="xl">
+          <Grid.Col span={{ base: 12, md: 3 }}>
+            <Box className={classes.stepPanel}>
+              <Paper className={classes.stepPanelCard} p="md">
+                <Stepper
+                  active={active}
+                  onStepClick={setActive}
+                  orientation={isStepperCompact ? 'horizontal' : 'vertical'}
+                  size="sm"
+                  color="blue"
+                  className={classes.stepperRoot}
+                >
+                  {steps.map((step) => (
+                    <Stepper.Step
+                      key={step.label}
+                      label={step.label}
+                      description={step.description}
+                      icon={step.icon}
+                    />
+                  ))}
+                </Stepper>
+              </Paper>
+            </Box>
+          </Grid.Col>
+
+          <Grid.Col span={{ base: 12, md: 9 }}>
+            <Paper className={classes.contentCard} p="xl">
+              {steps[active]?.content}
+            </Paper>
+
+            <Group justify="space-between" mt="xl">
+              <Button variant="default" onClick={prevStep} disabled={active === 0}>
+                Back
+              </Button>
+
+              {active < steps.length - 1 ? (
+                <Button onClick={nextStep}>Next</Button>
+              ) : (
+                <Button
+                  onClick={handleSubmit}
+                  loading={isSubmitting || loading}
+                  leftSection={<IconCheck size={16} />}
+                >
+                  Create Session
+                </Button>
+              )}
+            </Group>
+          </Grid.Col>
+        </Grid>
+      </Container>
+    </Box>
   )
 }

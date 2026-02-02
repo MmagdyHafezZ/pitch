@@ -5,6 +5,7 @@ import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import helmet from 'helmet';
 import compression from 'compression';
 import morgan from 'morgan';
+import cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
 import { MicroserviceExceptionFilter } from '@pitch/shared-backend/filters/microservice-exception.filter';
 import { PrismaClientExceptionFilter } from '@pitch/shared-backend/filters/prisma-exception.filter';
@@ -57,6 +58,7 @@ async function bootstrap() {
   app.use(helmet());
   app.use(compression());
   app.use(morgan(process.env.MORGAN_FORMAT ?? 'combined'));
+  app.use(cookieParser());
 
   app.enableCors({
     origin: [
@@ -91,8 +93,10 @@ async function bootstrap() {
   );
 
   const config = new DocumentBuilder()
-    .setTitle(process.env.SWAGGER_TITLE ?? 'My API')
-    .setDescription(process.env.SWAGGER_DESCRIPTION ?? 'REST API documentation')
+    .setTitle(process.env.SWAGGER_TITLE ?? 'PITCH API')
+    .setDescription(
+      process.env.SWAGGER_DESCRIPTION ?? 'PITCH API documentation',
+    )
     .setVersion(process.env.SWAGGER_VERSION ?? '1.0.0')
     .addBearerAuth(
       { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' },

@@ -307,6 +307,18 @@ export class AuthApplicationService {
       this.logger.log(`Updated OAuth tokens for user: ${user.id}`);
     }
 
+    return this.issueTokensForUser(user);
+  }
+
+  async issueTokensForUser(user: {
+    id: string;
+    email: string;
+    name: string | null;
+    avatar?: string | null;
+    isActive: boolean;
+    createdAt: Date;
+    updatedAt: Date;
+  }): Promise<AuthResponseDto> {
     const tokens = this.generateTokens(user);
 
     const expiresAt = new Date();
@@ -321,7 +333,7 @@ export class AuthApplicationService {
       user: {
         id: user.id,
         email: user.email,
-        name: user.name,
+        name: user.name ?? user.email,
         avatar: user.avatar ?? undefined,
         isActive: user.isActive,
         createdAt: user.createdAt,

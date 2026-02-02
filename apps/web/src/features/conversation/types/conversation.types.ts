@@ -19,6 +19,7 @@ export enum WsMessageType {
   CONVERSATION_AUDIO_READY = 'conversation.audio_ready',
   CONVERSATION_ERROR = 'conversation.error',
   CONVERSATION_END = 'conversation.end',
+  CONVERSATION_CANCEL = 'conversation.cancel',
 
   PING = 'ping',
   PONG = 'pong',
@@ -35,6 +36,7 @@ export interface WsEnvelope<T = any> {
 
 export interface ConversationStartPayload {
   text: string
+  startAsAssistant?: boolean
   personaId?: string
   messages?: Array<{
     role: 'system' | 'user' | 'assistant'

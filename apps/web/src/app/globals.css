@@ -66,4 +66,20 @@
   body {
     @apply bg-background text-foreground;
   }
+
+  html,
+  body {
+    min-height: 100%;
+    background: var(--pitch-app-bg, var(--pitch-surface-bg, #f8f9fa));
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--pitch-accent-strong);
+    outline-offset: 2px;
+  }
+
+  .focus-visible\:ring-ring:focus-visible,
+  .focus-visible\:ring-ring\/50:focus-visible {
+    --tw-ring-color: var(--pitch-accent-strong);
+  }
 }

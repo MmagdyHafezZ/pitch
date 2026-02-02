@@ -31,6 +31,18 @@ export const BUSINESS_SERVICE_PATTERNS = {
   GET_BUSINESSES: 'get_businesses',
 } as const
 
+export const CRM_SERVICE_PATTERNS = {
+  SALESFORCE_CONNECT: 'salesforce.connect',
+  SALESFORCE_CALLBACK: 'salesforce.callback',
+  SALESFORCE_GET_STATUS: 'salesforce.getStatus',
+  SALESFORCE_GET_CONTACTS: 'salesforce.getContacts',
+  SALESFORCE_GET_ACCOUNTS: 'salesforce.getAccounts',
+  SALESFORCE_GET_OPPORTUNITIES: 'salesforce.getOpportunities',
+  SALESFORCE_GET_LEADS: 'salesforce.getLeads',
+  SALESFORCE_QUERY: 'salesforce.query',
+  SALESFORCE_SEARCH: 'salesforce.search',
+  SALESFORCE_DISCONNECT: 'salesforce.disconnect',
+} as const
 export const SIMULATION_SERVICE_PATTERNS = {
   CREATE_SESSION: 'simulation.session.create',
   GET_SESSION: 'simulation.session.get',
@@ -38,6 +50,7 @@ export const SIMULATION_SERVICE_PATTERNS = {
   UPDATE_SESSION: 'simulation.session.update',
   DELETE_SESSION: 'simulation.session.delete',
   LIST_SESSIONS: 'simulation.session.list',
+  SESSION_TIMELINE: 'simulation.session.timeline',
   ADD_SESSION_MEMBERS: 'simulation.session.members.add',
   LIST_SESSION_MEMBERS: 'simulation.session.members.list',
   REMOVE_SESSION_MEMBER: 'simulation.session.members.remove',
@@ -62,6 +75,7 @@ export const SIMULATION_SERVICE_PATTERNS = {
   CHAT_CANCEL: 'simulation.chat.cancel',
 
   CONVERSATION_PROCESS: 'simulation.conversation.process',
+  CONVERSATION_STREAM: 'simulation.conversation.stream',
 
   LLM_ROUTING_GET: 'simulation.llm.routing.get',
   LLM_ROUTING_UPSERT: 'simulation.llm.routing.upsert',
@@ -101,14 +115,27 @@ export const SIMULATION_SERVICE_PATTERNS = {
   GET_REPORT: 'simulation.report.get',
 
   PUBLISH_EVENT: 'simulation.event.publish',
+
+  ASSESSMENT_RUN_REQUEST: 'assessment.run.request',
+  ASSESSMENT_RUN_COMPLETED: 'assessment.run.completed',
+  ASSESSMENT_RUN_FAILED: 'assessment.run.failed',
+  ASSESSMENT_RUN: 'assessment.run',
+  ASSESSMENT_STATUS: 'assessment.status',
+  ASSESSMENT_LATEST: 'assessment.latest',
+
+  HINTS_GENERATE: 'simulation.hints.generate',
+  HINTS_HISTORY: 'simulation.hints.history',
 } as const
 
 export type UserServicePattern = (typeof USER_SERVICE_PATTERNS)[keyof typeof USER_SERVICE_PATTERNS]
 export type BusinessServicePattern =
   (typeof BUSINESS_SERVICE_PATTERNS)[keyof typeof BUSINESS_SERVICE_PATTERNS]
+export type CrmServicePattern = (typeof CRM_SERVICE_PATTERNS)[keyof typeof CRM_SERVICE_PATTERNS]
 export type SimulationServicePattern =
   (typeof SIMULATION_SERVICE_PATTERNS)[keyof typeof SIMULATION_SERVICE_PATTERNS]
-
+export const SUPPORT_SERVICE_PATTERNS = {
+  EMAIL_SEND_VERIFICATION_CODE: 'support.email.sendVerificationCode',
+} as const
 export const TTS_SERVICE_PATTERNS = {
   SPEAK: 'tts.speak',
   STREAM: 'tts.stream',

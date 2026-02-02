@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { api } from '@/lib/client'
+import { api, setAccessToken } from '@/lib/client'
 import { LoginCredentials, RegisterCredentials, AuthResponse, User } from '../types/auth.types'
 
 // Query keys
@@ -8,18 +8,22 @@ export const authKeys = {
   me: () => [...authKeys.all, 'me'] as const,
 }
 
+export const oauthKeys = {
+  all: ['oauth'] as const,
+  providers: () => [...oauthKeys.all, 'providers'] as const,
+  linked: () => [...oauthKeys.all, 'linked-accounts'] as const,
+}
+
 // Login mutation
 export const useLoginMutation = () => {
   const queryClient = useQueryClient()
 
   return useMutation<AuthResponse, Error, LoginCredentials>({
     mutationFn: (credentials) => api.auth.login(credentials),
-    onSuccess: (data) => {
-      // Cache user data
+    onSuccess: async (data) => {
       queryClient.setQueryData(authKeys.me(), data.user)
-    },
-    onError: (error) => {
-      console.error('Login error:', error)
+      await queryClient.invalidateQueries({ queryKey: authKeys.me() })
+      await queryClient.invalidateQueries({ queryKey: oauthKeys.linked() })
     },
   })
 }
@@ -30,12 +34,10 @@ export const useRegisterMutation = () => {
 
   return useMutation<AuthResponse, Error, RegisterCredentials>({
     mutationFn: (credentials) => api.auth.register(credentials),
-    onSuccess: (data) => {
-      // Cache user data
+    onSuccess: async (data) => {
       queryClient.setQueryData(authKeys.me(), data.user)
-    },
-    onError: (error) => {
-      console.error('Registration error:', error)
+      await queryClient.invalidateQueries({ queryKey: authKeys.me() })
+      await queryClient.invalidateQueries({ queryKey: oauthKeys.linked() })
     },
   })
 }
@@ -47,52 +49,46 @@ export const useLogoutMutation = () => {
   return useMutation<void, Error, void>({
     mutationFn: () => api.auth.logout(),
     onSuccess: () => {
-      // Clear all cached data
-      queryClient.clear()
-    },
-    onError: (error) => {
-      console.error('Logout error:', error)
+      queryClient.removeQueries({ queryKey: authKeys.all })
+      queryClient.removeQueries({ queryKey: oauthKeys.all })
     },
   })
 }
 
 // Get current user query
-export const useMeQuery = (enabled: boolean = false) => {
+export const useMeQuery = (enabled = true) => {
   return useQuery<User, Error>({
     queryKey: authKeys.me(),
     queryFn: () => api.auth.me(),
     enabled,
     retry: false,
-    staleTime: 1000 * 60 * 10, // 10 minutes
+    staleTime: 1000 * 60 * 10,
   })
 }
 
 // Refresh token mutation
 export const useRefreshTokenMutation = () => {
-  return useMutation<{ token: string }, Error, void>({
+  return useMutation<{ accessToken: string }, Error, void>({
     mutationFn: () => api.auth.refreshToken(),
-    onError: (error) => {
-      console.error('Token refresh error:', error)
-    },
   })
 }
 
 // OAuth hooks
 export const useOAuthProvidersQuery = () => {
   return useQuery({
-    queryKey: ['oauth', 'providers'],
+    queryKey: oauthKeys.providers(),
     queryFn: () => api.oauth.getProviders(),
-    staleTime: 1000 * 60 * 30, // 30 minutes
+    staleTime: 1000 * 60 * 30,
     retry: 2,
   })
 }
 
-export const useLinkedAccountsQuery = (enabled: boolean = false) => {
+export const useLinkedAccountsQuery = (enabled = true) => {
   return useQuery({
-    queryKey: ['oauth', 'linked-accounts'],
+    queryKey: oauthKeys.linked(),
     queryFn: () => api.oauth.getLinkedAccounts(),
     enabled,
-    staleTime: 1000 * 60 * 5, // 5 minutes
+    staleTime: 1000 * 60 * 5,
   })
 }
 
@@ -100,13 +96,9 @@ export const useUnlinkAccountMutation = () => {
   const queryClient = useQueryClient()
 
   return useMutation<{ message: string }, Error, string>({
-    mutationFn: (provider: string) => api.oauth.unlinkAccount(provider),
+    mutationFn: (provider) => api.oauth.unlinkAccount(provider),
     onSuccess: () => {
-      // Invalidate linked accounts query
-      queryClient.invalidateQueries({ queryKey: ['oauth', 'linked-accounts'] })
-    },
-    onError: (error) => {
-      console.error('Unlink account error:', error)
+      queryClient.invalidateQueries({ queryKey: oauthKeys.linked() })
     },
   })
 }
@@ -115,15 +107,10 @@ export const useOAuthRefreshTokenMutation = () => {
   return useMutation<{ access_token: string; refresh_token: string }, Error, string>({
     mutationFn: (refreshToken: string) => api.oauth.refreshToken(refreshToken),
     onSuccess: (data) => {
-      // Store new tokens
-      localStorage.setItem('authToken', data.access_token)
-      localStorage.setItem('refreshToken', data.refresh_token)
+      setAccessToken(data.access_token)
     },
-    onError: (error) => {
-      console.error('OAuth token refresh error:', error)
-      // Clear tokens on refresh failure
-      localStorage.removeItem('authToken')
-      localStorage.removeItem('refreshToken')
+    onError: () => {
+      setAccessToken(null)
     },
   })
 }
