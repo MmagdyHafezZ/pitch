@@ -386,7 +386,6 @@ jobs:
       packages: write
       security-events: write
       id-token: write
-      attestations: write
       actions: read
     strategy:
       matrix:
@@ -521,6 +520,8 @@ jobs:
           cache-from: type=gha,scope=${{ matrix.service }}
           cache-to: type=gha,mode=max,scope=${{ matrix.service }}
           platforms: linux/amd64
+          provenance: false
+          sbom: false
           build-args: |
             NODE_VERSION=20.x
 
@@ -589,14 +590,6 @@ jobs:
           path: |
             trivy-container-${{ matrix.service }}.sarif
           retention-days: 30
-
-      - name: Generate attestation
-        if: steps.changes.outputs.needs_build == 'true' && !(github.event.repository.private && github.repository_owner_type == 'User')
-        uses: actions/attest-build-provenance@v1
-        with:
-          subject-name: ghcr.io/${{ env.REPO_LOWER }}/pitch-${{ matrix.service }}
-          subject-digest: ${{ steps.build-push.outputs.digest }}
-          push-to-registry: true
 
       - name: Generate security summary
         if: always() && steps.changes.outputs.needs_build == 'true'
