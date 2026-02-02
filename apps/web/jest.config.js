@@ -47,18 +47,12 @@ const baseConfig = createJestConfig(customJestConfig)
 module.exports = async () => {
   const config = await baseConfig()
 
-  config.transformIgnorePatterns = []
-  config.extensionsToTreatAsEsm = ['.ts', '.tsx']
-  config.transform = {
-    '^.+\\.(js|jsx|ts|tsx|mjs)$': [
-      'babel-jest',
-      {
-        presets: ['next/babel'],
-        plugins: ['@babel/plugin-transform-modules-commonjs'],
-        sourceType: 'unambiguous',
-      },
-    ],
-  }
+  const transpilePackages = ['geist', 'msw', 'until-async']
+  const transpilePattern = transpilePackages.join('|')
+  config.transformIgnorePatterns = [
+    `/node_modules/(?!.pnpm)(?!(${transpilePattern})/)`,
+    `/node_modules/.pnpm/(?!(?:${transpilePattern})@)`,
+  ]
 
   if (!shouldCollectCoverage) {
     delete config.coverageThreshold

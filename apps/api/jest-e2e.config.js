@@ -7,8 +7,10 @@ module.exports = {
   },
   testEnvironment: 'node',
   setupFilesAfterEnv: ['<rootDir>/setup-e2e.ts'],
-  moduleNameMapping: {
+  moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/../src/$1',
+    '^@gateway/(.*)$': '<rootDir>/../src/gateway/$1',
+    '^@microservices/(.*)$': '<rootDir>/../src/microservices/$1',
   },
   testTimeout: 60000,
   maxWorkers: 1, // Run E2E tests sequentially

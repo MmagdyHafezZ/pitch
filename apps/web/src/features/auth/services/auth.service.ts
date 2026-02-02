@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { api } from '@/lib/client'
+import { api, setAccessToken } from '@/lib/client'
 import { LoginCredentials, RegisterCredentials, AuthResponse, User } from '../types/auth.types'
 
 // Query keys
@@ -68,7 +68,7 @@ export const useMeQuery = (enabled = true) => {
 
 // Refresh token mutation
 export const useRefreshTokenMutation = () => {
-  return useMutation<{ token: string }, Error, void>({
+  return useMutation<{ accessToken: string }, Error, void>({
     mutationFn: () => api.auth.refreshToken(),
   })
 }
@@ -107,16 +107,10 @@ export const useOAuthRefreshTokenMutation = () => {
   return useMutation<{ access_token: string; refresh_token: string }, Error, string>({
     mutationFn: (refreshToken: string) => api.oauth.refreshToken(refreshToken),
     onSuccess: (data) => {
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('authToken', data.access_token)
-        localStorage.setItem('refreshToken', data.refresh_token)
-      }
+      setAccessToken(data.access_token)
     },
     onError: () => {
-      if (typeof window !== 'undefined') {
-        localStorage.removeItem('authToken')
-        localStorage.removeItem('refreshToken')
-      }
+      setAccessToken(null)
     },
   })
 }

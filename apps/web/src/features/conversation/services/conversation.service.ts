@@ -74,6 +74,22 @@ export class ConversationService {
     return requestId
   }
 
+  cancelConversation(sessionId: string, requestId?: string) {
+    if (!this.socket?.connected) {
+      return
+    }
+
+    const envelope = {
+      type: WsMessageType.CONVERSATION_CANCEL,
+      requestId: requestId || `cancel_${Date.now()}`,
+      sessionId,
+      payload: {},
+      timestamp: new Date().toISOString(),
+    }
+
+    this.socket.emit(WsMessageType.CONVERSATION_CANCEL, envelope)
+  }
+
   onConversationText(callback: (data: WsEnvelope<ConversationTextPayload>) => void) {
     if (!this.socket) return
 
@@ -116,6 +132,16 @@ export class ConversationService {
   offConversationEnd() {
     if (!this.socket) return
     this.socket.off(WsMessageType.CONVERSATION_END)
+  }
+
+  onConversationCancel(callback: (data: any) => void) {
+    if (!this.socket) return
+    this.socket.on(WsMessageType.CONVERSATION_CANCEL, callback)
+  }
+
+  offConversationCancel() {
+    if (!this.socket) return
+    this.socket.off(WsMessageType.CONVERSATION_CANCEL)
   }
 
   isConnected(): boolean {

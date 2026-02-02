@@ -131,8 +131,37 @@ export class SalesforceGatewayController {
     required: true,
     description: 'State parameter (userId)',
   })
-  handleCallback(@Query('code') code: string, @Query('state') state: string) {
+  @ApiQuery({
+    name: 'error',
+    required: false,
+    description: 'OAuth error code returned by Salesforce',
+  })
+  @ApiQuery({
+    name: 'error_description',
+    required: false,
+    description: 'OAuth error description returned by Salesforce',
+  })
+  handleCallback(
+    @Query('code') code: string | undefined,
+    @Query('state') state: string | undefined,
+    @Query('error') error: string | undefined,
+    @Query('error_description') errorDescription: string | undefined,
+  ) {
     this.logger.log(`Salesforce callback received for state: ${state}`);
+
+    if (error) {
+      const message = errorDescription
+        ? `Salesforce OAuth error: ${errorDescription}`
+        : `Salesforce OAuth error: ${error}`;
+      throw new HttpException(message, HttpStatus.BAD_REQUEST);
+    }
+
+    if (!code || !state) {
+      throw new HttpException(
+        'Missing OAuth callback parameters',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
 
     return this.crmService
       .send(CRM_SERVICE_PATTERNS.SALESFORCE_CALLBACK, { code, state })
@@ -142,7 +171,13 @@ export class SalesforceGatewayController {
           const error = err as ServiceError;
           const stack = error.stack ?? JSON.stringify(err);
           this.logger.error('Salesforce callback failed', stack);
-          const status = error.status ?? HttpStatus.BAD_REQUEST;
+          const status =
+            typeof error.status === 'number'
+              ? error.status
+              : typeof (error as { statusCode?: unknown }).statusCode ===
+                  'number'
+                ? (error as { statusCode: number }).statusCode
+                : HttpStatus.BAD_REQUEST;
           const message = error.message ?? 'Failed to connect Salesforce';
           return throwError(() => new HttpException(message, status));
         }),

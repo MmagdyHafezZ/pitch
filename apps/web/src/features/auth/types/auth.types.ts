@@ -21,6 +21,7 @@ export interface AuthActions {
   logout: () => void
   setUser: (user: User | null) => void
   setToken: (token: string | null) => void
+  refreshAccessToken: () => Promise<boolean>
   setLoading: (loading: boolean) => void
   setError: (error: string | null) => void
   clearError: () => void
@@ -39,6 +40,6 @@ export interface RegisterCredentials {
 }
 
 export interface AuthResponse {
-  token: string
+  accessToken: string
   user: User
 }

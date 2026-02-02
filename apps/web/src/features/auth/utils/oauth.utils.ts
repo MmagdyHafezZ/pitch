@@ -1,3 +1,5 @@
+import { getAccessToken, setAccessToken } from '@/lib/client'
+
 /**
  * OAuth utility functions for handling authentication tokens and redirects
  */
@@ -7,47 +9,19 @@ export interface OAuthTokens {
   refresh_token?: string
 }
 
-/**
- * Stores OAuth tokens in localStorage
- */
 export function storeOAuthTokens(tokens: OAuthTokens): void {
-  localStorage.setItem('authToken', tokens.access_token)
-  if (tokens.refresh_token) {
-    localStorage.setItem('refreshToken', tokens.refresh_token)
-  }
+  setAccessToken(tokens.access_token)
 }
 
-/**
- * Retrieves OAuth tokens from localStorage
- */
-export function getOAuthTokens(): OAuthTokens | null {
-  const access_token = localStorage.getItem('authToken')
-  const refresh_token = localStorage.getItem('refreshToken')
-
-  if (!access_token) {
-    return null
-  }
-
-  return {
-    access_token,
-    refresh_token: refresh_token || undefined,
-  }
-}
-
-/**
- * Clears OAuth tokens from localStorage
- */
 export function clearOAuthTokens(): void {
-  localStorage.removeItem('authToken')
-  localStorage.removeItem('refreshToken')
+  setAccessToken(null)
 }
 
 /**
  * Checks if user is authenticated by validating tokens
  */
 export function isAuthenticated(): boolean {
-  const tokens = getOAuthTokens()
-  return !!tokens?.access_token
+  return !!getAccessToken()
 }
 
 /**

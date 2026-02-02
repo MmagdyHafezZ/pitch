@@ -25,11 +25,11 @@ import {
 import { JwtAuthGuard } from '../../guards/jwt-auth.guard';
 import { GoogleOAuthGuard } from '../../guards/google-oauth.guard';
 import { AuthService } from '../services/auth.service';
+import { AuthApplicationService } from '../services/auth-application.service';
 import {
   OAuthProviderFactory,
   AuthProvider,
 } from '../factories/oauth-provider.factory';
-import type { TokenPair } from '../services/auth.service';
 import type { JwtUser } from '../../guards/jwt-auth.guard';
 import { GetUser } from '../../decorators/get-user.decorator';
 import { Public } from '../../decorators/public.decorator';
@@ -39,6 +39,10 @@ type OAuthRequestUser = {
   id: string;
   email: string;
   name?: string | null;
+  avatar?: string | null;
+  isActive?: boolean;
+  createdAt?: Date;
+  updatedAt?: Date;
 };
 
 const isOAuthRequestUser = (user: unknown): user is OAuthRequestUser => {
@@ -56,9 +60,23 @@ const isOAuthRequestUser = (user: unknown): user is OAuthRequestUser => {
 @Controller('auth/oauth')
 export class OAuthController {
   private readonly logger = new Logger(OAuthController.name);
+  private readonly refreshCookieName =
+    process.env.REFRESH_COOKIE_NAME ?? 'refreshToken';
+  private readonly refreshCookiePath = process.env.COOKIE_PATH ?? '/';
+  private readonly refreshCookieDomain = process.env.COOKIE_DOMAIN;
+  private readonly refreshCookieSameSite =
+    (process.env.COOKIE_SAMESITE as 'lax' | 'strict' | 'none' | undefined) ??
+    'lax';
+  private readonly refreshCookieSecure =
+    process.env.COOKIE_SECURE === 'true' ||
+    process.env.NODE_ENV === 'production';
+  private readonly refreshCookieMaxAgeMs = Number(
+    process.env.REFRESH_COOKIE_MAX_AGE_MS ?? 1000 * 60 * 60 * 24 * 7,
+  );
 
   constructor(
     private authService: AuthService,
+    private authApplicationService: AuthApplicationService,
     private oauthProviderFactory: OAuthProviderFactory,
   ) {}
 
@@ -72,11 +90,13 @@ export class OAuthController {
   @Public()
   @UseGuards(GoogleOAuthGuard)
   @ApiOperation({ summary: 'Google OAuth callback' })
-  googleCallback(@Req() req: express.Request, @Res() res: express.Response) {
+  async googleCallback(
+    @Req() req: express.Request,
+    @Res() res: express.Response,
+  ) {
     try {
       const user = this.ensureOAuthUser(req.user, 'Google');
-      const tokens = this.authService.generateTokens(user);
-      this.redirectWithTokens(res, tokens);
+      await this.redirectWithSession(res, user);
     } catch (error: unknown) {
       this.logger.error('Google OAuth callback error:', error);
       this.handleOAuthError(res, error, 'Google');
@@ -93,11 +113,13 @@ export class OAuthController {
   @Public()
   @UseGuards(AuthGuard('linkedin'))
   @ApiOperation({ summary: 'LinkedIn OAuth callback' })
-  linkedinCallback(@Req() req: express.Request, @Res() res: express.Response) {
+  async linkedinCallback(
+    @Req() req: express.Request,
+    @Res() res: express.Response,
+  ) {
     try {
       const user = this.ensureOAuthUser(req.user, 'LinkedIn');
-      const tokens = this.authService.generateTokens(user);
-      this.redirectWithTokens(res, tokens);
+      await this.redirectWithSession(res, user);
     } catch (error: unknown) {
       this.logger.error('LinkedIn OAuth callback error:', error);
       this.handleOAuthError(res, error, 'LinkedIn');
@@ -114,11 +136,13 @@ export class OAuthController {
   @Public()
   @UseGuards(AuthGuard('github'))
   @ApiOperation({ summary: 'GitHub OAuth callback' })
-  githubCallback(@Req() req: express.Request, @Res() res: express.Response) {
+  async githubCallback(
+    @Req() req: express.Request,
+    @Res() res: express.Response,
+  ) {
     try {
       const user = this.ensureOAuthUser(req.user, 'GitHub');
-      const tokens = this.authService.generateTokens(user);
-      this.redirectWithTokens(res, tokens);
+      await this.redirectWithSession(res, user);
     } catch (error: unknown) {
       this.logger.error('GitHub OAuth callback error:', error);
       this.handleOAuthError(res, error, 'GitHub');
@@ -135,11 +159,13 @@ export class OAuthController {
   @Public()
   @UseGuards(AuthGuard('microsoft'))
   @ApiOperation({ summary: 'Microsoft OAuth callback' })
-  microsoftCallback(@Req() req: express.Request, @Res() res: express.Response) {
+  async microsoftCallback(
+    @Req() req: express.Request,
+    @Res() res: express.Response,
+  ) {
     try {
       const user = this.ensureOAuthUser(req.user, 'Microsoft');
-      const tokens = this.authService.generateTokens(user);
-      this.redirectWithTokens(res, tokens);
+      await this.redirectWithSession(res, user);
     } catch (error: unknown) {
       this.logger.error('Microsoft OAuth callback error:', error);
       this.handleOAuthError(res, error, 'Microsoft');
@@ -156,11 +182,13 @@ export class OAuthController {
   @Public()
   @UseGuards(AuthGuard('discord'))
   @ApiOperation({ summary: 'Discord OAuth callback' })
-  discordCallback(@Req() req: express.Request, @Res() res: express.Response) {
+  async discordCallback(
+    @Req() req: express.Request,
+    @Res() res: express.Response,
+  ) {
     try {
       const user = this.ensureOAuthUser(req.user, 'Discord');
-      const tokens = this.authService.generateTokens(user);
-      this.redirectWithTokens(res, tokens);
+      await this.redirectWithSession(res, user);
     } catch (error: unknown) {
       this.logger.error('Discord OAuth callback error:', error);
       this.handleOAuthError(res, error, 'Discord');
@@ -244,9 +272,37 @@ export class OAuthController {
     return process.env.NEXT_PUBLIC_FRONTEND_URL || 'http://localhost:3000';
   }
 
-  private redirectWithTokens(res: express.Response, tokens: TokenPair): void {
+  private setRefreshCookie(res: express.Response, refreshToken: string) {
+    const secure =
+      this.refreshCookieSameSite === 'none' ? true : this.refreshCookieSecure;
+    res.cookie(this.refreshCookieName, refreshToken, {
+      httpOnly: true,
+      secure,
+      sameSite: this.refreshCookieSameSite,
+      path: this.refreshCookiePath,
+      domain: this.refreshCookieDomain,
+      maxAge: this.refreshCookieMaxAgeMs,
+    });
+  }
+
+  private async redirectWithSession(
+    res: express.Response,
+    user: OAuthRequestUser,
+  ): Promise<void> {
+    const response = await this.authApplicationService.issueTokensForUser({
+      id: user.id,
+      email: user.email,
+      name: user.name ?? null,
+      avatar: user.avatar ?? null,
+      isActive: user.isActive ?? true,
+      createdAt: user.createdAt ?? new Date(),
+      updatedAt: user.updatedAt ?? new Date(),
+    });
+
+    this.setRefreshCookie(res, response.refreshToken);
+
     const frontendUrl = this.getFrontendUrl();
-    const redirectUrl = `${frontendUrl}/auth/callback?token=${tokens.access_token}&refresh=${tokens.refresh_token}`;
+    const redirectUrl = `${frontendUrl}/auth/callback?token=${response.token}`;
     res.redirect(redirectUrl);
   }
 

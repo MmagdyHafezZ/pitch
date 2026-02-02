@@ -1,0 +1,791 @@
+import { Injectable, Logger } from '@nestjs/common';
+import { END, START, StateGraph } from '@langchain/langgraph';
+import { RunnableConfig } from '@langchain/core/runnables';
+import {
+  AssessmentState,
+  type AssessmentStateType,
+  type AssessmentChunk,
+  type ChunkJudgment,
+  type NormalizedTurn,
+  type AssessmentSummaryResult,
+  type AssessmentReportPayload,
+  type NodeTiming,
+  type RetrievalItem,
+} from './assessment-state';
+import { AssessmentRepository } from '../repositories/assessment.repository';
+import { AssessmentReportRepository } from '../repositories/assessment-report.repository';
+import { SimulationPrismaService } from '../../prisma/simulation-prisma.service';
+import { LLMService } from '../../services/llm/llm.service';
+import {
+  buildJudgeSystemPrompt,
+  buildJudgeUserPrompt,
+} from '../prompts/judge.prompt';
+import { JudgeOutputSchema, type JudgeOutput } from './judge-output.schema';
+import { AssessmentLabelValue } from '@prisma/simulation-client';
+import { computeScore } from '../utils/scoring';
+import type { AssessmentConfig } from '../config/assessment.config';
+
+interface AssessmentGraphResult {
+  summary: AssessmentSummaryResult;
+  report: AssessmentReportPayload;
+  labels: ChunkJudgment['labels'];
+  warnings: string[];
+  partial: boolean;
+  nodeTimings: NodeTiming[];
+  reportId?: string;
+}
+
+@Injectable()
+export class AssessmentGraphRunner {
+  private readonly logger = new Logger(AssessmentGraphRunner.name);
+  private readonly graph: ReturnType<typeof this.buildGraph>;
+
+  constructor(
+    private readonly prisma: SimulationPrismaService,
+    private readonly assessmentRepository: AssessmentRepository,
+    private readonly assessmentReportRepository: AssessmentReportRepository,
+    private readonly llmService: LLMService,
+  ) {
+    this.graph = this.buildGraph();
+  }
+
+  async run(
+    state: Omit<
+      AssessmentStateType,
+      | 'turnsRaw'
+      | 'turns'
+      | 'chunks'
+      | 'retrievalByChunk'
+      | 'judgments'
+      | 'labels'
+      | 'summary'
+      | 'report'
+      | 'warnings'
+      | 'partial'
+      | 'nodeTimings'
+    >,
+  ): Promise<AssessmentGraphResult> {
+    const result = await this.graph.invoke(
+      {
+        ...state,
+        turnsRaw: [],
+        turns: [],
+        chunks: [],
+        retrievalByChunk: [],
+        judgments: [],
+        labels: [],
+        summary: null,
+        report: null,
+        warnings: [],
+        partial: false,
+        nodeTimings: [],
+      },
+      this.buildRunConfig(state),
+    );
+
+    return {
+      summary: result.summary ?? { totalScore: 0 },
+      report: result.report ?? {
+        totalScore: result.summary?.totalScore ?? 0,
+        turnAnnotations: [],
+      },
+      labels: result.labels ?? [],
+      warnings: result.warnings ?? [],
+      partial: result.partial ?? false,
+      nodeTimings: result.nodeTimings ?? [],
+      reportId: undefined,
+    };
+  }
+
+  private buildRunConfig(
+    state: Omit<
+      AssessmentStateType,
+      | 'turnsRaw'
+      | 'turns'
+      | 'chunks'
+      | 'retrievalByChunk'
+      | 'judgments'
+      | 'labels'
+      | 'summary'
+      | 'report'
+      | 'warnings'
+      | 'partial'
+      | 'nodeTimings'
+    >,
+  ): RunnableConfig {
+    return {
+      tags: ['assessment', state.mode, state.configVersion],
+      metadata: {
+        runId: state.runId,
+        mode: state.mode,
+        configVersion: state.configVersion,
+      },
+    } satisfies RunnableConfig;
+  }
+
+  private buildGraph() {
+    const graph = new StateGraph(AssessmentState);
+
+    graph.addNode(
+      'loadSessionData',
+      this.wrapTiming('loadSessionData', this.loadSessionData),
+    );
+    graph.addNode(
+      'normalizeTurns',
+      this.wrapTiming('normalizeTurns', this.normalizeTurns),
+    );
+    graph.addNode(
+      'chunkConversation',
+      this.wrapTiming('chunkConversation', this.chunkConversation),
+    );
+    graph.addNode(
+      'retrieveContext',
+      this.wrapTiming('retrieveContext', this.retrieveContext),
+    );
+    graph.addNode(
+      'judgeChunks',
+      this.wrapTiming('judgeChunks', this.judgeChunks),
+    );
+    graph.addNode(
+      'reduceMerge',
+      this.wrapTiming('reduceMerge', this.reduceMerge),
+    );
+    graph.addNode(
+      'finalizeScores',
+      this.wrapTiming('finalizeScores', this.finalizeScores),
+    );
+    graph.addNode(
+      'persistResults',
+      this.wrapTiming('persistResults', this.persistResults),
+    );
+
+    // @ts-expect-error - LangGraph type definitions are overly strict
+    graph.addEdge(START, 'loadSessionData');
+    // @ts-expect-error - LangGraph type definitions are overly strict
+    graph.addEdge('loadSessionData', 'normalizeTurns');
+    // @ts-expect-error - LangGraph type definitions are overly strict
+    graph.addEdge('normalizeTurns', 'chunkConversation');
+    // @ts-expect-error - LangGraph type definitions are overly strict
+    graph.addEdge('chunkConversation', 'retrieveContext');
+    // @ts-expect-error - LangGraph type definitions are overly strict
+    graph.addEdge('retrieveContext', 'judgeChunks');
+    // @ts-expect-error - LangGraph type definitions are overly strict
+    graph.addEdge('judgeChunks', 'reduceMerge');
+    // @ts-expect-error - LangGraph type definitions are overly strict
+    graph.addEdge('reduceMerge', 'finalizeScores');
+    // @ts-expect-error - LangGraph type definitions are overly strict
+    graph.addEdge('finalizeScores', 'persistResults');
+    // @ts-expect-error - LangGraph type definitions are overly strict
+    graph.addEdge('persistResults', END);
+
+    return graph.compile();
+  }
+
+  private wrapTiming(
+    node: string,
+    handler: (
+      state: AssessmentStateType,
+    ) => Promise<Partial<AssessmentStateType>>,
+  ) {
+    return async (state: AssessmentStateType) => {
+      const started = Date.now();
+      const result = await handler(state);
+      const ms = Date.now() - started;
+      const timings = [...(state.nodeTimings ?? []), { node, ms }];
+      return { ...result, nodeTimings: timings };
+    };
+  }
+
+  private loadSessionData = async (state: AssessmentStateType) => {
+    const turns = await this.prisma.client.turn.findMany({
+      where: { sessionMemberId: state.sessionMemberId },
+      orderBy: { order: 'asc' },
+      include: { messages: true },
+    });
+
+    if (state.mode === 'live' && state.config.live.maxTurns > 0) {
+      return { turnsRaw: turns.slice(-state.config.live.maxTurns) };
+    }
+
+    return { turnsRaw: turns };
+  };
+
+  private normalizeTurns = (
+    state: AssessmentStateType,
+  ): Promise<Partial<AssessmentStateType>> => {
+    const normalized: NormalizedTurn[] = (state.turnsRaw ?? []).map((turn) => {
+      const text =
+        turn.text ??
+        (turn.messages ?? [])
+          .map((message) => message.content)
+          .filter((content): content is string => typeof content === 'string')
+          .join('\n');
+
+      const role = turn.role ?? 'user';
+      const isEvaluated =
+        state.config.judgeScope === 'user-only' ? role === 'user' : true;
+
+      return {
+        turnId: turn.id,
+        role,
+        text: text ?? '',
+        createdAt: turn.createdAt?.toISOString?.() ?? undefined,
+        isEvaluated,
+      };
+    });
+
+    return Promise.resolve({ turns: normalized });
+  };
+
+  private chunkConversation = (
+    state: AssessmentStateType,
+  ): Promise<Partial<AssessmentStateType>> => {
+    const chunkSize = state.config.chunk.size;
+    const chunks: AssessmentChunk[] = [];
+    const turns = state.turns ?? [];
+
+    for (let i = 0; i < turns.length; i += chunkSize) {
+      const slice = turns.slice(i, i + chunkSize);
+      chunks.push({
+        chunkIndex: chunks.length,
+        turns: slice,
+        turnIds: slice.map((turn) => turn.turnId),
+      });
+    }
+
+    return Promise.resolve({ chunks });
+  };
+
+  private retrieveContext = (
+    state: AssessmentStateType,
+  ): Promise<Partial<AssessmentStateType>> => {
+    const chunks = state.chunks ?? [];
+    if (!state.config.rag.enabled) {
+      return Promise.resolve({
+        retrievalByChunk: [],
+        warnings: state.warnings ?? [],
+      });
+    }
+
+    const warnings = [...(state.warnings ?? [])];
+    const retrievalResults: Array<{
+      chunkIndex: number;
+      items: RetrievalItem[];
+    }> = [];
+
+    for (const chunk of chunks) {
+      // Placeholder: no retrieval engine wired yet
+      retrievalResults.push({ chunkIndex: chunk.chunkIndex, items: [] });
+    }
+
+    if (retrievalResults.length === 0) {
+      warnings.push('RAG enabled but no retrieval results produced.');
+    }
+
+    return Promise.resolve({
+      retrievalByChunk: retrievalResults,
+      warnings,
+    } as Partial<AssessmentStateType>);
+  };
+
+  private judgeChunks = async (state: AssessmentStateType) => {
+    const chunks = state.chunks ?? [];
+    const config = state.config;
+    const judgments: ChunkJudgment[] = [];
+    const warnings = [...(state.warnings ?? [])];
+    let partial = state.partial ?? false;
+    const limit = Math.max(1, config.limits.maxParallelChunks);
+
+    await this.runWithConcurrency(chunks, limit, async (chunk) => {
+      const retrievalContext = this.getRetrievalForChunk(
+        state,
+        chunk.chunkIndex,
+      );
+      const judgeOutput = await this.runJudge(
+        chunk,
+        retrievalContext,
+        config,
+        state,
+      );
+      if (!judgeOutput.labels || judgeOutput.labels.length === 0) {
+        warnings.push(`chunk_${chunk.chunkIndex}_judge_empty`);
+        partial = true;
+      }
+      judgments.push({
+        chunkIndex: chunk.chunkIndex,
+        summary: judgeOutput.summary,
+        labels: judgeOutput.labels,
+        retrievalContext,
+      });
+    });
+
+    return { judgments, warnings, partial };
+  };
+
+  private reduceMerge = (
+    state: AssessmentStateType,
+  ): Promise<Partial<AssessmentStateType>> => {
+    const config = state.config;
+    const grouped = new Map<string, ChunkJudgment['labels']>();
+
+    for (const judgment of state.judgments ?? []) {
+      for (const label of judgment.labels ?? []) {
+        const existing = grouped.get(label.turnId) ?? [];
+        grouped.set(label.turnId, [...existing, label]);
+      }
+    }
+
+    const merged: ChunkJudgment['labels'] = [];
+    for (const [turnId, labels] of grouped) {
+      const sorted = [...labels].sort(
+        (a, b) => (b.confidence ?? 0) - (a.confidence ?? 0),
+      );
+      const top = sorted[0];
+      if (!top) {
+        continue;
+      }
+
+      const applied = this.applyConfidenceAndConflicts(sorted, config);
+      merged.push(...applied.map((label) => ({ ...label, turnId })));
+    }
+
+    return Promise.resolve({ labels: merged });
+  };
+
+  private finalizeScores = (
+    state: AssessmentStateType,
+  ): Promise<Partial<AssessmentStateType>> => {
+    const config = state.config;
+    const finalLabels = (state.labels ?? []).map((label) => {
+      const scoreDelta =
+        label.scoreDelta ?? config.labelScoreDelta[label.label] ?? 0;
+      return {
+        ...label,
+        scoreDelta,
+      };
+    });
+
+    const scoreResult = computeScore(
+      finalLabels.map((label) => ({
+        label: label.label,
+        scoreDelta: label.scoreDelta ?? undefined,
+      })),
+      config,
+    );
+
+    const narrativeSummary = (state.judgments ?? [])
+      .map((judgment) => judgment.summary)
+      .filter(Boolean)
+      .join('\n');
+
+    const summary: AssessmentSummaryResult = {
+      totalScore: scoreResult.totalScore,
+      scoreBreakdown: scoreResult.scoreBreakdown,
+      narrativeSummary: narrativeSummary || undefined,
+    };
+
+    const report: AssessmentReportPayload = {
+      totalScore: scoreResult.totalScore,
+      scoreBreakdown: scoreResult.scoreBreakdown,
+      summary: {
+        narrativeSummary: narrativeSummary || undefined,
+      },
+      turnAnnotations: finalLabels.map((label) => ({
+        turnId: label.turnId,
+        label: label.label,
+        confidence: label.confidence,
+        evidence: label.evidence ?? undefined,
+        scoreDelta: label.scoreDelta,
+        citations: label.citations,
+        reasonSummary: label.reasonSummary,
+        isFinal: label.isFinal,
+      })),
+      chunks: (state.judgments ?? []).map((judgment) => ({
+        chunkIndex: judgment.chunkIndex,
+        turnIds:
+          (state.chunks ?? []).find(
+            (chunk) => chunk.chunkIndex === judgment.chunkIndex,
+          )?.turnIds ?? [],
+        summary: judgment.summary,
+        retrievalContext: judgment.retrievalContext,
+      })),
+      rag: state.config.rag.enabled
+        ? {
+            namespace: state.config.rag.namespace,
+            snapshotId: state.config.rag.snapshotId,
+          }
+        : undefined,
+    };
+
+    return Promise.resolve({ summary, report, labels: finalLabels });
+  };
+
+  private persistResults = async (state: AssessmentStateType) => {
+    if (!state.summary || !state.report) {
+      return {};
+    }
+
+    await this.assessmentRepository.createLabels(
+      (state.labels ?? []).map((label) => ({
+        assessmentRunId: state.runId,
+        turnId: label.turnId,
+        label: label.label,
+        confidence: label.confidence ?? undefined,
+        scoreDelta: label.scoreDelta ?? undefined,
+        evidence: label.evidence ?? undefined,
+        isFinal: label.isFinal ?? true,
+      })),
+    );
+
+    await this.assessmentRepository.upsertSummary({
+      assessmentRunId: state.runId,
+      totalScore: state.summary.totalScore,
+      scoreBreakdown: state.summary.scoreBreakdown,
+      narrativeSummary: state.summary.narrativeSummary,
+      coachTips: state.summary.coachTips,
+    });
+
+    try {
+      await this.assessmentReportRepository.upsert({
+        runId: state.runId,
+        sessionMemberId: state.sessionMemberId,
+        sessionId: state.sessionId ?? undefined,
+        mode: state.mode,
+        configVersion: state.configVersion,
+        engineVersion: state.engineVersion,
+        reportVersion: state.configVersion,
+        report: state.report,
+        trace: {
+          nodeTimings: state.nodeTimings,
+          warnings: state.warnings,
+          partial: state.partial,
+        },
+      });
+    } catch (error) {
+      this.logger.warn(
+        `Failed to persist assessment report for run ${state.runId}: ${String(
+          (error as Error)?.message || error,
+        )}`,
+      );
+    }
+
+    return {};
+  };
+
+  private getRetrievalForChunk(
+    state: AssessmentStateType,
+    chunkIndex: number,
+  ): RetrievalItem[] {
+    const anyState = state as AssessmentStateType & {
+      retrievalByChunk?: Array<{ chunkIndex: number; items: RetrievalItem[] }>;
+    };
+    const match = anyState.retrievalByChunk?.find(
+      (item) => item.chunkIndex === chunkIndex,
+    );
+    return match?.items ?? [];
+  }
+
+  private applyConfidenceAndConflicts(
+    labels: ChunkJudgment['labels'],
+    config: AssessmentConfig,
+  ): ChunkJudgment['labels'] {
+    const finalLabels: ChunkJudgment['labels'] = [];
+
+    for (const label of labels) {
+      if ((label.confidence ?? 0) < config.thresholds.confidenceCutoff) {
+        finalLabels.push({
+          ...label,
+          label: AssessmentLabelValue.Neutral,
+          scoreDelta: 0,
+          isFinal: true,
+        });
+        continue;
+      }
+
+      if (
+        label.label === AssessmentLabelValue.NegativeExample &&
+        !label.evidence
+      ) {
+        finalLabels.push({
+          ...label,
+          label: AssessmentLabelValue.Neutral,
+          scoreDelta: 0,
+          isFinal: true,
+        });
+        continue;
+      }
+
+      finalLabels.push({ ...label, isFinal: label.isFinal ?? true });
+    }
+
+    // Resolve mutually exclusive conflicts by selecting the highest confidence
+    for (const group of config.conflictRules.mutuallyExclusive) {
+      const groupLabels = finalLabels.filter((label) =>
+        group.includes(label.label),
+      );
+      if (groupLabels.length <= 1) {
+        continue;
+      }
+
+      const winner = groupLabels.sort(
+        (a, b) => (b.confidence ?? 0) - (a.confidence ?? 0),
+      )[0];
+      for (const label of groupLabels) {
+        if (label !== winner) {
+          label.isFinal = false;
+        }
+      }
+    }
+
+    return finalLabels;
+  }
+
+  private async runJudge(
+    chunk: AssessmentChunk,
+    retrievalContext: RetrievalItem[],
+    config: AssessmentConfig,
+    state: AssessmentStateType,
+  ): Promise<JudgeOutput> {
+    const systemPrompt = buildJudgeSystemPrompt(config);
+    const userPrompt = buildJudgeUserPrompt({
+      chunkIndex: chunk.chunkIndex,
+      turns: chunk.turns.map((turn) => ({
+        turnId: turn.turnId,
+        role: turn.role,
+        text: turn.text,
+        createdAt: turn.createdAt,
+      })),
+      retrievedContext: retrievalContext,
+    });
+
+    const executeJudgeRaw = async (): Promise<string> => {
+      const response = await this.llmService.complete(
+        {
+          sessionId: state.sessionId ?? state.sessionMemberId,
+          sessionMemberId: state.sessionMemberId,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt },
+          ],
+          config: {
+            model: config.judge.model,
+            provider: config.judge.provider,
+            temperature: config.judge.temperature,
+            maxTokens: config.judge.maxTokens,
+          },
+        },
+        {
+          userId: state.sessionMemberId,
+          requestId: `assessment-${state.runId}-${chunk.chunkIndex}`,
+        },
+      );
+      return response.content ?? '';
+    };
+
+    const primaryRaw = await this.withTimeout(
+      executeJudgeRaw(),
+      config.timeBudgetMs.judge,
+      { chunkIndex: chunk.chunkIndex },
+      '',
+    );
+    let primary = this.parseJudgeOutput(primaryRaw, chunk.chunkIndex);
+    if (!primary) {
+      const retryRaw = await this.withTimeout(
+        executeJudgeRaw(),
+        config.timeBudgetMs.judge,
+        { chunkIndex: chunk.chunkIndex },
+        '',
+      );
+      primary = this.parseJudgeOutput(retryRaw, chunk.chunkIndex);
+    }
+    if (!primary) {
+      return { chunkIndex: chunk.chunkIndex, summary: '', labels: [] };
+    }
+
+    const allowedTurnIds = new Set(
+      chunk.turns.filter((turn) => turn.isEvaluated).map((turn) => turn.turnId),
+    );
+    primary.labels = primary.labels.filter((label) =>
+      allowedTurnIds.has(label.turnId),
+    );
+
+    if (!primary.labels || primary.labels.length === 0) {
+      return primary;
+    }
+
+    if (!this.shouldRunSecondJudge(primary, config)) {
+      return primary;
+    }
+
+    const secondaryRaw = await this.withTimeout(
+      executeJudgeRaw(),
+      config.timeBudgetMs.judge,
+      { chunkIndex: chunk.chunkIndex },
+      '',
+    );
+    const secondary = this.parseJudgeOutput(secondaryRaw, chunk.chunkIndex);
+    if (!secondary) {
+      return primary;
+    }
+
+    secondary.labels = secondary.labels.filter((label) =>
+      allowedTurnIds.has(label.turnId),
+    );
+
+    return this.mergeJudgeOutputs(primary, secondary, config);
+  }
+
+  private parseJudgeOutput(
+    raw: string,
+    chunkIndex: number,
+  ): JudgeOutput | null {
+    try {
+      const jsonText = this.extractJson(raw);
+      return JudgeOutputSchema.parse(JSON.parse(jsonText));
+    } catch (error) {
+      this.logger.warn(
+        `Failed to parse judge output for chunk ${chunkIndex}: ${String(
+          (error as Error)?.message || error,
+        )}`,
+      );
+      return null;
+    }
+  }
+
+  private extractJson(text: string): string {
+    const start = text.indexOf('{');
+    const end = text.lastIndexOf('}');
+    if (start === -1 || end === -1 || end <= start) {
+      return text;
+    }
+    return text.slice(start, end + 1);
+  }
+
+  private async runWithConcurrency<T>(
+    items: T[],
+    limit: number,
+    worker: (item: T) => Promise<void>,
+  ): Promise<void> {
+    const queue = [...items];
+    const workers: Promise<void>[] = [];
+
+    const runWorker = async () => {
+      while (queue.length > 0) {
+        const item = queue.shift();
+        if (!item) {
+          return;
+        }
+        await worker(item);
+      }
+    };
+
+    for (let i = 0; i < Math.min(limit, items.length); i += 1) {
+      workers.push(runWorker());
+    }
+
+    await Promise.all(workers);
+  }
+
+  private async withTimeout<T>(
+    promise: Promise<T>,
+    timeoutMs: number,
+    context: { chunkIndex: number },
+    fallback: T,
+  ): Promise<T> {
+    if (!timeoutMs || timeoutMs <= 0) {
+      return promise;
+    }
+
+    let timeoutHandle: NodeJS.Timeout | undefined;
+    const timeoutPromise = new Promise<T>((_resolve, reject) => {
+      timeoutHandle = setTimeout(() => {
+        reject(new Error(`Timeout after ${timeoutMs}ms`));
+      }, timeoutMs);
+    });
+
+    try {
+      return await Promise.race([promise, timeoutPromise]);
+    } catch (error) {
+      this.logger.warn(
+        `Judge timeout for chunk ${context.chunkIndex}: ${String((error as Error)?.message || error)}`,
+      );
+      return fallback;
+    } finally {
+      if (timeoutHandle) {
+        clearTimeout(timeoutHandle);
+      }
+    }
+  }
+
+  private shouldRunSecondJudge(
+    output: JudgeOutput,
+    config: AssessmentConfig,
+  ): boolean {
+    return output.labels.some((label) => {
+      const confidence = label.confidence ?? 0;
+      const scoreDelta =
+        label.scoreDelta ?? config.labelScoreDelta[label.label] ?? 0;
+      return (
+        confidence < config.thresholds.confidenceCutoff ||
+        scoreDelta <= config.thresholds.negativeDeltaTrigger
+      );
+    });
+  }
+
+  private mergeJudgeOutputs(
+    primary: JudgeOutput,
+    secondary: JudgeOutput,
+    config: AssessmentConfig,
+  ): JudgeOutput {
+    const byTurn = new Map<
+      string,
+      {
+        a: (typeof primary.labels)[0] | undefined;
+        b: (typeof primary.labels)[0] | undefined;
+      }
+    >();
+
+    for (const label of primary.labels) {
+      byTurn.set(label.turnId, { a: label, b: undefined });
+    }
+    for (const label of secondary.labels) {
+      const existing = byTurn.get(label.turnId);
+      byTurn.set(label.turnId, { a: existing?.a, b: label });
+    }
+
+    const merged = Array.from(byTurn.values()).map((entry) => {
+      const a = entry.a;
+      const b = entry.b;
+      if (!a) return b as (typeof primary.labels)[0];
+      if (!b) return a;
+
+      if (a.label === b.label) {
+        return {
+          ...a,
+          confidence: ((a.confidence ?? 0) + (b.confidence ?? 0)) / 2,
+          isFinal: true,
+        };
+      }
+
+      const diff = Math.abs((a.confidence ?? 0) - (b.confidence ?? 0));
+      if (diff < config.thresholds.disagreementCutoff) {
+        return {
+          ...a,
+          label: AssessmentLabelValue.Neutral,
+          scoreDelta: 0,
+          isFinal: true,
+        };
+      }
+
+      return (a.confidence ?? 0) >= (b.confidence ?? 0)
+        ? { ...a, isFinal: true }
+        : { ...b, isFinal: true };
+    });
+
+    return {
+      chunkIndex: primary.chunkIndex,
+      summary: primary.summary || secondary.summary,
+      labels: merged,
+    };
+  }
+}

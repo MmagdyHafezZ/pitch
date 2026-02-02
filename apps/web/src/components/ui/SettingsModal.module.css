@@ -2,7 +2,10 @@
   position: relative;
   background: var(--card-bg);
   color: var(--card-text);
-  transition: background 150ms ease, color 150ms ease, border-color 150ms ease;
+  transition:
+    background 150ms ease,
+    color 150ms ease,
+    border-color 150ms ease;
   --card-text: var(--card-text);
   --card-muted: var(--card-muted);
 }
@@ -36,7 +39,7 @@
   color: var(--tab-hover-text);
 }
 
-.appearanceTab[data-active="true"] {
+.appearanceTab[data-active='true'] {
   background: var(--tab-active-bg);
   color: var(--tab-active-text);
 }

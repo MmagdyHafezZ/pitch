@@ -6,8 +6,9 @@ import {
   Inject,
   HttpException,
   HttpStatus,
-  Request,
   Logger,
+  Req,
+  Res,
 } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
 import {
@@ -16,29 +17,71 @@ import {
   ApiResponse,
   ApiBearerAuth,
 } from '@nestjs/swagger';
-import { catchError, timeout, retry, delay } from 'rxjs/operators';
+import { catchError, timeout, retry, delay, map } from 'rxjs/operators';
 import { throwError } from 'rxjs';
 import { Public } from '../../../microservices/userManagement/decorators/public.decorator';
 import { CurrentUser } from '../../../microservices/userManagement/decorators/current-user.decorator';
 import { USER_SERVICE_PATTERNS } from '@pitch/shared-backend/interfaces/message-patterns.interface';
-import { getWhitelistedRoutes } from '../../config/auth-whitelist.config';
 import {
   RegisterDto,
   LoginDto,
-  RefreshTokenDto,
   AuthResponseDto,
   UserResponseDto,
 } from '../../../microservices/userManagement/auth/dto/auth.dto';
 import { normalizeError } from '@pitch/shared-backend/helpers/exceptions';
 import { UserClaims } from '../../decorators/user-claims.decorator';
 import type { UserClaims as UserClaimsType } from '@pitch/shared-backend/interfaces/user-claims.interface';
+import type {
+  Request as ExpressRequest,
+  Response as ExpressResponse,
+} from 'express';
+import { AuthTokenResponseDto } from '../../dto/auth-response.dto';
+import { getWhitelistedRoutes } from '../../config/auth-whitelist.config';
 
 @ApiTags('authentication')
 @Controller({ path: 'auth', version: '1' })
 export class AuthGatewayController {
   private readonly logger = new Logger(AuthGatewayController.name);
+  private readonly refreshCookieName =
+    process.env.REFRESH_COOKIE_NAME ?? 'refreshToken';
+  private readonly refreshCookiePath = process.env.COOKIE_PATH ?? '/';
+  private readonly refreshCookieDomain = process.env.COOKIE_DOMAIN;
+  private readonly refreshCookieSameSite =
+    (process.env.COOKIE_SAMESITE as 'lax' | 'strict' | 'none' | undefined) ??
+    'lax';
+  private readonly refreshCookieSecure =
+    process.env.COOKIE_SECURE === 'true' ||
+    process.env.NODE_ENV === 'production';
+  private readonly refreshCookieMaxAgeMs = Number(
+    process.env.REFRESH_COOKIE_MAX_AGE_MS ?? 1000 * 60 * 60 * 24 * 7,
+  );
 
   constructor(@Inject('USER_SERVICE') private userService: ClientProxy) {}
+
+  private setRefreshCookie(res: ExpressResponse, refreshToken: string) {
+    const secure =
+      this.refreshCookieSameSite === 'none' ? true : this.refreshCookieSecure;
+    res.cookie(this.refreshCookieName, refreshToken, {
+      httpOnly: true,
+      secure,
+      sameSite: this.refreshCookieSameSite,
+      path: this.refreshCookiePath,
+      domain: this.refreshCookieDomain,
+      maxAge: this.refreshCookieMaxAgeMs,
+    });
+  }
+
+  private clearRefreshCookie(res: ExpressResponse) {
+    const secure =
+      this.refreshCookieSameSite === 'none' ? true : this.refreshCookieSecure;
+    res.clearCookie(this.refreshCookieName, {
+      httpOnly: true,
+      secure,
+      sameSite: this.refreshCookieSameSite,
+      path: this.refreshCookiePath,
+      domain: this.refreshCookieDomain,
+    });
+  }
 
   @Post('register')
   @Public()
@@ -46,17 +89,24 @@ export class AuthGatewayController {
   @ApiResponse({
     status: 201,
     description: 'User registered successfully',
-    type: AuthResponseDto,
+    type: AuthTokenResponseDto,
   })
   @ApiResponse({ status: 400, description: 'Invalid input data' })
   @ApiResponse({ status: 409, description: 'User already exists' })
-  register(@Body() registerDto: RegisterDto) {
+  register(
+    @Body() registerDto: RegisterDto,
+    @Res({ passthrough: true }) res: ExpressResponse,
+  ) {
     this.logger.log(`Registration attempt for: ${registerDto.email}`);
 
     return this.userService
       .send(USER_SERVICE_PATTERNS.REGISTER, registerDto)
       .pipe(
         timeout(10000),
+        map((payload: AuthResponseDto) => {
+          this.setRefreshCookie(res, payload.refreshToken);
+          return { user: payload.user, accessToken: payload.token };
+        }),
         retry({
           count: 2,
           delay: (_error: Error, retryCount) => {
@@ -88,14 +138,21 @@ export class AuthGatewayController {
   @ApiResponse({
     status: 200,
     description: 'User logged in successfully',
-    type: AuthResponseDto,
+    type: AuthTokenResponseDto,
   })
   @ApiResponse({ status: 401, description: 'Invalid credentials' })
-  login(@Body() loginDto: LoginDto) {
+  login(
+    @Body() loginDto: LoginDto,
+    @Res({ passthrough: true }) res: ExpressResponse,
+  ) {
     this.logger.log(`Login attempt for: ${loginDto.email}`);
 
     return this.userService.send('auth.login', loginDto).pipe(
       timeout(10000),
+      map((payload: AuthResponseDto) => {
+        this.setRefreshCookie(res, payload.refreshToken);
+        return { user: payload.user, accessToken: payload.token };
+      }),
       catchError((err: unknown) => {
         const error = normalizeError(err);
         const stack = error.stack ?? JSON.stringify(err);
@@ -112,15 +169,28 @@ export class AuthGatewayController {
   @ApiOperation({ summary: 'Refresh access token' })
   @ApiResponse({ status: 200, description: 'Token refreshed successfully' })
   @ApiResponse({ status: 401, description: 'Invalid refresh token' })
-  refresh(@Body() refreshTokenDto: RefreshTokenDto) {
+  refresh(
+    @Req() req: ExpressRequest,
+    @Res({ passthrough: true }) res: ExpressResponse,
+  ) {
     this.logger.log('Token refresh attempt');
+
+    const cookies = req.cookies as Record<string, string> | undefined;
+    const refreshToken = cookies?.[this.refreshCookieName];
+    if (!refreshToken) {
+      throw new HttpException('Refresh token missing', HttpStatus.UNAUTHORIZED);
+    }
 
     return this.userService
       .send(USER_SERVICE_PATTERNS.REFRESH, {
-        refreshToken: refreshTokenDto.refreshToken,
+        refreshToken,
       })
       .pipe(
         timeout(10000),
+        map((payload: { access_token: string; refresh_token: string }) => {
+          this.setRefreshCookie(res, payload.refresh_token);
+          return { accessToken: payload.access_token };
+        }),
         catchError((err: unknown) => {
           const error = normalizeError(err);
           const stack = error.stack ?? JSON.stringify(err);
@@ -139,14 +209,19 @@ export class AuthGatewayController {
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   logout(
     @CurrentUser('id') userId: string,
-    @Body() body?: { refreshToken?: string },
+    @Req() req: ExpressRequest,
+    @Res({ passthrough: true }) res: ExpressResponse,
   ) {
     this.logger.log(`Logout attempt for user: ${userId}`);
+
+    const cookies = req.cookies as Record<string, string> | undefined;
+    const refreshToken = cookies?.[this.refreshCookieName];
+    this.clearRefreshCookie(res);
 
     return this.userService
       .send('auth.logout', {
         userId,
-        refreshToken: body?.refreshToken,
+        refreshToken,
       })
       .pipe(
         timeout(10000),

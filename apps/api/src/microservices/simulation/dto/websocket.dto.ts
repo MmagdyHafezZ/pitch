@@ -32,6 +32,10 @@ export enum WsMessageType {
   CONVERSATION_AUDIO_READY = 'conversation.audio_ready',
   CONVERSATION_ERROR = 'conversation.error',
   CONVERSATION_END = 'conversation.end',
+  CONVERSATION_CANCEL = 'conversation.cancel',
+  CONVERSATION_STREAM_DELTA = 'conversation.stream.delta',
+  CONVERSATION_STREAM_COMPLETED = 'conversation.stream.completed',
+  CONVERSATION_STAGE_TRANSITION = 'conversation.stage.transition',
 
   PING = 'ping',
   PONG = 'pong',
@@ -302,6 +306,9 @@ export class ConversationStartPayload {
   @IsString()
   text: string;
 
+  @IsOptional()
+  startAsAssistant?: boolean;
+
   @IsString()
   @IsOptional()
   personaId?: string;
@@ -372,6 +379,73 @@ export class ConversationErrorPayload {
   @IsString()
   @IsOptional()
   stage?: 'llm' | 'tts';
+}
+
+/**
+ * Conversation Stream Delta Payload
+ * Streaming text chunk from LLM during conversation
+ */
+export class ConversationStreamDeltaPayload {
+  @IsString()
+  delta: string;
+
+  @IsOptional()
+  isFirstChunk?: boolean;
+}
+
+/**
+ * Conversation Stream Completed Payload
+ * Streaming text completed, about to start TTS
+ */
+export class ConversationStreamCompletedPayload {
+  @IsString()
+  fullText: string;
+
+  @IsObject()
+  @IsOptional()
+  usage?: {
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+    costUsd?: number;
+  };
+
+  @IsObject()
+  @IsOptional()
+  stageInfo?: {
+    currentStage: string;
+    stageIndex: number;
+    stageTransition: boolean;
+    confidence: number;
+  };
+
+  @IsOptional()
+  progress?: number;
+}
+
+/**
+ * Conversation Stage Transition Payload
+ * Emitted when conversation moves to a new stage
+ */
+export class ConversationStageTransitionPayload {
+  @IsString()
+  previousStage: string;
+
+  @IsString()
+  currentStage: string;
+
+  @IsOptional()
+  previousStageIndex?: number;
+
+  @IsOptional()
+  currentStageIndex: number;
+
+  @IsOptional()
+  confidence?: number;
+
+  @IsString()
+  @IsOptional()
+  reasoning?: string;
 }
 
 /**
