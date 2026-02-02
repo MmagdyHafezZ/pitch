@@ -8,12 +8,10 @@ import {
   IsOptional,
   IsString,
   ValidateIf,
-  ValidateNested,
 } from 'class-validator';
 import {
   ApiProperty,
   ApiPropertyOptional,
-  ApiExtraModels,
   getSchemaPath,
 } from '@nestjs/swagger';
 
@@ -61,7 +59,7 @@ export class SendEmailDto {
     ],
     example: 'magdy.hafez9123@gmail.com',
   })
-  @ValidateIf((o) => Array.isArray(o.to))
+  @ValidateIf((o: SendEmailDto) => Array.isArray(o.to))
   @IsArray()
   @IsEmail({}, { each: true })
   to!: string | string[];
