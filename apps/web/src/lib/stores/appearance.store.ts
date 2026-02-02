@@ -77,6 +77,71 @@ const DEFAULT_PROFILES: ThemeProfile[] = [
       info: '#1c7ed6',
     },
   },
+  {
+    id: 'citrus',
+    name: 'Citrus',
+    isCustom: false,
+    tokens: {
+      navBg: '#1c1a0b',
+      surfaceBg: '#fffbe6',
+      accent: '#f59f00',
+      selected: '#f76707',
+      success: '#2f9e44',
+      info: '#15aabf',
+    },
+  },
+  {
+    id: 'lagoon',
+    name: 'Lagoon',
+    isCustom: false,
+    tokens: {
+      navBg: '#0b2b2e',
+      surfaceBg: '#f2fbf9',
+      accent: '#12b886',
+      selected: '#0ca678',
+      success: '#37b24d',
+      info: '#228be6',
+    },
+  },
+  {
+    id: 'rosewood',
+    name: 'Rosewood',
+    isCustom: false,
+    tokens: {
+      navBg: '#2a1418',
+      surfaceBg: '#fff5f6',
+      accent: '#f03e3e',
+      selected: '#e64980',
+      success: '#2f9e44',
+      info: '#1c7ed6',
+    },
+  },
+  {
+    id: 'slate',
+    name: 'Slate',
+    isCustom: false,
+    tokens: {
+      navBg: '#111827',
+      surfaceBg: '#f8fafc',
+      accent: '#64748b',
+      selected: '#475569',
+      success: '#22c55e',
+      info: '#0ea5e9',
+    },
+  },
+  {
+    id: 'arctic',
+    name: 'Arctic',
+    isCustom: false,
+    tokens: {
+      navBg: '#101d3a',
+      surfaceBg: '#f4f7ff',
+      accent: '#5c7cfa',
+      selected: '#4263eb',
+      success: '#12b886',
+      info: '#1c7ed6',
+    },
+  },
 ]
 
 const DEFAULT_PROFILE_IDS = new Set(DEFAULT_PROFILES.map((profile) => profile.id))
@@ -215,7 +280,8 @@ export const useAppearanceStore = create<AppearanceState>()(
         if (!state) {
           return
         }
-        const nextProfiles = state.profiles?.length ? state.profiles : DEFAULT_PROFILES
+        const customProfiles = (state.profiles ?? []).filter((profile) => profile.isCustom)
+        const nextProfiles = [...DEFAULT_PROFILES, ...customProfiles]
         const nextActive =
           nextProfiles.find((profile) => profile.id === state.activeProfileId)?.id ??
           nextProfiles[0]?.id ??
