@@ -109,7 +109,7 @@
     "helmet": "^8.1.0",
     "ioredis": "^5.8.2",
     "langsmith": "^0.4.7",
-    "mongoose": "^8.19.4",
+    "mongoose": "8.19.4",
     "morgan": "^1.10.1",
     "nodemailer": "^7.0.13",
     "openai": "^4.96.0",
