@@ -1,7 +1,7 @@
 import { act } from '@testing-library/react'
 import { server } from '../../../../__tests__/mocks/server'
 import { resetStores } from '../../../../__tests__/utils/store-utils'
-import { useAuthStore, persistAuthToken, clearAuthToken } from '../auth.store'
+import { useAuthStore } from '../auth.store'
 import { api } from '@/lib/client'
 import { http, HttpResponse } from 'msw'
 
@@ -9,32 +9,9 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/a
 
 const flushPromises = () => new Promise((resolve) => setTimeout(resolve, 0))
 
-type LocalStorageMock = {
-  getItem: jest.Mock<string | null, [string]>
-  setItem: jest.Mock<void, [string, string]>
-  removeItem: jest.Mock<void, [string]>
-  clear: jest.Mock<void, []>
-}
-
-const localStorageMock: LocalStorageMock = {
-  getItem: jest.fn<string | null, [string]>(() => null),
-  setItem: jest.fn<void, [string, string]>(() => undefined),
-  removeItem: jest.fn<void, [string]>(() => undefined),
-  clear: jest.fn<void, []>(() => undefined),
-}
-
-Object.defineProperty(window, 'localStorage', {
-  value: localStorageMock,
-})
-
 describe('AuthStore', () => {
   beforeEach(() => {
     resetStores()
-    localStorageMock.getItem.mockReset()
-    localStorageMock.getItem.mockReturnValue(null)
-    localStorageMock.setItem.mockClear()
-    localStorageMock.removeItem.mockClear()
-    localStorageMock.clear.mockClear()
   })
 
   describe('Initial State', () => {
@@ -69,7 +46,6 @@ describe('AuthStore', () => {
       expect(state.token).toBe('mock-jwt-token')
       expect(state.isLoading).toBe(false)
       expect(state.error).toBeNull()
-      expect(localStorageMock.setItem).toHaveBeenCalledWith('authToken', 'mock-jwt-token')
     })
 
     it('should handle login failure with invalid credentials', async () => {
@@ -88,7 +64,6 @@ describe('AuthStore', () => {
       expect(state.token).toBeNull()
       expect(state.isLoading).toBe(false)
       expect(state.error).toBe('Invalid credentials')
-      expect(localStorageMock.setItem).not.toHaveBeenCalled()
     })
 
     it('should fallback to default error message when login throws non-Error', async () => {
@@ -113,8 +88,7 @@ describe('AuthStore', () => {
         http.post(`${API_BASE_URL}/auth/login`, async () => {
           await new Promise((resolve) => setTimeout(resolve, 50))
           return HttpResponse.json({
-            token: 'mock-jwt-token',
-            refreshToken: 'mock-refresh-token',
+            accessToken: 'mock-jwt-token',
             user: {
               id: '1',
               email: 'test@example.com',
@@ -159,7 +133,6 @@ describe('AuthStore', () => {
       })
       expect(state.token).toBe('mock-jwt-token')
       expect(state.error).toBeNull()
-      expect(localStorageMock.setItem).toHaveBeenCalledWith('authToken', 'mock-jwt-token')
     })
 
     it('should handle registration failure', async () => {
@@ -216,7 +189,6 @@ describe('AuthStore', () => {
       expect(state.token).toBeNull()
       expect(state.isAuthenticated).toBe(false)
       expect(state.error).toBeNull()
-      expect(localStorageMock.removeItem).toHaveBeenCalledWith('authToken')
     })
   })
 
@@ -249,7 +221,6 @@ describe('AuthStore', () => {
       const state = useAuthStore.getState()
 
       expect(state.token).toBe('new-token')
-      expect(localStorageMock.setItem).toHaveBeenCalledWith('authToken', 'new-token')
     })
 
     it('should set loading state', () => {
@@ -281,27 +252,13 @@ describe('AuthStore', () => {
     })
   })
 
-  describe('Token helpers', () => {
-    it('persistAuthToken should respect the shouldPersist flag', () => {
-      persistAuthToken('helper-token', false)
-      expect(localStorageMock.setItem).not.toHaveBeenCalled()
-
-      persistAuthToken('helper-token', true)
-      expect(localStorageMock.setItem).toHaveBeenCalledWith('authToken', 'helper-token')
-    })
-
-    it('clearAuthToken should respect the shouldPersist flag', () => {
-      clearAuthToken(false)
-      expect(localStorageMock.removeItem).not.toHaveBeenCalled()
-
-      clearAuthToken(true)
-      expect(localStorageMock.removeItem).toHaveBeenCalledWith('authToken')
-    })
-  })
-
   describe('Initialize Auth', () => {
-    it('should initialize auth with valid token in localStorage', async () => {
-      localStorageMock.getItem.mockReturnValue('mock-jwt-token')
+    it('should initialize auth via refresh and load user', async () => {
+      server.use(
+        http.post(`${API_BASE_URL}/auth/refresh`, () => {
+          return HttpResponse.json({ accessToken: 'mock-jwt-token' })
+        })
+      )
 
       await act(async () => {
         useAuthStore.getState().initializeAuth()
@@ -322,11 +279,9 @@ describe('AuthStore', () => {
       })
     })
 
-    it('should handle invalid token in localStorage', async () => {
-      localStorageMock.getItem.mockReturnValue('invalid-token')
-
+    it('should handle refresh failure', async () => {
       server.use(
-        http.get(`${API_BASE_URL}/auth/me`, () => {
+        http.post(`${API_BASE_URL}/auth/refresh`, () => {
           return new HttpResponse(JSON.stringify({ message: 'Unauthorized' }), {
             status: 401,
             headers: { 'Content-Type': 'application/json' },
@@ -337,20 +292,6 @@ describe('AuthStore', () => {
       await act(async () => {
         useAuthStore.getState().initializeAuth()
         await new Promise((resolve) => setTimeout(resolve, 50))
-      })
-
-      const state = useAuthStore.getState()
-
-      expect(localStorageMock.removeItem).toHaveBeenCalledWith('authToken')
-      expect(state.token).toBeNull()
-      expect(state.isAuthenticated).toBe(false)
-    })
-
-    it('should do nothing when no token in localStorage', () => {
-      localStorageMock.getItem.mockReturnValue(null)
-
-      act(() => {
-        useAuthStore.getState().initializeAuth()
       })
 
       const state = useAuthStore.getState()

@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import '@mantine/core/styles.css'
 import { ColorSchemeScript, mantineHtmlProps } from '@mantine/core'
 import { Providers } from '@/lib/providers'
+import { AuthGate } from './auth-gate'
 
 export const metadata: Metadata = {
   title: 'PITCH - Your Business Platform',
@@ -19,7 +20,9 @@ export default function RootLayout({
         <ColorSchemeScript />
       </head>
       <body>
-        <Providers>{children}</Providers>
+        <Providers>
+          <AuthGate>{children}</AuthGate>
+        </Providers>
       </body>
     </html>
   )
