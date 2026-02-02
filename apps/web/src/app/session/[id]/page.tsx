@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import {
   Box,
   Group,
@@ -25,6 +25,7 @@ import {
 import { useRouter, useParams } from 'next/navigation'
 import { useConversation } from '@/features/conversation'
 import { useSpeechToText } from '@/features/stt'
+import { api } from '@/lib/client'
 
 export default function LiveSessionPage() {
   const router = useRouter()
@@ -32,6 +33,44 @@ export default function LiveSessionPage() {
   const sessionId = params.id as string
   const [time, setTime] = useState(615)
   const [textInput, setTextInput] = useState('')
+  const [hints, setHints] = useState<string[]>([])
+  const [timelineStages, setTimelineStages] = useState<
+    Array<{
+      order: number
+      label: string
+      description?: string
+      active: boolean
+      completed: boolean
+    }>
+  >([])
+  const [currentProgress, setCurrentProgress] = useState(0)
+  const [hintsError, setHintsError] = useState<string | null>(null)
+  const [timelineError, setTimelineError] = useState<string | null>(null)
+  const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [isMultiTurn, setIsMultiTurn] = useState(false)
+  const assistantStartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const scheduleIdleHints = () => {
+    if (!sessionId) return
+    if (idleTimerRef.current) {
+      clearTimeout(idleTimerRef.current)
+    }
+    idleTimerRef.current = setTimeout(async () => {
+      try {
+        const generated = await api.hints.generate({
+          sessionId,
+          strategy: 'contextual',
+          maxHints: 3,
+          includeObjectives: true,
+        })
+        const nextHints = generated?.hints?.map((hint: { content: string }) => hint.content) ?? []
+        setHints(nextHints)
+        setHintsError(null)
+      } catch (err) {
+        setHintsError('Unable to load hints')
+      }
+    }, 20000)
+  }
 
   const {
     isConnected,
@@ -40,6 +79,12 @@ export default function LiveSessionPage() {
     messages,
     error: conversationError,
     sendMessage,
+    startAssistantTurn,
+    currentAudioUrl,
+    isAudioPlaying,
+    hangUp,
+    interrupt,
+    stopAudio,
   } = useConversation({
     sessionId,
     autoConnect: true,
@@ -61,6 +106,7 @@ export default function LiveSessionPage() {
       if (isFinal && text.trim()) {
         sendMessage(text.trim())
         resetTranscript()
+        scheduleIdleHints()
       }
     },
     onError: (error) => {},
@@ -73,6 +119,22 @@ export default function LiveSessionPage() {
     return () => clearInterval(interval)
   }, [])
 
+  useEffect(() => {
+    if (!sessionId) return
+
+    const loadSession = async () => {
+      try {
+        const session = await api.sessions.getById(sessionId)
+        const config = (session?.sessionConfig as Record<string, any>) ?? {}
+        setIsMultiTurn(Boolean(config.multiTurnEnabled))
+      } catch {
+        setIsMultiTurn(false)
+      }
+    }
+
+    void loadSession()
+  }, [sessionId])
+
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60)
     const secs = seconds % 60
@@ -83,26 +145,128 @@ export default function LiveSessionPage() {
     if (textInput.trim() && isConnected) {
       sendMessage(textInput.trim())
       setTextInput('')
+      scheduleIdleHints()
     }
   }
 
-  const hints = [
-    'Hint text placeholder',
-    'Hint text placeholder',
-    'Hint text placeholder',
-    'Hint text placeholder',
-    'Hint text placeholder',
-    'Hint text placeholder',
-    'Hint text placeholder',
-  ]
+  useEffect(() => {
+    if (!sessionId) return
 
-  const timelineEvents = [
-    { time: '0:00', progress: 11.5, label: 'User is introducing product', active: true },
-    { time: '2:30', progress: 25, label: '', active: false },
-    { time: '5:00', progress: 50, label: '', active: false },
-    { time: '7:30', progress: 75, label: '', active: false },
-    { time: '10:00', progress: 100, label: '', active: false },
-  ]
+    const loadHints = async () => {
+      try {
+        const response = await api.hints.history(sessionId, 1)
+        const latest = response?.history?.[0]
+        const nextHints = latest?.hints?.map((hint: { content: string }) => hint.content) ?? []
+        setHints(nextHints)
+        setHintsError(null)
+      } catch (err) {
+        setHintsError('Unable to load hints')
+      }
+    }
+
+    const loadTimeline = async () => {
+      try {
+        const response = await api.sessions.timeline(sessionId, 50)
+        const plannedStages = response?.plannedStages ?? []
+        const progress = response?.currentProgress ?? 0
+        const totalTurns = response?.total ?? 0
+
+        if (plannedStages.length === 0) {
+          setTimelineStages([])
+          setCurrentProgress(0)
+          setTimelineError(null)
+          return
+        }
+
+        // Calculate which stage is currently active based on progress
+        const currentStageIndex = Math.min(
+          plannedStages.length - 1,
+          Math.floor((progress / 100) * plannedStages.length)
+        )
+
+        const stages = plannedStages.map((stage: any, index: number) => ({
+          order: stage.order,
+          label: stage.label,
+          description: stage.description,
+          active: index === currentStageIndex && totalTurns > 0,
+          completed: index < currentStageIndex,
+        }))
+
+        setTimelineStages(stages)
+        setCurrentProgress(progress)
+        setTimelineError(null)
+      } catch (err) {
+        setTimelineError('Unable to load timeline')
+      }
+    }
+
+    void loadHints()
+    void loadTimeline()
+    scheduleIdleHints()
+
+    return () => {
+      if (idleTimerRef.current) {
+        clearTimeout(idleTimerRef.current)
+      }
+      if (assistantStartTimerRef.current) {
+        clearTimeout(assistantStartTimerRef.current)
+      }
+    }
+  }, [sessionId])
+
+  useEffect(() => {
+    if (!isMultiTurn || !isConnected) return
+    if (messages.length > 0) return
+
+    if (assistantStartTimerRef.current) {
+      clearTimeout(assistantStartTimerRef.current)
+    }
+    assistantStartTimerRef.current = setTimeout(() => {
+      startAssistantTurn()
+    }, 1500)
+  }, [isMultiTurn, isConnected, messages.length, startAssistantTurn])
+
+  useEffect(() => {
+    if (currentAudioUrl && isListening) {
+      toggleListening()
+    }
+  }, [currentAudioUrl, isListening, toggleListening])
+
+  // Refresh timeline when messages change (conversation progresses)
+  useEffect(() => {
+    if (messages.length > 0 && sessionId) {
+      const loadTimeline = async () => {
+        try {
+          const response = await api.sessions.timeline(sessionId, 50)
+          const plannedStages = response?.plannedStages ?? []
+          const progress = response?.currentProgress ?? 0
+          const totalTurns = response?.total ?? 0
+
+          if (plannedStages.length === 0) return
+
+          const currentStageIndex = Math.min(
+            plannedStages.length - 1,
+            Math.floor((progress / 100) * plannedStages.length)
+          )
+
+          const stages = plannedStages.map((stage: any, index: number) => ({
+            order: stage.order,
+            label: stage.label,
+            description: stage.description,
+            active: index === currentStageIndex && totalTurns > 0,
+            completed: index < currentStageIndex,
+          }))
+
+          setTimelineStages(stages)
+          setCurrentProgress(progress)
+        } catch {
+          // Silently fail on updates
+        }
+      }
+
+      void loadTimeline()
+    }
+  }, [messages.length, sessionId])
 
   return (
     <Box
@@ -193,13 +357,20 @@ export default function LiveSessionPage() {
             Hints
           </Title>
           <Stack gap="md">
+            {hintsError && (
+              <Text size="xs" c="red">
+                {hintsError}
+              </Text>
+            )}
+            {!hintsError && hints.length === 0 && (
+              <Text size="xs" c="dimmed">
+                No hints yet.
+              </Text>
+            )}
             {hints.map((hint, i) => (
               <Group key={i} gap="xs" align="start">
                 <IconArrowRight size={16} style={{ marginTop: 4, flexShrink: 0 }} />
-                <Box>
-                  <Box h={8} bg="gray.4" style={{ borderRadius: 4, marginBottom: 4 }} />
-                  <Box h={8} bg="gray.4" style={{ borderRadius: 4, width: '80%' }} />
-                </Box>
+                <Text size="sm">{hint}</Text>
               </Group>
             ))}
           </Stack>
@@ -273,7 +444,10 @@ export default function LiveSessionPage() {
                   boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
                   cursor: 'pointer',
                 }}
-                onClick={() => router.push('/studio/sessions')}
+                onClick={() => {
+                  hangUp()
+                  router.push('/studio/sessions')
+                }}
                 title="End call and return to sessions"
               >
                 <IconPhone size={32} />
@@ -282,8 +456,26 @@ export default function LiveSessionPage() {
                 size={80}
                 radius="xl"
                 variant="filled"
-                color="dark"
-                style={{ border: '4px solid white', boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}
+                color={isAudioPlaying ? 'orange' : 'dark'}
+                style={{
+                  border: '4px solid white',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                  cursor: isAudioPlaying ? 'pointer' : 'default',
+                }}
+                onClick={() => {
+                  if (isAudioPlaying) {
+                    stopAudio()
+                  } else if (isProcessing) {
+                    interrupt()
+                  }
+                }}
+                title={
+                  isAudioPlaying
+                    ? 'Stop audio'
+                    : isProcessing
+                      ? 'Interrupt conversation'
+                      : 'Pause (not active)'
+                }
               >
                 <IconPlayerPause size={32} />
               </ActionIcon>
@@ -321,7 +513,10 @@ export default function LiveSessionPage() {
               <TextInput
                 placeholder="Type your message..."
                 value={textInput}
-                onChange={(e) => setTextInput(e.target.value)}
+                onChange={(e) => {
+                  setTextInput(e.target.value)
+                  scheduleIdleHints()
+                }}
                 onKeyPress={(e) => e.key === 'Enter' && handleSendText()}
                 style={{ flex: 1 }}
                 disabled={!isConnected}
@@ -436,7 +631,24 @@ export default function LiveSessionPage() {
             />
 
             <Stack gap={60}>
-              {timelineEvents.map((event, i) => (
+              {timelineError && (
+                <Text size="xs" c="red">
+                  {timelineError}
+                </Text>
+              )}
+              {!timelineError && currentProgress > 0 && (
+                <Box mb="md">
+                  <Badge variant="filled" color="blue" size="lg">
+                    {currentProgress}% Complete
+                  </Badge>
+                </Box>
+              )}
+              {!timelineError && timelineStages.length === 0 && (
+                <Text size="xs" c="dimmed">
+                  Loading session plan...
+                </Text>
+              )}
+              {timelineStages.map((stage, i) => (
                 <Box key={i} style={{ position: 'relative' }}>
                   {/* Timeline dot */}
                   <Box
@@ -444,34 +656,31 @@ export default function LiveSessionPage() {
                       position: 'absolute',
                       left: -28,
                       top: -4,
-                      width: event.active ? 16 : 8,
-                      height: event.active ? 16 : 8,
+                      width: stage.active ? 16 : 8,
+                      height: stage.active ? 16 : 8,
                       borderRadius: '50%',
-                      backgroundColor: event.active
-                        ? 'var(--pitch-accent-strong)'
-                        : 'var(--mantine-color-gray-5)',
-                      border: event.active ? '2px solid var(--pitch-accent-soft)' : 'none',
+                      backgroundColor: stage.completed
+                        ? 'var(--mantine-color-green-6)'
+                        : stage.active
+                          ? 'var(--mantine-color-blue-6)'
+                          : 'var(--mantine-color-gray-5)',
+                      border: stage.active ? '2px solid var(--mantine-color-blue-2)' : 'none',
                     }}
                   />
-                  {event.active && event.progress && (
-                    <Badge
-                      variant="filled"
-                      color="brand"
-                      size="lg"
-                      style={{
-                        position: 'absolute',
-                        left: -20,
-                        top: -30,
-                      }}
+                  <Box>
+                    <Text
+                      size="sm"
+                      fw={stage.active ? 600 : 400}
+                      c={stage.active ? 'blue' : stage.completed ? 'green' : 'dimmed'}
                     >
-                      {event.progress}%
-                    </Badge>
-                  )}
-                  {event.label && (
-                    <Text size="xs" mt="md" style={{ lineHeight: 1.3 }}>
-                      {event.label}
+                      {stage.label}
                     </Text>
-                  )}
+                    {stage.description && (
+                      <Text size="xs" c="dimmed" mt={4} style={{ lineHeight: 1.3 }}>
+                        {stage.description}
+                      </Text>
+                    )}
+                  </Box>
                 </Box>
               ))}
             </Stack>

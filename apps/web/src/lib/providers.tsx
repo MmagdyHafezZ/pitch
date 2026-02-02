@@ -70,6 +70,8 @@ export function Providers({ children }: ProvidersProps) {
         selected: generateColors(activeProfile.tokens.selected),
         success: generateColors(activeProfile.tokens.success),
         info: generateColors(activeProfile.tokens.info),
+        nav: generateColors(activeProfile.tokens.navBg),
+        surface: generateColors(activeProfile.tokens.surfaceBg),
         gray: generateColors(activeProfile.tokens.surfaceBg),
       },
       primaryColor: 'brand',
@@ -127,10 +129,18 @@ export function Providers({ children }: ProvidersProps) {
       return
     }
     const accentStrong = getAccentStrong(activeProfile.tokens.accent, resolvedScheme)
-    const navBg = activeProfile.tokens.navBg
+    const preferDark = resolvedScheme === 'dark'
+    const adjustForScheme = (color: string, darkRatio: number, lightRatio: number) => {
+      const light = isLightColor(color)
+      if (preferDark) {
+        return light ? mixColors(color, '#000000', darkRatio) : color
+      }
+      return light ? color : mixColors(color, '#ffffff', lightRatio)
+    }
+    const navBg = adjustForScheme(activeProfile.tokens.navBg, 0.7, 0.65)
     const navText = getReadableTextColor(navBg)
     const navTextDim = getReadableMutedColor(navBg)
-    const surfaceBg = activeProfile.tokens.surfaceBg
+    const surfaceBg = adjustForScheme(activeProfile.tokens.surfaceBg, 0.82, 0.7)
     const surfaceText = getReadableTextColor(surfaceBg)
     const surfaceTextDim = getReadableMutedColor(surfaceBg)
     const lightSurface = isLightColor(surfaceBg)
@@ -156,7 +166,7 @@ export function Providers({ children }: ProvidersProps) {
     document.documentElement.style.setProperty('--pitch-input-bg', inputBg)
     document.documentElement.style.setProperty('--pitch-input-text', inputText)
     document.documentElement.style.setProperty('--pitch-input-placeholder', inputPlaceholder)
-    const appBg = mixColors(activeProfile.tokens.surfaceBg, activeProfile.tokens.accent, 0.2)
+    const appBg = mixColors(surfaceBg, activeProfile.tokens.accent, preferDark ? 0.12 : 0.2)
     document.documentElement.style.setProperty('--pitch-app-bg', appBg)
     const accentSoft = mixColors(activeProfile.tokens.surfaceBg, activeProfile.tokens.accent, 0.15)
     document.documentElement.style.setProperty('--pitch-accent', activeProfile.tokens.accent)

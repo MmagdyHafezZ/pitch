@@ -2,6 +2,7 @@ import { http, HttpResponse } from 'msw'
 
 // Mock API endpoints
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1'
+const API_ROOT_URL = API_BASE_URL.replace(/\/v\d+$/, '')
 
 export const handlers = [
   // Auth endpoints
@@ -11,8 +12,7 @@ export const handlers = [
     // Mock successful login
     if (body.email === 'test@example.com' && body.password === 'password123') {
       return HttpResponse.json({
-        token: 'mock-jwt-token',
-        refreshToken: 'mock-refresh-token',
+        accessToken: 'mock-jwt-token',
         user: {
           id: '1',
           email: 'test@example.com',
@@ -37,8 +37,7 @@ export const handlers = [
     // Mock successful registration
     if (body.email && body.password && body.name) {
       return HttpResponse.json({
-        token: 'mock-jwt-token',
-        refreshToken: 'mock-refresh-token',
+        accessToken: 'mock-jwt-token',
         user: {
           id: '2',
           email: body.email,
@@ -81,19 +80,9 @@ export const handlers = [
     })
   }),
 
-  http.post(`${API_BASE_URL}/auth/refresh`, async ({ request }) => {
-    const body = (await request.json()) as { refreshToken: string }
-
-    if (body.refreshToken === 'mock-refresh-token') {
-      return HttpResponse.json({
-        token: 'new-mock-jwt-token',
-        refreshToken: 'new-mock-refresh-token',
-      })
-    }
-
-    return new HttpResponse(JSON.stringify({ message: 'Invalid refresh token' }), {
-      status: 401,
-      headers: { 'Content-Type': 'application/json' },
+  http.post(`${API_BASE_URL}/auth/refresh`, () => {
+    return HttpResponse.json({
+      accessToken: 'new-mock-jwt-token',
     })
   }),
 
@@ -118,5 +107,180 @@ export const handlers = [
         updatedAt: '2024-01-01T00:00:00.000Z',
       },
     ])
+  }),
+
+  // LLM Providers endpoint
+  http.get(`${API_BASE_URL}/simulation/llm/providers`, () => {
+    return HttpResponse.json({
+      providers: [
+        {
+          name: 'openai',
+          enabled: true,
+          models: ['gpt-4o', 'gpt-4o-mini'],
+          modelDetails: [
+            {
+              name: 'gpt-4o',
+              pricing: {
+                inputTokensPerMillion: 5.0,
+                outputTokensPerMillion: 15.0,
+              },
+              maxTokens: 128000,
+              maxOutputTokens: 4096,
+              supportsStreaming: true,
+              supportsTools: true,
+              supportsVision: true,
+              supportsAudio: false,
+              supportedModalities: ['text', 'image'],
+            },
+            {
+              name: 'gpt-4o-mini',
+              pricing: {
+                inputTokensPerMillion: 0.15,
+                outputTokensPerMillion: 0.6,
+              },
+              maxTokens: 128000,
+              maxOutputTokens: 4096,
+              supportsStreaming: true,
+              supportsTools: true,
+              supportsVision: true,
+              supportsAudio: false,
+              supportedModalities: ['text', 'image'],
+            },
+          ],
+        },
+        {
+          name: 'watsonx',
+          enabled: true,
+          models: ['granite-13b'],
+          modelDetails: [
+            {
+              name: 'granite-13b',
+              pricing: {
+                inputTokensPerMillion: 0,
+                outputTokensPerMillion: 0,
+              },
+              maxTokens: 8192,
+              maxOutputTokens: 2048,
+              supportsStreaming: false,
+              supportsTools: false,
+              supportsVision: false,
+              supportsAudio: false,
+              supportedModalities: ['text'],
+            },
+          ],
+        },
+      ],
+    })
+  }),
+
+  // Personas endpoint
+  http.get(`${API_BASE_URL}/simulation/personas`, () => {
+    return HttpResponse.json({
+      personas: [
+        {
+          id: 'persona_1',
+          name: 'Sales Coach',
+          orgId: 'org_123',
+          traits: {
+            role: 'coach',
+            level: 'expert',
+            personality: 'encouraging',
+          },
+          createdAt: '2024-01-01T00:00:00.000Z',
+          updatedAt: '2024-01-01T00:00:00.000Z',
+        },
+        {
+          id: 'persona_2',
+          name: 'Product Manager',
+          orgId: 'org_123',
+          traits: {
+            role: 'manager',
+            level: 'senior',
+            personality: 'analytical',
+          },
+          createdAt: '2024-01-01T00:00:00.000Z',
+          updatedAt: '2024-01-01T00:00:00.000Z',
+        },
+      ],
+      total: 2,
+    })
+  }),
+
+  // Scenarios endpoint
+  http.get(`${API_BASE_URL}/simulation/scenarios`, () => {
+    return HttpResponse.json({
+      scenarios: [
+        {
+          id: 'scenario_1',
+          name: 'Discovery Call',
+          description: 'Qualify the lead and uncover core business pain points.',
+        },
+        {
+          id: 'scenario_2',
+          name: 'Pricing Discussion',
+          description: 'Handle pricing objections while reinforcing value.',
+        },
+      ],
+    })
+  }),
+
+  // TTS Providers endpoint
+  http.get(`${API_BASE_URL}/tts/providers`, () => {
+    return HttpResponse.json([
+      {
+        name: 'elevenlabs',
+        description: 'ElevenLabs',
+        voices: ['Rachel', 'Adam', 'Sarah'],
+      },
+      {
+        name: 'melotts',
+        description: 'MeloTTS',
+        voices: ['EN-US-1', 'EN-GB-1'],
+      },
+    ])
+  }),
+
+  // Teams endpoint
+  http.get(`${API_BASE_URL}/teams/user-teams`, () => {
+    return HttpResponse.json([
+      {
+        id: 'team_1',
+        name: 'Test Team',
+        orgId: 'org_123',
+        createdAt: '2024-01-01T00:00:00.000Z',
+        updatedAt: '2024-01-01T00:00:00.000Z',
+      },
+    ])
+  }),
+
+  // Sessions endpoint
+  http.post(`${API_BASE_URL}/simulation/sessions`, async ({ request }) => {
+    const body = (await request.json()) as any
+
+    return HttpResponse.json({
+      id: 'session_123',
+      ...body,
+      status: 'active',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    })
+  }),
+
+  http.get(`${API_BASE_URL}/simulation/sessions`, () => {
+    return HttpResponse.json({
+      sessions: [],
+      total: 0,
+      limit: 10,
+      offset: 0,
+    })
+  }),
+
+  // CRM endpoints
+  http.get(`${API_ROOT_URL}/crm/salesforce/status`, () => {
+    return HttpResponse.json({
+      connected: false,
+      status: 'disconnected',
+      provider: 'salesforce',
+    })
   }),
 ]

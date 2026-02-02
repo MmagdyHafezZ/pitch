@@ -52,6 +52,7 @@ export class WatsonxProvider implements ILLMProvider {
   private apiKey: string;
   private projectId: string;
   private baseUrl: string;
+  private apiVersion: string;
   private accessToken: string | null = null;
   private tokenExpiry: number = 0;
 
@@ -65,6 +66,8 @@ export class WatsonxProvider implements ILLMProvider {
     this.baseUrl =
       this.configService.get<string>('WATSONX_URL') ||
       'https://us-south.ml.cloud.ibm.com';
+    this.apiVersion =
+      this.configService.get<string>('WATSONX_API_VERSION') || '2024-10-01';
 
     if (!this.apiKey) {
       this.logger.warn('WATSONX_API_KEY not configured');
@@ -107,7 +110,7 @@ export class WatsonxProvider implements ILLMProvider {
       const prompt = this.convertMessagesToPrompt(messages);
 
       const response = await this.client.post<WatsonxGenerationResponse>(
-        '/ml/v1/text/generation',
+        `/ml/v1/text/generation?version=${this.apiVersion}`,
         {
           model_id: config.model,
           input: prompt,
@@ -182,7 +185,7 @@ export class WatsonxProvider implements ILLMProvider {
           const prompt = this.convertMessagesToPrompt(messages);
 
           const response = await this.client.post<NodeJS.ReadableStream>(
-            '/ml/v1/text/generation_stream',
+            `/ml/v1/text/generation_stream?version=${this.apiVersion}`,
             {
               model_id: config.model,
               input: prompt,

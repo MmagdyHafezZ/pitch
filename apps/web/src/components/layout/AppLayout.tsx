@@ -3,6 +3,7 @@
 import { AppShell, Box, rem } from '@mantine/core'
 import { ReactNode } from 'react'
 import { useDisclosure } from '@mantine/hooks'
+import classes from './app-layout.module.css'
 
 type Props = {
   header: ReactNode
@@ -13,7 +14,7 @@ type Props = {
 export function AppLayout({ header, navbar, children }: Props) {
   const [opened, { toggle }] = useDisclosure()
   const headerHeight = '3.7em'
-  const curveRadius = rem(36)
+  const curveRadius = rem(18)
 
   return (
     <AppShell
@@ -22,13 +23,16 @@ export function AppLayout({ header, navbar, children }: Props) {
       navbar={{ width: 300, breakpoint: 'md', collapsed: { mobile: !opened } }}
       styles={{
         header: {
-          background: 'var(--pitch-nav-bg, var(--mantine-color-dark-9))',
+          background:
+            'var(--pitch-nav-bg, var(--mantine-color-nav-9, var(--mantine-color-dark-9)))',
         },
         navbar: {
-          background: 'var(--pitch-nav-bg, var(--mantine-color-dark-9))',
+          background:
+            'var(--pitch-nav-bg, var(--mantine-color-nav-9, var(--mantine-color-dark-9)))',
         },
         main: {
-          background: 'var(--pitch-app-bg, var(--pitch-surface-bg, var(--mantine-color-dark-9)))',
+          background:
+            'var(--pitch-app-bg, var(--pitch-surface-bg, var(--mantine-color-surface-0, var(--mantine-color-body))))',
           height: `calc(100vh - ${headerHeight})`,
           overflow: 'hidden',
         },
@@ -38,40 +42,11 @@ export function AppLayout({ header, navbar, children }: Props) {
       <AppShell.Header>{header}</AppShell.Header>
       <AppShell.Navbar>{navbar}</AppShell.Navbar>
       <AppShell.Main>
-        <Box
-          style={{
-            position: 'relative',
-            height: '100%',
-            width: '100%',
-            overflow: 'hidden',
-            background: 'var(--pitch-app-bg, var(--pitch-surface-bg, var(--mantine-color-body)))',
-          }}
-        >
-          <Box
-            style={{
-              position: 'absolute',
-              inset: 0,
-              background:
-                'var(--pitch-window-gradient, var(--pitch-surface-bg, var(--mantine-color-body)))',
-              borderTop: '1px solid var(--mantine-color-default-border)',
-              borderLeft: '1px solid var(--mantine-color-default-border)',
-              borderTopLeftRadius: curveRadius,
-              pointerEvents: 'none',
-            }}
-          />
-          <Box
-            style={{
-              position: 'relative',
-              height: '100%',
-              overflow: 'auto',
-              padding: rem(16),
-              borderTopLeftRadius: curveRadius,
-              overflowX: 'hidden',
-              background: 'var(--pitch-app-bg, var(--pitch-surface-bg, var(--mantine-color-body)))',
-            }}
-          >
-            {children}
-          </Box>
+        <Box className={classes.surface} style={{ ['--studio-shell-radius' as any]: curveRadius }}>
+          <div className={classes.mesh} />
+          <div className={`${classes.glowOrb} ${classes.orbA}`} />
+          <div className={`${classes.glowOrb} ${classes.orbB}`} />
+          <Box className={classes.content}>{children}</Box>
         </Box>
       </AppShell.Main>
     </AppShell>

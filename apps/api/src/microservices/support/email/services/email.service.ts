@@ -1,7 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
-/* eslint-disable @typescript-eslint/no-unsafe-call */
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
-
 import { Injectable, Logger } from '@nestjs/common';
 import * as nodemailer from 'nodemailer';
 
@@ -73,6 +69,30 @@ export interface SendEmailResult {
   error?: string;
 }
 
+type EmailTransporter = {
+  sendMail: (mail: MailOptions) => Promise<{ messageId?: string }>;
+  verify: () => Promise<boolean>;
+};
+
+interface MailOptions {
+  from?: string | { name: string; address: string };
+  to: string | string[];
+  subject: string;
+  replyTo?: string;
+  cc?: string | string[];
+  bcc?: string | string[];
+  headers?: Record<string, string>;
+  attachments?: Array<{
+    filename: string;
+    content: string | Buffer;
+    contentType?: string;
+    cid?: string;
+    encoding?: string;
+  }>;
+  text?: string;
+  html?: string;
+}
+
 /** Simple, testable configuration object */
 export interface EmailServiceConfig {
   provider: EmailProvider;
@@ -134,29 +154,36 @@ export class EmailConfigFactory {
 
 /** Isolated transport builder (easy to swap later) */
 export class GmailTransportFactory {
-  static create(cfg: EmailServiceConfig): nodemailer.Transporter | undefined {
+  static create(cfg: EmailServiceConfig): EmailTransporter | undefined {
     if (!cfg.gmailUser || !cfg.gmailPassword) return undefined;
 
-    return nodemailer.createTransport({
+    const nodemailerModule = nodemailer as unknown as {
+      createTransport: (options: {
+        host: string;
+        port: number;
+        secure: boolean;
+        auth: { user: string; pass: string };
+        requireTLS: boolean;
+      }) => EmailTransporter;
+    };
+    const transporter = nodemailerModule.createTransport({
       host: 'smtp.gmail.com',
       port: 587,
       secure: false,
       auth: { user: cfg.gmailUser, pass: cfg.gmailPassword },
       requireTLS: true,
     });
+    return transporter;
   }
 }
 
 /** Normalizes mail options (from, replyTo, content, etc.) */
 export class MailComposer {
-  static compose(
-    cfg: EmailServiceConfig,
-    req: SendEmailRequest,
-  ): nodemailer.SendMailOptions {
+  static compose(cfg: EmailServiceConfig, req: SendEmailRequest): MailOptions {
     const from = this.normalizeFrom(cfg, req.from);
     const replyTo = req.replyTo ?? cfg.defaultReplyTo;
 
-    const mail: nodemailer.SendMailOptions = {
+    const mail: MailOptions = {
       from,
       to: req.to,
       subject: req.subject,
@@ -211,8 +238,8 @@ export class MailComposer {
  * Purpose: "templates" are pure functions.
  * You can move this to /emails/templates later without touching EmailService.
  */
-export namespace PitchEmailTemplates {
-  export function verificationCode(args: {
+export const PitchEmailTemplates = {
+  verificationCode(args: {
     appName?: string;
     code: string;
     expiresMinutes?: number;
@@ -288,8 +315,8 @@ Do not share this code with anyone.
     `.trim();
 
     return { subject, html, text };
-  }
-}
+  },
+};
 
 /**
  * EmailService: orchestration only (config + transport + compose + send)
@@ -299,7 +326,7 @@ export class EmailService {
   private readonly logger = new Logger(EmailService.name);
 
   private readonly cfg: EmailServiceConfig;
-  private readonly transporter?: nodemailer.Transporter;
+  private readonly transporter?: EmailTransporter;
 
   constructor() {
     this.cfg = EmailConfigFactory.fromEnv(process.env);

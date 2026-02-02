@@ -1,6 +1,7 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Persona, Prisma } from '@prisma/simulation-client';
 import { PersonaRepository } from '../repositories/persona.repository';
+import { CreatePersonaDto } from '../dto/persona.dto';
 
 export interface PersonaResponseDto {
   id: string;
@@ -22,12 +23,20 @@ export class PersonaService {
 
   constructor(private readonly personaRepository: PersonaRepository) {}
 
-  async findAll(orgId?: string): Promise<PersonaListResponseDto> {
-    this.logger.log(`Finding all personas${orgId ? ` for org: ${orgId}` : ''}`);
+  async create(
+    createPersonaDto: CreatePersonaDto,
+  ): Promise<PersonaResponseDto> {
+    this.logger.log(`Creating persona: ${createPersonaDto.name}`);
 
+    const persona = await this.personaRepository.create(createPersonaDto);
+    return this.mapToResponseDto(persona);
+  }
+
+  async findAll(orgId?: string): Promise<PersonaListResponseDto> {
     const personas = await this.personaRepository.findMany(
       orgId ? { orgId } : undefined,
     );
+    this.logger.log(`Found ${personas.length} personas`);
 
     return {
       personas: personas.map(this.mapToResponseDto),
@@ -57,7 +66,9 @@ export class PersonaService {
     };
   }
 
-  private mapToResponseDto = (persona: Persona): PersonaResponseDto => {
+  private readonly mapToResponseDto = (
+    persona: Persona,
+  ): PersonaResponseDto => {
     return {
       id: persona.id,
       orgId: persona.orgId,

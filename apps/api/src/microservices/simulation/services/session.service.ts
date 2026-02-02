@@ -246,12 +246,16 @@ export class SessionService {
       this.assertOwner(existingSession, requesterUserId);
 
       const session = await this.sessionRepository.update(id, {
+        orgId: updateSessionDto.orgId,
+        orgSnapshot: updateSessionDto.orgSnapshot,
         name: updateSessionDto.name,
+        type: updateSessionDto.type,
         tags: updateSessionDto.tags,
         sessionConfig: updateSessionDto.sessionConfig,
         scenarioId: updateSessionDto.scenarioId,
         personaId: updateSessionDto.personaId,
         language: updateSessionDto.language,
+        crmContextId: updateSessionDto.crmContextId,
         status: updateSessionDto.status,
         endedReason: updateSessionDto.endedReason,
       });
