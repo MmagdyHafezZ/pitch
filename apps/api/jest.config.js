@@ -42,7 +42,10 @@ const baseConfig = {
     '^@/(.*)$': '<rootDir>/$1',
     '^src/(.*)$': '<rootDir>/$1',
   },
-  transformIgnorePatterns: ['node_modules/(?!(@faker-js/faker)/)'],
+  transformIgnorePatterns: [
+    '/node_modules/(?!(@faker-js/faker|uuid)/)',
+    '/node_modules/.pnpm/(?!(?:@faker-js\\+faker|uuid)@)',
+  ],
   testTimeout: 30000,
 };
 

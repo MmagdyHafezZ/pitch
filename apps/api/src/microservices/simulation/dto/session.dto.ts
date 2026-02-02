@@ -124,12 +124,37 @@ export class CreateSessionDto {
  */
 export class UpdateSessionDto {
   @ApiPropertyOptional({
+    example: 'org_456',
+    description: 'ID of the organization or team',
+  })
+  @IsString()
+  @IsOptional()
+  orgId?: string;
+
+  @ApiPropertyOptional({
+    example: { id: 'org_456', name: 'Acme Corp', region: 'us-east-1' },
+    description: 'Organization snapshot captured at session creation',
+  })
+  @IsObject()
+  @IsOptional()
+  orgSnapshot?: Record<string, any>;
+
+  @ApiPropertyOptional({
     example: 'Updated Session Name',
     description: 'Display name for the session',
   })
   @IsString()
   @IsOptional()
   name?: string;
+
+  @ApiPropertyOptional({
+    enum: SessionType,
+    example: SessionType.text,
+    description: 'Type of session (text, voice, or video)',
+  })
+  @IsEnum(SessionType)
+  @IsOptional()
+  type?: SessionType;
 
   @ApiPropertyOptional({
     example: ['sales', 'onboarding', 'advanced'],
@@ -172,6 +197,14 @@ export class UpdateSessionDto {
   @IsString()
   @IsOptional()
   language?: string;
+
+  @ApiPropertyOptional({
+    example: 'crm_context_123',
+    description: 'CRM context ID',
+  })
+  @IsString()
+  @IsOptional()
+  crmContextId?: string;
 
   @ApiPropertyOptional({
     example: 'active',

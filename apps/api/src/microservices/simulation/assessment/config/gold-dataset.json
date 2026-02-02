@@ -1,0 +1,25 @@
+{
+  "version": "v1",
+  "cases": [
+    {
+      "name": "balanced",
+      "labels": [
+        "PositiveExample",
+        "InsightfulQuestion",
+        "MissedOpportunity",
+        "Neutral"
+      ],
+      "expectedTotal": 2
+    },
+    {
+      "name": "objective_met",
+      "labels": ["ObjectiveMet", "PositiveExample"],
+      "expectedTotal": 6
+    },
+    {
+      "name": "objective_not_met",
+      "labels": ["ObjectiveNotMet", "NegativeExample"],
+      "expectedTotal": -6
+    }
+  ]
+}
