@@ -51,10 +51,10 @@ describe('S3Repository', () => {
     jest.clearAllMocks();
     process.env = {
       ...originalEnv,
-      AWS_REGION: 'us-east-1',
-      AWS_ACCESS_KEY_ID: 'test-access-key',
-      AWS_SECRET_ACCESS_KEY: 'test-secret',
-      AWS_S3_BUCKET: 'test-bucket',
+      STORAGE_REGION: 'us-east-1',
+      STORAGE_ACCESS_KEY_ID: 'test-access-key',
+      STORAGE_SECRET_ACCESS_KEY: 'test-secret',
+      STORAGE_BUCKET: 'test-bucket',
     };
   });
 
@@ -191,7 +191,8 @@ describe('S3Repository', () => {
   });
 
   it('throws when required env vars are missing', () => {
-    process.env = { ...process.env, AWS_REGION: '' };
-    expect(() => new S3Repository()).toThrow('AWS_REGION is required');
+    process.env = { ...process.env, STORAGE_REGION: '' };
+    expect(() => new S3Repository()).toThrow('STORAGE_REGION is required');
   });
 });
+

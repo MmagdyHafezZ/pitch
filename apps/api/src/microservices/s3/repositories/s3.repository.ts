@@ -18,19 +18,19 @@ export class S3Repository {
   private readonly defaultExpiresInSeconds = 900;
 
   constructor() {
-    const region = process.env.AWS_REGION;
-    const accessKeyId = process.env.AWS_ACCESS_KEY_ID;
-    const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
+    const region = process.env.STORAGE_REGION;
+    const accessKeyId = process.env.STORAGE_ACCESS_KEY_ID;
+    const secretAccessKey = process.env.STORAGE_SECRET_ACCESS_KEY;
 
-    if (!region) throw new Error('AWS_REGION is required');
+    if (!region) throw new Error('STORAGE_REGION is required');
     if (!accessKeyId || !secretAccessKey) {
       throw new Error(
-        'AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY are required',
+        'STORAGE_ACCESS_KEY_ID and STORAGE_SECRET_ACCESS_KEY are required',
       );
     }
 
-    this.defaultBucket = process.env.AWS_S3_BUCKET;
-    const endpoint = process.env.AWS_ENDPOINT;
+    this.defaultBucket = process.env.STORAGE_BUCKET;
+    const endpoint = process.env.STORAGE_ENDPOINT;
     this.client = new S3Client({
       region,
       credentials: { accessKeyId, secretAccessKey },
@@ -40,7 +40,7 @@ export class S3Repository {
 
   private resolveBucket(bucket?: string) {
     const resolved = bucket || this.defaultBucket;
-    if (!resolved) throw new Error('AWS_S3_BUCKET is required');
+    if (!resolved) throw new Error('STORAGE_BUCKET is required');
     return resolved;
   }
 
@@ -153,3 +153,4 @@ export class S3Repository {
     return { deleted: deletedCount };
   }
 }
+
