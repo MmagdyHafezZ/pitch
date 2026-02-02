@@ -31,15 +31,18 @@ import {
   normalizeError,
   safeStringify,
 } from '@pitch/shared-backend/utils/error-logging';
+import type {
+  Request as ExpressRequest,
+  Response as ExpressResponse,
+} from 'express';
 
 @Catch()
 export class LogAllHttpExceptionsFilter implements ExceptionFilter {
   private readonly logger = new Logger('HTTP');
-
-  catch(exception: unknown, host: ArgumentsHost) {
+  catch(exception: unknown, host: ArgumentsHost): unknown {
     const ctx = host.switchToHttp();
-    const res = ctx.getResponse<any>();
-    const req = ctx.getRequest<any>();
+    const res = ctx.getResponse<ExpressResponse>();
+    const req = ctx.getRequest<ExpressRequest>();
 
     if (exception instanceof HttpException) {
       const status = exception.getStatus();
@@ -60,7 +63,7 @@ export class LogAllHttpExceptionsFilter implements ExceptionFilter {
 
     this.logger.error(
       `${req.method} ${req.url} -> ${String(exception)}`,
-      (exception as any)?.stack,
+      (exception as Error | null)?.stack,
     );
 
     return res.status(500).json({
