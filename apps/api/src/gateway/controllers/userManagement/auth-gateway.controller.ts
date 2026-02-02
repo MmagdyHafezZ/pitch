@@ -36,7 +36,7 @@ import type {
   Response as ExpressResponse,
 } from 'express';
 import { AuthTokenResponseDto } from '../../dto/auth-response.dto';
-import { getWhitelistedRoutes } from '@gateway/config/auth-whitelist.config';
+import { getWhitelistedRoutes } from '../../config/auth-whitelist.config';
 
 @ApiTags('authentication')
 @Controller({ path: 'auth', version: '1' })
