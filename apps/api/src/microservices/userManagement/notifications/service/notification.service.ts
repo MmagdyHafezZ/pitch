@@ -16,7 +16,7 @@ import {
   ListNotificationsResponseDto,
   BatchCreateResponseDto,
   MarkReadResponseDto,
-} from './notification.dto';
+} from '../dto/notification.dto';
 
 const NOTIFICATION_MODEL = 'Notification';
 

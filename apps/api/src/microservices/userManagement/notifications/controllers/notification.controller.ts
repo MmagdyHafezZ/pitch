@@ -25,8 +25,8 @@ import {
   MarkReadResponseDto,
   NotificationDto,
   UnreadCountResponseDto,
-} from './notification.dto';
-import { NotificationService } from './notification.service';
+} from '../dto/notification.dto';
+import { NotificationService } from '../service/notification.service';
 
 @ApiTags('notifications')
 @Controller({ path: 'notifications', version: '1' })
