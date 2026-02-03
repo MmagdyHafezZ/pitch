@@ -69,6 +69,8 @@ export function TeamMembersPanel() {
       await addMember(currentTeam.id, {
         userId,
         role: newRole,
+        tokenLimit: 0,
+        isActive: true,
       })
       setNewUserId('')
     } finally {
