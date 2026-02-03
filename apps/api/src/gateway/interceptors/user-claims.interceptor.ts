@@ -31,13 +31,6 @@ export class UserClaimsInterceptor implements NestInterceptor {
     if (user) {
       req.userClaims = user;
 
-      if (req.method !== 'GET' && req.body && typeof req.body === 'object') {
-        req.body = {
-          ...req.body,
-          __claims: { id: user.id, email: user.email, name: user.name },
-        };
-      }
-
       this.logger.debug(`User claims attached: ${user.email} (${user.id})`);
     }
     return next.handle();
