@@ -18,15 +18,21 @@ import {
   Paper,
   Divider,
   Menu,
+  Modal,
   Select,
   Tooltip,
+  UnstyledButton,
+  Transition,
+  useMantineColorScheme,
 } from '@mantine/core'
-import { Suspense, useEffect, useRef, useState } from 'react'
+import { Fragment, Suspense, useEffect, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { useMediaQuery } from '@mantine/hooks'
 import { useTeams } from '@/features/teams/hooks/useTeams'
 import { useAuth } from '@/features/auth'
 import { useCreateTeamForm } from '@/features/teams/hooks/useTeamForm'
 import { TeamMembersPanel } from '@/components/ui/TeamMembersPanel'
+import { api } from '@/lib/client'
 import {
   IconFilter,
   IconMail,
@@ -35,6 +41,9 @@ import {
   IconSettings,
   IconChartBar,
   IconChevronDown,
+  IconUserPlus,
+  IconX,
+  IconCheck,
 } from '@tabler/icons-react'
 import Image from 'next/image'
 
@@ -47,6 +56,8 @@ export default function TeamConfigPage() {
 }
 
 function TeamConfigInner() {
+  const { colorScheme } = useMantineColorScheme()
+  const isMobile = useMediaQuery('(max-width: 48em)')
   const router = useRouter()
   const searchParams = useSearchParams()
   const isCreateMode = searchParams.get('mode') === 'create'
@@ -80,8 +91,24 @@ function TeamConfigInner() {
   const [roleFilter, setRoleFilter] = useState<'ALL' | 'OWNER' | 'ADMIN' | 'MEMBER'>('ALL')
   const [inviteUserId, setInviteUserId] = useState('')
   const [inviting, setInviting] = useState(false)
+  const [inviteSuccess, setInviteSuccess] = useState(false)
+  const inviteCloseTimeout = useRef<number | null>(null)
   const [selectedMembers, setSelectedMembers] = useState<Set<string>>(new Set())
-  const inviteInputRef = useRef<HTMLInputElement>(null)
+  const [addMemberOpen, setAddMemberOpen] = useState(false)
+  const [expandedMembers, setExpandedMembers] = useState<Set<string>>(new Set())
+  const [roleMenuMemberId, setRoleMenuMemberId] = useState<string | null>(null)
+  const [settingsMenuMemberId, setSettingsMenuMemberId] = useState<string | null>(null)
+  const [usersLoading, setUsersLoading] = useState(false)
+  const [usersError, setUsersError] = useState<string | null>(null)
+  const [users, setUsers] = useState<Array<{ id: string; name?: string; email: string }>>([])
+  const [removingMembers, setRemovingMembers] = useState<Set<string>>(new Set())
+  const [tokenLimitMember, setTokenLimitMember] = useState<{
+    teamId: string
+    userId: string
+    current?: number
+  } | null>(null)
+  const [tokenLimitValue, setTokenLimitValue] = useState('')
+  const [tokenLimitSaving, setTokenLimitSaving] = useState(false)
 
   useEffect(() => {
     if (!isCreateMode && currentTeam) {
@@ -169,8 +196,16 @@ function TeamConfigInner() {
     if (!userId) return
     setInviting(true)
     try {
-      await addMember(teamId, { userId, role: 'MEMBER' })
+      await addMember(teamId, { userId, role: 'MEMBER', tokenLimit: 0, isActive: true })
       setInviteUserId('')
+      setInviteSuccess(true)
+      if (inviteCloseTimeout.current) {
+        window.clearTimeout(inviteCloseTimeout.current)
+      }
+      inviteCloseTimeout.current = window.setTimeout(() => {
+        setInviteSuccess(false)
+        setAddMemberOpen(false)
+      }, 1200)
     } finally {
       setInviting(false)
     }
@@ -181,14 +216,25 @@ function TeamConfigInner() {
   }
 
   const handleTokenLimitChange = async (teamId: string, userId: string, current?: number) => {
-    const next = window.prompt('Set token limit', String(current ?? 0))
-    if (next === null) return
-    const parsed = Number(next)
-    if (Number.isNaN(parsed) || parsed < 0) return
-    await updateMember(teamId, userId, { tokenLimit: parsed })
+    setTokenLimitMember({ teamId, userId, current })
+    setTokenLimitValue(String(current ?? 0))
   }
 
-  const toggleMemberSelected = (userId: string) => {
+  const handleTokenLimitSave = async () => {
+    if (!tokenLimitMember) return
+    const parsed = Number(tokenLimitValue)
+    if (Number.isNaN(parsed) || parsed < 0) return
+    setTokenLimitSaving(true)
+    try {
+      await updateMember(tokenLimitMember.teamId, tokenLimitMember.userId, { tokenLimit: parsed })
+      setTokenLimitMember(null)
+    } finally {
+      setTokenLimitSaving(false)
+    }
+  }
+
+  const toggleMemberSelected = (userId: string, role?: string) => {
+    if (role === 'OWNER') return
     setSelectedMembers((prev) => {
       const next = new Set(prev)
       if (next.has(userId)) {
@@ -204,9 +250,12 @@ function TeamConfigInner() {
     setSelectedMembers(new Set())
   }
 
-  const selectAllFiltered = (members: { userId: string }[]) => {
+  const selectAllFiltered = (members: { userId: string; role?: string }[]) => {
     const next = new Set<string>()
-    members.forEach((member) => next.add(member.userId))
+    members.forEach((member) => {
+      if (member.role === 'OWNER') return
+      next.add(member.userId)
+    })
     setSelectedMembers(next)
   }
 
@@ -217,11 +266,64 @@ function TeamConfigInner() {
     )
   }
 
-  const handleBulkRemove = async (teamId: string) => {
+  const handleBulkRemove = async (teamId: string, protectedUserIds: Set<string>) => {
     if (!selectedMembers.size) return
-    await Promise.all(Array.from(selectedMembers).map((userId) => deleteMember(teamId, userId)))
+    const removable = Array.from(selectedMembers).filter((userId) => !protectedUserIds.has(userId))
+    if (!removable.length) return
+    await Promise.all(removable.map((userId) => handleRemoveMember(teamId, userId)))
     clearSelection()
   }
+
+  const toggleMemberExpanded = (memberId: string) => {
+    setExpandedMembers((prev) => {
+      const next = new Set(prev)
+      if (next.has(memberId)) {
+        next.delete(memberId)
+      } else {
+        next.add(memberId)
+      }
+      return next
+    })
+  }
+
+  const loadUsers = async () => {
+    setUsersLoading(true)
+    setUsersError(null)
+    try {
+      const data = await api.users.getAll()
+      setUsers(data ?? [])
+    } catch (error) {
+      setUsersError(error instanceof Error ? error.message : 'Failed to load users')
+    } finally {
+      setUsersLoading(false)
+    }
+  }
+
+  const handleRemoveMember = async (teamId: string, userId: string) => {
+    setRemovingMembers((prev) => {
+      const next = new Set(prev)
+      next.add(userId)
+      return next
+    })
+    await new Promise((resolve) => setTimeout(resolve, 240))
+    try {
+      await deleteMember(teamId, userId)
+    } finally {
+      setRemovingMembers((prev) => {
+        const next = new Set(prev)
+        next.delete(userId)
+        return next
+      })
+    }
+  }
+
+  useEffect(() => {
+    return () => {
+      if (inviteCloseTimeout.current) {
+        window.clearTimeout(inviteCloseTimeout.current)
+      }
+    }
+  }, [])
 
   if (isMyTeamsTab) {
     const activeTeam =
@@ -234,6 +336,12 @@ function TeamConfigInner() {
     const role = membership?.role ?? 'MEMBER'
     const isOwner = role === 'OWNER'
     const members = (activeTeam?.memberships ?? []).filter((m) => m.isActive !== false)
+    const protectedMemberIds = new Set(
+      members.filter((member) => member.role === 'OWNER').map((member) => member.userId)
+    )
+    const memberIds = new Set(members.map((member) => member.userId))
+    const availableUsers = users.filter((member) => !memberIds.has(member.id))
+    const activeTeamIdValue = activeTeam?.id
     const filteredMembers = members.filter((member) => {
       const q = memberSearch.trim().toLowerCase()
       if (roleFilter !== 'ALL' && member.role !== roleFilter) return false
@@ -242,15 +350,172 @@ function TeamConfigInner() {
       const email = member.user?.email?.toLowerCase() ?? ''
       return name.includes(q) || email.includes(q)
     })
+    const surfaceTint =
+      'color-mix(in srgb, var(--pitch-nav-bg) 22%, var(--pitch-surface-bg))'
+    const surfaceTintStrong =
+      'color-mix(in srgb, var(--pitch-nav-bg) 34%, var(--pitch-surface-bg))'
+    const summaryGradient =
+      'linear-gradient(135deg, ' +
+      'color-mix(in srgb, var(--pitch-accent) 38%, var(--pitch-surface-bg)), ' +
+      'color-mix(in srgb, var(--pitch-selected) 38%, var(--pitch-surface-bg)) 48%, ' +
+      'color-mix(in srgb, var(--pitch-info) 38%, var(--pitch-surface-bg)))'
+    const mascotShadow = colorScheme === 'dark' ? 'drop-shadow(0 8px 10px rgba(0, 0, 0, 0.45))' : undefined
+
+    const tokenLimitMemberName =
+      tokenLimitMember &&
+      members.find((member) => member.userId === tokenLimitMember.userId)?.user?.name
+
     return (
-      <Paper p="xl" radius="xl" withBorder shadow="sm" style={{ background: 'rgba(252 ,252, 252, 0.8)' }}>
+      <Paper
+        p="xl"
+        radius="xl"
+        withBorder
+        shadow="sm"
+        style={{
+          background: surfaceTintStrong,
+          borderColor: 'var(--pitch-border)',
+        }}
+      >
         <Stack gap="lg">
-          <Stack gap={4}>
-            <Title order={2}>Team Management</Title>
-            <Text size="sm" c="dimmed">
-              Manage members, roles, and invitations for your team.
-            </Text>
-          </Stack>
+          <Modal
+            opened={Boolean(tokenLimitMember)}
+            onClose={() => setTokenLimitMember(null)}
+            radius={'lg'}
+            title={
+              tokenLimitMemberName ? `Set token limit for ${tokenLimitMemberName}` : 'Set token limit'
+            }
+            centered
+          >
+            <Stack gap="sm">
+              <Text size="sm" c="dimmed">
+                Enter the maximum number of tokens this member can use.
+              </Text>
+              <TextInput
+                label="Token limit"
+                type="number"
+                min={0}
+                value={tokenLimitValue}
+                onChange={(e) => setTokenLimitValue(e.currentTarget.value)}
+              />
+              <Group justify="flex-end" gap="sm">
+                <Button variant="default" radius="xl" onClick={() => setTokenLimitMember(null)}>
+                  Cancel
+                </Button>
+                <Button
+                  radius="xl"
+                  onClick={() => void handleTokenLimitSave()}
+                  loading={tokenLimitSaving}
+                >
+                  Save
+                </Button>
+              </Group>
+            </Stack>
+          </Modal>
+          <Modal
+            opened={addMemberOpen}
+            onClose={() => setAddMemberOpen(false)}
+            radius="lg"
+            title="Add member"
+            centered
+          >
+            <Stack gap="sm">
+              <Text size="sm" c="dimmed">
+                Select a user to add to this team.
+              </Text>
+              <Select
+                label="Select user"
+                placeholder="Choose a user"
+                searchable
+                clearable
+                nothingFoundMessage={usersLoading ? 'Loading users...' : 'No users found'}
+                data={availableUsers.map((user) => ({
+                  value: user.id,
+                  label: `${user.name ?? user.email} (${user.email})`,
+                }))}
+                value={inviteUserId}
+                onChange={(value) => setInviteUserId(value ?? '')}
+                disabled={!isOwner}
+                onDropdownOpen={() => {
+                  if (!users.length && !usersLoading) {
+                    void loadUsers()
+                  }
+                }}
+                styles={{
+                  input: {
+                    background: 'var(--pitch-input-bg)',
+                    color: 'var(--pitch-input-text)',
+                  },
+                }}
+              />
+              <Transition mounted={inviteSuccess} transition="slide-up" duration={320} timingFunction="ease">
+                {(styles) => (
+                  <Box
+                    style={{
+                      ...styles,
+                      borderRadius: 14,
+                      padding: '10px 12px',
+                      border: '1px solid color-mix(in srgb, var(--pitch-accent) 35%, transparent)',
+                      background:
+                        'linear-gradient(120deg, ' +
+                        'color-mix(in srgb, var(--pitch-accent) 18%, transparent), ' +
+                        'color-mix(in srgb, var(--pitch-selected) 14%, transparent))',
+                      color: 'var(--pitch-accent-strong)',
+                      boxShadow: 'var(--mantine-shadow-xs)',
+                    }}
+                  >
+                    <Group gap={8} justify="center" wrap="nowrap">
+                      <Box
+                        style={{
+                          width: 22,
+                          height: 22,
+                          borderRadius: 999,
+                          display: 'grid',
+                          placeItems: 'center',
+                          background: 'color-mix(in srgb, var(--pitch-accent) 25%, transparent)',
+                        }}
+                      >
+                        <IconCheck size={14} />
+                      </Box>
+                      <Text size="xs" fw={700} tt="uppercase" style={{ letterSpacing: 0.6 }}>
+                        Member added
+                      </Text>
+                    </Group>
+                  </Box>
+                )}
+              </Transition>
+              {usersError && (
+                <Text size="xs" c="red.7">
+                  {usersError}
+                </Text>
+              )}
+              <Group justify="flex-end" gap="sm">
+                <Button variant="default" radius="xl" onClick={() => setAddMemberOpen(false)}>
+                  Cancel
+                </Button>
+                <Button
+                  radius="xl"
+                  onClick={() => {
+                    if (!activeTeamIdValue) return
+                    void handleInvite(activeTeamIdValue)
+                  }}
+                  loading={inviting || teamsLoading}
+                  disabled={!isOwner || !inviteUserId.trim() || !activeTeamIdValue}
+                >
+                  Add
+                </Button>
+              </Group>
+            </Stack>
+          </Modal>
+          <Group justify={isMobile ? 'center' : 'space-between'} align="center" wrap="wrap">
+            <Stack gap={4} align={isMobile ? 'center' : 'flex-start'}>
+              <Title order={2}>Team Management</Title>
+              <Text size="sm" c="dimmed">
+                Manage members, roles, and invitations for your team.
+              </Text>
+            </Stack>
+          </Group>
+
+          <Divider />
 
         {!activeTeam ? (
           <Stack gap="xs">
@@ -263,122 +528,140 @@ function TeamConfigInner() {
           </Stack>
         ) : (
           <>
+            <Group
+              align="center"
+              wrap="wrap"
+              gap="lg"
+              justify={isMobile ? 'center' : 'space-between'}
+              w="100%"
+            >
+              <Paper
+                p="lg"
+                radius="lg"
+                shadow="sm"
+                style={{
+                  background: summaryGradient,
+                  borderColor: 'var(--pitch-border)',
+                  flex: 1,
+                  minWidth: 320,
+                }}
+              >
+                <Group justify="space-between" align="center" wrap="wrap" gap="md">
+                  <Stack gap={4}>
+                    <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
+                      Team
+                    </Text>
+                    <Group gap="xs" align="center" wrap="wrap">
+                      <Title order={2}>{activeTeam.name}</Title>
+                      <Badge variant="light" radius="xl">
+                        {role.toLowerCase()}
+                      </Badge>
+                    </Group>
+                    <Text size="sm" c="dimmed">
+                      {members.length} member{members.length === 1 ? '' : 's'}
+                    </Text>
+                  </Stack>
+                  <Button size="md" onClick={() => void handleEditTeam(activeTeam.id)}>
+                    Edit team
+                  </Button>
+                </Group>
+              </Paper>
+              <Box
+                style={{
+                  position: 'relative',
+                  width: 240,
+                  marginLeft: isMobile ? 0 : 'auto',
+                }}
+              >
+                <Box
+                  style={{
+                    position: 'absolute',
+                    bottom: 24,
+                    width: 240,
+                    height: 22,
+                    background:
+                      'radial-gradient(ellipse, rgba(0, 0, 0, 0.45) 0%, rgba(0, 0, 0, 0.25) 40%, rgba(0, 0, 0, 0) 70%)',
+                    filter: 'blur(1px)',
+                    zIndex: 0,
+                  }}
+                />
+                <Image
+                  src="/teamsMascots.png"
+                  alt="Team mascots"
+                  width={240}
+                  height={200}
+                  style={{
+                    objectFit: 'contain',
+                    position: 'relative',
+                    zIndex: 1,
+                    filter: mascotShadow,
+                  }}
+                />
+              </Box>
+            </Group>
+
             <Paper
               p="lg"
               radius="lg"
               withBorder
               shadow="sm"
-              style={{
-                background:
-                  'linear-gradient(135deg, rgba(204,224,255,0.95), rgba(230,240,255,0.98))',
-                borderColor: 'rgba(59,130,246,0.2)',
-              }}
+              style={{ background: surfaceTintStrong, borderColor: 'var(--pitch-border)' }}
             >
-              <Group justify="space-between" align="center" wrap="nowrap">
-                <Stack gap={4}>
-                  <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
-                    Team
-                  </Text>
-                  <Group gap="xs" align="center">
-                    <Title order={2}>{activeTeam.name}</Title>
-                    <Badge variant="light" radius="xl">
-                      {role.toLowerCase()}
-                    </Badge>
-                  </Group>
-                  <Text size="sm" c="dimmed">
-                    {members.length} member{members.length === 1 ? '' : 's'}
-                  </Text>
-                </Stack>
-                <Button
-                  size="md"
-                
-                  onClick={() => void handleEditTeam(activeTeam.id)}
-                >
-                  Edit team
-                </Button>
-              </Group>
-            </Paper>
-                 <Box style={{ position: 'absolute', top: 50, right: 330, pointerEvents: 'none'}}>
-                    <Box
-                      style={{
-                        position: 'absolute',
-                        bottom: 36,
-                        width: 320,
-                        height: 26,
-                        background:
-                          'radial-gradient(ellipse, rgba(15, 23, 42, 0.45) 0%, rgba(15, 23, 42, 0.25) 40%, rgba(15, 23, 42, 0) 70%)',
-                        filter: 'blur(1px)',
-                        zIndex: 0,
-                      }}
-                    />
-                    <Image
-                      src="/teamsMascots.png"
-                      alt="Team mascots"
-                      width={330}
-                      height={270}
-                      style={{ objectFit: 'contain', position: 'relative', zIndex: 1 }}
-                    />
-                  </Box>
-
-            <Stack gap="sm">
-              <Stack gap={2}>
-                <Title order={4}>Invite new member</Title>
-                <Text size="sm" c="dimmed">
-                  Invite teammates to collaborate on projects and roles.
-                </Text>
-              </Stack>
-              <Group gap="sm" align="flex-end" wrap="nowrap">
-                <TextInput
-                  ref={inviteInputRef}
-                  leftSection={<IconMail size={16} />}
-                  placeholder="Email address"
-                  value={inviteUserId}
-                  onChange={(e) => setInviteUserId(e.currentTarget.value)}
-                  disabled={!isOwner}
-                  styles={{
-                    input: { background: 'white' },
-                  }}
-                  size="sm"
-                  style={{ width: 280 }}
-                />
-                <Button
-                  radius="xl"
-                  size="sm"
-                  onClick={() => void handleInvite(activeTeam.id)}
-                  loading={inviting || teamsLoading}
-                  disabled={!isOwner || !inviteUserId.trim()}
-                >
-                  Send Invite
-                </Button>
-              </Group>
-              <Text size="xs" c="dimmed">
-                Members will join as Editors by default.
-              </Text>
-              {!isOwner && (
-                <Text size="xs" c="dimmed">
-                  Only owners can invite or remove members.
-                </Text>
-              )}
-            </Stack>
-
-            <Paper p="lg" radius="lg" withBorder shadow="sm">
-              <Group justify="space-between" align="center" wrap="nowrap" mb="sm">
-                <Stack gap={2}>
+              <Group
+                justify={isMobile ? 'center' : 'space-between'}
+                align="center"
+                wrap="wrap"
+                mb="sm"
+                gap="sm"
+              >
+                <Stack gap={2} align={isMobile ? 'center' : 'flex-start'}>
                   <Title order={4}>Members</Title>
                   <Text size="sm" c="dimmed">
                     {members.length} total
                   </Text>
                 </Stack>
+                <Stack gap={6} align="center">
+                 
+                  <Tooltip label="Add member" withArrow>
+                    <ActionIcon
+                      variant="light"
+                      radius="xl"
+                      size="lg"
+                      onClick={() => setAddMemberOpen(true)}
+                      disabled={!isOwner}
+                    >
+                      <IconUserPlus size={18} />
+                    </ActionIcon>
+                  </Tooltip>
+                  {!isOwner && (
+                    <Text size="xs" c="dimmed" ta="center">
+                      Only owners can invite or remove members.
+                    </Text>
+                  )}
+                </Stack>
               </Group>
 
-              <Group gap="sm" align="flex-end" wrap="nowrap" w="100%" mb="sm">
+              <Group
+                gap="sm"
+                align="flex-end"
+                wrap="wrap"
+                w="100%"
+                mb="sm"
+                justify={isMobile ? 'center' : 'flex-start'}
+              >
                 <TextInput
                   leftSection={<IconSearch size={16} />}
                   placeholder="Search by name or role"
                   value={memberSearch}
                   onChange={(e) => setMemberSearch(e.currentTarget.value)}
                   size="sm"
-                  style={{ width: 320 }}
+                  style={{ width: isMobile ? '100%' : 320 }}
+                  styles={{
+                    input: {
+                      background: 'var(--pitch-input-bg)',
+                      color: 'var(--pitch-input-text)',
+                    },
+                  }}
                 />
                 <Menu width={180} position="bottom-end" withArrow>
                   <Menu.Target>
@@ -434,7 +717,7 @@ function TeamConfigInner() {
                       size="sm"
                       variant="light"
                       disabled={!selectedMembers.size}
-                      onClick={() => void handleBulkRemove(activeTeam.id)}
+                      onClick={() => void handleBulkRemove(activeTeam.id, protectedMemberIds)}
                     >
                       Remove
                     </Button>
@@ -443,7 +726,13 @@ function TeamConfigInner() {
               </Group>
 
               <ScrollArea h={filteredMembers.length > 6 ? 320 : undefined} type="auto">
-                <Table withColumnBorders={false} highlightOnHover>
+                <Table
+                  withColumnBorders={false}
+                  highlightOnHover
+                  horizontalSpacing={isMobile ? 'xs' : 'md'}
+                  verticalSpacing="xs"
+                  style={{ tableLayout: 'fixed' }}
+                >
                   <Table.Thead>
                     <Table.Tr>
                       <Table.Th style={{ width: 28, paddingRight: 0 }}>
@@ -473,142 +762,454 @@ function TeamConfigInner() {
                           />
                         )}
                       </Table.Th>
-                      <Table.Th>Name</Table.Th>
-                      <Table.Th>Role</Table.Th>
-                      <Table.Th>Actions</Table.Th>
+                      <Table.Th style={{ width: isMobile ? '72%' : '50%' }}>Name</Table.Th>
+                      {!isMobile && (
+                        <>
+                          <Table.Th style={{ width: '20%' }}>Role</Table.Th>
+                          <Table.Th style={{ width: '30%' }}>Actions</Table.Th>
+                        </>
+                      )}
                     </Table.Tr>
                   </Table.Thead>
                   <Table.Tbody>
                     {filteredMembers.length === 0 ? (
                       <Table.Tr>
-                        <Table.Td colSpan={4}>
+                        <Table.Td colSpan={isMobile ? 2 : 4}>
                           <Text size="sm" c="dimmed">
                             No matching members.
                           </Text>
                         </Table.Td>
                       </Table.Tr>
                     ) : (
-                      filteredMembers.map((member) => (
-                        <Table.Tr key={member.id}>
-                          <Table.Td style={{ paddingRight: 0 }}>
-                            <Checkbox
-                              size="xs"
-                              checked={selectedMembers.has(member.userId)}
-                              onChange={() => toggleMemberSelected(member.userId)}
-                              styles={{ input: { width: 14, height: 14 } }}
-                            />
-                          </Table.Td>
-                          <Table.Td>
-                            <Group gap="sm" wrap="nowrap">
-                              <Avatar src={member.user?.avatar ?? undefined} radius="xl" size={32} />
-                              <Stack gap={2}>
-                                <Text size="sm" fw={600}>
-                                  {member.user?.name ?? 'Unknown'}
-                                </Text>
-                                <Text size="xs" c="dimmed">
-                                  {member.user?.email ?? ''}
-                                </Text>
-                              </Stack>
-                            </Group>
-                          </Table.Td>
-                          <Table.Td>
-                            {isOwner ? (
-                              <Select
-                                size="sm"
-                                radius="xl"
-                                value={member.role}
-                                data={[
-                                  { value: 'OWNER', label: 'Owner' },
-                                  { value: 'ADMIN', label: 'Admin' },
-                                  { value: 'MEMBER', label: 'Member' },
-                                ]}
-                                onChange={(value) => {
-                                  if (!value) return
-                                  void handleRoleChange(activeTeam.id, member.userId, value)
+                        filteredMembers.map((member) =>
+                          isMobile ? (
+                            <Fragment key={member.id}>
+                              <Table.Tr
+                                style={{
+                                  cursor: 'pointer',
+                                  opacity: removingMembers.has(member.userId) ? 0 : 1,
+                                  transform: removingMembers.has(member.userId)
+                                    ? 'translateX(12px)'
+                                    : 'translateX(0)',
+                                  transition: 'opacity 220ms ease, transform 220ms ease',
                                 }}
-                                rightSection={
-                                  <IconChevronDown size={14} color="var(--mantine-color-blue-6)" />
-                                }
-                                rightSectionPointerEvents="none"
-                                styles={{
-                                  input: {
-                                    background: 'transparent',
-                                    borderRadius: 999,
-                                    border: 'none',
-                                    boxShadow: 'none',
-                                    fontSize: '0.875rem',
-                                    '&:hover': {
-                                      background: 'transparent',
-                                    },
-                                  },
-                                }}
-                                w={120}
-                              />
-                            ) : (
-                              <Text size="sm">{member.role.toLowerCase()}</Text>
-                            )}
-                          </Table.Td>
-                          <Table.Td>
-                            {isOwner ? (
-                              <Tooltip label="Member settings" withArrow>
-                                <ActionIcon variant="subtle" radius="xl">
-                                  <IconSettings size={16} />
-                                </ActionIcon>
-                              </Tooltip>
-                            ) : (
-                              <Text size="xs" c="dimmed">
-                                -
-                              </Text>
-                            )}
-                          </Table.Td>
-                        </Table.Tr>
-                      ))
-                    )}
+                                onClick={() => toggleMemberExpanded(member.id)}
+                              >
+                                <Table.Td style={{ paddingRight: 0 }}>
+                                  <Checkbox
+                                    size="xs"
+                                    checked={selectedMembers.has(member.userId)}
+                                    onChange={() => toggleMemberSelected(member.userId, member.role)}
+                                    disabled={
+                                      member.role === 'OWNER' || removingMembers.has(member.userId)
+                                    }
+                                    onClick={(e) => e.stopPropagation()}
+                                    styles={{ input: { width: 14, height: 14 } }}
+                                  />
+                                </Table.Td>
+                                <Table.Td>
+                                  <Group gap="xs" justify="space-between" wrap="nowrap">
+                                    <Text size="sm" fw={600} lineClamp={1}>
+                                      {member.user?.name ?? 'Unknown'}
+                                    </Text>
+                                    <ActionIcon
+                                      variant="subtle"
+                                      radius="xl"
+                                      size="sm"
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        toggleMemberExpanded(member.id)
+                                      }}
+                                      style={{
+                                        transform: expandedMembers.has(member.id)
+                                          ? 'rotate(180deg)'
+                                          : 'rotate(0deg)',
+                                        transition: 'transform 150ms ease',
+                                      }}
+                                    >
+                                      <IconChevronDown size={14} />
+                                    </ActionIcon>
+                                  </Group>
+                                </Table.Td>
+                              </Table.Tr>
+                              {expandedMembers.has(member.id) && (
+                                <Table.Tr
+                                  style={{
+                                    opacity: removingMembers.has(member.userId) ? 0 : 1,
+                                    transform: removingMembers.has(member.userId)
+                                      ? 'translateX(12px)'
+                                      : 'translateX(0)',
+                                    transition: 'opacity 220ms ease, transform 220ms ease',
+                                  }}
+                                >
+                                  <Table.Td colSpan={2}>
+                                    <Stack gap="xs">
+                                      <Text size="xs" fw={600}>
+                                        {member.user?.name ?? 'Unknown'}
+                                      </Text>
+                                      <Text size="xs" c="dimmed">
+                                        {member.user?.email ?? ''}
+                                      </Text>
+                                      <Group gap="sm" align="center" wrap="wrap">
+                                        {isOwner ? (
+                                          roleMenuMemberId === member.id ? (
+                                            <Transition
+                                              mounted
+                                              transition="slide-right"
+                                              duration={260}
+                                              timingFunction="ease"
+                                            >
+                                              {(styles) => (
+                                                <Stack
+                                                  gap="xs"
+                                                  style={{
+                                                    ...styles,
+                                                    background: 'var(--pitch-surface-bg)',
+                                                    border: '1px solid var(--pitch-border)',
+                                                    borderRadius: 12,
+                                                    padding: '8px 10px',
+                                                    boxShadow: 'var(--mantine-shadow-xs)',
+                                                    transformOrigin: 'left center',
+                                                  }}
+                                                >
+                                                  <Button
+                                                    size="xs"
+                                                    radius="sm"
+                                                    variant="subtle"
+                                                    fullWidth
+                                                    onClick={() => {
+                                                      void handleRoleChange(
+                                                        activeTeam.id,
+                                                        member.userId,
+                                                        'OWNER'
+                                                      )
+                                                      setRoleMenuMemberId(null)
+                                                    }}
+                                                  >
+                                                    Owner
+                                                  </Button>
+                                                  <Button
+                                                    size="xs"
+                                                    radius="sm"
+                                                    variant="subtle"
+                                                    fullWidth
+                                                    onClick={() => {
+                                                      void handleRoleChange(
+                                                        activeTeam.id,
+                                                        member.userId,
+                                                        'ADMIN'
+                                                      )
+                                                      setRoleMenuMemberId(null)
+                                                    }}
+                                                  >
+                                                    Admin
+                                                  </Button>
+                                                  <Button
+                                                    size="xs"
+                                                    radius="sm"
+                                                    variant="subtle"
+                                                    fullWidth
+                                                    onClick={() => {
+                                                      void handleRoleChange(
+                                                        activeTeam.id,
+                                                        member.userId,
+                                                        'MEMBER'
+                                                      )
+                                                      setRoleMenuMemberId(null)
+                                                    }}
+                                                  >
+                                                    Member
+                                                  </Button>
+                                                  <Button
+                                                    size="xs"
+                                                    radius="sm"
+                                                    variant="subtle"
+                                                    fullWidth
+                                                    leftSection={<IconX size={12} />}
+                                                    onClick={() => setRoleMenuMemberId(null)}
+                                                  >
+                                                    Close
+                                                  </Button>
+                                                </Stack>
+                                              )}
+                                            </Transition>
+                                          ) : (
+                                            <UnstyledButton
+                                              onClick={(e) => {
+                                                e.stopPropagation()
+                                                setRoleMenuMemberId(member.id)
+                                              }}
+                                              style={{
+                                                display: 'inline-flex',
+                                                alignItems: 'center',
+                                                gap: 6,
+                                                padding: 0,
+                                                cursor: 'pointer',
+                                              }}
+                                            >
+                                              <Text size="xs" fw={600}>
+                                                Role: {member.role.toLowerCase()}
+                                              </Text>
+                                              <IconChevronDown size={12} />
+                                            </UnstyledButton>
+                                          )
+                                        ) : (
+                                          <Text size="xs" c="dimmed">
+                                            Role: {member.role.toLowerCase()}
+                                          </Text>
+                                        )}
+                                      </Group>
+                                      <Group gap="sm" align="center" wrap="wrap">
+                                        {isOwner ? (
+                                          settingsMenuMemberId === member.id ? (
+                                            <Transition
+                                              mounted
+                                              transition="slide-right"
+                                              duration={260}
+                                              timingFunction="ease"
+                                            >
+                                              {(styles) => (
+                                                <Stack
+                                                  gap="xs"
+                                                  style={{
+                                                    ...styles,
+                                                    background: 'var(--pitch-surface-bg)',
+                                                    border: '1px solid var(--pitch-border)',
+                                                    borderRadius: 12,
+                                                    padding: '8px 10px',
+                                                    boxShadow: 'var(--mantine-shadow-xs)',
+                                                    transformOrigin: 'left center',
+                                                  }}
+                                                >
+                                                  <Button
+                                                    size="xs"
+                                                    radius="sm"
+                                                    variant="subtle"
+                                                    fullWidth
+                                                    onClick={() => {
+                                                      void handleTokenLimitChange(
+                                                        activeTeam.id,
+                                                        member.userId,
+                                                        member.tokenLimit
+                                                      )
+                                                      setSettingsMenuMemberId(null)
+                                                    }}
+                                                  >
+                                                    Token limit
+                                                  </Button>
+                                                  <Button
+                                                    size="xs"
+                                                    radius="sm"
+                                                    variant="subtle"
+                                                    fullWidth
+                                                    onClick={() => {
+                                                      router.push(
+                                                        `/studio/analytics?memberId=${member.userId}`
+                                                      )
+                                                      setSettingsMenuMemberId(null)
+                                                    }}
+                                                  >
+                                                    Analytics
+                                                  </Button>
+                                                  <Button
+                                                    size="xs"
+                                                    radius="sm"
+                                                    variant="subtle"
+                                                    color="red"
+                                                    fullWidth
+                                                    onClick={() => {
+                                                      void handleRemoveMember(activeTeam.id, member.userId)
+                                                      setSettingsMenuMemberId(null)
+                                                    }}
+                                                    disabled={
+                                                      member.userId === user?.id ||
+                                                      removingMembers.has(member.userId)
+                                                    }
+                                                  >
+                                                    Remove
+                                                  </Button>
+                                                  <Button
+                                                    size="xs"
+                                                    radius="sm"
+                                                    variant="subtle"
+                                                    fullWidth
+                                                    leftSection={<IconX size={12} />}
+                                                    onClick={() => setSettingsMenuMemberId(null)}
+                                                  >
+                                                    Close
+                                                  </Button>
+                                                </Stack>
+                                              )}
+                                            </Transition>
+                                          ) : (
+                                            <UnstyledButton
+                                              onClick={(e) => {
+                                                e.stopPropagation()
+                                                setSettingsMenuMemberId(member.id)
+                                              }}
+                                              style={{
+                                                display: 'inline-flex',
+                                                alignItems: 'center',
+                                                gap: 6,
+                                                padding: 0,
+                                                cursor: 'pointer',
+                                              }}
+                                            >
+                                              <Text size="xs" fw={600}>
+                                                Settings
+                                              </Text>
+                                              <IconChevronDown size={12} />
+                                            </UnstyledButton>
+                                          )
+                                        ) : (
+                                          <Text size="xs" c="dimmed">
+                                            -
+                                          </Text>
+                                        )}
+                                      </Group>
+                                    </Stack>
+                                  </Table.Td>
+                                </Table.Tr>
+                              )}
+                            </Fragment>
+                          ) : (
+                            <Table.Tr
+                              key={member.id}
+                              style={{
+                                opacity: removingMembers.has(member.userId) ? 0 : 1,
+                                transform: removingMembers.has(member.userId)
+                                  ? 'translateX(12px)'
+                                  : 'translateX(0)',
+                                transition: 'opacity 220ms ease, transform 220ms ease',
+                              }}
+                            >
+                              <Table.Td style={{ paddingRight: 0 }}>
+                                <Checkbox
+                                  size="xs"
+                                  checked={selectedMembers.has(member.userId)}
+                                  onChange={() => toggleMemberSelected(member.userId, member.role)}
+                                  disabled={
+                                    member.role === 'OWNER' || removingMembers.has(member.userId)
+                                  }
+                                  styles={{ input: { width: 14, height: 14 } }}
+                                />
+                              </Table.Td>
+                              <Table.Td>
+                                <Group gap="sm" wrap="nowrap">
+                                  <Avatar
+                                    src={member.user?.avatar ?? undefined}
+                                    radius="xl"
+                                    size={32}
+                                  />
+                                  <Stack gap={2}>
+                                    <Text size="sm" fw={600}>
+                                      {member.user?.name ?? 'Unknown'}
+                                    </Text>
+                                    <Text size="xs" c="dimmed" lineClamp={1}>
+                                      {member.user?.email ?? ''}
+                                    </Text>
+                                  </Stack>
+                                </Group>
+                              </Table.Td>
+                              <Table.Td>
+                                {isOwner ? (
+                                  <Select
+                                    size="sm"
+                                    radius="xl"
+                                    value={member.role}
+                                    data={[
+                                      { value: 'OWNER', label: 'Owner' },
+                                      { value: 'ADMIN', label: 'Admin' },
+                                      { value: 'MEMBER', label: 'Member' },
+                                    ]}
+                                    onChange={(value) => {
+                                      if (!value) return
+                                      void handleRoleChange(activeTeam.id, member.userId, value)
+                                    }}
+                                    rightSection={
+                                      <IconChevronDown size={14} color="var(--pitch-accent-strong)" />
+                                    }
+                                    rightSectionPointerEvents="none"
+                                    styles={{
+                                      input: {
+                                        background: 'var(--pitch-input-bg)',
+                                        color: 'var(--pitch-input-text)',
+                                        borderRadius: 999,
+                                        border: 'none',
+                                        boxShadow: 'none',
+                                        fontSize: '0.875rem',
+                                        '&:hover': {
+                                          background: 'var(--pitch-input-bg)',
+                                        },
+                                      },
+                                    }}
+                                    w={120}
+                                  />
+                                ) : (
+                                  <Text size="sm">{member.role.toLowerCase()}</Text>
+                                )}
+                              </Table.Td>
+                              <Table.Td>
+                                {isOwner ? (
+                                  <Menu position="bottom-end" withArrow>
+                                    <Menu.Target>
+                                      <Tooltip label="Member settings" withArrow>
+                                        <ActionIcon variant="subtle" radius="xl">
+                                          <IconSettings size={16} />
+                                        </ActionIcon>
+                                      </Tooltip>
+                                    </Menu.Target>
+                                    <Menu.Dropdown>
+                                      <Menu.Label>Member actions</Menu.Label>
+                                      <Menu.Item
+                                        leftSection={<IconSettings size={14} />}
+                                        onClick={() =>
+                                          void handleTokenLimitChange(
+                                            activeTeam.id,
+                                            member.userId,
+                                            member.tokenLimit
+                                          )
+                                        }
+                                      >
+                                        Set token limit
+                                      </Menu.Item>
+                                      <Menu.Item
+                                        leftSection={<IconChartBar size={14} />}
+                                        onClick={() =>
+                                          router.push(`/studio/analytics?memberId=${member.userId}`)
+                                        }
+                                      >
+                                        View analytics
+                                      </Menu.Item>
+                                      <Menu.Divider />
+                                      <Menu.Item
+                                        color="red"
+                                        leftSection={<IconTrash size={14} />}
+                                        onClick={() => void handleRemoveMember(activeTeam.id, member.userId)}
+                                        disabled={
+                                          member.userId === user?.id ||
+                                          removingMembers.has(member.userId)
+                                        }
+                                      >
+                                        Remove member
+                                      </Menu.Item>
+                                    </Menu.Dropdown>
+                                  </Menu>
+                                ) : (
+                                  <Text size="xs" c="dimmed">
+                                    -
+                                  </Text>
+                                )}
+                              </Table.Td>
+                            </Table.Tr>
+                          )
+                        )
+                      )}
                   </Table.Tbody>
                 </Table>
               </ScrollArea>
             </Paper>
 
-            {members.length === 1 && (
-              <Paper p="lg" radius="lg" withBorder shadow="sm">
-                <Group justify="space-between" align="center" wrap="nowrap">
-                  <Stack gap={4}>
-                    <Title order={4}>You're the only member right now.</Title>
-                    <Text size="sm" c="dimmed">
-                      Invite teammates to start collaborating.
-                    </Text>
-                    <Button
-                      radius="xl"
-                      size="sm"
-                      onClick={() => inviteInputRef.current?.focus()}
-                    >
-                      Send Invite
-                    </Button>
-                  </Stack>
-                  <Box style={{ width: 180, position: 'relative', pointerEvents: 'none' }}>
-                    <Box
-                      style={{
-                        position: 'absolute',
-                        bottom: 4,
-                        width: 180,
-                        height: 20,
-                        background:
-                          'radial-gradient(ellipse, rgba(15, 23, 42, 0.45) 0%, rgba(15, 23, 42, 0.25) 40%, rgba(15, 23, 42, 0) 70%)',
-                        filter: 'blur(1px)',
-                        zIndex: 0,
-                      }}
-                    />
-                    <Image
-                      src="/teamsMascots.png"
-                      alt="Team mascots"
-                      width={180}
-                      height={140}
-                      style={{ objectFit: 'contain', position: 'relative', zIndex: 1 }}
-                    />
-                  </Box>
-                </Group>
-              </Paper>
-            )}
           </>
         )}
         </Stack>
@@ -623,7 +1224,7 @@ function TeamConfigInner() {
       radius="xl"
       shadow="sm"
       withBorder
-      style={{ background: 'var(--mantine-color-gray-0)' }}
+      style={{ background: 'var(--pitch-surface-bg)', borderColor: 'var(--pitch-border)' }}
     >
       {/* header */}
       <Group justify="space-between" align="flex-start" mb="md">
@@ -784,8 +1385,8 @@ function TeamConfigInner() {
           p="md"
           style={{
             borderRadius: 14,
-            border: '1px solid var(--mantine-color-gray-3)',
-            background: 'white',
+            border: '1px solid var(--pitch-border)',
+            background: 'var(--pitch-surface-bg)',
           }}
         >
           <Text size="sm" c="dimmed">
