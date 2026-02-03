@@ -101,6 +101,27 @@ export class TeamRepository {
   }
 
   async addMember(data: AddMemberDto): Promise<TeamMembership> {
+    const existing = await this.prisma.teamMembership.findUnique({
+      where: {
+        userId_teamId: { userId: data.userId, teamId: data.teamId },
+      },
+      select: { id: true },
+    });
+
+    if (existing) {
+      return this.prisma.teamMembership.update({
+        where: {
+          userId_teamId: { userId: data.userId, teamId: data.teamId },
+        },
+        data: {
+          role: data.role,
+          tokenLimit: data.tokenLimit,
+          isActive: data.isActive ?? true,
+          invitedByUserId: data.invitedByUserId,
+        },
+      });
+    }
+
     return this.prisma.teamMembership.create({
       data: {
         userId: data.userId,
@@ -128,6 +149,13 @@ export class TeamRepository {
   }
 
   async deleteTeamMember(teamId: string, userId: string): Promise<void> {
+    const membership = await this.prisma.teamMembership.findUnique({
+      where: { userId_teamId: { userId, teamId } },
+      select: { role: true },
+    });
+    if (membership?.role === Role.OWNER) {
+      throw new ForbiddenException('Cannot remove team owner');
+    }
     await this.prisma.teamMembership.update({
       where: {
         userId_teamId: { userId: userId, teamId: teamId },
@@ -232,7 +260,16 @@ export class TeamRepository {
     if (!m) throw new NotFoundException('Membership not found');
     if (!m.team.isActive || m.team.deletedAt !== null)
       throw new NotFoundException('Team not found');
-    if (!m.isActive) throw new ForbiddenException('Membership inactive');
+    if (!m.isActive) {
+      if (m.role === Role.OWNER) {
+        await this.prisma.teamMembership.update({
+          where: { userId_teamId: { userId, teamId } },
+          data: { isActive: true },
+        });
+      } else {
+        throw new ForbiddenException('Membership inactive');
+      }
+    }
     if (m.role !== Role.OWNER && m.role !== Role.ADMIN)
       throw new ForbiddenException('Insufficient role');
 
