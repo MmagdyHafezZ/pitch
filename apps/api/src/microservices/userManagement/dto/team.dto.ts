@@ -112,6 +112,7 @@ export class AddMemberRequestDTO {
   @ApiProperty({ description: 'Per-member token limit', example: 0 })
   @Min(0)
   @IsNumber()
+  @IsOptional()
   tokenLimit?: number;
 
   @ApiProperty({
@@ -136,6 +137,7 @@ export class UpdateMemberRequestDto {
   @ApiProperty({ description: 'Per-member token limit', example: 0 })
   @Min(0)
   @IsNumber()
+  @IsOptional()
   tokenLimit?: number;
 
   @ApiProperty({
