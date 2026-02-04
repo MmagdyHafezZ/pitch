@@ -15,6 +15,7 @@ import {
 import { LLMMessageDto, LLMConfigDto } from '../dto/llm.dto';
 import { randomUUID } from 'crypto';
 import type { IConversationContext } from '../schemas/mongodb/hint.schema';
+import { buildHintsSystemPrompt } from '../prompts/hints.prompt';
 
 interface HintConfig {
   enabled: boolean;
@@ -28,6 +29,7 @@ interface HintConfig {
 }
 
 interface ConversationContext extends IConversationContext {
+  iterationId?: string;
   messages: Array<{
     role: string;
     content: string;
@@ -35,6 +37,9 @@ interface ConversationContext extends IConversationContext {
   }>;
   conversationLength: number;
   lastUserMessageAt?: Date;
+  latestAssistantMessage?: string;
+  latestAssistantQuestion?: string;
+  latestUserMessage?: string;
   objectives?: string[];
   pendingObjectives?: string[];
 }
@@ -81,6 +86,22 @@ const isParsedHintsPayload = (value: unknown): value is ParsedHintsPayload => {
     return true;
   });
 };
+
+const extractLatestQuestion = (text?: string): string | undefined => {
+  if (!text) return undefined;
+  const matches = text.match(/[^?]*\?/g);
+  if (!matches || matches.length === 0) return undefined;
+  return matches[matches.length - 1].trim();
+};
+
+const HINT_REPAIR_PROMPT = (
+  maxHints: number,
+) => `Your previous output was invalid for hint generation.
+Return ONLY valid JSON and nothing else.
+Do NOT answer the conversation or roleplay.
+Output schema:
+{"hints":[{"type":"next_topic|clarification|follow_up|transition|objective","content":"string","rationale":"string","score":0.0}]}
+Generate at most ${maxHints} hints.`;
 
 /**
  * Service for generating and managing conversation hints
@@ -135,10 +156,11 @@ export class HintsService {
       );
 
       // 3. Build system prompt for hint generation
-      const systemPrompt = this.buildHintGenerationPrompt(
+      const systemPrompt = await buildHintsSystemPrompt(
         request.strategy || hintConfig.strategy,
-        conversationContext,
+        conversationContext.latestAssistantQuestion,
         request.maxHints || hintConfig.maxHintsPerRequest,
+        Boolean(conversationContext.objectives?.length),
       );
 
       // 4. Prepare LLM request
@@ -153,8 +175,8 @@ export class HintsService {
           hintConfig.llmModel ||
           'gpt-4o-mini',
         temperature:
-          request.llmConfigOverride?.temperature || hintConfig.temperature,
-        maxTokens: request.llmConfigOverride?.maxTokens || hintConfig.maxTokens,
+          request.llmConfigOverride?.temperature ?? hintConfig.temperature,
+        maxTokens: request.llmConfigOverride?.maxTokens ?? hintConfig.maxTokens,
         stream: false,
       };
 
@@ -170,12 +192,12 @@ export class HintsService {
       ];
 
       // 5. Generate hints using LLM
-      const { response: llmResponse, route } = await this.llmRouter.complete(
+      const initialResult = await this.llmRouter.complete(
         {
           messages: llmMessages,
           config: llmConfig,
           sessionId: request.sessionId,
-          sessionMemberId: request.turnId,
+          iterationId: conversationContext.iterationId,
           userId: request.userId,
         },
         {
@@ -185,12 +207,59 @@ export class HintsService {
           purpose: 'hints',
         },
       );
+      let llmResponse = initialResult.response;
+      let route = initialResult.route;
 
       // 6. Parse LLM response into hints
-      const hints = this.parseHintsFromLLMResponse(
+      let hints = this.tryParseHintsFromLLMResponse(
         llmResponse.content ?? '',
         conversationContext,
       );
+      if (!hints) {
+        this.logger.warn(
+          `Invalid hints output for session ${request.sessionId}. Retrying with strict JSON repair prompt.`,
+        );
+        const repairResult = await this.llmRouter.complete(
+          {
+            messages: [
+              ...llmMessages,
+              {
+                role: 'assistant',
+                content: llmResponse.content ?? '',
+              },
+              {
+                role: 'user',
+                content: HINT_REPAIR_PROMPT(
+                  request.maxHints || hintConfig.maxHintsPerRequest,
+                ),
+              },
+            ],
+            config: {
+              ...llmConfig,
+              temperature: 0,
+            },
+            sessionId: request.sessionId,
+            iterationId: conversationContext.iterationId,
+            userId: request.userId,
+          },
+          {
+            orgId: request.orgId,
+            userId: request.userId,
+            requestId: randomUUID(),
+            purpose: 'hints',
+          },
+        );
+
+        llmResponse = repairResult.response;
+        route = repairResult.route;
+        hints = this.tryParseHintsFromLLMResponse(
+          llmResponse.content ?? '',
+          conversationContext,
+        );
+      }
+      if (!hints) {
+        hints = this.buildFallbackHints(conversationContext);
+      }
 
       // 7. Store hints in MongoDB
       const savedHint = await this.hintsRepository.create({
@@ -333,7 +402,7 @@ export class HintsService {
         inactivityThresholdSeconds: 30,
         llmProvider: null,
         llmModel: 'gpt-4o-mini',
-        temperature: 0.7,
+        temperature: 0.25,
         maxTokens: 500,
       };
     }
@@ -351,7 +420,7 @@ export class HintsService {
       inactivityThresholdSeconds: config.inactivityThresholdSeconds,
       llmProvider: config.llmProvider,
       llmModel: config.llmModel ?? 'gpt-4o-mini',
-      temperature: config.temperature ?? 0.7,
+      temperature: config.temperature ?? 0.25,
       maxTokens: config.maxTokens ?? 500,
     };
   }
@@ -368,24 +437,35 @@ export class HintsService {
   ): Promise<ConversationContext> {
     // If messages are provided, use them
     if (providedMessages && providedMessages.length > 0) {
+      const messages = providedMessages.map((m) => ({
+        role: m.role,
+        content:
+          typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
+      }));
+      const reversed = [...messages].reverse();
+      const latestAssistantMessage =
+        reversed.find((m) => m.role === 'assistant')?.content ?? undefined;
+      const latestUserMessage =
+        reversed.find((m) => m.role === 'user')?.content ?? undefined;
+      const latestAssistantQuestion = extractLatestQuestion(
+        latestAssistantMessage,
+      );
       return {
-        messages: providedMessages.map((m) => ({
-          role: m.role,
-          content:
-            typeof m.content === 'string'
-              ? m.content
-              : JSON.stringify(m.content),
-        })),
-        conversationLength: providedMessages.length,
+        messages,
+        conversationLength: messages.length,
+        latestAssistantMessage,
+        latestAssistantQuestion,
+        latestUserMessage,
       };
     }
 
     // Otherwise, fetch from database
-    const sessionMember = await this.prisma.client.sessionMember.findFirst({
+    const iteration = await this.prisma.client.iteration.findFirst({
       where: {
         sessionId,
-        ...(userId ? { userId } : {}),
+        ...(userId ? { sessionMember: { userId } } : {}),
       },
+      orderBy: { iterationNumber: 'desc' },
       include: {
         messages: {
           orderBy: { createdAt: 'desc' },
@@ -400,11 +480,11 @@ export class HintsService {
       },
     });
 
-    if (!sessionMember) {
+    if (!iteration) {
       throw new NotFoundException(`Session ${sessionId} not found`);
     }
 
-    const messages = sessionMember.messages
+    const messages = iteration.messages
       .map((msg) => ({
         role: String(msg.role),
         content: typeof msg.content === 'string' ? msg.content : '',
@@ -412,22 +492,27 @@ export class HintsService {
       }))
       .reverse();
 
-    const lastUserMessage = messages
-      .filter((m) => m.role === 'user')
-      .sort(
-        (a, b) =>
-          new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
-      )[0];
+    const reversedMessages = [...messages].reverse();
+    const lastUserMessage =
+      reversedMessages.find((m) => m.role === 'user') ?? undefined;
+    const lastAssistantMessage =
+      reversedMessages.find((m) => m.role === 'assistant') ?? undefined;
 
     const context: ConversationContext = {
-      messages: messages.reverse(), // Chronological order
+      iterationId: iteration.id,
+      messages, // Chronological order
       conversationLength: messages.length,
       lastUserMessageAt: lastUserMessage?.timestamp,
+      latestAssistantMessage: lastAssistantMessage?.content,
+      latestAssistantQuestion: extractLatestQuestion(
+        lastAssistantMessage?.content,
+      ),
+      latestUserMessage: lastUserMessage?.content,
     };
 
-    if (includeObjectives && sessionMember.session?.scenario) {
+    if (includeObjectives && iteration.session?.scenario) {
       // Extract objectives from scenario config if available
-      const scenarioConfig = sessionMember.session.scenario.config as Record<
+      const scenarioConfig = iteration.session.scenario.config as Record<
         string,
         unknown
       > | null;
@@ -442,68 +527,6 @@ export class HintsService {
     }
 
     return context;
-  }
-
-  /**
-   * Build system prompt for hint generation
-   */
-  private buildHintGenerationPrompt(
-    strategy: HintStrategy,
-    context: ConversationContext,
-    maxHints: number,
-  ): string {
-    let strategyGuidance = '';
-
-    switch (strategy) {
-      case HintStrategy.PROACTIVE:
-        strategyGuidance =
-          'Generate hints proactively to guide the conversation forward, anticipating what the user might need to discuss next.';
-        break;
-      case HintStrategy.REACTIVE:
-        strategyGuidance =
-          'Generate hints in response to user inactivity or lack of engagement, helping them re-engage with the conversation.';
-        break;
-      case HintStrategy.CONTEXTUAL:
-        strategyGuidance =
-          'Generate hints based on the current conversation context, identifying gaps or areas that need more exploration.';
-        break;
-      default:
-        strategyGuidance = 'Generate helpful hints to guide the conversation.';
-    }
-
-    return `You are an AI assistant helping users have better conversations. Your task is to generate helpful hints that guide the user on what to talk about next.
-
-${strategyGuidance}
-
-Hint Types:
-- "next_topic": Suggest the next logical topic to discuss
-- "clarification": Ask for clarification on something mentioned
-- "follow_up": Suggest a follow-up question or point
-- "transition": Help transition to a new topic
-- "objective": Remind about session objectives (if applicable)
-
-Generate up to ${maxHints} hints in JSON format with the following structure:
-{
-  "hints": [
-    {
-      "type": "next_topic|clarification|follow_up|transition|objective",
-      "content": "The hint text that will be shown to the user",
-      "rationale": "Why this hint is relevant right now",
-      "score": 0.0-1.0
-    }
-  ]
-}
-
-Guidelines:
-- Each hint should be concise (1-2 sentences)
-- Hints should be actionable and specific
-- Score reflects relevance (0.0 = low, 1.0 = high)
-- Order hints by relevance (most relevant first)
-- Consider conversation flow and natural progression
-- Be empathetic and encouraging
-${context.objectives ? '- Align hints with session objectives when relevant' : ''}
-
-Respond ONLY with valid JSON, no additional text.`;
   }
 
   /**
@@ -530,6 +553,18 @@ Respond ONLY with valid JSON, no additional text.`;
         .join('\n');
     }
 
+    if (context.latestAssistantMessage) {
+      formatted += `\n\nLatest Assistant Message:\n${context.latestAssistantMessage}`;
+    }
+
+    if (context.latestAssistantQuestion) {
+      formatted += `\nLatest Assistant Question:\n${context.latestAssistantQuestion}`;
+    }
+
+    if (context.latestUserMessage) {
+      formatted += `\nLatest User Message:\n${context.latestUserMessage}`;
+    }
+
     if (context.conversationLength !== undefined) {
       formatted += `\n\nConversation Length: ${context.conversationLength} messages`;
     }
@@ -546,10 +581,10 @@ Respond ONLY with valid JSON, no additional text.`;
   /**
    * Parse hints from LLM response
    */
-  private parseHintsFromLLMResponse(
+  private tryParseHintsFromLLMResponse(
     content: string,
     context: ConversationContext,
-  ): HintDto[] {
+  ): HintDto[] | null {
     try {
       // Try to extract JSON from the response
       const jsonMatch = content.match(/\{[\s\S]*\}/);
@@ -588,16 +623,34 @@ Respond ONLY with valid JSON, no additional text.`;
         `Error parsing hints from LLM response: ${err.message}`,
         err.stack,
       );
-      // Fallback: return a generic hint
+      return null;
+    }
+  }
+
+  private buildFallbackHints(context: ConversationContext): HintDto[] {
+    const latestAssistantQuestion = context.latestAssistantQuestion;
+    if (latestAssistantQuestion) {
       return [
         {
           id: randomUUID(),
-          type: HintType.NEXT_TOPIC,
-          content:
-            'Continue the conversation by exploring the topics discussed so far.',
+          type: HintType.FOLLOW_UP,
+          content: `Give a direct, specific answer to this question first: ${latestAssistantQuestion}`,
+          rationale:
+            'Prioritize answering the latest assistant question before introducing new points.',
+          score: 0.8,
           generatedAt: new Date(),
         },
       ];
     }
+
+    return [
+      {
+        id: randomUUID(),
+        type: HintType.NEXT_TOPIC,
+        content:
+          'Continue with one concrete next point tied to the latest concern in the conversation.',
+        generatedAt: new Date(),
+      },
+    ];
   }
 }

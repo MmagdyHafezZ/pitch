@@ -20,7 +20,9 @@ import { Suspense, useState, useEffect, useMemo } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { motion, AnimatePresence, type Variants } from 'framer-motion'
 import { useAuth } from '@/features/auth'
+import { JsonViewer } from '@/components/ui/JsonViewer'
 import { useSessions, type Session } from '@/features/sessions'
+import { useTeams, type Team } from '@/features/teams'
 
 type Status = 'active' | 'ended'
 const statusColor: Record<Status, string> = {
@@ -140,7 +142,23 @@ function SessionDetailPanel({ session, onDismiss }: { session: Session; onDismis
     if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
       return String(value)
     }
+    // For objects, we'll render them with a special component
+    if (typeof value === 'object') {
+      return value
+    }
     return JSON.stringify(value)
+  }
+
+  const renderValue = (value: unknown) => {
+    const formattedValue = formatValue(value)
+    if (typeof formattedValue === 'object' && formattedValue !== null) {
+      return <JsonViewer data={formattedValue as Record<string, any>} />
+    }
+    return (
+      <Text size="sm" c="white">
+        {String(formattedValue)}
+      </Text>
+    )
   }
 
   const panelVariants = {
@@ -255,9 +273,7 @@ function SessionDetailPanel({ session, onDismiss }: { session: Session; onDismis
                   <Text size="sm" c="dimmed" style={{ minWidth: 120 }}>
                     {key}
                   </Text>
-                  <Text size="sm" c="white">
-                    {formatValue(value)}
-                  </Text>
+                  <div style={{ flex: 1 }}>{renderValue(value)}</div>
                 </Group>
               ))}
             </Stack>
@@ -286,9 +302,7 @@ function SessionDetailPanel({ session, onDismiss }: { session: Session; onDismis
                 <Text size="sm" c="dimmed" style={{ minWidth: 120 }}>
                   {detail.label}
                 </Text>
-                <Text size="sm" c="white">
-                  {formatValue(detail.value)}
-                </Text>
+                <div style={{ flex: 1 }}>{renderValue(detail.value)}</div>
               </Group>
             ))}
             {description && (
@@ -343,16 +357,20 @@ function SessionsPageInner() {
   const searchParams = useSearchParams()
   const { user } = useAuth()
   const { sessions, loading, fetchUserSessions } = useSessions()
+  const { teams, fetchUserTeams } = useTeams()
+  const sessionFilter = searchParams.get('filter') ?? 'All'
 
-  const [assignedExpanded, setAssignedExpanded] = useState(true)
-  const [createdExpanded, setCreatedExpanded] = useState(true)
+  const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({
+    Personal: true,
+  })
   const [selectedSession, setSelectedSession] = useState<Session | null>(null)
 
   useEffect(() => {
     if (user?.id) {
       fetchUserSessions(user.id)
+      fetchUserTeams()
     }
-  }, [user?.id, fetchUserSessions])
+  }, [user?.id, fetchUserSessions, fetchUserTeams])
 
   const searchQuery = (searchParams.get('q') ?? '').trim().toLowerCase()
 
@@ -385,21 +403,52 @@ function SessionsPageInner() {
     return haystack.includes(query)
   }
 
-  const filteredSessions = useMemo(() => {
-    if (!searchQuery) return sessions
-    return sessions.filter((session) => matchesQuery(session, searchQuery))
-  }, [sessions, searchQuery])
+  const groupedAndFilteredSessions = useMemo(() => {
+    const filtered = sessions
+      .filter((session) => matchesQuery(session, searchQuery))
+      .filter((session) => {
+        if (sessionFilter === 'Created by me') {
+          return session.userId === user?.id
+        }
+        if (sessionFilter === 'Shared with me') {
+          return session.userId !== user?.id
+        }
+        return true
+      })
 
-  const createdSessions = filteredSessions.filter((s) => s.userId === user?.id)
-  const assignedSessions = filteredSessions.filter((s) => s.userId !== user?.id)
+    const groups: Record<string, Session[]> = {
+      Personal: [],
+    }
+    teams.forEach((team) => {
+      groups[team.name] = []
+    })
+
+    filtered.forEach((session) => {
+      const team = teams.find((t) => t.id === session.orgId)
+      if (team) {
+        groups[team.name].push(session)
+      } else {
+        groups.Personal.push(session)
+      }
+    })
+
+    return Object.entries(groups)
+      .map(([groupName, sessions]) => ({
+        groupName,
+        sessions,
+      }))
+      .filter((group) => group.sessions.length > 0)
+  }, [sessions, searchQuery, sessionFilter, user?.id, teams])
 
   useEffect(() => {
     if (!selectedSession) return
-    const stillVisible = filteredSessions.some((session) => session.id === selectedSession.id)
+    const stillVisible = groupedAndFilteredSessions.some((group) =>
+      group.sessions.some((session) => session.id === selectedSession.id)
+    )
     if (!stillVisible) {
       setSelectedSession(null)
     }
-  }, [filteredSessions, selectedSession])
+  }, [groupedAndFilteredSessions, selectedSession])
 
   return (
     <Group align="start" gap="xl" wrap="nowrap">
@@ -413,11 +462,13 @@ function SessionsPageInner() {
         }}
       >
         <Stack gap="xl">
+          <Group justify="space-between" />
+
           {loading ? (
             <Center p="xl">
               <Loader size="lg" />
             </Center>
-          ) : assignedSessions.length === 0 && createdSessions.length === 0 ? (
+          ) : groupedAndFilteredSessions.length === 0 ? (
             <Box
               style={{
                 display: 'flex',
@@ -433,7 +484,7 @@ function SessionsPageInner() {
                 No sessions found
               </Title>
               <Text c="dimmed" mb="md">
-                You haven&apos;t created or been assigned to any sessions yet.
+                Try adjusting your filters or create a new session.
               </Text>
               <Button
                 variant="light"
@@ -445,34 +496,12 @@ function SessionsPageInner() {
             </Box>
           ) : (
             <>
-              {createdSessions.length > 0 && (
-                <Box>
-                  <Collapse in={createdExpanded}>
-                    <motion.div variants={gridVariants} initial="hidden" animate="show">
-                      <SimpleGrid
-                        cols={{ base: 1, sm: 2, lg: selectedSession ? 2 : 3 }}
-                        spacing="lg"
-                        style={{ transition: 'all 0.3s ease-in-out' }}
-                      >
-                        {createdSessions.map((session) => (
-                          <motion.div key={session.id} variants={cardVariants}>
-                            <SessionCard
-                              session={session}
-                              onClick={() => setSelectedSession(session)}
-                              isSelected={selectedSession?.id === session.id}
-                            />
-                          </motion.div>
-                        ))}
-                      </SimpleGrid>
-                    </motion.div>
-                  </Collapse>
-                </Box>
-              )}
-
-              {assignedSessions.length > 0 && (
-                <Box>
+              {groupedAndFilteredSessions.map(({ groupName, sessions: groupSessions }) => (
+                <Box key={groupName}>
                   <UnstyledButton
-                    onClick={() => setAssignedExpanded(!assignedExpanded)}
+                    onClick={() =>
+                      setExpandedCategories((prev) => ({ ...prev, [groupName]: !prev[groupName] }))
+                    }
                     style={{
                       width: '100%',
                       padding: '16px 20px',
@@ -483,9 +512,9 @@ function SessionsPageInner() {
                   >
                     <Group justify="space-between" wrap="nowrap">
                       <Title order={3} c="white" style={{ fontWeight: 600 }}>
-                        Assigned to you ({assignedSessions.length})
+                        {groupName} ({groupSessions.length})
                       </Title>
-                      {assignedExpanded ? (
+                      {expandedCategories[groupName] ? (
                         <IconChevronDown size={24} color="white" />
                       ) : (
                         <IconChevronUp size={24} color="white" />
@@ -493,14 +522,14 @@ function SessionsPageInner() {
                     </Group>
                   </UnstyledButton>
 
-                  <Collapse in={assignedExpanded}>
+                  <Collapse in={expandedCategories[groupName]}>
                     <motion.div variants={gridVariants} initial="hidden" animate="show">
                       <SimpleGrid
                         cols={{ base: 1, sm: 2, lg: selectedSession ? 2 : 3 }}
                         spacing="lg"
                         style={{ transition: 'all 0.3s ease-in-out' }}
                       >
-                        {assignedSessions.map((session) => (
+                        {groupSessions.map((session) => (
                           <motion.div key={session.id} variants={cardVariants}>
                             <SessionCard
                               session={session}
@@ -513,7 +542,7 @@ function SessionsPageInner() {
                     </motion.div>
                   </Collapse>
                 </Box>
-              )}
+              ))}
             </>
           )}
         </Stack>

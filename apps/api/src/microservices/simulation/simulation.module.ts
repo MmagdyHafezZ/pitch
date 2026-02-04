@@ -38,9 +38,12 @@ import { ScenarioService } from './services/scenario.service';
 import { HintsRepository } from './repositories/hints.repository';
 import { HintsService } from './services/hints.service';
 import { StageDetectorService } from './services/stage-detector.service';
+import { StreamingConversationService } from './services/streaming-conversation.service';
+import { SimulationRedisService } from './services/redis/redis.service';
 import { RedisModule } from '@pitch/shared-backend/redis/index';
 import { TtsModule } from './tts/tts.module';
 import { AssessmentModule } from './assessment/assessment.module';
+import { PhoneModule } from './phone/phone.module';
 
 @Module({
   imports: [
@@ -53,6 +56,7 @@ import { AssessmentModule } from './assessment/assessment.module';
       inject: [ConfigService],
     }),
     TtsModule,
+    PhoneModule,
     forwardRef(() => AssessmentModule),
   ],
   controllers: [
@@ -109,6 +113,8 @@ import { AssessmentModule } from './assessment/assessment.module';
     HintsRepository,
     HintsService,
     StageDetectorService,
+    SimulationRedisService,
+    StreamingConversationService,
   ],
   exports: [
     LLMService,

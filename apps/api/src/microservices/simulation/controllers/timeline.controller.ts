@@ -87,6 +87,21 @@ export class TimelineController {
         throw new Error('User is not a member of this session');
       }
 
+      const iteration = await this.prisma.client.iteration.findFirst({
+        where: { sessionMemberId: member.id },
+        orderBy: { iterationNumber: 'desc' },
+      });
+
+      if (!iteration) {
+        return {
+          sessionId: data.sessionId,
+          plannedStages: [],
+          currentProgress: 0,
+          conversationHistory: [],
+          total: 0,
+        };
+      }
+
       const sessionConfig = toRecord(session.sessionConfig) as SessionConfig;
       const scenarioConfig = toRecord(
         session.scenario?.config,
@@ -101,13 +116,13 @@ export class TimelineController {
       // Get actual conversation turns
       const limit = data.limit ? Math.max(1, Math.min(200, data.limit)) : 200;
       const turns = await this.prisma.client.turn.findMany({
-        where: { sessionMemberId: member.id },
+        where: { iterationId: iteration.id },
         orderBy: { order: 'asc' },
         take: limit,
       });
 
       const totalTurns = await this.prisma.client.turn.count({
-        where: { sessionMemberId: member.id },
+        where: { iterationId: iteration.id },
       });
 
       // Calculate current progress

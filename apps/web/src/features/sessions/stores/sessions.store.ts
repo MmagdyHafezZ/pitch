@@ -26,7 +26,7 @@ type SessionsState = {
   fetchSessionById: (id: string) => Promise<void>
   fetchUserSessions: (userId: string, params?: { limit?: number; offset?: number }) => Promise<void>
   fetchOrgSessions: (orgId: string, params?: { limit?: number; offset?: number }) => Promise<void>
-  createSession: (input: CreateSessionInput) => Promise<void>
+  createSession: (input: CreateSessionInput) => Promise<Session>
   updateSession: (id: string, input: UpdateSessionInput) => Promise<void>
   endSession: (id: string, input?: EndSessionInput) => Promise<void>
   deleteSession: (id: string) => Promise<void>
@@ -161,11 +161,13 @@ export const useSessionsStore = create<SessionsState>()(
               total: Math.max(state.total, sessions.length),
             }
           })
+          return session
         } catch (err) {
           set({
             loading: false,
             error: err instanceof Error ? err.message : 'Failed to create session',
           })
+          throw err
         }
       },
 

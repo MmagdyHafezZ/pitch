@@ -20,6 +20,8 @@ export enum WsMessageType {
   CONVERSATION_ERROR = 'conversation.error',
   CONVERSATION_END = 'conversation.end',
   CONVERSATION_CANCEL = 'conversation.cancel',
+  CONVERSATION_STREAM_DELTA = 'conversation.stream.delta',
+  CONVERSATION_STREAM_COMPLETED = 'conversation.stream.completed',
 
   PING = 'ping',
   PONG = 'pong',
@@ -29,6 +31,7 @@ export interface WsEnvelope<T = any> {
   type: WsMessageType
   requestId: string
   sessionId: string
+  iterationId?: string
   turnId?: string
   payload: T
   timestamp?: string
@@ -61,6 +64,28 @@ export interface ConversationTextPayload {
     totalTokens: number
     costUsd?: number
   }
+}
+
+export interface ConversationStreamDeltaPayload {
+  delta: string
+  isFirstChunk?: boolean
+}
+
+export interface ConversationStreamCompletedPayload {
+  fullText: string
+  usage?: {
+    promptTokens: number
+    completionTokens: number
+    totalTokens: number
+    costUsd?: number
+  }
+  stageInfo?: {
+    currentStage: string
+    stageIndex: number
+    stageTransition: boolean
+    confidence: number
+  }
+  progress?: number
 }
 
 export interface ConversationAudioReadyPayload {

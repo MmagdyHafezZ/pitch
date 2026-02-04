@@ -25,7 +25,7 @@ export function LLMModelSelector({
     if (!provider) return []
 
     // For voice/video sessions, prefer streaming models
-    if (sessionType === 'voice' || sessionType === 'video') {
+    if (sessionType === 'voice' || sessionType === 'video' || sessionType === 'phone') {
       return provider.modelDetails.filter((m) => m.supportsStreaming)
     }
 
@@ -37,7 +37,7 @@ export function LLMModelSelector({
   }, [filteredModels, selectedModel])
 
   const showStreamingWarning =
-    (sessionType === 'voice' || sessionType === 'video') &&
+    (sessionType === 'voice' || sessionType === 'video' || sessionType === 'phone') &&
     selectedModelDetail &&
     !selectedModelDetail.supportsStreaming
 

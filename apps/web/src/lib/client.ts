@@ -480,6 +480,48 @@ export const api = {
       }),
   },
 
+  phoneCalls: {
+    start: (data: {
+      sessionId: string
+      phoneNumber?: string
+      provider?: string
+      fromNumber?: string
+    }) =>
+      apiRequest<any>('/simulation/phone-calls', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+  },
+
+  assessments: {
+    run: (data: {
+      sessionId?: string
+      iterationId?: string
+      sessionMemberId?: string
+      mode: 'live' | 'final'
+      configVersion?: string
+      requestedBy?: string
+    }) =>
+      apiRequest<any>('/simulation/assessments/run', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    getRunStatus: (runId: string) => apiRequest<any>(`/simulation/assessments/runs/${runId}`),
+    getReport: (runId: string) => apiRequest<any>(`/simulation/assessments/runs/${runId}/report`),
+    getLatestForSession: (
+      sessionId: string,
+      params?: { iterationId?: string; sessionMemberId?: string }
+    ) => {
+      const query = new URLSearchParams()
+      if (params?.iterationId) query.set('iterationId', params.iterationId)
+      if (params?.sessionMemberId) query.set('sessionMemberId', params.sessionMemberId)
+      const queryString = query.toString()
+      return apiRequest<any>(
+        `/simulation/sessions/${sessionId}/assessments/latest${queryString ? `?${queryString}` : ''}`
+      )
+    },
+  },
+
   scenarios: {
     getAll: (params?: { orgId?: string }) => {
       const query = new URLSearchParams()

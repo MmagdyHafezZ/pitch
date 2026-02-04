@@ -25,18 +25,36 @@ export enum AssessmentRunStatusDto {
 export class AssessmentRunRequestDto {
   @ApiPropertyOptional({
     example: 'session_123',
-    description: 'Session id to assess (optional if sessionMemberId provided).',
+    description:
+      'Session id to assess (optional if iterationId or sessionMemberId provided).',
   })
-  @ValidateIf((value: AssessmentRunRequestDto) => !value.sessionMemberId)
+  @ValidateIf(
+    (value: AssessmentRunRequestDto) =>
+      !value.iterationId && !value.sessionMemberId,
+  )
   @IsString()
   sessionId?: string;
 
   @ApiPropertyOptional({
+    example: 'iteration_123',
+    description:
+      'Iteration id to assess (optional if sessionId or sessionMemberId provided).',
+  })
+  @ValidateIf(
+    (value: AssessmentRunRequestDto) =>
+      !value.sessionId && !value.sessionMemberId,
+  )
+  @IsString()
+  iterationId?: string;
+
+  @ApiPropertyOptional({
     example: 'session_member_123',
     description:
-      'Session member id to assess (optional if sessionId provided).',
+      'Session member id to assess (optional if iterationId or sessionId provided).',
   })
-  @ValidateIf((value: AssessmentRunRequestDto) => !value.sessionId)
+  @ValidateIf(
+    (value: AssessmentRunRequestDto) => !value.iterationId && !value.sessionId,
+  )
   @IsString()
   sessionMemberId?: string;
 
@@ -66,6 +84,11 @@ export class AssessmentRunResponseDto {
   @IsString()
   runId: string;
 
+  @ApiPropertyOptional({ example: 'iteration_123' })
+  @IsString()
+  @IsOptional()
+  iterationId?: string;
+
   @ApiProperty({ enum: AssessmentRunStatusDto })
   @IsEnum(AssessmentRunStatusDto)
   status: AssessmentRunStatusDto;
@@ -84,7 +107,7 @@ export class AssessmentRunResponseDto {
   @IsOptional()
   configVersion?: string;
 
-  @ApiPropertyOptional({ example: 'langgraph-v1.0' })
+  @ApiPropertyOptional({ example: 'langgraph-v1.1' })
   @IsString()
   @IsOptional()
   engineVersion?: string;
@@ -168,6 +191,11 @@ export class AssessmentReportResponseDto {
 }
 
 export class AssessmentLatestResponseDto extends AssessmentRunStatusResponseDto {
+  @ApiPropertyOptional({ example: 'iteration_123' })
+  @IsString()
+  @IsOptional()
+  iterationId?: string;
+
   @ApiPropertyOptional({ example: 'session_member_123' })
   @IsString()
   @IsOptional()
