@@ -25,25 +25,20 @@ import {
   Transition,
   useMantineColorScheme,
 } from '@mantine/core'
-import { Fragment, Suspense, useEffect, useRef, useState } from 'react'
+import { Fragment, Suspense, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useMediaQuery } from '@mantine/hooks'
 import { useTeams } from '@/features/teams/hooks/useTeams'
 import { useAuth } from '@/features/auth'
 import { useCreateTeamForm } from '@/features/teams/hooks/useTeamForm'
-import { TeamMembersPanel } from '@/components/ui/TeamMembersPanel'
-import { api } from '@/lib/client'
 import {
   IconFilter,
-  IconMail,
   IconSearch,
   IconTrash,
   IconSettings,
   IconChartBar,
   IconChevronDown,
-  IconUserPlus,
   IconX,
-  IconCheck,
 } from '@tabler/icons-react'
 import Image from 'next/image'
 
@@ -70,10 +65,8 @@ function TeamConfigInner() {
     teams,
     fetchTeamById,
     activeTeamId,
-    addMember,
     updateMember,
     deleteMember,
-    loading: teamsLoading,
   } = useTeams()
   const { values, errors, setField, submit, submitting, apiError } = useCreateTeamForm()
   const [editValues, setEditValues] = useState({
@@ -89,18 +82,10 @@ function TeamConfigInner() {
   const [savingEdit, setSavingEdit] = useState(false)
   const [memberSearch, setMemberSearch] = useState('')
   const [roleFilter, setRoleFilter] = useState<'ALL' | 'OWNER' | 'ADMIN' | 'MEMBER'>('ALL')
-  const [inviteUserId, setInviteUserId] = useState('')
-  const [inviting, setInviting] = useState(false)
-  const [inviteSuccess, setInviteSuccess] = useState(false)
-  const inviteCloseTimeout = useRef<number | null>(null)
   const [selectedMembers, setSelectedMembers] = useState<Set<string>>(new Set())
-  const [addMemberOpen, setAddMemberOpen] = useState(false)
   const [expandedMembers, setExpandedMembers] = useState<Set<string>>(new Set())
   const [roleMenuMemberId, setRoleMenuMemberId] = useState<string | null>(null)
   const [settingsMenuMemberId, setSettingsMenuMemberId] = useState<string | null>(null)
-  const [usersLoading, setUsersLoading] = useState(false)
-  const [usersError, setUsersError] = useState<string | null>(null)
-  const [users, setUsers] = useState<Array<{ id: string; name?: string; email: string }>>([])
   const [removingMembers, setRemovingMembers] = useState<Set<string>>(new Set())
   const [tokenLimitMember, setTokenLimitMember] = useState<{
     teamId: string
@@ -182,33 +167,13 @@ function TeamConfigInner() {
 
   const pageTitle = isCreateMode ? 'Create a new team' : 'Team settings'
   const pageSubtitle = isCreateMode
-    ? 'Set up your team details and billing information. You can invite members after the team is created.'
-    : 'Manage your team details, billing information, and members.'
+    ? 'Set up your team profile and billing information.'
+    : 'Manage your team profile and billing information.'
   const primaryLabel = isCreateMode ? 'Create team' : 'Save changes'
 
   const handleEditTeam = async (teamId: string) => {
     await fetchTeamById(teamId)
     router.push('/studio/team-config')
-  }
-
-  const handleInvite = async (teamId: string) => {
-    const userId = inviteUserId.trim()
-    if (!userId) return
-    setInviting(true)
-    try {
-      await addMember(teamId, { userId, role: 'MEMBER', tokenLimit: 0, isActive: true })
-      setInviteUserId('')
-      setInviteSuccess(true)
-      if (inviteCloseTimeout.current) {
-        window.clearTimeout(inviteCloseTimeout.current)
-      }
-      inviteCloseTimeout.current = window.setTimeout(() => {
-        setInviteSuccess(false)
-        setAddMemberOpen(false)
-      }, 1200)
-    } finally {
-      setInviting(false)
-    }
   }
 
   const handleRoleChange = async (teamId: string, userId: string, role: string) => {
@@ -286,19 +251,6 @@ function TeamConfigInner() {
     })
   }
 
-  const loadUsers = async () => {
-    setUsersLoading(true)
-    setUsersError(null)
-    try {
-      const data = await api.users.getAll()
-      setUsers(data ?? [])
-    } catch (error) {
-      setUsersError(error instanceof Error ? error.message : 'Failed to load users')
-    } finally {
-      setUsersLoading(false)
-    }
-  }
-
   const handleRemoveMember = async (teamId: string, userId: string) => {
     setRemovingMembers((prev) => {
       const next = new Set(prev)
@@ -317,14 +269,6 @@ function TeamConfigInner() {
     }
   }
 
-  useEffect(() => {
-    return () => {
-      if (inviteCloseTimeout.current) {
-        window.clearTimeout(inviteCloseTimeout.current)
-      }
-    }
-  }, [])
-
   if (isMyTeamsTab) {
     const activeTeam =
       currentTeam ?? teams.find((team) => (activeTeamId ? team.id === activeTeamId : false))
@@ -339,9 +283,6 @@ function TeamConfigInner() {
     const protectedMemberIds = new Set(
       members.filter((member) => member.role === 'OWNER').map((member) => member.userId)
     )
-    const memberIds = new Set(members.map((member) => member.userId))
-    const availableUsers = users.filter((member) => !memberIds.has(member.id))
-    const activeTeamIdValue = activeTeam?.id
     const filteredMembers = members.filter((member) => {
       const q = memberSearch.trim().toLowerCase()
       if (roleFilter !== 'ALL' && member.role !== roleFilter) return false
@@ -407,101 +348,6 @@ function TeamConfigInner() {
                   loading={tokenLimitSaving}
                 >
                   Save
-                </Button>
-              </Group>
-            </Stack>
-          </Modal>
-          <Modal
-            opened={addMemberOpen}
-            onClose={() => setAddMemberOpen(false)}
-            radius="lg"
-            title="Add member"
-            centered
-          >
-            <Stack gap="sm">
-              <Text size="sm" c="dimmed">
-                Select a user to add to this team.
-              </Text>
-              <Select
-                label="Select user"
-                placeholder="Choose a user"
-                searchable
-                clearable
-                nothingFoundMessage={usersLoading ? 'Loading users...' : 'No users found'}
-                data={availableUsers.map((user) => ({
-                  value: user.id,
-                  label: `${user.name ?? user.email} (${user.email})`,
-                }))}
-                value={inviteUserId}
-                onChange={(value) => setInviteUserId(value ?? '')}
-                disabled={!isOwner}
-                onDropdownOpen={() => {
-                  if (!users.length && !usersLoading) {
-                    void loadUsers()
-                  }
-                }}
-                styles={{
-                  input: {
-                    background: 'var(--pitch-input-bg)',
-                    color: 'var(--pitch-input-text)',
-                  },
-                }}
-              />
-              <Transition mounted={inviteSuccess} transition="slide-up" duration={320} timingFunction="ease">
-                {(styles) => (
-                  <Box
-                    style={{
-                      ...styles,
-                      borderRadius: 14,
-                      padding: '10px 12px',
-                      border: '1px solid color-mix(in srgb, var(--pitch-accent) 35%, transparent)',
-                      background:
-                        'linear-gradient(120deg, ' +
-                        'color-mix(in srgb, var(--pitch-accent) 18%, transparent), ' +
-                        'color-mix(in srgb, var(--pitch-selected) 14%, transparent))',
-                      color: 'var(--pitch-accent-strong)',
-                      boxShadow: 'var(--mantine-shadow-xs)',
-                    }}
-                  >
-                    <Group gap={8} justify="center" wrap="nowrap">
-                      <Box
-                        style={{
-                          width: 22,
-                          height: 22,
-                          borderRadius: 999,
-                          display: 'grid',
-                          placeItems: 'center',
-                          background: 'color-mix(in srgb, var(--pitch-accent) 25%, transparent)',
-                        }}
-                      >
-                        <IconCheck size={14} />
-                      </Box>
-                      <Text size="xs" fw={700} tt="uppercase" style={{ letterSpacing: 0.6 }}>
-                        Member added
-                      </Text>
-                    </Group>
-                  </Box>
-                )}
-              </Transition>
-              {usersError && (
-                <Text size="xs" c="red.7">
-                  {usersError}
-                </Text>
-              )}
-              <Group justify="flex-end" gap="sm">
-                <Button variant="default" radius="xl" onClick={() => setAddMemberOpen(false)}>
-                  Cancel
-                </Button>
-                <Button
-                  radius="xl"
-                  onClick={() => {
-                    if (!activeTeamIdValue) return
-                    void handleInvite(activeTeamIdValue)
-                  }}
-                  loading={inviting || teamsLoading}
-                  disabled={!isOwner || !inviteUserId.trim() || !activeTeamIdValue}
-                >
-                  Add
                 </Button>
               </Group>
             </Stack>
@@ -620,24 +466,13 @@ function TeamConfigInner() {
                     {members.length} total
                   </Text>
                 </Stack>
-                <Stack gap={6} align="center">
-                 
-                  <Tooltip label="Add member" withArrow>
-                    <ActionIcon
-                      variant="light"
-                      radius="xl"
-                      size="lg"
-                      onClick={() => setAddMemberOpen(true)}
-                      disabled={!isOwner}
-                    >
-                      <IconUserPlus size={18} />
-                    </ActionIcon>
-                  </Tooltip>
-                  {!isOwner && (
-                    <Text size="xs" c="dimmed" ta="center">
-                      Only owners can invite or remove members.
-                    </Text>
-                  )}
+                <Stack gap={2} align={isMobile ? 'center' : 'flex-end'}>
+                  <Text size="xs" c="dimmed" tt="uppercase" fw={600} style={{ letterSpacing: 0.5 }}>
+                    Role controls
+                  </Text>
+                  <Text size="xs" c="dimmed">
+                    Only owners can remove members.
+                  </Text>
                 </Stack>
               </Group>
 
@@ -1218,183 +1053,258 @@ function TeamConfigInner() {
   }
 
 
+  const overviewName = formValues.name?.trim() || 'Untitled team'
+  const overviewEmail = formValues.billingEmail?.trim() || 'No billing email'
+  const overviewCity = formValues.city?.trim()
+  const overviewCountry = formValues.country?.trim()
+  const overviewLocation =
+    overviewCity && overviewCountry ? `${overviewCity}, ${overviewCountry}` : overviewCountry || 'N/A'
+  const overviewStatus = isCreateMode ? 'Draft' : 'Active'
+  const formatDate = (value?: string | null) =>
+    value ? new Date(value).toLocaleDateString() : 'N/A'
+
   return (
     <Paper
       p="xl"
       radius="xl"
       shadow="sm"
       withBorder
-      style={{ background: 'var(--pitch-surface-bg)', borderColor: 'var(--pitch-border)' }}
+      style={{
+        background:
+          'linear-gradient(145deg, var(--pitch-surface-bg), color-mix(in srgb, var(--pitch-nav-bg) 30%, transparent), var(--pitch-surface-bg))',
+        borderColor: 'var(--pitch-border)',
+      }}
     >
-      {/* header */}
-      <Group justify="space-between" align="flex-start" mb="md">
-        <Stack gap={4}>
-          <Title order={2}>{pageTitle}</Title>
-          <Text size="sm" c="dimmed">
-            {pageSubtitle}
-          </Text>
-        </Stack>
+      <Stack gap="lg">
+        <Group justify="space-between" align="flex-start" wrap="wrap">
+          <Stack gap={6}>
+            <Text size="xs" c="dimmed" tt="uppercase" fw={700} style={{ letterSpacing: 0.6 }}>
+              Team Settings
+            </Text>
+            <Title order={2}>{pageTitle}</Title>
+            <Text size="sm" c="dimmed">
+              {pageSubtitle}
+            </Text>
+          </Stack>
 
-        <Group gap="xs">
-          <Button variant="default" size="sm" onClick={() => router.back()}>
-            Cancel
-          </Button>
-          <Button size="sm" onClick={handlePrimaryClick} loading={primaryLoading}>
-            {primaryLabel}
-          </Button>
+          <Group gap="xs">
+            <Button variant="default" size="sm" onClick={() => router.back()}>
+              Cancel
+            </Button>
+            <Button size="sm" onClick={handlePrimaryClick} loading={primaryLoading}>
+              {primaryLabel}
+            </Button>
+          </Group>
         </Group>
-      </Group>
-      <Divider my="md" />
 
-      {/* error banner */}
-      {bannerError && (
-        <Box
-          mb="md"
-          p="sm"
-          style={{
-            borderRadius: 8,
-            background: 'var(--mantine-color-red-0)',
-            border: '1px solid var(--mantine-color-red-3)',
-          }}
-        >
-          <Text size="sm" c="red.7">
-            {bannerError}
-          </Text>
-        </Box>
-      )}
-
-      {/* main layout */}
-      <SimpleGrid cols={{ base: 1, md: isCreateMode ? 1 : 2 }} spacing="xl">
-        {/* LEFT: team details + billing address */}
-        <Stack gap="lg">
-          <Stack gap="sm">
-            <Title order={3}>Team details</Title>
-            <Text size="sm" c="dimmed">
-              Give your team a clear name. You can change this later in team settings.
+        {bannerError && (
+          <Box
+            p="sm"
+            style={{
+              borderRadius: 10,
+              background: 'var(--mantine-color-red-0)',
+              border: '1px solid var(--mantine-color-red-3)',
+            }}
+          >
+            <Text size="sm" c="red.7">
+              {bannerError}
             </Text>
+          </Box>
+        )}
 
-            <TextInput
-              label="Team name"
-              placeholder="e.g. Sales Team"
-              value={formValues.name}
-              error={formErrors.name}
-              onChange={(e) =>
-                isCreateMode
-                  ? setField('name', e.currentTarget.value)
-                  : setEditField('name', e.currentTarget.value)
-              }
-              required
-            />
+        <SimpleGrid cols={{ base: 1, md: 2 }} spacing="xl">
+          <Stack gap="lg">
+            <Paper
+              p="lg"
+              radius="lg"
+              withBorder
+              shadow="xs"
+              style={{ background: 'var(--pitch-surface-bg)', borderColor: 'var(--pitch-border)' }}
+            >
+              <Stack gap="sm">
+                <Group justify="space-between" align="center">
+                  <Title order={3}>Team profile</Title>
+                  <Badge variant="light" radius="xl">
+                    {overviewStatus}
+                  </Badge>
+                </Group>
+                <Text size="sm" c="dimmed">
+                  A clear team name and billing email help us personalize your workspace.
+                </Text>
 
-            <TextInput
-              label="Billing email (optional)"
-              placeholder="billing@example.com"
-              value={formValues.billingEmail}
-              error={formErrors.billingEmail}
-              onChange={(e) =>
-                isCreateMode
-                  ? setField('billingEmail', e.currentTarget.value)
-                  : setEditField('billingEmail', e.currentTarget.value)
-              }
-            />
+                <TextInput
+                  label="Team name"
+                  placeholder="e.g. Sales Team"
+                  value={formValues.name}
+                  error={formErrors.name}
+                  onChange={(e) =>
+                    isCreateMode
+                      ? setField('name', e.currentTarget.value)
+                      : setEditField('name', e.currentTarget.value)
+                  }
+                  required
+                />
+
+                <TextInput
+                  label="Billing email (optional)"
+                  placeholder="billing@example.com"
+                  value={formValues.billingEmail}
+                  error={formErrors.billingEmail}
+                  onChange={(e) =>
+                    isCreateMode
+                      ? setField('billingEmail', e.currentTarget.value)
+                      : setEditField('billingEmail', e.currentTarget.value)
+                  }
+                />
+              </Stack>
+            </Paper>
+
+            <Paper
+              p="lg"
+              radius="lg"
+              withBorder
+              shadow="xs"
+              style={{ background: 'var(--pitch-surface-bg)', borderColor: 'var(--pitch-border)' }}
+            >
+              <Stack gap="sm">
+                <Group justify="space-between">
+                  <Title order={3}>Billing address</Title>
+                  <Text size="xs" c="dimmed">
+                    Optional
+                  </Text>
+                </Group>
+                <Text size="sm" c="dimmed">
+                  Used for invoices and account communication.
+                </Text>
+
+                <TextInput
+                  label="Street address"
+                  placeholder="123 Main St"
+                  value={formValues.street}
+                  error={formErrors.street}
+                  onChange={(e) =>
+                    isCreateMode
+                      ? setField('street', e.currentTarget.value)
+                      : setEditField('street', e.currentTarget.value)
+                  }
+                />
+                <Group grow>
+                  <TextInput
+                    label="City"
+                    placeholder="Calgary"
+                    value={formValues.city}
+                    error={formErrors.city}
+                    onChange={(e) =>
+                      isCreateMode
+                        ? setField('city', e.currentTarget.value)
+                        : setEditField('city', e.currentTarget.value)
+                    }
+                  />
+                  <TextInput
+                    label="State / Province"
+                    placeholder="AB"
+                    value={formValues.stateProvince}
+                    error={formErrors.stateProvince}
+                    onChange={(e) =>
+                      isCreateMode
+                        ? setField('stateProvince', e.currentTarget.value)
+                        : setEditField('stateProvince', e.currentTarget.value)
+                    }
+                  />
+                </Group>
+                <Group grow>
+                  <TextInput
+                    label="Postal code"
+                    placeholder="T2N 1N4"
+                    value={formValues.postalCode}
+                    error={formErrors.postalCode}
+                    onChange={(e) =>
+                      isCreateMode
+                        ? setField('postalCode', e.currentTarget.value)
+                        : setEditField('postalCode', e.currentTarget.value)
+                    }
+                  />
+                  <TextInput
+                    label="Country"
+                    placeholder="Canada"
+                    value={formValues.country}
+                    error={formErrors.country}
+                    onChange={(e) =>
+                      isCreateMode
+                        ? setField('country', e.currentTarget.value)
+                        : setEditField('country', e.currentTarget.value)
+                    }
+                  />
+                </Group>
+              </Stack>
+            </Paper>
           </Stack>
 
-          <Divider />
+          <Stack gap="lg">
+            <Paper
+              p="lg"
+              radius="lg"
+              withBorder
+              shadow="xs"
+              style={{
+                background:
+                  'linear-gradient(160deg, color-mix(in srgb, var(--pitch-accent) 10%, transparent), var(--pitch-surface-bg))',
+                borderColor: 'var(--pitch-border)',
+              }}
+            >
+              <Stack gap="sm">
+                <Text size="xs" c="dimmed" tt="uppercase" fw={700} style={{ letterSpacing: 0.6 }}>
+                  Overview
+                </Text>
+                <Title order={4}>{overviewName}</Title>
+                <Text size="sm" c="dimmed">
+                  {overviewEmail}
+                </Text>
+                <Divider />
+                <Group justify="space-between" align="center">
+                  <Text size="sm" c="dimmed">
+                    Status
+                  </Text>
+                  <Badge variant="light" radius="xl">
+                    {overviewStatus}
+                  </Badge>
+                </Group>
+                <Group justify="space-between" align="center">
+                  <Text size="sm" c="dimmed">
+                    Location
+                  </Text>
+                  <Text size="sm">{overviewLocation}</Text>
+                </Group>
+                <Group justify="space-between" align="center">
+                  <Text size="sm" c="dimmed">
+                    Team ID
+                  </Text>
+                  <Text size="sm" c="dimmed">
+                    {currentTeam?.id ?? 'N/A'}
+                  </Text>
+                </Group>
+              </Stack>
+            </Paper>
 
-          <Stack gap="sm">
-            <Group justify="space-between">
-              <Title order={3}>Billing address</Title>
-              <Text size="xs" c="dimmed">
-                Optional
-              </Text>
-            </Group>
-            <Text size="sm" c="dimmed">
-              Used for invoices and account communication.
-            </Text>
-
-            <TextInput
-              label="Street address"
-              placeholder="123 Main St"
-              value={formValues.street}
-              error={formErrors.street}
-              onChange={(e) =>
-                isCreateMode
-                  ? setField('street', e.currentTarget.value)
-                  : setEditField('street', e.currentTarget.value)
-              }
-            />
-            <Group grow>
-              <TextInput
-                label="City"
-                placeholder="Calgary"
-                value={formValues.city}
-                error={formErrors.city}
-                onChange={(e) =>
-                  isCreateMode
-                    ? setField('city', e.currentTarget.value)
-                    : setEditField('city', e.currentTarget.value)
-                }
-              />
-              <TextInput
-                label="State / Province"
-                placeholder="AB"
-                value={formValues.stateProvince}
-                error={formErrors.stateProvince}
-                onChange={(e) =>
-                  isCreateMode
-                    ? setField('stateProvince', e.currentTarget.value)
-                    : setEditField('stateProvince', e.currentTarget.value)
-                }
-              />
-            </Group>
-            <Group grow>
-              <TextInput
-                label="Postal code"
-                placeholder="T2N 1N4"
-                value={formValues.postalCode}
-                error={formErrors.postalCode}
-                onChange={(e) =>
-                  isCreateMode
-                    ? setField('postalCode', e.currentTarget.value)
-                    : setEditField('postalCode', e.currentTarget.value)
-                }
-              />
-              <TextInput
-                label="Country"
-                placeholder="Canada"
-                value={formValues.country}
-                error={formErrors.country}
-                onChange={(e) =>
-                  isCreateMode
-                    ? setField('country', e.currentTarget.value)
-                    : setEditField('country', e.currentTarget.value)
-                }
-              />
-            </Group>
+            <Paper
+              p="lg"
+              radius="lg"
+              withBorder
+              shadow="xs"
+              style={{ background: 'var(--pitch-surface-bg)', borderColor: 'var(--pitch-border)' }}
+            >
+              <Stack gap="sm">
+                <Text size="xs" c="dimmed" tt="uppercase" fw={700} style={{ letterSpacing: 0.6 }}>
+                  Token usage
+                </Text>
+                <Text size="sm" c="dimmed">
+                  To be added.
+                </Text>
+              </Stack>
+            </Paper>
           </Stack>
-        </Stack>
-
-        {/* RIGHT: members management only makes sense in edit mode */}
-        {!isCreateMode && <TeamMembersPanel />}
-      </SimpleGrid>
-
-      {/* Light-weight hint in create mode so we don't waste a full column */}
-      {isCreateMode && (
-        <Box
-          mt="xl"
-          p="md"
-          style={{
-            borderRadius: 14,
-            border: '1px solid var(--pitch-border)',
-            background: 'var(--pitch-surface-bg)',
-          }}
-        >
-          <Text size="sm" c="dimmed">
-            Once you create this team, you can invite members and manage roles from the Team Config
-            view.
-          </Text>
-        </Box>
-      )}
+        </SimpleGrid>
+      </Stack>
     </Paper>
   )
 }

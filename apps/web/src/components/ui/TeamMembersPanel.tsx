@@ -12,12 +12,11 @@ import {
   Badge,
   ActionIcon,
   NumberInput,
-  Button,
   Tooltip,
   Divider,
   ScrollArea,
 } from '@mantine/core'
-import { IconSearch, IconFilter, IconTrash, IconUserPlus } from '@tabler/icons-react'
+import { IconSearch, IconFilter, IconTrash } from '@tabler/icons-react'
 import { useTeams } from '@/features/teams/hooks/useTeams'
 import type { TeamMembership } from '@/features/teams/types/teams.types'
 
@@ -28,14 +27,10 @@ const ROLE_OPTIONS = [
 ]
 
 export function TeamMembersPanel() {
-  const { currentTeam, addMember, updateMember, deleteMember, loading } = useTeams()
+  const { currentTeam, updateMember, deleteMember } = useTeams()
 
   const [search, setSearch] = useState('')
   const [roleFilter, setRoleFilter] = useState<'ALL' | 'OWNER' | 'ADMIN' | 'MEMBER'>('ALL')
-
-  const [newUserId, setNewUserId] = useState('')
-  const [newRole, setNewRole] = useState<'MEMBER' | 'ADMIN' | 'OWNER'>('MEMBER')
-  const [submitting, setSubmitting] = useState(false)
 
   // Always call hooks – guard nulls inside useMemo
   const members: TeamMembership[] = useMemo(
@@ -59,24 +54,6 @@ export function TeamMembersPanel() {
       return name.includes(q) || email.includes(q)
     })
   }, [members, search, roleFilter])
-
-  const handleAddMember = async () => {
-    const userId = newUserId.trim()
-    if (!userId || !currentTeam) return
-
-    setSubmitting(true)
-    try {
-      await addMember(currentTeam.id, {
-        userId,
-        role: newRole,
-        tokenLimit: 0,
-        isActive: true,
-      })
-      setNewUserId('')
-    } finally {
-      setSubmitting(false)
-    }
-  }
 
   const handleUpdateRole = async (membership: TeamMembership, roleValue: string | null) => {
     if (!currentTeam || !roleValue) return
@@ -152,32 +129,6 @@ export function TeamMembersPanel() {
                 ]}
               />
             </Group>
-          </Group>
-
-          <Divider label="Add member" labelPosition="left" />
-
-          <Group align="flex-end" gap="sm">
-            <TextInput
-              label="User ID (or email placeholder)"
-              placeholder="user_123 / email@example.com"
-              value={newUserId}
-              onChange={(e) => setNewUserId(e.currentTarget.value)}
-              style={{ flex: 1 }}
-            />
-            <Select
-              label="Role"
-              value={newRole}
-              onChange={(v) => setNewRole((v as any) ?? 'MEMBER')}
-              data={ROLE_OPTIONS}
-              style={{ width: 140 }}
-            />
-            <Button
-              leftSection={<IconUserPlus size={16} />}
-              onClick={handleAddMember}
-              loading={submitting || loading}
-            >
-              Add
-            </Button>
           </Group>
 
           <Divider label="Current members" labelPosition="left" />
