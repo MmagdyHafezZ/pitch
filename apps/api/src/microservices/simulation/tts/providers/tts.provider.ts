@@ -11,9 +11,18 @@ export interface TtsResult {
   contentType: string;
 }
 
+export interface TtsStreamResult {
+  audioStream: AsyncIterable<Uint8Array>;
+  contentType: string;
+}
+
 export interface TtsProvider {
   readonly name: string;
   readonly description?: string;
   readonly voices?: string[];
   synthesize(text: string, options?: TtsOptions): Promise<TtsResult>;
+  synthesizeStream?: (
+    text: string,
+    options?: TtsOptions,
+  ) => Promise<TtsStreamResult>;
 }
