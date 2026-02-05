@@ -1,0 +1,78 @@
+name: Feature Proposal
+description: Propose a new feature or improvement
+title: "[Feature]: "
+labels:
+  - enhancement
+  - triage
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for proposing a feature. Please provide enough detail for us to evaluate scope and impact.
+  - type: input
+    id: summary
+    attributes:
+      label: Summary
+      description: A clear, one-sentence statement of the proposal
+      placeholder: "Example: Add a session tone for Rude Karen with a hard-to-please persona"
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem statement
+      description: What problem are you trying to solve?
+      placeholder: "Describe the user or business pain this addresses"
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe what you want to happen
+      placeholder: "Outline the behavior, UI, or workflow changes"
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Other approaches you considered and why they are not preferred
+    validations:
+      required: false
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Bullet list of what "done" looks like
+      placeholder: |
+        - [ ] ...
+        - [ ] ...
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected area
+      multiple: true
+      options:
+        - Web app
+        - API
+        - Studio
+        - Simulation service
+        - Infrastructure
+        - Documentation
+        - Other
+    validations:
+      required: true
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      options:
+        - Low
+        - Medium
+        - High
+        - Critical
+    validations:
+      required: true
