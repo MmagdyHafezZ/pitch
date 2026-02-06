@@ -52,7 +52,7 @@ export const useAuth = () => {
       const result = await loginMutation.mutateAsync(credentials)
 
       setUser(result.user)
-      setToken(result.token)
+      setToken(result.accessToken)
 
       return result
     } catch (error) {
@@ -72,7 +72,7 @@ export const useAuth = () => {
       const result = await registerMutation.mutateAsync(credentials)
 
       setUser(result.user)
-      setToken(result.token)
+      setToken(result.accessToken)
 
       return result
     } catch (error) {

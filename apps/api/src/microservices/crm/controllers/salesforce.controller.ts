@@ -24,13 +24,10 @@ export class SalesforceController {
    * Pattern: salesforce.connect
    */
   @MessagePattern(CRM_SERVICE_PATTERNS.SALESFORCE_CONNECT)
-  async getConnectUrl(@Payload() data: { userId: string; state?: string }) {
+  getConnectUrl(@Payload() data: { userId: string; state?: string }) {
     try {
       this.logger.log(`Salesforce connect request for user: ${data.userId}`);
-      return await this.salesforceService.getConnectUrl(
-        data.userId,
-        data.state,
-      );
+      return this.salesforceService.getConnectUrl(data.userId, data.state);
     } catch (error) {
       this.logger.error(
         `Salesforce connect failed for user ${data.userId}`,

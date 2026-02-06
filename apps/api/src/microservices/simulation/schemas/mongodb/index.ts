@@ -50,3 +50,18 @@ export {
   SessionInvitationModel,
 } from './session-invitation.schema';
 export type { ISessionInvitation } from './session-invitation.schema';
+
+export {
+  AssessmentReportSchema,
+  AssessmentReportModel,
+} from './assessment-report.schema';
+export type { IAssessmentReport } from './assessment-report.schema';
+
+export { HintSchema, HintModel } from './hint.schema';
+export type {
+  IHintDocument,
+  IHint,
+  IHintLLMConfig,
+  IHintUsage,
+  IConversationContext,
+} from './hint.schema';

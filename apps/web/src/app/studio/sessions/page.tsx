@@ -18,6 +18,7 @@ import {
 import { IconChevronDown, IconChevronUp, IconX } from '@tabler/icons-react'
 import { Suspense, useState, useEffect, useMemo } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { motion, AnimatePresence, type Variants } from 'framer-motion'
 import { useAuth } from '@/features/auth'
 import { useSessions, type Session } from '@/features/sessions'
 
@@ -25,6 +26,26 @@ type Status = 'active' | 'ended'
 const statusColor: Record<Status, string> = {
   active: 'brand',
   ended: 'green',
+}
+
+const gridVariants: Variants = {
+  hidden: { opacity: 1 },
+  show: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.06,
+      delayChildren: 0.04,
+    },
+  },
+}
+
+const cardVariants: Variants = {
+  hidden: { opacity: 0, y: -24 },
+  show: {
+    opacity: 1,
+    y: 0,
+    transition: { type: 'spring', stiffness: 360, damping: 28 },
+  },
 }
 
 function SessionCard({
@@ -122,6 +143,21 @@ function SessionDetailPanel({ session, onDismiss }: { session: Session; onDismis
     return JSON.stringify(value)
   }
 
+  const panelVariants = {
+    hidden: { opacity: 0 },
+    visible: {
+      opacity: 1,
+      transition: {
+        staggerChildren: 0.1,
+      },
+    },
+  }
+
+  const itemVariants = {
+    hidden: { y: 20, opacity: 0 },
+    visible: { y: 0, opacity: 1 },
+  }
+
   return (
     <Card
       withBorder={false}
@@ -138,9 +174,9 @@ function SessionDetailPanel({ session, onDismiss }: { session: Session; onDismis
         alignSelf: 'flex-start',
       }}
     >
-      <Stack gap="xl">
+      <motion.div initial="hidden" animate="visible" variants={panelVariants}>
         {/* Header */}
-        <Box>
+        <motion.div variants={itemVariants}>
           <Group justify="space-between" align="start" mb="xs">
             <Stack gap={4} style={{ flex: 1 }}>
               <Title order={2} c="white" style={{ fontWeight: 700 }}>
@@ -182,10 +218,10 @@ function SessionDetailPanel({ session, onDismiss }: { session: Session; onDismis
               {displayStatus}
             </Badge>
           </Group>
-        </Box>
+        </motion.div>
 
         {/* Type & Tags */}
-        <Box>
+        <motion.div variants={itemVariants} style={{ marginTop: '2rem', marginBottom: '2rem' }}>
           <Title order={4} c="white" mb="md">
             Type & Tags
           </Title>
@@ -205,10 +241,10 @@ function SessionDetailPanel({ session, onDismiss }: { session: Session; onDismis
               </Badge>
             ))}
           </Group>
-        </Box>
+        </motion.div>
 
         {/* Config */}
-        <Box>
+        <motion.div variants={itemVariants} style={{ marginBottom: '2rem' }}>
           <Title order={4} c="white" mb="md">
             Config
           </Title>
@@ -230,10 +266,10 @@ function SessionDetailPanel({ session, onDismiss }: { session: Session; onDismis
               No config provided.
             </Text>
           )}
-        </Box>
+        </motion.div>
 
         {/* Details */}
-        <Box>
+        <motion.div variants={itemVariants} style={{ marginBottom: '2rem' }}>
           <Title order={4} c="white" mb="md">
             Details
           </Title>
@@ -266,28 +302,30 @@ function SessionDetailPanel({ session, onDismiss }: { session: Session; onDismis
               </>
             )}
           </Stack>
-        </Box>
+        </motion.div>
 
         {/* Action Buttons */}
-        <Group gap="md" grow>
-          <Button
-            size="lg"
-            variant="light"
-            color="brand"
-            onClick={() => router.push(`/studio/sessions/${session.id}/edit`)}
-          >
-            Edit
-          </Button>
-          <Button
-            size="lg"
-            variant="filled"
-            color="brand"
-            onClick={() => router.push(`/session/${session.id}`)}
-          >
-            Launch
-          </Button>
-        </Group>
-      </Stack>
+        <motion.div variants={itemVariants}>
+          <Group gap="md" grow>
+            <Button
+              size="lg"
+              variant="light"
+              color="blue"
+              onClick={() => router.push(`/studio/sessions/${session.id}/edit`)}
+            >
+              Edit
+            </Button>
+            <Button
+              size="lg"
+              variant="filled"
+              color="blue"
+              onClick={() => router.push(`/session/${session.id}`)}
+            >
+              Launch
+            </Button>
+          </Group>
+        </motion.div>
+      </motion.div>
     </Card>
   )
 }
@@ -366,10 +404,10 @@ function SessionsPageInner() {
   return (
     <Group align="start" gap="xl" wrap="nowrap">
       {/* Left side - Sessions list */}
-      <Box
+      <motion.div
+        animate={{ width: selectedSession ? '65%' : '100%' }}
+        transition={{ duration: 0.5, ease: 'easeInOut' }}
         style={{
-          flex: selectedSession ? '0 0 65%' : '1 1 100%',
-          transition: 'flex 0.3s linear',
           justifyContent: 'center',
           alignItems: 'center',
         }}
@@ -410,20 +448,23 @@ function SessionsPageInner() {
               {createdSessions.length > 0 && (
                 <Box>
                   <Collapse in={createdExpanded}>
-                    <SimpleGrid
-                      cols={{ base: 1, sm: 2, lg: selectedSession ? 2 : 3 }}
-                      spacing="lg"
-                      style={{ transition: 'all 0.3s ease-in-out' }}
-                    >
-                      {createdSessions.map((session) => (
-                        <SessionCard
-                          key={session.id}
-                          session={session}
-                          onClick={() => setSelectedSession(session)}
-                          isSelected={selectedSession?.id === session.id}
-                        />
-                      ))}
-                    </SimpleGrid>
+                    <motion.div variants={gridVariants} initial="hidden" animate="show">
+                      <SimpleGrid
+                        cols={{ base: 1, sm: 2, lg: selectedSession ? 2 : 3 }}
+                        spacing="lg"
+                        style={{ transition: 'all 0.3s ease-in-out' }}
+                      >
+                        {createdSessions.map((session) => (
+                          <motion.div key={session.id} variants={cardVariants}>
+                            <SessionCard
+                              session={session}
+                              onClick={() => setSelectedSession(session)}
+                              isSelected={selectedSession?.id === session.id}
+                            />
+                          </motion.div>
+                        ))}
+                      </SimpleGrid>
+                    </motion.div>
                   </Collapse>
                 </Box>
               )}
@@ -453,42 +494,50 @@ function SessionsPageInner() {
                   </UnstyledButton>
 
                   <Collapse in={assignedExpanded}>
-                    <SimpleGrid
-                      cols={{ base: 1, sm: 2, lg: selectedSession ? 2 : 3 }}
-                      spacing="lg"
-                      style={{ transition: 'all 0.3s ease-in-out' }}
-                    >
-                      {assignedSessions.map((session) => (
-                        <SessionCard
-                          key={session.id}
-                          session={session}
-                          onClick={() => setSelectedSession(session)}
-                          isSelected={selectedSession?.id === session.id}
-                        />
-                      ))}
-                    </SimpleGrid>
+                    <motion.div variants={gridVariants} initial="hidden" animate="show">
+                      <SimpleGrid
+                        cols={{ base: 1, sm: 2, lg: selectedSession ? 2 : 3 }}
+                        spacing="lg"
+                        style={{ transition: 'all 0.3s ease-in-out' }}
+                      >
+                        {assignedSessions.map((session) => (
+                          <motion.div key={session.id} variants={cardVariants}>
+                            <SessionCard
+                              session={session}
+                              onClick={() => setSelectedSession(session)}
+                              isSelected={selectedSession?.id === session.id}
+                            />
+                          </motion.div>
+                        ))}
+                      </SimpleGrid>
+                    </motion.div>
                   </Collapse>
                 </Box>
               )}
             </>
           )}
         </Stack>
-      </Box>
+      </motion.div>
 
-      {selectedSession && (
-        <Box
-          style={{
-            flex: '0 0 35%',
-            minWidth: 0,
-            animation: 'slideIn 0.3s linear',
-          }}
-        >
-          <SessionDetailPanel
-            session={selectedSession}
-            onDismiss={() => setSelectedSession(null)}
-          />
-        </Box>
-      )}
+      <AnimatePresence>
+        {selectedSession && (
+          <motion.div
+            initial={{ width: 0, opacity: 0, x: 100 }}
+            animate={{ width: '35%', opacity: 1, x: 0 }}
+            exit={{ width: 0, opacity: 0, x: 100 }}
+            transition={{ duration: 0.3, ease: 'easeInOut' }}
+            style={{
+              flexShrink: 0,
+              overflow: 'hidden',
+            }}
+          >
+            <SessionDetailPanel
+              session={selectedSession}
+              onDismiss={() => setSelectedSession(null)}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
     </Group>
   )
 }
@@ -499,23 +548,4 @@ function SessionsPageFallback() {
       <Loader size="lg" />
     </Center>
   )
-}
-
-if (typeof document !== 'undefined') {
-  const styleId = 'session-slide-animation'
-  if (!document.getElementById(styleId)) {
-    const style = document.createElement('style')
-    style.id = styleId
-    style.textContent = `
-      @keyframes slideIn {
-        from {
-          transform: translateX(100%);
-        }
-        to {
-          transform: translateX(0);
-        }
-      }
-    `
-    document.head.appendChild(style)
-  }
 }

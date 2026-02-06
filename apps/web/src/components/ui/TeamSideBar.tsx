@@ -45,7 +45,7 @@ export function TeamSideBar({ teams, activeTeamId, onSelectTeam }: TeamSideBarPr
       style={{
         width: 60,
         height: '100%',
-        background: 'var(--pitch-nav-bg)',
+        background: 'var(--pitch-nav-bg, var(--mantine-color-nav-9))',
         borderTopRightRadius: 24,
         borderBottomRightRadius: 24,
         border: '1px solid var(--pitch-nav-text-dim)',
