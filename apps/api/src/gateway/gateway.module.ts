@@ -24,6 +24,9 @@ import {
   getJwtAccessExpiration,
 } from '@pitch/shared-backend/config/jwt.config';
 import { APP_GUARD } from '@nestjs/core';
+import { TeamGatewayController } from './controllers/userManagement/team-gateway.controller';
+import { S3GatewayController } from './controllers/s3/s3-gateway.controller';
+import { SimulationWsGateway } from './controllers/simulation/simulation-ws.gateway';
 import { SimulationWsGateway } from './controllers/simulation/simulation-ws.gateway';
 
 @Module({
@@ -50,6 +53,7 @@ import { SimulationWsGateway } from './controllers/simulation/simulation-ws.gate
     UserGatewayController,
     AuthGatewayController,
     TeamGatewayController,
+    S3GatewayController,
     SalesforceGatewayController,
     TtsGatewayController,
     SessionGatewayController,
