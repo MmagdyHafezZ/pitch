@@ -9,14 +9,21 @@ import {
   Paper,
   TextInput,
   Textarea,
-  Select,
   Button,
   SimpleGrid,
   Badge,
   NumberInput,
 } from '@mantine/core'
-import { IconSparkles, IconWand, IconClock, IconTarget, IconNotes } from '@tabler/icons-react'
+import {
+  IconSparkles,
+  IconWand,
+  IconClock,
+  IconTarget,
+  IconNotes,
+  IconSearch,
+} from '@tabler/icons-react'
 import classes from '../create-session.module.css'
+import React from 'react'
 
 export interface ScenarioOption {
   id: string
@@ -38,6 +45,8 @@ interface ScenarioStepProps {
   setScenarioContext: (value: string) => void
   aiRole: string
   setAiRole: (value: string) => void
+  userRole: string
+  setUserRole: (value: string) => void
   durationMinutes: number
   setDurationMinutes: (value: number) => void
   scenarioCount: number
@@ -60,6 +69,8 @@ export function ScenarioStep({
   setScenarioContext,
   aiRole,
   setAiRole,
+  userRole,
+  setUserRole,
   durationMinutes,
   setDurationMinutes,
   scenarioCount,
@@ -69,7 +80,29 @@ export function ScenarioStep({
   errors,
 }: ScenarioStepProps) {
   const selectedScenario = scenarios.find((scenario) => scenario.id === selectedScenarioId) ?? null
+  const [scenarioQuery, setScenarioQuery] = React.useState('')
+  const filteredScenarios = React.useMemo(() => {
+    const query = scenarioQuery.trim().toLowerCase()
+    if (!query) {
+      return scenarios
+    }
 
+    return scenarios.filter((scenario) => {
+      const name = scenario.name.toLowerCase()
+      const description = scenario.description?.toLowerCase() ?? ''
+      return name.includes(query) || description.includes(query)
+    })
+  }, [scenarios, scenarioQuery])
+
+  React.useEffect(() => {
+    if (!selectedScenarioId) {
+      return
+    }
+
+    if (!scenarios.some((scenario) => scenario.id === selectedScenarioId)) {
+      setSelectedScenarioId(null)
+    }
+  }, [scenarios, selectedScenarioId, setSelectedScenarioId])
   return (
     <Stack gap="lg">
       <Group align="center" gap="sm">
@@ -126,6 +159,12 @@ export function ScenarioStep({
               value={aiRole}
               onChange={(event) => setAiRole(event.currentTarget.value)}
             />
+            <TextInput
+              label="Your role in the simulation"
+              placeholder="Account executive / Founder / Sales rep"
+              value={userRole}
+              onChange={(event) => setUserRole(event.currentTarget.value)}
+            />
             <NumberInput
               label="Session length (minutes)"
               value={durationMinutes}
@@ -166,27 +205,74 @@ export function ScenarioStep({
               max={5}
               step={1}
             />
-            <Select
-              label="Choose a scenario"
-              placeholder={scenariosLoading ? 'Loading scenarios...' : 'Pick a scenario'}
-              data={scenarios.map((scenario) => ({
-                value: scenario.id,
-                label: scenario.name,
-              }))}
-              value={selectedScenarioId}
-              onChange={setSelectedScenarioId}
-              searchable
-              clearable
+            {/* // search scenarios list */}
+            <TextInput
+              placeholder="Search for specific scenario"
+              leftSection={<IconSearch size={16} />}
+              value={scenarioQuery}
+              onChange={(event) => setScenarioQuery(event.currentTarget.value)}
               disabled={scenariosLoading}
             />
-
-            <Paper withBorder radius="md" p="md" className={classes.scenarioPreview}>
-              {selectedScenario ? (
-                <Stack gap="xs">
-                  <Text fw={600}>{selectedScenario.name}</Text>
-                  <Text size="sm" c="dimmed">
-                    {selectedScenario.description ||
-                      'No description provided. Generated scenario details will show here.'}
+            <Text size="xs" c="dimmed">
+              {scenariosLoading
+                ? 'Loading scenarios...'
+                : scenarios.length === 0
+                  ? 'No scenarios available yet.'
+                  : `Showing ${filteredScenarios.length} of ${scenarios.length} scenarios`}
+            </Text>
+            <Stack
+              gap="xs"
+              style={{
+                overflowY: 'auto',
+              }}
+            >
+              {scenariosLoading && scenarios.length === 0 ? (
+                <Stack gap="xs" align="center">
+                  <IconSparkles size={18} />
+                  <Text size="sm" c="dimmed" ta="center">
+                    Loading your scenarios...
+                  </Text>
+                </Stack>
+              ) : filteredScenarios.length > 0 ? (
+                filteredScenarios.map((scenario) =>
+                  selectedScenario?.id === scenario.id ? (
+                    <Paper
+                      withBorder
+                      radius="md"
+                      p="md"
+                      className={classes.scenarioPreviewSelected}
+                      key={scenario.id}
+                    >
+                      <Text fw={600} mb="xs">
+                        {scenario.name}
+                      </Text>
+                      <Text size="sm" c="dimmed">
+                        {scenario.description || 'No description provided.'}
+                      </Text>
+                    </Paper>
+                  ) : (
+                    <Paper
+                      withBorder
+                      radius="md"
+                      p="md"
+                      key={scenario.id}
+                      className={classes.scenarioPreview}
+                      onClick={() => setSelectedScenarioId(scenario.id)}
+                    >
+                      <Text fw={600} mb="xs">
+                        {scenario.name}
+                      </Text>
+                      <Text size="sm" c="dimmed">
+                        {scenario.description || 'No description provided.'}
+                      </Text>
+                    </Paper>
+                  )
+                )
+              ) : scenarioQuery.trim() ? (
+                <Stack gap="xs" align="center">
+                  <IconSparkles size={18} />
+                  <Text size="sm" c="dimmed" ta="center">
+                    No scenarios match {scenarioQuery.trim()}.
                   </Text>
                 </Stack>
               ) : (
@@ -197,7 +283,7 @@ export function ScenarioStep({
                   </Text>
                 </Stack>
               )}
-            </Paper>
+            </Stack>
           </Stack>
         </Paper>
       </SimpleGrid>

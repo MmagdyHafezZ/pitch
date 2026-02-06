@@ -18,6 +18,7 @@ interface ReviewStepProps {
   selectedTeamId: string | null
   teams: Team[]
   sessionType: SessionType | null
+  phoneNumber: string
   language: string
   tags: string[]
   selectedPersona: string | null
@@ -29,6 +30,8 @@ interface ReviewStepProps {
   scenarioContext: string
   scenarioId: string | null
   scenarios: Array<{ id: string; name: string; description?: string }>
+  aiRole: string
+  userRole: string
   durationMinutes: number
   crmSelections: {
     accounts: string[]
@@ -58,6 +61,7 @@ export function ReviewStep({
   selectedTeamId,
   teams,
   sessionType,
+  phoneNumber,
   language,
   tags,
   selectedPersona,
@@ -69,6 +73,8 @@ export function ReviewStep({
   scenarioContext,
   scenarioId,
   scenarios,
+  aiRole,
+  userRole,
   durationMinutes,
   crmSelections,
   crmConnected,
@@ -124,6 +130,12 @@ export function ReviewStep({
               <Text fw={600}>Type</Text>
               <Text c="dimmed">{sessionType || 'Not set'}</Text>
             </Group>
+            {sessionType === 'phone' && (
+              <Group justify="apart" className={classes.reviewRow}>
+                <Text fw={600}>Phone number</Text>
+                <Text c="dimmed">{phoneNumber || 'Not set'}</Text>
+              </Group>
+            )}
             <Group justify="apart" className={classes.reviewRow}>
               <Text fw={600}>Language</Text>
               <Text c="dimmed">{language}</Text>
@@ -189,6 +201,14 @@ export function ReviewStep({
                 <Text c="dimmed">{scenarioContext}</Text>
               </Group>
             )}
+            <Group justify="apart" className={classes.reviewRow}>
+              <Text fw={600}>AI role</Text>
+              <Text c="dimmed">{aiRole || 'Not set'}</Text>
+            </Group>
+            <Group justify="apart" className={classes.reviewRow}>
+              <Text fw={600}>Your role</Text>
+              <Text c="dimmed">{userRole || 'Not set'}</Text>
+            </Group>
             <Group justify="apart" className={classes.reviewRow}>
               <Text fw={600}>Session length</Text>
               <Text c="dimmed">{durationMinutes} min</Text>

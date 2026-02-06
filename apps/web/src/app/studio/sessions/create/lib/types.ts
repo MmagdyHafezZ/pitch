@@ -6,6 +6,7 @@ export interface SessionConfigForm {
   difficulty: number
   durationMinutes?: number
   aiRole?: string
+  userRole?: string
   [key: string]: any
 }
 

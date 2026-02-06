@@ -86,6 +86,7 @@ export default function EditSessionPage() {
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null)
   const [sessionName, setSessionName] = useState('')
   const [sessionType, setSessionType] = useState<SessionType | null>(null)
+  const [phoneNumber, setPhoneNumber] = useState('')
   const [tags, setTags] = useState<string[]>([])
   const [language, setLanguage] = useState('en-US')
   const [durationMinutes, setDurationMinutes] = useState(30)
@@ -241,6 +242,14 @@ export default function EditSessionPage() {
       setSelectedLeads(config.crm.selections.leads ?? [])
       setSelectedContacts(config.crm.selections.contacts ?? [])
     }
+
+    const resolvedPhoneNumber =
+      typeof config.phoneNumber === 'string'
+        ? config.phoneNumber
+        : typeof config.phone?.number === 'string'
+          ? config.phone.number
+          : ''
+    setPhoneNumber(resolvedPhoneNumber)
   }, [session, activeTeamId])
 
   useEffect(() => {
@@ -309,6 +318,12 @@ export default function EditSessionPage() {
   }, [sessionType, errors.sessionType])
 
   useEffect(() => {
+    if (phoneNumber.trim() && errors.phoneNumber) {
+      setErrors(({ phoneNumber: _phoneNumber, ...rest }) => rest)
+    }
+  }, [phoneNumber, errors.phoneNumber])
+
+  useEffect(() => {
     if (selectedPersona && errors.persona) {
       setErrors(({ persona: _persona, ...rest }) => rest)
     }
@@ -343,6 +358,14 @@ export default function EditSessionPage() {
 
     if (step === 0) {
       if (!sessionType) newErrors.sessionType = 'Session type is required'
+      if (sessionType === 'phone') {
+        const normalized = phoneNumber.trim()
+        if (!normalized) {
+          newErrors.phoneNumber = 'Phone number is required for phone calls'
+        } else if (!/^\+?[1-9]\d{7,14}$/.test(normalized)) {
+          newErrors.phoneNumber = 'Use E.164 format (e.g. +15551234567)'
+        }
+      }
     }
 
     if (step === 1) {
@@ -478,6 +501,19 @@ export default function EditSessionPage() {
       return
     }
 
+    if (sessionType === 'phone') {
+      const normalized = phoneNumber.trim()
+      if (!normalized || !/^\+?[1-9]\d{7,14}$/.test(normalized)) {
+        notifications.show({
+          title: 'Error',
+          message: 'Enter a valid phone number in E.164 format (e.g. +15551234567)',
+          color: 'red',
+          icon: <IconAlertCircle />,
+        })
+        return
+      }
+    }
+
     if (!selectedPersona) {
       notifications.show({
         title: 'Error',
@@ -538,12 +574,18 @@ export default function EditSessionPage() {
         },
       }
 
-      if (sessionType === 'voice' || sessionType === 'video') {
+      if (sessionType === 'voice' || sessionType === 'video' || sessionType === 'phone') {
         sessionConfig.ttsProvider = ttsProvider
         sessionConfig.ttsVoice = ttsVoice
         sessionConfig.voice = {
           provider: ttsProvider,
           voice: ttsVoice,
+        }
+      }
+
+      if (sessionType === 'phone') {
+        sessionConfig.phone = {
+          number: phoneNumber.trim(),
         }
       }
 
@@ -606,6 +648,8 @@ export default function EditSessionPage() {
           errors={errors}
           sessionName={sessionName}
           setSessionName={setSessionName}
+          phoneNumber={phoneNumber}
+          setPhoneNumber={setPhoneNumber}
           teamsLoading={teamsLoading}
           selectedTeamId={selectedTeamId}
           setSelectedTeamId={setSelectedTeamId}
@@ -739,6 +783,7 @@ export default function EditSessionPage() {
           selectedTeamId={selectedTeamId}
           teams={teams}
           sessionType={sessionType}
+          phoneNumber={phoneNumber}
           language={language}
           tags={tags}
           selectedPersona={selectedPersona}
