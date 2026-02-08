@@ -113,20 +113,3 @@ Ensure callback URL in Salesforce matches:
 ### OAuth Error 1800
 
 In Salesforce Connected App:
-
-- Edit Policies → "All users may self-authorize"
-- "Relax IP restrictions"
-- PKCE must be UNCHECKED
-
-## Next Steps
-
-- Read full documentation: `SALESFORCE_QUICK_START.md`
-- View architecture: `docs/architecture/MicroServices/CRM/README.md`
-- Explore Swagger UI: http://localhost:8000/docs
-- Check Prisma Studio: http://localhost:5555
-
-## Need Help?
-
-- Main README: `README.md`
-- Salesforce Setup: `SALESFORCE_QUICK_START.md`
-- API Docs: http://localhost:8000/docs
