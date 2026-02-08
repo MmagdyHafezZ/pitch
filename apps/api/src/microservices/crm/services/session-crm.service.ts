@@ -1,6 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
-/* eslint-disable @typescript-eslint/no-unsafe-argument */
 import {
   Injectable,
   Logger,
@@ -10,6 +7,12 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from './prisma.service';
 import { SalesforceIntegrationService } from './salesforce-integration.service';
+import {
+  SalesforceContact,
+  SalesforceAccount,
+  SalesforceOpportunity,
+  SessionCrmDataPayload,
+} from '../types/salesforce.types';
 
 /**
  * Session CRM Service
@@ -47,13 +50,7 @@ export class SessionCrmService {
   async attachCrmDataToSession(
     userId: string,
     sessionId: string,
-    data: {
-      orgId?: string;
-      contacts?: Array<any>; // Raw Salesforce Contact objects
-      accounts?: Array<any>; // Raw Salesforce Account objects
-      opportunities?: Array<any>; // Raw Salesforce Opportunity objects
-      leads?: Array<any>; // Raw Salesforce Lead objects
-    },
+    data: SessionCrmDataPayload,
   ) {
     this.logger.log(
       `Attaching CRM data to session ${sessionId} for user ${userId}`,
@@ -477,7 +474,7 @@ export class SessionCrmService {
           );
 
           if (freshData.records && freshData.records.length > 0) {
-            const fresh = freshData.records[0];
+            const fresh = freshData.records[0] as SalesforceContact;
             await this.prisma.client.contact.update({
               where: { id: contact.id },
               data: {
@@ -509,7 +506,7 @@ export class SessionCrmService {
           );
 
           if (freshData.records && freshData.records.length > 0) {
-            const fresh = freshData.records[0];
+            const fresh = freshData.records[0] as SalesforceAccount;
             await this.prisma.client.account.update({
               where: { id: account.id },
               data: {
@@ -539,7 +536,7 @@ export class SessionCrmService {
           );
 
           if (freshData.records && freshData.records.length > 0) {
-            const fresh = freshData.records[0];
+            const fresh = freshData.records[0] as SalesforceOpportunity;
             await this.prisma.client.opportunity.update({
               where: { id: opp.id },
               data: {

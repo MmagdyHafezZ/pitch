@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-return */
 import { Test, TestingModule } from '@nestjs/testing';
 import { HttpException, HttpStatus } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
@@ -87,13 +86,14 @@ describe('SalesforceGatewayController', () => {
       mockCrmService.send.mockReturnValue(throwError(() => error));
 
       controller.getConnectUrl('user-1').subscribe({
-        next: () => done.fail('Should have thrown error'),
-        error: (err: HttpException) => {
+        next: (): void => {
+          done.fail('Should have thrown error');
+        },
+        error: (err: HttpException): void => {
           expect(err).toBeInstanceOf(HttpException);
           expect(err.getStatus()).toBe(HttpStatus.BAD_REQUEST);
           expect(err.message).toBe('Client ID not configured');
           done();
-          return;
         },
       });
     });
@@ -104,12 +104,13 @@ describe('SalesforceGatewayController', () => {
       );
 
       controller.getConnectUrl('user-1').subscribe({
-        next: () => done.fail('Should have thrown error'),
-        error: (err: HttpException) => {
+        next: (): void => {
+          done.fail('Should have thrown error');
+        },
+        error: (err: HttpException): void => {
           expect(err).toBeInstanceOf(HttpException);
           expect(err.getStatus()).toBe(HttpStatus.INTERNAL_SERVER_ERROR);
           done();
-          return;
         },
       });
     });
@@ -146,12 +147,13 @@ describe('SalesforceGatewayController', () => {
       mockCrmService.send.mockReturnValue(throwError(() => error));
 
       controller.handleCallback('invalid', 'user-1').subscribe({
-        next: () => done.fail('Should have thrown error'),
-        error: (err: HttpException) => {
+        next: (): void => {
+          done.fail('Should have thrown error');
+        },
+        error: (err: HttpException): void => {
           expect(err).toBeInstanceOf(HttpException);
           expect(err.getStatus()).toBe(HttpStatus.BAD_REQUEST);
           done();
-          return;
         },
       });
     });

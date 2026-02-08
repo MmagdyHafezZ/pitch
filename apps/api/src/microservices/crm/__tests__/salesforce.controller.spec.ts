@@ -36,15 +36,15 @@ describe('SalesforceController', () => {
   });
 
   describe('getConnectUrl', () => {
-    it('returns OAuth connect URL', async () => {
+    it('returns OAuth connect URL', () => {
       const mockResult = {
         authUrl: 'https://login.salesforce.com/services/oauth2/authorize?...',
         message: 'Redirect user to this URL to connect Salesforce',
       };
 
-      mockService.getConnectUrl.mockResolvedValue(mockResult);
+      mockService.getConnectUrl.mockReturnValue(mockResult);
 
-      const result = await controller.getConnectUrl({ userId: 'user-1' });
+      const result = controller.getConnectUrl({ userId: 'user-1' });
 
       expect(result).toEqual(mockResult);
       expect(mockService.getConnectUrl).toHaveBeenCalledWith(
@@ -53,15 +53,15 @@ describe('SalesforceController', () => {
       );
     });
 
-    it('passes custom state parameter', async () => {
+    it('passes custom state parameter', () => {
       const mockResult = {
         authUrl: 'https://login.salesforce.com/services/oauth2/authorize?...',
         message: 'Redirect user to this URL to connect Salesforce',
       };
 
-      mockService.getConnectUrl.mockResolvedValue(mockResult);
+      mockService.getConnectUrl.mockReturnValue(mockResult);
 
-      await controller.getConnectUrl({
+      controller.getConnectUrl({
         userId: 'user-1',
         state: 'custom-state',
       });

@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-return */
 import { Test, TestingModule } from '@nestjs/testing';
 import { HttpException, HttpStatus } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
@@ -141,8 +140,10 @@ describe('SessionCrmGatewayController', () => {
       mockCrmService.send.mockReturnValue(throwError(() => error));
 
       controller.attachCrmData('user-1', 'session-1', payload).subscribe({
-        next: () => done.fail('Should have thrown error'),
-        error: (err: HttpException) => {
+        next: (): void => {
+          done.fail('Should have thrown error');
+        },
+        error: (err: HttpException): void => {
           expect(err).toBeInstanceOf(HttpException);
           expect(err.getStatus()).toBe(HttpStatus.BAD_REQUEST);
           expect(err.message).toBe('No CRM data provided');
@@ -166,8 +167,10 @@ describe('SessionCrmGatewayController', () => {
       );
 
       controller.attachCrmData('user-1', 'session-1', payload).subscribe({
-        next: () => done.fail('Should have thrown error'),
-        error: (err: HttpException) => {
+        next: (): void => {
+          done.fail('Should have thrown error');
+        },
+        error: (err: HttpException): void => {
           expect(err).toBeInstanceOf(HttpException);
           expect(err.getStatus()).toBe(HttpStatus.INTERNAL_SERVER_ERROR);
           done();
@@ -239,8 +242,10 @@ describe('SessionCrmGatewayController', () => {
       mockCrmService.send.mockReturnValue(throwError(() => error));
 
       controller.getSessionCrmData('user-1', 'session-1').subscribe({
-        next: () => done.fail('Should have thrown error'),
-        error: (err: HttpException) => {
+        next: (): void => {
+          done.fail('Should have thrown error');
+        },
+        error: (err: HttpException): void => {
           expect(err).toBeInstanceOf(HttpException);
           expect(err.getStatus()).toBe(HttpStatus.NOT_FOUND);
           done();
@@ -313,8 +318,10 @@ describe('SessionCrmGatewayController', () => {
       mockCrmService.send.mockReturnValue(throwError(() => error));
 
       controller.refreshSessionCrmData('user-1', 'session-1').subscribe({
-        next: () => done.fail('Should have thrown error'),
-        error: (err: HttpException) => {
+        next: (): void => {
+          done.fail('Should have thrown error');
+        },
+        error: (err: HttpException): void => {
           expect(err).toBeInstanceOf(HttpException);
           expect(err.getStatus()).toBe(HttpStatus.NOT_FOUND);
           done();
@@ -372,8 +379,10 @@ describe('SessionCrmGatewayController', () => {
       mockCrmService.send.mockReturnValue(throwError(() => error));
 
       controller.deleteSessionCrmData('user-1', 'session-1').subscribe({
-        next: () => done.fail('Should have thrown error'),
-        error: (err: HttpException) => {
+        next: (): void => {
+          done.fail('Should have thrown error');
+        },
+        error: (err: HttpException): void => {
           expect(err).toBeInstanceOf(HttpException);
           expect(err.getStatus()).toBe(HttpStatus.INTERNAL_SERVER_ERROR);
           done();

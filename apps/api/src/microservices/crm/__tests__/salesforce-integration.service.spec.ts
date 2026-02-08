@@ -151,12 +151,12 @@ describe('SalesforceIntegrationService', () => {
   });
 
   describe('getConnectUrl', () => {
-    it('returns Salesforce OAuth URL with userId as state', async () => {
+    it('returns Salesforce OAuth URL with userId as state', () => {
       process.env.SALESFORCE_CLIENT_ID = 'test-client-id';
       process.env.SALESFORCE_REDIRECT_URI =
         'http://localhost:8000/api/crm/salesforce/callback';
 
-      const result = await service.getConnectUrl('user-1');
+      const result = service.getConnectUrl('user-1');
 
       expect(result).toHaveProperty('authUrl');
       expect(result.authUrl).toContain(
@@ -169,10 +169,10 @@ describe('SalesforceIntegrationService', () => {
       );
     });
 
-    it('throws BadRequestException when client ID not configured', async () => {
+    it('throws BadRequestException when client ID not configured', () => {
       delete process.env.SALESFORCE_CLIENT_ID;
 
-      await expect(service.getConnectUrl('user-1')).rejects.toThrow(
+      expect(() => service.getConnectUrl('user-1')).toThrow(
         new BadRequestException('Salesforce client ID not configured'),
       );
     });
