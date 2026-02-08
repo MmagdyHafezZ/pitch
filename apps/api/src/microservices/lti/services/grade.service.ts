@@ -14,7 +14,6 @@ interface GradeData {
 export class GradeService {
   constructor(private readonly repository: LtiRepository) {}
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   syncGrade(_data: GradeData) {
     void _data;
     return { success: true };

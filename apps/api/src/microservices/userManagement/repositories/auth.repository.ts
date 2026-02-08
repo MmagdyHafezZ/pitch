@@ -186,7 +186,6 @@ export class AuthRepository {
    */
   async canUnlinkOAuthAccount(
     userId: string,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     _provider: AuthProvider,
   ): Promise<boolean> {
     void _provider;

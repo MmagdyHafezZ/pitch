@@ -13,7 +13,6 @@ interface LaunchData {
 export class LaunchService {
   constructor(private readonly repository: LtiRepository) {}
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   handleLaunch(_data: LaunchData) {
     void _data;
     return { success: true };
