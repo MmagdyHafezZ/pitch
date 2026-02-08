@@ -1,4 +1,4 @@
-import { NotFoundException, BadRequestException } from '@nestjs/common';
+import { NotFoundException } from '@nestjs/common';
 import { SessionCrmService } from '../services/session-crm.service';
 import type { PrismaService } from '../services/prisma.service';
 import type { SalesforceIntegrationService } from '../services/salesforce-integration.service';
@@ -316,12 +316,6 @@ describe('SessionCrmService', () => {
 
   describe('getSessionCrmData', () => {
     it('returns all CRM data for a session', async () => {
-      const mockAccount = {
-        id: 'account-1',
-        externalId: '001XXXXX',
-        name: 'Acme Corp',
-      };
-
       const mockActivitiesWithRelations = [
         {
           ...mockActivity,
@@ -384,7 +378,7 @@ describe('SessionCrmService', () => {
       global.fetch = mockFetch as any;
       mockFetch.mockResolvedValue({
         ok: true,
-        json: async () => mockSalesforceContact,
+        json: () => Promise.resolve(mockSalesforceContact),
       } as Response);
 
       mockPrisma.client.contact.upsert.mockResolvedValue({

@@ -5,23 +5,6 @@ describe('SalesforceController', () => {
   let controller: SalesforceController;
   let mockService: jest.Mocked<SalesforceIntegrationService>;
 
-  const mockIntegration = {
-    id: 'integration-1',
-    userId: 'user-1',
-    provider: 'SALESFORCE' as const,
-    status: 'CONNECTED' as const,
-    accessToken: 'access-token-123',
-    refreshToken: 'refresh-token-123',
-    expiresAt: new Date(Date.now() + 3600000),
-    instanceUrl: 'https://example.my.salesforce.com',
-    providerId: 'sf-user-id',
-    providerEmail: 'user@company.com',
-    providerData: {},
-    metadata: {},
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  };
-
   const mockContact = {
     Id: '003XXXXX',
     FirstName: 'John',

@@ -1,8 +1,10 @@
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
+/* eslint-disable @typescript-eslint/no-unsafe-member-access */
+/* eslint-disable @typescript-eslint/no-unsafe-argument */
 import {
   Injectable,
   Logger,
   NotFoundException,
-  BadRequestException,
   Inject,
   forwardRef,
 } from '@nestjs/common';

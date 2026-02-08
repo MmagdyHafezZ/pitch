@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-return */
 import { Test, TestingModule } from '@nestjs/testing';
 import { HttpException, HttpStatus } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
@@ -146,6 +147,7 @@ describe('SessionCrmGatewayController', () => {
           expect(err.getStatus()).toBe(HttpStatus.BAD_REQUEST);
           expect(err.message).toBe('No CRM data provided');
           done();
+          return;
         },
       });
     });
@@ -169,6 +171,7 @@ describe('SessionCrmGatewayController', () => {
           expect(err).toBeInstanceOf(HttpException);
           expect(err.getStatus()).toBe(HttpStatus.INTERNAL_SERVER_ERROR);
           done();
+          return;
         },
       });
     });
@@ -241,6 +244,7 @@ describe('SessionCrmGatewayController', () => {
           expect(err).toBeInstanceOf(HttpException);
           expect(err.getStatus()).toBe(HttpStatus.NOT_FOUND);
           done();
+          return;
         },
       });
     });
@@ -314,6 +318,7 @@ describe('SessionCrmGatewayController', () => {
           expect(err).toBeInstanceOf(HttpException);
           expect(err.getStatus()).toBe(HttpStatus.NOT_FOUND);
           done();
+          return;
         },
       });
     });
@@ -372,6 +377,7 @@ describe('SessionCrmGatewayController', () => {
           expect(err).toBeInstanceOf(HttpException);
           expect(err.getStatus()).toBe(HttpStatus.INTERNAL_SERVER_ERROR);
           done();
+          return;
         },
       });
     });

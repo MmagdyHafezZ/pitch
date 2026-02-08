@@ -185,22 +185,24 @@ describe('SalesforceIntegrationService', () => {
       // Mock token exchange
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        json: async () => ({
-          access_token: 'new-access-token',
-          refresh_token: 'new-refresh-token',
-          expires_in: 3600,
-          instance_url: 'https://example.my.salesforce.com',
-        }),
+        json: () =>
+          Promise.resolve({
+            access_token: 'new-access-token',
+            refresh_token: 'new-refresh-token',
+            expires_in: 3600,
+            instance_url: 'https://example.my.salesforce.com',
+          }),
       } as Response);
 
       // Mock user info fetch
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        json: async () => ({
-          user_id: 'sf-user-id',
-          email: 'user@company.com',
-          name: 'Test User',
-        }),
+        json: () =>
+          Promise.resolve({
+            user_id: 'sf-user-id',
+            email: 'user@company.com',
+            name: 'Test User',
+          }),
       } as Response);
 
       mockPrisma.client.integration.upsert.mockResolvedValue(mockIntegration);
@@ -229,7 +231,7 @@ describe('SalesforceIntegrationService', () => {
 
       mockFetch.mockResolvedValueOnce({
         ok: false,
-        text: async () => 'Invalid authorization code',
+        text: () => Promise.resolve('Invalid authorization code'),
       } as Response);
 
       await expect(
@@ -272,9 +274,10 @@ describe('SalesforceIntegrationService', () => {
       const mockFetch = global.fetch as jest.MockedFunction<typeof fetch>;
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        json: async () => ({
-          records: [mockContact],
-        }),
+        json: () =>
+          Promise.resolve({
+            records: [mockContact],
+          }),
       } as Response);
 
       const result = await service.getContacts('user-1', 100);
@@ -308,9 +311,10 @@ describe('SalesforceIntegrationService', () => {
       const mockFetch = global.fetch as jest.MockedFunction<typeof fetch>;
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        json: async () => ({
-          records: [mockAccount],
-        }),
+        json: () =>
+          Promise.resolve({
+            records: [mockAccount],
+          }),
       } as Response);
 
       const result = await service.getAccounts('user-1', 100);
@@ -335,9 +339,10 @@ describe('SalesforceIntegrationService', () => {
       const mockFetch = global.fetch as jest.MockedFunction<typeof fetch>;
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        json: async () => ({
-          records: [mockOpportunity],
-        }),
+        json: () =>
+          Promise.resolve({
+            records: [mockOpportunity],
+          }),
       } as Response);
 
       const result = await service.getOpportunities('user-1', 100);
@@ -363,9 +368,10 @@ describe('SalesforceIntegrationService', () => {
       const mockFetch = global.fetch as jest.MockedFunction<typeof fetch>;
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        json: async () => ({
-          records: [mockLead],
-        }),
+        json: () =>
+          Promise.resolve({
+            records: [mockLead],
+          }),
       } as Response);
 
       const result = await service.getLeads('user-1', 100);
@@ -383,9 +389,10 @@ describe('SalesforceIntegrationService', () => {
       const mockFetch = global.fetch as jest.MockedFunction<typeof fetch>;
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        json: async () => ({
-          records: [mockContact],
-        }),
+        json: () =>
+          Promise.resolve({
+            records: [mockContact],
+          }),
       } as Response);
 
       const result = await service.query(
@@ -407,9 +414,10 @@ describe('SalesforceIntegrationService', () => {
       const mockFetch = global.fetch as jest.MockedFunction<typeof fetch>;
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        json: async () => ({
-          searchRecords: [mockContact],
-        }),
+        json: () =>
+          Promise.resolve({
+            searchRecords: [mockContact],
+          }),
       } as Response);
 
       const result = await service.search(
