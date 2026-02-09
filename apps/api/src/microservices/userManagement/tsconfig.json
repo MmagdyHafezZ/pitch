@@ -2,7 +2,6 @@
   "display": "Default",
   "compilerOptions": {
     "outDir": "./dist",
-    "rootDir": ".",
     "module": "nodenext",
     "moduleResolution": "nodenext",
     "resolvePackageJsonExports": true,

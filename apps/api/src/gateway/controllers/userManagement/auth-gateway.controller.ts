@@ -27,7 +27,7 @@ import {
   LoginDto,
   AuthResponseDto,
   UserResponseDto,
-} from '../../../microservices/userManagement/dto/auth.dto';
+} from '../../../microservices/userManagement/auth/dto/auth.dto';
 import { normalizeError } from '@pitch/shared-backend/helpers/exceptions';
 import { UserClaims } from '../../decorators/user-claims.decorator';
 import type { UserClaims as UserClaimsType } from '@pitch/shared-backend/interfaces/user-claims.interface';

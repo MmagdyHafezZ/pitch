@@ -15,14 +15,11 @@ enum Role {
   MEMBER
 }
 
-enum SubscriptionStatus {
-  ACTIVE
-  CANCELED
-}
-
 enum BillingInterval {
   MONTH
-  YEAR
+  QUARTER
+  SEMIANNUAL
+  ANNUAL
 }
 
 enum AuthProvider {
@@ -46,7 +43,7 @@ model User {
   isActive  Boolean  @default(true) // Is the account active, i.e. allowed to operate
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  lastSeen DateTime?
+  lastSeen  DateTime?
 
   // Relations
   refreshTokens RefreshToken[]
@@ -146,12 +143,10 @@ model TeamMembership {
 model Plan {
   // plans are constant
   id           String          @id @default(cuid())
-  name         String
+  name         String          @unique
   description  String?
   planLevel    PlanLevel       @default(FREE)
-  interval     BillingInterval @default(MONTH)
-  maxTokens    Int             @default(0) // the number of allowed tokens in the plan
-  limits       Json?           // usage limits
+  maxCoins     Int             @default(0) // the number of allowed tokens in the plan
   isActive     Boolean         @default(true) // can anyone subscribe to this plan
   createdAt    DateTime        @default(now())
   updatedAt    DateTime        @updatedAt
@@ -167,7 +162,9 @@ model Subscription {
   id                    String             @id @default(cuid())
   teamId                String
   planId                String
-  status                SubscriptionStatus @default(ACTIVE) // the status of the subscription
+  interval              BillingInterval    @default(MONTH)
+  limits                Int?               // role-based limit
+  isActive              Boolean            @default(true) // whether the subscription is active
   currentPeriodStart    DateTime
   currentPeriodEnd      DateTime
   cancelAtPeriodEnd     Boolean            @default(false)
@@ -180,7 +177,7 @@ model Subscription {
   team                  Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
   plan                  Plan @relation(fields: [planId], references: [id])
 
-  @@index([teamId, status])
+  @@index([teamId, isActive])
   @@index([planId])
   @@map("subscriptions")
 }

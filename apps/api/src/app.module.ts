@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { ScheduleModule } from '@nestjs/schedule';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { GatewayModule } from './gateway/gateway.module';
@@ -11,6 +12,7 @@ import { S3Module } from '@microservices/s3/s3.module';
 
 @Module({
   imports: [
+    ScheduleModule.forRoot(),
     GatewayModule,
     UserMicroserviceModule,
     SupportModule,

@@ -1,6 +1,8 @@
 /* ---------- ENUMS ---------- */
 
 export type Role = 'OWNER' | 'ADMIN' | 'MEMBER'
+export type PlanLevel = 'FREE' | 'PRO' | 'TEAM' | 'ENTERPRISE'
+export type BillingInterval = 'MONTH' | 'QUARTER' | 'SEMIANNUAL' | 'ANNUAL'
 
 /* ---------- READ MODELS ---------- */
 
@@ -62,6 +64,36 @@ export interface TeamMembership {
   user?: UserSummary
 }
 
+export interface Plan {
+  id: string
+  name: string
+  description?: string | null
+  planLevel: PlanLevel
+  maxCoins: number
+  isActive: boolean
+  createdAt: Date
+  updatedAt: Date
+  subscriptions?: Subscription[]
+}
+
+export interface Subscription {
+  id: string
+  teamId: string
+  planId: string
+  interval: BillingInterval
+  limits?: number | null
+  isActive: boolean
+  currentPeriodStart: Date
+  currentPeriodEnd: Date
+  cancelAtPeriodEnd: boolean
+  metadata?: unknown
+  createdAt: Date
+  updatedAt: Date
+  canceledAt?: Date | null
+  team?: Team
+  plan?: Plan
+}
+
 /* ---------- Write MODELS ---------- */
 
 export interface CreateUserDto {
@@ -112,4 +144,51 @@ export interface UpdateMemberDto {
   tokenLimit?: number
   isActive?: boolean
   acceptedAt?: Date | null
+}
+
+export interface CreatePlanDto {
+  name: string
+  description?: string | null
+  planLevel: PlanLevel
+  maxCoins: number
+  isActive?: boolean
+}
+
+export interface UpdatePlanDto {
+  name?: string
+  description?: string | null
+  planLevel?: PlanLevel
+  maxCoins?: number
+  isActive?: boolean
+}
+
+export interface CreateSubscriptionDto {
+  teamId: string
+  planId: string
+  interval: BillingInterval
+  limits?: number
+  currentPeriodStart?: Date | null
+  cancelAtPeriodEnd?: boolean
+}
+
+export interface UpdateSubscriptionDto {
+  teamId?: string
+  planId?: string
+  interval?: BillingInterval
+  limits?: number
+  metadata?: unknown
+  cancelAtPeriodEnd?: boolean
+}
+
+export interface UpgradeSubscriptionDto {
+  planId: string
+  interval?: BillingInterval
+  limits?: number
+  metadata?: unknown
+  canceledAt?: Date | null
+}
+
+export interface Period {
+  start: Date
+  end: Date
 }
