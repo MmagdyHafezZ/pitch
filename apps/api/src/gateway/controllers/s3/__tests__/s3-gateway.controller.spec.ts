@@ -87,9 +87,7 @@ describe('S3GatewayController', () => {
 
   it('maps errors to HttpException', async () => {
     const client = createClientProxyMock();
-    client.send.mockReturnValueOnce(
-      throwError(() => new Error('boom')),
-    );
+    client.send.mockReturnValueOnce(throwError(() => new Error('boom')));
     const controller = new S3GatewayController(client);
 
     await expect(

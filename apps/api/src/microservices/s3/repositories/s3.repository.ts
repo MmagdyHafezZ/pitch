@@ -2,10 +2,16 @@ import { Injectable } from '@nestjs/common';
 import {
   DeleteObjectCommand,
   DeleteObjectsCommand,
+  type DeleteObjectsCommandOutput,
   GetObjectCommand,
   ListObjectsV2Command,
+  type ListObjectsV2CommandOutput,
   PutObjectCommand,
   S3Client,
+  type DeleteObjectCommandInput,
+  type GetObjectCommandInput,
+  type ListObjectsV2CommandInput,
+  type PutObjectCommandInput,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
@@ -51,15 +57,16 @@ export class S3Repository {
     expiresInSeconds?: number;
   }): Promise<{ url: string }> {
     const bucket = this.resolveBucket(params.bucket);
-    const command = new PutObjectCommand({
+    const commandInput: PutObjectCommandInput = {
       Bucket: bucket,
       Key: params.key,
       ContentType: params.contentType,
-    });
+    };
+    const command = new PutObjectCommand(commandInput);
 
-    const url = await getSignedUrl(this.client, command, {
+    const url = (await getSignedUrl(this.client, command, {
       expiresIn: params.expiresInSeconds ?? this.defaultExpiresInSeconds,
-    });
+    })) as string;
 
     return { url };
   }
@@ -70,14 +77,15 @@ export class S3Repository {
     expiresInSeconds?: number;
   }): Promise<{ url: string }> {
     const bucket = this.resolveBucket(params.bucket);
-    const command = new GetObjectCommand({
+    const commandInput: GetObjectCommandInput = {
       Bucket: bucket,
       Key: params.key,
-    });
+    };
+    const command = new GetObjectCommand(commandInput);
 
-    const url = await getSignedUrl(this.client, command, {
+    const url = (await getSignedUrl(this.client, command, {
       expiresIn: params.expiresInSeconds ?? this.defaultExpiresInSeconds,
-    });
+    })) as string;
 
     return { url };
   }
@@ -88,14 +96,15 @@ export class S3Repository {
     expiresInSeconds?: number;
   }): Promise<{ url: string }> {
     const bucket = this.resolveBucket(params.bucket);
-    const command = new DeleteObjectCommand({
+    const commandInput: DeleteObjectCommandInput = {
       Bucket: bucket,
       Key: params.key,
-    });
+    };
+    const command = new DeleteObjectCommand(commandInput);
 
-    const url = await getSignedUrl(this.client, command, {
+    const url = (await getSignedUrl(this.client, command, {
       expiresIn: params.expiresInSeconds ?? this.defaultExpiresInSeconds,
-    });
+    })) as string;
 
     return { url };
   }
@@ -106,13 +115,16 @@ export class S3Repository {
     limit?: number;
   }): Promise<{ keys: string[] }> {
     const bucket = this.resolveBucket(params.bucket);
-    const command = new ListObjectsV2Command({
+    const commandInput: ListObjectsV2CommandInput = {
       Bucket: bucket,
       Prefix: params.prefix,
       MaxKeys: params.limit,
-    });
+    };
+    const command = new ListObjectsV2Command(commandInput);
 
-    const response = await this.client.send(command);
+    const response = (await this.client.send(
+      command,
+    )) as ListObjectsV2CommandOutput;
     const keys =
       response.Contents?.map((item) => item.Key).filter((key): key is string =>
         Boolean(key),
@@ -126,12 +138,15 @@ export class S3Repository {
     prefix: string;
   }): Promise<{ deleted: number }> {
     const bucket = this.resolveBucket(params.bucket);
-    const listCommand = new ListObjectsV2Command({
+    const listCommandInput: ListObjectsV2CommandInput = {
       Bucket: bucket,
       Prefix: params.prefix,
-    });
+    };
+    const listCommand = new ListObjectsV2Command(listCommandInput);
 
-    const listResponse = await this.client.send(listCommand);
+    const listResponse = (await this.client.send(
+      listCommand,
+    )) as ListObjectsV2CommandOutput;
     const keys =
       listResponse.Contents?.map((item) => item.Key).filter(
         (key): key is string => Boolean(key),
@@ -147,7 +162,9 @@ export class S3Repository {
       },
     });
 
-    const deleteResponse = await this.client.send(deleteCommand);
+    const deleteResponse = (await this.client.send(
+      deleteCommand,
+    )) as DeleteObjectsCommandOutput;
     const deletedCount = deleteResponse.Deleted?.length ?? 0;
 
     return { deleted: deletedCount };

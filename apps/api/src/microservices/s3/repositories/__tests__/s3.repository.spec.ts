@@ -1,7 +1,7 @@
 import { S3Repository } from '../s3.repository';
 
 const sendMock = jest.fn();
-const getSignedUrlMock = jest.fn();
+const getSignedUrlMock = jest.fn<Promise<string>, unknown[]>();
 
 jest.mock('@aws-sdk/s3-request-presigner', () => ({
   getSignedUrl: (...args: unknown[]) => getSignedUrlMock(...args),

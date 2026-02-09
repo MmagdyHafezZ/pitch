@@ -13,7 +13,9 @@ describe('FileService', () => {
 
   it('delegates presign upload to repository', async () => {
     const repository = createRepositoryMock();
-    repository.createPresignedUploadUrl.mockResolvedValue({ url: 'upload' });
+    repository.createPresignedUploadUrl.mockResolvedValue({
+      url: 'upload',
+    });
     const service = new FileService(repository);
 
     const result = await service.createPresignedUploadUrl({
@@ -30,7 +32,9 @@ describe('FileService', () => {
 
   it('delegates presign download to repository', async () => {
     const repository = createRepositoryMock();
-    repository.createPresignedDownloadUrl.mockResolvedValue({ url: 'download' });
+    repository.createPresignedDownloadUrl.mockResolvedValue({
+      url: 'download',
+    });
     const service = new FileService(repository);
 
     const result = await service.createPresignedDownloadUrl({
@@ -47,7 +51,9 @@ describe('FileService', () => {
 
   it('delegates presign delete to repository', async () => {
     const repository = createRepositoryMock();
-    repository.createPresignedDeleteUrl.mockResolvedValue({ url: 'delete' });
+    repository.createPresignedDeleteUrl.mockResolvedValue({
+      url: 'delete',
+    });
     const service = new FileService(repository);
 
     const result = await service.createPresignedDeleteUrl({
@@ -64,7 +70,9 @@ describe('FileService', () => {
 
   it('delegates list files to repository', async () => {
     const repository = createRepositoryMock();
-    repository.listFiles.mockResolvedValue({ keys: ['a'] });
+    repository.listFiles.mockResolvedValue({
+      keys: ['a'],
+    });
     const service = new FileService(repository);
 
     const result = await service.listFiles({ bucket: 'b', prefix: 'p' });
@@ -78,7 +86,9 @@ describe('FileService', () => {
 
   it('delegates delete by prefix to repository', async () => {
     const repository = createRepositoryMock();
-    repository.deleteByPrefix.mockResolvedValue({ deleted: 1 });
+    repository.deleteByPrefix.mockResolvedValue({
+      deleted: 1,
+    });
     const service = new FileService(repository);
 
     const result = await service.deleteByPrefix({ bucket: 'b', prefix: 'p' });
