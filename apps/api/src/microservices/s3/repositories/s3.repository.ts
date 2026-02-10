@@ -2,10 +2,8 @@ import { Injectable } from '@nestjs/common';
 import {
   DeleteObjectCommand,
   DeleteObjectsCommand,
-  type DeleteObjectsCommandOutput,
   GetObjectCommand,
   ListObjectsV2Command,
-  type ListObjectsV2CommandOutput,
   PutObjectCommand,
   S3Client,
   type DeleteObjectCommandInput,
@@ -64,9 +62,9 @@ export class S3Repository {
     };
     const command = new PutObjectCommand(commandInput);
 
-    const url = (await getSignedUrl(this.client, command, {
+    const url = await getSignedUrl(this.client, command, {
       expiresIn: params.expiresInSeconds ?? this.defaultExpiresInSeconds,
-    })) as string;
+    });
 
     return { url };
   }
@@ -83,9 +81,9 @@ export class S3Repository {
     };
     const command = new GetObjectCommand(commandInput);
 
-    const url = (await getSignedUrl(this.client, command, {
+    const url = await getSignedUrl(this.client, command, {
       expiresIn: params.expiresInSeconds ?? this.defaultExpiresInSeconds,
-    })) as string;
+    });
 
     return { url };
   }
@@ -102,9 +100,9 @@ export class S3Repository {
     };
     const command = new DeleteObjectCommand(commandInput);
 
-    const url = (await getSignedUrl(this.client, command, {
+    const url = await getSignedUrl(this.client, command, {
       expiresIn: params.expiresInSeconds ?? this.defaultExpiresInSeconds,
-    })) as string;
+    });
 
     return { url };
   }
@@ -122,9 +120,7 @@ export class S3Repository {
     };
     const command = new ListObjectsV2Command(commandInput);
 
-    const response = (await this.client.send(
-      command,
-    )) as ListObjectsV2CommandOutput;
+    const response = await this.client.send(command);
     const keys =
       response.Contents?.map((item) => item.Key).filter((key): key is string =>
         Boolean(key),
@@ -144,9 +140,7 @@ export class S3Repository {
     };
     const listCommand = new ListObjectsV2Command(listCommandInput);
 
-    const listResponse = (await this.client.send(
-      listCommand,
-    )) as ListObjectsV2CommandOutput;
+    const listResponse = await this.client.send(listCommand);
     const keys =
       listResponse.Contents?.map((item) => item.Key).filter(
         (key): key is string => Boolean(key),
@@ -162,9 +156,7 @@ export class S3Repository {
       },
     });
 
-    const deleteResponse = (await this.client.send(
-      deleteCommand,
-    )) as DeleteObjectsCommandOutput;
+    const deleteResponse = await this.client.send(deleteCommand);
     const deletedCount = deleteResponse.Deleted?.length ?? 0;
 
     return { deleted: deletedCount };
