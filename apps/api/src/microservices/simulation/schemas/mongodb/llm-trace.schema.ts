@@ -21,7 +21,8 @@ export interface ILLMMessage {
 
 export interface ILLMTrace extends Document {
   _id: string;
-  sessionMemberId: string;
+  iterationId: string;
+  sessionMemberId?: string;
   turnId?: string;
   toolCallId?: string;
   messageId?: string;
@@ -99,7 +100,8 @@ export interface ILLMTrace extends Document {
 export const LLMTraceSchema = new Schema<ILLMTrace>(
   {
     _id: { type: String, required: true },
-    sessionMemberId: { type: String, required: true, index: true },
+    iterationId: { type: String, required: true, index: true },
+    sessionMemberId: { type: String, index: true },
     turnId: { type: String, index: true },
     toolCallId: { type: String, index: true },
     messageId: { type: String, index: true },
@@ -197,6 +199,7 @@ export const LLMTraceSchema = new Schema<ILLMTrace>(
   },
 );
 
+LLMTraceSchema.index({ iterationId: 1, createdAt: -1 });
 LLMTraceSchema.index({ sessionMemberId: 1, createdAt: -1 });
 LLMTraceSchema.index({ provider: 1, llmModel: 1 });
 LLMTraceSchema.index({ 'context.orgId': 1, createdAt: -1 });

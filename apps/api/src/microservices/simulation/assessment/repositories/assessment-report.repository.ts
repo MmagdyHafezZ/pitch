@@ -9,7 +9,8 @@ import {
 
 export interface CreateAssessmentReportData {
   runId: string;
-  sessionMemberId: string;
+  iterationId: string;
+  sessionMemberId?: string;
   sessionId?: string;
   mode: 'live' | 'final';
   configVersion: string;
@@ -38,6 +39,7 @@ export class AssessmentReportRepository {
     const payload = {
       _id: data.runId || new Types.ObjectId().toHexString(),
       runId: data.runId,
+      iterationId: data.iterationId,
       sessionMemberId: data.sessionMemberId,
       sessionId: data.sessionId,
       mode: data.mode,

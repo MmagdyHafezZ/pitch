@@ -86,6 +86,7 @@ type ConversationStreamEvent =
 interface StreamHandle {
   socketId: string;
   subscription: Subscription;
+  timeoutId?: NodeJS.Timeout;
 }
 
 @WebSocketGateway({
@@ -132,7 +133,13 @@ export class SimulationWsGateway
     for (const [requestId, handle] of this.activeStreams.entries()) {
       if (handle.socketId === client.id) {
         handle.subscription.unsubscribe();
+        if (handle.timeoutId) {
+          clearTimeout(handle.timeoutId);
+        }
         this.activeStreams.delete(requestId);
+        this.logger.debug(
+          `Cleaned up stream ${requestId} for disconnected client`,
+        );
       }
     }
   }
@@ -273,6 +280,31 @@ export class SimulationWsGateway
       return;
     }
 
+    // Add timeout to prevent hanging streams (60 seconds)
+    const timeoutId = setTimeout(() => {
+      this.logger.warn(`Stream timeout for request ${requestId}`);
+      const active = this.activeStreams.get(requestId);
+      if (active) {
+        active.subscription.unsubscribe();
+        this.activeStreams.delete(requestId);
+
+        const errorPayload: ConversationErrorPayload = {
+          error: 'Request timeout (60s)',
+          stage: 'gateway',
+        };
+
+        client.emit(
+          WsMessageType.CONVERSATION_ERROR,
+          WsEnvelopeFactory.conversationError(
+            requestId,
+            sessionId,
+            errorPayload,
+            envelope.turnId,
+          ),
+        );
+      }
+    }, 60000);
+
     // Use streaming conversation handler for real-time text
     const stream$ = this.simulationService.send<
       ConversationStreamEvent,
@@ -363,6 +395,7 @@ export class SimulationWsGateway
             timestamp: new Date().toISOString(),
           });
 
+          clearTimeout(timeoutId);
           this.activeStreams.delete(requestId);
         }
       },
@@ -384,16 +417,26 @@ export class SimulationWsGateway
           ),
         );
 
+        clearTimeout(timeoutId);
         this.activeStreams.delete(requestId);
       },
       complete: () => {
-        this.activeStreams.delete(requestId);
+        clearTimeout(timeoutId);
+        const wasActive = this.activeStreams.delete(requestId);
+        if (wasActive) {
+          client.emit(WsMessageType.CONVERSATION_END, {
+            requestId,
+            sessionId,
+            timestamp: new Date().toISOString(),
+          });
+        }
       },
     });
 
     this.activeStreams.set(requestId, {
       socketId: client.id,
       subscription,
+      timeoutId,
     });
   }
 

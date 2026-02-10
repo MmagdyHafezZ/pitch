@@ -69,6 +69,8 @@ export interface AssessmentReportPayload {
   };
   turnAnnotations: Array<{
     turnId: string;
+    role?: string;
+    text?: string;
     label: string;
     confidence?: number;
     evidence?: string | null;
@@ -101,8 +103,10 @@ export const AssessmentState = Annotation.Root({
   config: Annotation<AssessmentConfig>(),
   configVersion: Annotation<string>(),
   engineVersion: Annotation<string>(),
+  iterationId: Annotation<string>(),
+  sessionId: Annotation<string>(),
   sessionMemberId: Annotation<string>(),
-  sessionId: Annotation<string | null>(),
+  userId: Annotation<string | null>(),
   turnsRaw: Annotation<RawTurn[]>(),
   turns: Annotation<NormalizedTurn[]>(),
   chunks: Annotation<AssessmentChunk[]>(),

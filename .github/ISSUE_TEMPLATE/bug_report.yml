@@ -1,0 +1,86 @@
+name: Bug Report
+description: Report a reproducible problem
+title: "[Bug]: "
+labels:
+  - bug
+  - triage
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. Please fill out the sections below.
+  - type: input
+    id: summary
+    attributes:
+      label: Summary
+      description: Short, specific description of the issue
+      placeholder: "Example: Session creation fails when tone is set to Rude Karen"
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Provide a minimal, repeatable set of steps
+      placeholder: |
+        1. Go to ...
+        2. Click ...
+        3. See error ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      placeholder: "Describe what you expected to happen"
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      placeholder: "Describe what actually happened"
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs, screenshots, or recordings
+      description: Paste logs or attach screenshots if available
+      render: shell
+    validations:
+      required: false
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected area
+      multiple: true
+      options:
+        - Web app
+        - API
+        - Studio
+        - Simulation service
+        - Infrastructure
+        - Documentation
+        - Other
+    validations:
+      required: true
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      options:
+        - Low
+        - Medium
+        - High
+        - Critical
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, browser, device, and any relevant versions
+      placeholder: "Example: macOS 14.6, Chrome 121, Node 20.11"
+    validations:
+      required: false

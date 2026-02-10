@@ -46,6 +46,27 @@ export const getMetricIcon = (label: string) => {
   return metricIconMap[key] ?? null
 }
 
+const resolveSignatureTraits = (traits: PersonaTraits | Record<string, unknown>) => {
+  const rawValue =
+    (traits as PersonaTraits).signatureTraits ?? (traits as PersonaTraits).highlights ?? []
+
+  if (Array.isArray(rawValue)) {
+    return rawValue
+      .filter((value): value is string => typeof value === 'string')
+      .map((value) => value.trim())
+      .filter(Boolean)
+  }
+
+  if (typeof rawValue === 'string') {
+    return rawValue
+      .split(',')
+      .map((value) => value.trim())
+      .filter(Boolean)
+  }
+
+  return []
+}
+
 interface PersonaStepProps {
   personasLoading: boolean
   personas: Persona[]
@@ -146,7 +167,7 @@ export function PersonaStep({
                     const isSelected = selectedPersona === persona.id
                     const traits = persona.traits ?? {}
                     const metrics = normalizeMetrics(traits)
-                    const signatureTraits = traits.signatureTraits ?? traits.highlights ?? []
+                    const signatureTraits = resolveSignatureTraits(traits)
                     const voiceProfile = getVoiceProfile(traits)
                     const archetype = traits.archetype ?? traits.role ?? 'Persona'
                     const rarity = traits.rarity ?? 'Standard'
@@ -277,7 +298,7 @@ export function PersonaStep({
                 (() => {
                   const traits = (selectedPersonaData.traits ?? {}) as PersonaTraits
                   const metrics = normalizeMetrics(traits)
-                  const signatureTraits = traits.signatureTraits ?? traits.highlights ?? []
+                  const signatureTraits = resolveSignatureTraits(traits)
                   const voiceProfile = getVoiceProfile(traits)
                   const archetype = traits.archetype ?? traits.role ?? 'Persona'
                   const rarity = traits.rarity ?? 'Standard'

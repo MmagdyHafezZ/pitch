@@ -43,7 +43,7 @@ export interface AssessmentConfig {
   };
 }
 
-export const ASSESSMENT_ENGINE_VERSION = 'langgraph-v1.0';
+export const ASSESSMENT_ENGINE_VERSION = 'langgraph-v1.1';
 
 export const ASSESSMENT_LABEL_DEFINITIONS: Record<
   AssessmentLabelValue,

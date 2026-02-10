@@ -6,6 +6,7 @@ import {
   IconBriefcase,
   IconShieldCheck,
   IconMoodSmile,
+  IconMoodAngry,
   IconCoffee,
   IconLeaf,
   IconMountain,
@@ -49,6 +50,12 @@ const toneOptions = [
     label: 'Casual',
     description: 'Relaxed and conversational.',
     icon: <IconCoffee size={18} />,
+  },
+  {
+    value: 'Rude Karen',
+    label: 'Rude Karen',
+    description: 'Entitled, combative, and hard to please.',
+    icon: <IconMoodAngry size={18} />,
   },
 ]
 

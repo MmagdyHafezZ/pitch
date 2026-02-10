@@ -79,27 +79,30 @@ export class AssessmentService {
       request.mode === AssessmentModeDto.live
         ? AssessmentMode.live
         : AssessmentMode.final;
-    const sessionMemberId = await this.resolveSessionMemberId(
-      request.sessionMemberId,
-      request.sessionId,
-    );
-    const sessionId = await this.resolveSessionId(
-      sessionMemberId,
-      request.sessionId,
-    );
+    const context = await this.resolveIterationContext({
+      iterationId: request.iterationId,
+      sessionMemberId: request.sessionMemberId,
+      sessionId: request.sessionId,
+      requestedBy: request.requestedBy,
+    });
 
     const config = getAssessmentConfig(request.configVersion);
     const inputHash = await this.computeInputHash({
-      sessionMemberId,
-      sessionId,
+      iterationId: context.iterationId,
+      iterationNumber: context.iterationNumber,
+      sessionId: context.sessionId,
+      sessionMemberId: context.sessionMemberId,
       mode,
       config,
+      scenario: context.scenario,
+      persona: context.persona,
     });
 
     const existing = await this.assessmentRepository.findByInputHash(inputHash);
     if (existing && existing.status !== AssessmentRunStatus.failed) {
       return {
         runId: existing.id,
+        iterationId: existing.iterationId,
         status: this.mapRunStatus(existing.status),
         mode: this.mapMode(existing.mode),
         totalScore: existing.totalScore ?? undefined,
@@ -110,7 +113,7 @@ export class AssessmentService {
     }
 
     const run = await this.assessmentRepository.createRun({
-      sessionMemberId,
+      iterationId: context.iterationId,
       mode,
       inputHash,
       config: this.buildConfigSnapshot(config),
@@ -119,8 +122,9 @@ export class AssessmentService {
 
     this.queuePublisher.emitRunRequest({
       runId: run.id,
-      sessionMemberId,
-      sessionId,
+      iterationId: context.iterationId,
+      sessionMemberId: context.sessionMemberId,
+      sessionId: context.sessionId,
       mode,
       configVersion: config.version,
       requestedBy: request.requestedBy,
@@ -129,6 +133,7 @@ export class AssessmentService {
 
     return {
       runId: run.id,
+      iterationId: run.iterationId,
       status: this.mapRunStatus(run.status),
       mode: this.mapMode(run.mode),
       configVersion: config.version,
@@ -144,6 +149,7 @@ export class AssessmentService {
 
     return {
       runId: run.id,
+      iterationId: run.iterationId,
       status: this.mapRunStatus(run.status),
       mode: this.mapMode(run.mode),
       totalScore: run.totalScore ?? undefined,
@@ -156,18 +162,51 @@ export class AssessmentService {
     };
   }
 
-  async getLatest(sessionId?: string, sessionMemberId?: string) {
-    if (!sessionId && !sessionMemberId) {
-      throw new BadRequestException('sessionId or sessionMemberId is required');
+  async getLatest(
+    sessionId?: string,
+    iterationId?: string,
+    sessionMemberId?: string,
+  ) {
+    if (!sessionId && !iterationId && !sessionMemberId) {
+      throw new BadRequestException(
+        'sessionId, iterationId, or sessionMemberId is required',
+      );
     }
 
-    const run = sessionMemberId
-      ? await this.assessmentRepository.findLatestCompletedForSessionMember(
-          sessionMemberId,
-        )
-      : await this.assessmentRepository.findLatestCompletedForSession(
-          sessionId as string,
+    let run = null as Awaited<
+      ReturnType<typeof this.assessmentRepository.findLatestCompletedForSession>
+    > | null;
+    let resolvedSessionMemberId: string | undefined = sessionMemberId;
+
+    if (iterationId) {
+      run =
+        await this.assessmentRepository.findLatestCompletedForIteration(
+          iterationId,
         );
+      if (!resolvedSessionMemberId) {
+        const iteration = await this.prisma.client.iteration.findUnique({
+          where: { id: iterationId },
+          select: { sessionMemberId: true },
+        });
+        resolvedSessionMemberId = iteration?.sessionMemberId;
+      }
+    } else if (sessionMemberId) {
+      const iteration = await this.prisma.client.iteration.findFirst({
+        where: { sessionMemberId },
+        orderBy: { iterationNumber: 'desc' },
+        select: { id: true },
+      });
+      if (!iteration) {
+        throw new NotFoundException('No iterations found for session member');
+      }
+      run = await this.assessmentRepository.findLatestCompletedForIteration(
+        iteration.id,
+      );
+    } else {
+      run = await this.assessmentRepository.findLatestCompletedForSession(
+        sessionId as string,
+      );
+    }
 
     if (!run) {
       throw new NotFoundException('No completed assessments found');
@@ -175,6 +214,7 @@ export class AssessmentService {
 
     return {
       runId: run.id,
+      iterationId: run.iterationId,
       status: this.mapRunStatus(run.status),
       mode: this.mapMode(run.mode),
       totalScore: run.totalScore ?? undefined,
@@ -183,7 +223,7 @@ export class AssessmentService {
       createdAt: run.createdAt.toISOString(),
       completedAt: run.completedAt?.toISOString() ?? null,
       summary: this.mapSummary(run.summary ?? undefined),
-      sessionMemberId: run.sessionMemberId,
+      sessionMemberId: resolvedSessionMemberId,
       progress: this.buildProgress(run.status),
     };
   }
@@ -257,6 +297,7 @@ export class AssessmentService {
 
   async executeRun(payload: {
     runId: string;
+    iterationId?: string;
     sessionMemberId?: string;
     sessionId?: string;
     mode?: AssessmentMode;
@@ -290,9 +331,27 @@ export class AssessmentService {
       return;
     }
 
+    const iteration = await this.prisma.client.iteration.findUnique({
+      where: { id: run.iterationId },
+      select: {
+        id: true,
+        sessionId: true,
+        sessionMemberId: true,
+        sessionMember: { select: { userId: true } },
+        session: { select: { orgId: true } },
+      },
+    });
+
+    if (!iteration) {
+      this.logger.warn(
+        `Assessment run ${run.id} missing iteration ${run.iterationId}`,
+      );
+      return;
+    }
+
     const startedAt = Date.now();
     const orgKey = await this.acquireOrgToken(
-      run.sessionMemberId,
+      iteration.session?.orgId ?? null,
       config.limits.maxParallelRuns,
     );
     if (!orgKey) {
@@ -304,16 +363,16 @@ export class AssessmentService {
       await this.redisService.incr('metrics:assessment:queue_depth', -1);
       await this.assessmentRepository.markRunning(run.id, new Date());
 
-      const resolvedSessionId =
-        payload.sessionId ?? (await this.resolveSessionId(run.sessionMemberId));
       const state = {
         runId: run.id,
         mode: run.mode,
         config,
         configVersion: config.version,
         engineVersion: run.engineVersion ?? ASSESSMENT_ENGINE_VERSION,
-        sessionMemberId: run.sessionMemberId,
-        sessionId: resolvedSessionId ?? null,
+        iterationId: iteration.id,
+        sessionId: iteration.sessionId,
+        sessionMemberId: iteration.sessionMemberId,
+        userId: iteration.sessionMember?.userId ?? null,
       };
 
       const result = await this.graphRunner.run(state);
@@ -334,8 +393,9 @@ export class AssessmentService {
 
       this.queuePublisher.emitCompleted({
         runId: run.id,
-        sessionId: payload.sessionId,
-        sessionMemberId: run.sessionMemberId,
+        iterationId: iteration.id,
+        sessionId: payload.sessionId ?? iteration.sessionId,
+        sessionMemberId: iteration.sessionMemberId,
         totalScore: result.summary.totalScore,
         createdAt: new Date().toISOString(),
       });
@@ -357,15 +417,17 @@ export class AssessmentService {
   }
 
   async enqueueLiveForTurn(event: {
+    iterationId?: string;
     sessionMemberId?: string;
     sessionId?: string;
     configVersion?: string;
   }) {
-    if (!event.sessionMemberId && !event.sessionId) {
+    if (!event.iterationId && !event.sessionMemberId && !event.sessionId) {
       return;
     }
 
     await this.requestRun({
+      iterationId: event.iterationId,
       sessionMemberId: event.sessionMemberId,
       sessionId: event.sessionId,
       mode: AssessmentModeDto.live,
@@ -373,48 +435,117 @@ export class AssessmentService {
     });
   }
 
-  private async resolveSessionMemberId(
-    sessionMemberId?: string,
-    sessionId?: string,
-  ): Promise<string> {
-    if (sessionMemberId) {
-      const exists = await this.prisma.client.sessionMember.findUnique({
-        where: { id: sessionMemberId },
+  private async resolveIterationContext(input: {
+    iterationId?: string;
+    sessionMemberId?: string;
+    sessionId?: string;
+    requestedBy?: string;
+  }): Promise<{
+    iterationId: string;
+    iterationNumber: number;
+    sessionId: string;
+    sessionMemberId: string;
+    userId: string | null;
+    orgId: string | null;
+    scenario: { id: string; updatedAt?: Date | null } | null;
+    persona: { id: string; updatedAt?: Date | null } | null;
+  }> {
+    const select = {
+      id: true,
+      iterationNumber: true,
+      sessionId: true,
+      sessionMemberId: true,
+      sessionMember: { select: { userId: true } },
+      session: {
+        select: {
+          orgId: true,
+          scenario: { select: { id: true, updatedAt: true } },
+          persona: { select: { id: true, updatedAt: true } },
+        },
+      },
+    } satisfies Prisma.IterationSelect;
+
+    if (input.iterationId) {
+      const iteration = await this.prisma.client.iteration.findUnique({
+        where: { id: input.iterationId },
+        select,
       });
-      if (!exists) {
-        throw new NotFoundException('Session member not found');
+      if (!iteration) {
+        throw new NotFoundException('Iteration not found');
       }
-      return sessionMemberId;
+      return {
+        iterationId: iteration.id,
+        iterationNumber: iteration.iterationNumber,
+        sessionId: iteration.sessionId,
+        sessionMemberId: iteration.sessionMemberId,
+        userId: iteration.sessionMember?.userId ?? null,
+        orgId: iteration.session?.orgId ?? null,
+        scenario: iteration.session?.scenario ?? null,
+        persona: iteration.session?.persona ?? null,
+      };
     }
 
-    if (!sessionId) {
-      throw new BadRequestException('sessionId or sessionMemberId is required');
+    if (input.sessionMemberId) {
+      const iteration = await this.prisma.client.iteration.findFirst({
+        where: { sessionMemberId: input.sessionMemberId },
+        orderBy: { iterationNumber: 'desc' },
+        select,
+      });
+      if (!iteration) {
+        throw new NotFoundException('No iterations found for session member');
+      }
+      return {
+        iterationId: iteration.id,
+        iterationNumber: iteration.iterationNumber,
+        sessionId: iteration.sessionId,
+        sessionMemberId: iteration.sessionMemberId,
+        userId: iteration.sessionMember?.userId ?? null,
+        orgId: iteration.session?.orgId ?? null,
+        scenario: iteration.session?.scenario ?? null,
+        persona: iteration.session?.persona ?? null,
+      };
     }
 
-    const owner = await this.prisma.client.sessionMember.findFirst({
-      where: { sessionId, role: 'owner' },
+    if (!input.sessionId) {
+      throw new BadRequestException(
+        'sessionId, iterationId, or sessionMemberId is required',
+      );
+    }
+
+    const member = await this.prisma.client.sessionMember.findFirst({
+      where: {
+        sessionId: input.sessionId,
+        ...(input.requestedBy
+          ? { userId: input.requestedBy }
+          : { role: 'owner' }),
+      },
+      select: { id: true },
     });
-    if (!owner) {
+
+    if (!member) {
       throw new NotFoundException('No session member found for session');
     }
 
-    return owner.id;
-  }
-
-  private async resolveSessionId(
-    sessionMemberId: string,
-    fallbackSessionId?: string,
-  ): Promise<string | undefined> {
-    if (fallbackSessionId) {
-      return fallbackSessionId;
-    }
-
-    const member = await this.prisma.client.sessionMember.findUnique({
-      where: { id: sessionMemberId },
-      select: { sessionId: true },
+    const iteration = await this.prisma.client.iteration.findFirst({
+      where: { sessionMemberId: member.id },
+      orderBy: { iterationNumber: 'desc' },
+      select,
     });
 
-    return member?.sessionId;
+    if (!iteration) {
+      throw new NotFoundException('No iterations found for session');
+    }
+
+    return {
+      iterationId: iteration.id,
+      iterationNumber: iteration.iterationNumber,
+      sessionId: iteration.sessionId,
+      sessionMemberId: iteration.sessionMemberId,
+      userId: iteration.sessionMember?.userId ?? null,
+      orgId: iteration.session?.orgId ?? null,
+      scenario: iteration.session?.scenario ?? null,
+      persona: iteration.session?.persona ?? null,
+    };
   }
 
   private buildConfigSnapshot(config: AssessmentConfig): Prisma.InputJsonValue {
@@ -448,29 +579,17 @@ export class AssessmentService {
   }
 
   private async computeInputHash(input: {
+    iterationId: string;
+    iterationNumber: number;
+    sessionId: string;
     sessionMemberId: string;
-    sessionId?: string;
     mode: AssessmentMode;
     config: AssessmentConfig;
+    scenario: { id: string; updatedAt?: Date | null } | null;
+    persona: { id: string; updatedAt?: Date | null } | null;
   }): Promise<string> {
-    const sessionMember = await this.prisma.client.sessionMember.findUnique({
-      where: { id: input.sessionMemberId },
-      include: {
-        session: {
-          include: {
-            scenario: true,
-            persona: true,
-          },
-        },
-      },
-    });
-
-    if (!sessionMember) {
-      throw new NotFoundException('Session member not found');
-    }
-
     const turns = await this.prisma.client.turn.findMany({
-      where: { sessionMemberId: input.sessionMemberId },
+      where: { iterationId: input.iterationId },
       orderBy: { order: 'asc' },
       include: { messages: true },
     });
@@ -497,21 +616,23 @@ export class AssessmentService {
         : normalizedTurns;
 
     const hashPayload = {
+      iterationId: input.iterationId,
+      iterationNumber: input.iterationNumber,
       sessionMemberId: input.sessionMemberId,
-      sessionId: sessionMember.sessionId,
+      sessionId: input.sessionId,
       mode: input.mode,
       configVersion: input.config.version,
       engineVersion: ASSESSMENT_ENGINE_VERSION,
-      scenario: sessionMember.session?.scenario
+      scenario: input.scenario
         ? {
-            id: sessionMember.session.scenario.id,
-            updatedAt: sessionMember.session.scenario.updatedAt?.toISOString(),
+            id: input.scenario.id,
+            updatedAt: input.scenario.updatedAt?.toISOString(),
           }
         : null,
-      persona: sessionMember.session?.persona
+      persona: input.persona
         ? {
-            id: sessionMember.session.persona.id,
-            updatedAt: sessionMember.session.persona.updatedAt?.toISOString(),
+            id: input.persona.id,
+            updatedAt: input.persona.updatedAt?.toISOString(),
           }
         : null,
       rag: {
@@ -527,15 +648,10 @@ export class AssessmentService {
   }
 
   private async acquireOrgToken(
-    sessionMemberId: string,
+    orgId: string | null,
     maxParallelRuns: number,
   ): Promise<string | null> {
     try {
-      const member = await this.prisma.client.sessionMember.findUnique({
-        where: { id: sessionMemberId },
-        select: { session: { select: { orgId: true } } },
-      });
-      const orgId = member?.session?.orgId;
       if (!orgId) {
         return null;
       }

@@ -1,4 +1,4 @@
-export type SessionType = 'text' | 'voice' | 'video' | string
+export type SessionType = 'text' | 'voice' | 'video' | 'phone' | string
 export type SessionStatus = 'active' | 'ended' | string
 
 export interface Session {
@@ -124,12 +124,19 @@ export interface VoiceConfig {
   stability?: number
 }
 
+export interface PhoneConfig {
+  number: string
+}
+
 export interface SessionConfigData {
   llm?: LLMConfig
   voice?: VoiceConfig
+  phone?: PhoneConfig
   multiTurnEnabled?: boolean
   tone?: string
   speechRate?: string
   accent?: string
   difficulty?: number
+  aiRole?: string
+  userRole?: string
 }

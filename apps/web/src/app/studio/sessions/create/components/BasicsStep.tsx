@@ -15,7 +15,7 @@ import {
   TagsInput,
 } from '@mantine/core'
 import { ReactNode } from 'react'
-import { IconMessage, IconMicrophone, IconVideo } from '@tabler/icons-react'
+import { IconMessage, IconMicrophone, IconPhone, IconVideo } from '@tabler/icons-react'
 import type { SessionType } from '@/features/sessions'
 import classes from '../create-session.module.css'
 
@@ -30,6 +30,8 @@ interface BasicsStepProps {
   errors: Record<string, string>
   sessionName: string
   setSessionName: (value: string) => void
+  phoneNumber: string
+  setPhoneNumber: (value: string) => void
   teamsLoading: boolean
   selectedTeamId: string | null
   setSelectedTeamId: (value: string | null) => void
@@ -68,6 +70,13 @@ const sessionTypeOptions: Array<{
     hint: 'Ideal for high-stakes training',
     icon: <IconVideo size={20} />,
   },
+  {
+    value: 'phone',
+    label: 'Phone calls',
+    description: 'Real-world calls on your device',
+    hint: 'Best for phone-based training',
+    icon: <IconPhone size={20} />,
+  },
 ]
 
 export function BasicsStep({
@@ -76,6 +85,8 @@ export function BasicsStep({
   errors,
   sessionName,
   setSessionName,
+  phoneNumber,
+  setPhoneNumber,
   teamsLoading,
   selectedTeamId,
   setSelectedTeamId,
@@ -190,6 +201,20 @@ export function BasicsStep({
                 clearable
               />
             </Grid.Col>
+            {sessionType === 'phone' && (
+              <Grid.Col span={{ base: 12, md: 6 }}>
+                <TextInput
+                  label="Phone Number"
+                  placeholder="+15551234567"
+                  value={phoneNumber}
+                  onChange={(event) => setPhoneNumber(event.currentTarget.value)}
+                  description="We’ll call this number when the session starts"
+                  error={errors.phoneNumber}
+                  type="tel"
+                  autoComplete="tel"
+                />
+              </Grid.Col>
+            )}
             <Grid.Col span={{ base: 12, md: 6 }}>
               <Select
                 label="Language"

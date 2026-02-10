@@ -19,7 +19,10 @@ import {
   SessionType,
 } from '../dto/session.dto';
 import { SessionMemberRepository } from '../repositories/session-member.repository';
+import { AssessmentService } from '../assessment/assessment.service';
+import { AssessmentModeDto } from '../assessment/dto/assessment.dto';
 import type { SessionWithOwner } from '../repositories/session.repository';
+import { SimulationPrismaService } from '../prisma/simulation-prisma.service';
 
 /**
  * Session Service
@@ -33,6 +36,8 @@ export class SessionService {
   constructor(
     private readonly sessionRepository: SessionRepository,
     private readonly sessionMemberRepository: SessionMemberRepository,
+    private readonly assessmentService: AssessmentService,
+    private readonly prisma: SimulationPrismaService,
   ) {}
 
   /**
@@ -289,19 +294,55 @@ export class SessionService {
         throw new NotFoundException(`Session with ID ${id} not found`);
       }
 
-      if (existingSession.status === 'ended') {
-        throw new BadRequestException(`Session ${id} has already ended`);
+      const member = requesterUserId
+        ? await this.sessionMemberRepository.findBySessionIdAndUserId(
+            id,
+            requesterUserId,
+          )
+        : await this.sessionMemberRepository.findOwner(id);
+
+      if (!member) {
+        if (requesterUserId) {
+          throw new ForbiddenException(
+            `User ${requesterUserId} is not a member of session ${id}`,
+          );
+        }
+        throw new NotFoundException('No session member found for session');
       }
 
-      this.assertOwner(existingSession, requesterUserId);
+      const iteration = await this.prisma.client.iteration.findFirst({
+        where: { sessionMemberId: member.id },
+        orderBy: { iterationNumber: 'desc' },
+      });
 
-      const session = await this.sessionRepository.end(
-        id,
-        endSessionDto.reason,
-      );
+      if (iteration && iteration.status !== 'completed') {
+        await this.prisma.client.iteration.update({
+          where: { id: iteration.id },
+          data: {
+            status: 'completed',
+            endedReason: endSessionDto.reason,
+            endedAt: new Date(),
+          },
+        });
+      }
 
-      this.logger.log(`Ended session: ${session.id}`);
-      return this.mapToResponseDto(session);
+      try {
+        await this.assessmentService.requestRun({
+          iterationId: iteration?.id,
+          sessionId: existingSession.id,
+          mode: AssessmentModeDto.final,
+          requestedBy: requesterUserId,
+        });
+      } catch (error) {
+        this.logger.warn(
+          `Failed to enqueue assessment for session ${existingSession.id}: ${
+            (error as Error)?.message ?? error
+          }`,
+        );
+      }
+
+      this.logger.log(`Completed iteration for session: ${existingSession.id}`);
+      return this.mapToResponseDto(existingSession);
     } catch (error) {
       const err = error as PrismaError;
       if (err.code === 'P2025') {
