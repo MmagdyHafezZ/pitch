@@ -106,17 +106,30 @@ export class S3Repository {
     limit?: number;
   }): Promise<{ keys: string[] }> {
     const bucket = this.resolveBucket(params.bucket);
-    const command = new ListObjectsV2Command({
-      Bucket: bucket,
-      Prefix: params.prefix,
-      MaxKeys: params.limit,
-    });
+    const keys: string[] = [];
+    let continuationToken: string | undefined;
 
-    const response = await this.client.send(command);
-    const keys =
-      response.Contents?.map((item) => item.Key).filter((key): key is string =>
-        Boolean(key),
-      ) ?? [];
+    do {
+      const remainingLimit = params.limit ? params.limit - keys.length : undefined;
+      if (remainingLimit !== undefined && remainingLimit <= 0) break;
+
+      const command = new ListObjectsV2Command({
+        Bucket: bucket,
+        Prefix: params.prefix,
+        ContinuationToken: continuationToken,
+        MaxKeys: remainingLimit ? Math.min(remainingLimit, 1000) : 1000,
+      });
+
+      const response = await this.client.send(command);
+      const pageKeys =
+        response.Contents?.map((item) => item.Key).filter(
+          (key): key is string => Boolean(key),
+        ) ?? [];
+      keys.push(...pageKeys);
+      continuationToken = response.IsTruncated
+        ? response.NextContinuationToken
+        : undefined;
+    } while (continuationToken);
 
     return { keys };
   }
@@ -126,29 +139,41 @@ export class S3Repository {
     prefix: string;
   }): Promise<{ deleted: number }> {
     const bucket = this.resolveBucket(params.bucket);
-    const listCommand = new ListObjectsV2Command({
-      Bucket: bucket,
-      Prefix: params.prefix,
-    });
+    const keys: string[] = [];
+    let continuationToken: string | undefined;
 
-    const listResponse = await this.client.send(listCommand);
-    const keys =
-      listResponse.Contents?.map((item) => item.Key).filter(
-        (key): key is string => Boolean(key),
-      ) ?? [];
+    do {
+      const listCommand = new ListObjectsV2Command({
+        Bucket: bucket,
+        Prefix: params.prefix,
+        ContinuationToken: continuationToken,
+        MaxKeys: 1000,
+      });
+      const listResponse = await this.client.send(listCommand);
+      const pageKeys =
+        listResponse.Contents?.map((item) => item.Key).filter(
+          (key): key is string => Boolean(key),
+        ) ?? [];
+      keys.push(...pageKeys);
+      continuationToken = listResponse.IsTruncated
+        ? listResponse.NextContinuationToken
+        : undefined;
+    } while (continuationToken);
 
     if (keys.length === 0) return { deleted: 0 };
 
-    const deleteCommand = new DeleteObjectsCommand({
-      Bucket: bucket,
-      Delete: {
-        Objects: keys.map((key) => ({ Key: key })),
-        Quiet: true,
-      },
-    });
-
-    const deleteResponse = await this.client.send(deleteCommand);
-    const deletedCount = deleteResponse.Deleted?.length ?? 0;
+    let deletedCount = 0;
+    for (let i = 0; i < keys.length; i += 1000) {
+      const batch = keys.slice(i, i + 1000);
+      const deleteCommand = new DeleteObjectsCommand({
+        Bucket: bucket,
+        Delete: {
+          Objects: batch.map((key) => ({ Key: key })),
+        },
+      });
+      const deleteResponse = await this.client.send(deleteCommand);
+      deletedCount += deleteResponse.Deleted?.length ?? 0;
+    }
 
     return { deleted: deletedCount };
   }

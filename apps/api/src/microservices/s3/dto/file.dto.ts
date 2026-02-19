@@ -1,5 +1,7 @@
-import { IsInt, IsNotEmpty, IsOptional, IsString, Min } from 'class-validator';
+import { IsInt, IsNotEmpty, IsOptional, IsString, Max, Min } from 'class-validator';
 import { Type } from 'class-transformer';
+
+const MAX_PRESIGNED_URL_EXPIRY_SECONDS = 604800;
 
 export class PresignUploadDto {
   @IsString()
@@ -17,6 +19,7 @@ export class PresignUploadDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
+  @Max(MAX_PRESIGNED_URL_EXPIRY_SECONDS)
   @IsOptional()
   expiresInSeconds?: number;
 }
@@ -33,6 +36,7 @@ export class PresignDownloadDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
+  @Max(MAX_PRESIGNED_URL_EXPIRY_SECONDS)
   @IsOptional()
   expiresInSeconds?: number;
 }
@@ -49,6 +53,7 @@ export class PresignDeleteDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
+  @Max(MAX_PRESIGNED_URL_EXPIRY_SECONDS)
   @IsOptional()
   expiresInSeconds?: number;
 }

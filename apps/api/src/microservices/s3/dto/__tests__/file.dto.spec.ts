@@ -51,4 +51,14 @@ describe('S3 file DTOs', () => {
     const errors = await validate(dto);
     expect(errors).toHaveLength(0);
   });
+
+  it('rejects presign upload when expiresInSeconds exceeds max', async () => {
+    const dto = plainToInstance(PresignUploadDto, {
+      bucket: 'b',
+      key: 'k',
+      expiresInSeconds: 604801,
+    });
+    const errors = await validate(dto);
+    expect(errors.length).toBeGreaterThan(0);
+  });
 });

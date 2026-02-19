@@ -140,7 +140,54 @@ describe('S3Repository', () => {
     expect(result).toEqual({ keys: ['a.txt'] });
     expect(sendMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        input: { Bucket: 'test-bucket', Prefix: 'a/', MaxKeys: 5 },
+        input: expect.objectContaining({
+          Bucket: 'test-bucket',
+          Prefix: 'a/',
+          MaxKeys: 5,
+        }),
+      }),
+    );
+  });
+
+  it('lists files across multiple pages', async () => {
+    sendMock
+      .mockResolvedValueOnce({
+        Contents: [{ Key: 'a.txt' }],
+        IsTruncated: true,
+        NextContinuationToken: 'next-token',
+      })
+      .mockResolvedValueOnce({
+        Contents: [{ Key: 'b.txt' }],
+        IsTruncated: false,
+      });
+    const repository = new S3Repository();
+
+    const result = await repository.listFiles({
+      bucket: 'test-bucket',
+      prefix: 'folder/',
+    });
+
+    expect(result).toEqual({ keys: ['a.txt', 'b.txt'] });
+    expect(sendMock).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        input: expect.objectContaining({
+          Bucket: 'test-bucket',
+          Prefix: 'folder/',
+          MaxKeys: 1000,
+          ContinuationToken: undefined,
+        }),
+      }),
+    );
+    expect(sendMock).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        input: expect.objectContaining({
+          Bucket: 'test-bucket',
+          Prefix: 'folder/',
+          MaxKeys: 1000,
+          ContinuationToken: 'next-token',
+        }),
       }),
     );
   });
@@ -160,7 +207,12 @@ describe('S3Repository', () => {
     expect(sendMock).toHaveBeenNthCalledWith(
       1,
       expect.objectContaining({
-        input: { Bucket: 'test-bucket', Prefix: 'a/' },
+        input: expect.objectContaining({
+          Bucket: 'test-bucket',
+          Prefix: 'a/',
+          MaxKeys: 1000,
+          ContinuationToken: undefined,
+        }),
       }),
     );
     expect(sendMock).toHaveBeenNthCalledWith(
@@ -170,9 +222,85 @@ describe('S3Repository', () => {
           Bucket: 'test-bucket',
           Delete: {
             Objects: [{ Key: 'a.txt' }, { Key: 'b.txt' }],
-            Quiet: true,
           },
         },
+      }),
+    );
+  });
+
+  it('deletes all matching keys across pages and batches', async () => {
+    const firstPageKeys = Array.from({ length: 1000 }, (_, i) => ({
+      Key: `folder/a-${i}.txt`,
+    }));
+    const secondPageKeys = [{ Key: 'folder/b-0.txt' }, { Key: 'folder/b-1.txt' }];
+
+    sendMock
+      .mockResolvedValueOnce({
+        Contents: firstPageKeys,
+        IsTruncated: true,
+        NextContinuationToken: 'next-token',
+      })
+      .mockResolvedValueOnce({
+        Contents: secondPageKeys,
+        IsTruncated: false,
+      })
+      .mockResolvedValueOnce({
+        Deleted: firstPageKeys.map((item) => ({ Key: item.Key })),
+      })
+      .mockResolvedValueOnce({
+        Deleted: secondPageKeys.map((item) => ({ Key: item.Key })),
+      });
+
+    const repository = new S3Repository();
+    const result = await repository.deleteByPrefix({
+      bucket: 'test-bucket',
+      prefix: 'folder/',
+    });
+
+    expect(result).toEqual({ deleted: 1002 });
+    expect(sendMock).toHaveBeenCalledTimes(4);
+    expect(sendMock).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        input: expect.objectContaining({
+          Bucket: 'test-bucket',
+          Prefix: 'folder/',
+          MaxKeys: 1000,
+          ContinuationToken: undefined,
+        }),
+      }),
+    );
+    expect(sendMock).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        input: expect.objectContaining({
+          Bucket: 'test-bucket',
+          Prefix: 'folder/',
+          MaxKeys: 1000,
+          ContinuationToken: 'next-token',
+        }),
+      }),
+    );
+    expect(sendMock).toHaveBeenNthCalledWith(
+      3,
+      expect.objectContaining({
+        input: expect.objectContaining({
+          Bucket: 'test-bucket',
+          Delete: expect.objectContaining({
+            Objects: expect.any(Array),
+          }),
+        }),
+      }),
+    );
+    expect(sendMock).toHaveBeenNthCalledWith(
+      4,
+      expect.objectContaining({
+        input: expect.objectContaining({
+          Bucket: 'test-bucket',
+          Delete: expect.objectContaining({
+            Objects: expect.any(Array),
+          }),
+        }),
       }),
     );
   });
