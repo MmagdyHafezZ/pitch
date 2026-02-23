@@ -15,11 +15,13 @@ describe('UserController', () => {
       findAll: jest.fn(),
       findOne: jest.fn(),
       findByEmail: jest.fn(),
+      getSettings: jest.fn(),
       findByOAuthAccount: jest.fn(),
       create: jest.fn(),
       update: jest.fn(),
       remove: jest.fn(),
       getOAuthAccountsByUserId: jest.fn(),
+      updateSettings: jest.fn(),
     }) as unknown as jest.Mocked<UserService>;
 
   const createOauthProviderFactoryMock =
@@ -43,6 +45,7 @@ describe('UserController', () => {
     email: 'user@example.com',
     name: 'Test User',
     avatar: null,
+    settings: null,
     isActive: true,
     createdAt: new Date('2023-01-01T00:00:00.000Z'),
     updatedAt: new Date('2023-01-01T00:00:00.000Z'),
@@ -109,6 +112,42 @@ describe('UserController', () => {
 
     await expect(controller.updateUser(payload)).resolves.toEqual(user);
     expect(service.update).toHaveBeenCalledWith('user-1', { name: 'Updated' });
+  });
+
+  it('returns current user settings', async () => {
+    const service = createServiceMock();
+    const oauthProviderFactory = createOauthProviderFactoryMock();
+    service.getSettings.mockResolvedValue({
+      language: { locale: 'English (US)' },
+    } as any);
+    const controller = new UserController(service, oauthProviderFactory);
+
+    await expect(controller.getMySettings(basePayload)).resolves.toEqual({
+      language: { locale: 'English (US)' },
+    });
+    expect(service.getSettings).toHaveBeenCalledWith('admin-1');
+  });
+
+  it('updates current user settings', async () => {
+    const service = createServiceMock();
+    const oauthProviderFactory = createOauthProviderFactoryMock();
+    service.updateSettings.mockResolvedValue({
+      browser: { compactMode: true },
+    } as any);
+    const controller = new UserController(service, oauthProviderFactory);
+
+    await expect(
+      controller.updateMySettings({
+        settings: { browser: { compactMode: true } } as any,
+        ...basePayload,
+      }),
+    ).resolves.toEqual({
+      browser: { compactMode: true },
+    });
+
+    expect(service.updateSettings).toHaveBeenCalledWith('admin-1', {
+      browser: { compactMode: true },
+    });
   });
 
   it('deletes a user', async () => {
@@ -198,5 +237,19 @@ describe('UserController', () => {
     await expect(
       controller.deleteUser({ userId: 'user-1', ...basePayload }),
     ).rejects.toThrow(rpcError);
+  });
+
+  it('wraps errors when getting current user settings', async () => {
+    const service = createServiceMock();
+    const oauthProviderFactory = createOauthProviderFactoryMock();
+    const error = new Error('failure');
+    const rpcError = new Error('rpc');
+    service.getSettings.mockRejectedValue(error);
+    toRpcExceptionMock.mockReturnValueOnce(rpcError as any);
+    const controller = new UserController(service, oauthProviderFactory);
+
+    await expect(controller.getMySettings(basePayload)).rejects.toThrow(
+      rpcError,
+    );
   });
 });
