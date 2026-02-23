@@ -5,11 +5,11 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { AuthApplicationService } from './auth-application.service';
-import { UserRepository } from '../../user/repositories/user.repository';
-import { AuthRepository } from '../repositories/auth.repository';
-import { AuthProvider } from '../factories/oauth-provider.factory';
-import type { OAuthProfile } from './auth.service';
+import { AuthApplicationService } from '../../../auth/services/auth-application.service';
+import { UserRepository } from '../../../user/repositories/user.repository';
+import { AuthRepository } from '../../../auth/repositories/auth.repository';
+import { AuthProvider } from '../../../auth/factories/oauth-provider.factory';
+import type { OAuthProfile } from '../../../auth/services/auth.service';
 
 describe('AuthApplicationService', () => {
   let service: AuthApplicationService;

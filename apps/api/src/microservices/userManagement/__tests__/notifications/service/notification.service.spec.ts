@@ -1,12 +1,12 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-member-access */
 import { ServiceUnavailableException } from '@nestjs/common';
 import { Types } from 'mongoose';
-import { MongoConnectionService } from '../../services/mongo/mongo-connection.service';
-import { NotificationService } from './notification.service';
+import { MongoConnectionService } from '../../../services/mongo/mongo-connection.service';
+import { NotificationService } from '../../../notifications/service/notification.service';
 import {
   NotificationSeverity,
   NotificationSourceType,
-} from '../schema/notification.schema';
+} from '../../../notifications/schema/notification.schema';
 
 describe('NotificationService', () => {
   let service: NotificationService;

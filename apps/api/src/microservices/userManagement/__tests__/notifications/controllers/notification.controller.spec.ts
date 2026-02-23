@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unsafe-argument, @typescript-eslint/unbound-method */
-import { NotificationController } from './notification.controller';
-import type { NotificationService } from '../service/notification.service';
+import { NotificationController } from '../../../notifications/controllers/notification.controller';
+import type { NotificationService } from '../../../notifications/service/notification.service';
 
 describe('NotificationController', () => {
   let controller: NotificationController;

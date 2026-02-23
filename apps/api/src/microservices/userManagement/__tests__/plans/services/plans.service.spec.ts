@@ -1,8 +1,8 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-argument, @typescript-eslint/unbound-method */
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import { PlanLevel } from '@prisma/user-client';
-import { PlanService } from './plans.service';
-import { PlanRepository } from '../repositories/plans.repository';
+import { PlanService } from '../../../plans/services/plans.service';
+import { PlanRepository } from '../../../plans/repositories/plans.repository';
 
 describe('PlanService', () => {
   let service: PlanService;

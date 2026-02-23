@@ -1,10 +1,13 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/unbound-method */
 import { NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { AuthProvider } from '../factories/oauth-provider.factory';
-import { AuthRepository } from '../repositories/auth.repository';
-import { AuthService, type OAuthProfile } from './auth.service';
-import { UserRepository } from '../../user/repositories/user.repository';
+import { AuthProvider } from '../../../auth/factories/oauth-provider.factory';
+import { AuthRepository } from '../../../auth/repositories/auth.repository';
+import {
+  AuthService,
+  type OAuthProfile,
+} from '../../../auth/services/auth.service';
+import { UserRepository } from '../../../user/repositories/user.repository';
 
 describe('AuthService', () => {
   let service: AuthService;

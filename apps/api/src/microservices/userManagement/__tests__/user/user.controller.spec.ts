@@ -1,5 +1,5 @@
-import { UserController } from '../controllers/user.controller';
-import type { UserService } from '../services/user.service';
+import { UserController } from '../../user/controllers/user.controller';
+import type { UserService } from '../../user/services/user.service';
 import { toRpcException } from '@pitch/shared-backend/helpers/exceptions';
 import type { OAuthProviderFactory } from '../../auth/factories/oauth-provider.factory';
 import type { User } from '@pitch/shared-backend/interfaces/user.interface';

@@ -1,12 +1,12 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-argument, @typescript-eslint/unbound-method */
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import { BillingInterval } from '@prisma/user-client';
-import { SubscriptionService } from './subscription.service';
-import { SubscriptionRepository } from '../repositories/subscription.repository';
-import { PlanRepository } from '../../plans/repositories/plans.repository';
-import { CoinRefillService } from '../../coins/services/coin-refill.service';
-import { CoinRedisService } from '../../coins/services/coin-redis.service';
-import { CoinAccountingService } from '../../coins/services/coin-accounting.service';
+import { SubscriptionService } from '../../../subscription/services/subscription.service';
+import { SubscriptionRepository } from '../../../subscription/repositories/subscription.repository';
+import { PlanRepository } from '../../../plans/repositories/plans.repository';
+import { CoinRefillService } from '../../../coins/services/coin-refill.service';
+import { CoinRedisService } from '../../../coins/services/coin-redis.service';
+import { CoinAccountingService } from '../../../coins/services/coin-accounting.service';
 
 describe('SubscriptionService', () => {
   let service: SubscriptionService;

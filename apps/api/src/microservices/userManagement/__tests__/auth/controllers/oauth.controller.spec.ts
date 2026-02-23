@@ -1,12 +1,12 @@
 /* eslint-disable @typescript-eslint/no-unsafe-argument, @typescript-eslint/unbound-method */
 import { BadRequestException, UnauthorizedException } from '@nestjs/common';
-import { OAuthController } from './oauth.controller';
-import type { AuthService } from '../services/auth.service';
-import type { AuthApplicationService } from '../services/auth-application.service';
+import { OAuthController } from '../../../auth/controllers/oauth.controller';
+import type { AuthService } from '../../../auth/services/auth.service';
+import type { AuthApplicationService } from '../../../auth/services/auth-application.service';
 import {
   AuthProvider,
   type OAuthProviderFactory,
-} from '../factories/oauth-provider.factory';
+} from '../../../auth/factories/oauth-provider.factory';
 
 describe('OAuthController', () => {
   let controller: OAuthController;

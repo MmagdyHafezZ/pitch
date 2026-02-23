@@ -1,8 +1,8 @@
 /* eslint-disable @typescript-eslint/no-unsafe-argument, @typescript-eslint/unbound-method */
 import { BillingInterval } from '@prisma/user-client';
 import { toRpcException } from '@pitch/shared-backend/helpers/exceptions';
-import { SubscriptionController } from './subscription.controller';
-import type { SubscriptionService } from '../services/subscription.service';
+import { SubscriptionController } from '../../../subscription/controllers/subscription.controller';
+import type { SubscriptionService } from '../../../subscription/services/subscription.service';
 
 jest.mock('@pitch/shared-backend/helpers/exceptions', () => ({
   toRpcException: jest.fn((error: unknown) => error),

@@ -1,8 +1,8 @@
 /* eslint-disable @typescript-eslint/no-unsafe-argument, @typescript-eslint/unbound-method */
-import { AuthController } from './auth.controller';
+import { AuthController } from '../../../auth/controllers/auth.controller';
 import { toRpcException } from '@pitch/shared-backend/helpers/exceptions';
-import type { AuthApplicationService } from '../services/auth-application.service';
-import type { OAuthProviderFactory } from '../factories/oauth-provider.factory';
+import type { AuthApplicationService } from '../../../auth/services/auth-application.service';
+import type { OAuthProviderFactory } from '../../../auth/factories/oauth-provider.factory';
 
 jest.mock('@pitch/shared-backend/helpers/exceptions', () => ({
   toRpcException: jest.fn((error: unknown) => error),

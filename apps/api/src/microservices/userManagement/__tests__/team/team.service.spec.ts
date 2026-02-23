@@ -1,4 +1,4 @@
-import { TeamService } from '../services/team.service';
+import { TeamService } from '../../team/services/team.service';
 import { NotFoundException } from '@nestjs/common';
 import type {
   Team,
