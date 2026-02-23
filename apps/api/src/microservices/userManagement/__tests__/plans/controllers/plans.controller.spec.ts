@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-argument, @typescript-eslint/unbound-method */
 import { PlanController } from '../../../plans/controllers/plans.controller';
 import { toRpcException } from '@pitch/shared-backend/helpers/exceptions';
 import { PlanLevel } from '@prisma/user-client';

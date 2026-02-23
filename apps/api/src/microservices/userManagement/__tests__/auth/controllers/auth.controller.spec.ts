@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-argument, @typescript-eslint/unbound-method */
 import { AuthController } from '../../../auth/controllers/auth.controller';
 import { toRpcException } from '@pitch/shared-backend/helpers/exceptions';
 import type { AuthApplicationService } from '../../../auth/services/auth-application.service';

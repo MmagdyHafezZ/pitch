@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-argument, @typescript-eslint/unbound-method */
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import { BillingInterval } from '@prisma/user-client';
 import { SubscriptionService } from '../../../subscription/services/subscription.service';
@@ -47,7 +46,11 @@ describe('SubscriptionService', () => {
       applyDeltaIdempotent: jest.fn(),
     } as unknown as jest.Mocked<CoinRedisService>;
     coinRefillService = {
-      refillInitialForSubscription: jest.fn(),
+      refillInitialForSubscription: jest.fn().mockResolvedValue({
+        periodKey: 'period-key',
+        allowance: 100,
+        remainingAfter: 100,
+      }),
     } as unknown as jest.Mocked<CoinRefillService>;
     subscriptionRepository = {
       create: jest.fn(),

@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-argument, @typescript-eslint/unbound-method */
 import { BillingInterval } from '@prisma/user-client';
 import { toRpcException } from '@pitch/shared-backend/helpers/exceptions';
 import { SubscriptionController } from '../../../subscription/controllers/subscription.controller';

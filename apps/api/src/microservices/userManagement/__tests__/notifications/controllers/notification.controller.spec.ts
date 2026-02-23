@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-argument, @typescript-eslint/unbound-method */
 import { NotificationController } from '../../../notifications/controllers/notification.controller';
 import type { NotificationService } from '../../../notifications/service/notification.service';
 

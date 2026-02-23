@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-member-access */
 import { ServiceUnavailableException } from '@nestjs/common';
 import { Types } from 'mongoose';
 import { MongoConnectionService } from '../../../services/mongo/mongo-connection.service';
