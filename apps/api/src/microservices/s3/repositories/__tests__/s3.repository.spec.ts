@@ -1,7 +1,10 @@
 import { S3Repository } from '../s3.repository';
 
 const sendMock = jest.fn();
-const getSignedUrlMock = jest.fn();
+const getSignedUrlMock = jest.fn<
+  Promise<string>,
+  [unknown, unknown, { expiresIn: number }]
+>();
 
 jest.mock('@aws-sdk/s3-request-presigner', () => ({
   getSignedUrl: (...args: unknown[]) => getSignedUrlMock(...args),
@@ -232,7 +235,10 @@ describe('S3Repository', () => {
     const firstPageKeys = Array.from({ length: 1000 }, (_, i) => ({
       Key: `folder/a-${i}.txt`,
     }));
-    const secondPageKeys = [{ Key: 'folder/b-0.txt' }, { Key: 'folder/b-1.txt' }];
+    const secondPageKeys = [
+      { Key: 'folder/b-0.txt' },
+      { Key: 'folder/b-1.txt' },
+    ];
 
     sendMock
       .mockResolvedValueOnce({
