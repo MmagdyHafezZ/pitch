@@ -39,6 +39,7 @@ describe('TeamService', () => {
     isActive: true,
     billingEmail: 'billing@example.com',
     billingAddress: null,
+    metadata: null,
     createdAt: new Date(),
     updatedAt: new Date(),
     deletedAt: null,
@@ -62,12 +63,19 @@ describe('TeamService', () => {
 
     expect(repo.ensureUniqueSlug).toHaveBeenCalledWith('my-team');
     expect(repo.createTeam).toHaveBeenCalledWith(
-      {
+      expect.objectContaining({
         ...dto,
         slug: 'my-team',
         isActive: true,
-        metadata: { temp: 'data' },
-      },
+        metadata: expect.objectContaining({
+          audit: expect.objectContaining({
+            ownerUserId: 'user-1',
+            createdByUserId: 'user-1',
+            updatedByUserId: 'user-1',
+            version: 1,
+          }),
+        }),
+      }),
       'user-1',
     );
 
@@ -97,6 +105,44 @@ describe('TeamService', () => {
       slug: 'engineering',
     });
     await expect(service.updateTeam('team-1', dto, 'user-1')).rejects.toThrow();
+  });
+
+  it('merges metadata on update and increments audit version', async () => {
+    repo.confirmAuthorityOrThrow.mockResolvedValue(undefined);
+    repo.findById.mockResolvedValue({
+      ...baseTeam,
+      metadata: {
+        profile: { industry: 'Software' },
+        audit: {
+          ownerUserId: 'owner-1',
+          createdByUserId: 'owner-1',
+          createdAt: '2024-01-01T00:00:00.000Z',
+          version: 2,
+        },
+      },
+    });
+    repo.updateTeam.mockResolvedValue(baseTeam);
+
+    await service.updateTeam(
+      'team-1',
+      { metadata: { preferences: { allowMemberInvites: true } } },
+      'admin-1',
+    );
+
+    expect(repo.updateTeam).toHaveBeenCalledWith(
+      'team-1',
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          profile: { industry: 'Software' },
+          preferences: { allowMemberInvites: true },
+          audit: expect.objectContaining({
+            ownerUserId: 'owner-1',
+            updatedByUserId: 'admin-1',
+            version: 3,
+          }),
+        }),
+      }),
+    );
   });
 
   // --------------------

@@ -21,6 +21,7 @@ import {
   UpdateMemberDto,
   CreateTeamDto,
   UpdateTeamDto,
+  TeamMetadata,
 } from '@pitch/shared-backend/interfaces/user.interface';
 import { Prisma } from '@prisma/user-client';
 import { ElevatedAccessGuard } from '../../guards/elevated-access.guard';
@@ -50,6 +51,7 @@ export class TeamController {
         billingEmail: createTeamDto.billingEmail,
         billingAddress:
           createTeamDto.billingAddress as unknown as Prisma.JsonValue,
+        metadata: createTeamDto.metadata as unknown as TeamMetadata,
       };
 
       return await this.teamService.createTeam(dto, _userClaims.id);
@@ -81,6 +83,7 @@ export class TeamController {
         billingEmail: updateData.billingEmail,
         billingAddress:
           updateData.billingAddress as unknown as Prisma.JsonValue,
+        metadata: updateData.metadata as unknown as TeamMetadata,
       };
 
       return await this.teamService.updateTeam(teamId, dto, _userClaims.id);

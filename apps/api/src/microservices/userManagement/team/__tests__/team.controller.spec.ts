@@ -49,6 +49,7 @@ describe('TeamController', () => {
       state: 'CA',
       zip: '12345',
     },
+    metadata: null,
     createdAt: new Date('2023-01-01T00:00:00.000Z'),
     updatedAt: new Date('2023-01-01T00:00:00.000Z'),
     deletedAt: null,
@@ -98,6 +99,9 @@ describe('TeamController', () => {
         state: 'CA',
         zip: '12345',
       },
+      metadata: {
+        profile: { industry: 'Software' },
+      },
       ...basePayload,
     };
 
@@ -115,6 +119,9 @@ describe('TeamController', () => {
           city: 'Anytown',
           state: 'CA',
           zip: '12345',
+        },
+        metadata: {
+          profile: { industry: 'Software' },
         },
       },
       basePayload.userClaims.id,
@@ -138,6 +145,9 @@ describe('TeamController', () => {
         state: 'NY',
         zip: '67890',
       },
+      metadata: {
+        notes: 'updated',
+      },
       ...basePayload,
     };
 
@@ -156,6 +166,9 @@ describe('TeamController', () => {
           city: 'Othertown',
           state: 'NY',
           zip: '67890',
+        },
+        metadata: {
+          notes: 'updated',
         },
       },
       basePayload.userClaims.id,

@@ -3,7 +3,7 @@ import {
   NotFoundException,
   ConflictException,
 } from '@nestjs/common';
-import { Prisma, Role } from '@prisma/user-client';
+import { Role } from '@prisma/user-client';
 import {
   Team,
   TeamMembership,
@@ -11,6 +11,7 @@ import {
   UpdateTeamDto,
   AddMemberDto,
   UpdateMemberDto,
+  TeamMetadata,
 } from '@pitch/shared-backend/interfaces/user.interface';
 import { TeamRepository } from '../repositories/team.repository';
 
@@ -26,7 +27,10 @@ export class TeamService {
       name: createTeamDto.name,
       slug: createTeamDto.slug,
     });
-    const metadata = { temp: 'data' };
+    const metadata = this.buildMetadataOnCreate(
+      createTeamDto.metadata ?? null,
+      requesterId,
+    );
 
     return this.teamRepository.createTeam(
       {
@@ -48,8 +52,8 @@ export class TeamService {
     if (!existingTeam) {
       throw new NotFoundException(`Team with ID ${teamId} not found`);
     }
-    if (existingTeam.name !== dto.name) {
-      const teamWithName = await this.teamRepository.findByName(dto.name!);
+    if (dto.name !== undefined && existingTeam.name !== dto.name) {
+      const teamWithName = await this.teamRepository.findByName(dto.name);
       if (teamWithName && teamWithName.id !== teamId) {
         throw new ConflictException(
           `Team name '${dto.name}' is already in use`,
@@ -66,9 +70,13 @@ export class TeamService {
       slug = await this.createSlug({ name: dto.name, slug: undefined });
     }
 
-    const metadata = { temp: 'data' };
-
     await this.teamRepository.confirmAuthorityOrThrow(requesterId, teamId);
+
+    const metadata = this.buildMetadataOnUpdate(
+      existingTeam.metadata ?? null,
+      dto.metadata,
+      requesterId,
+    );
 
     return this.teamRepository.updateTeam(teamId, {
       ...dto,
@@ -164,20 +172,68 @@ export class TeamService {
     return normalized.slice(0, MAX);
   }
 
-  private buildMetadata(ownerId: string, createdBy: string): Prisma.JsonValue {
-    return {
-      ownerId: ownerId,
-      createdBy: createdBy,
-      createdAt: new Date().toISOString(),
-    };
+  private toMetadataObject(value: unknown): TeamMetadata {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return {};
+    }
+    return value as TeamMetadata;
   }
 
-  private updateMetadata(existingMetadata: Prisma.JsonValue | undefined) {
+  private buildMetadataOnCreate(
+    input: TeamMetadata | null | undefined,
+    requesterId: string,
+  ): TeamMetadata {
+    const now = new Date().toISOString();
+    const metadata = this.toMetadataObject(input);
+    const audit = metadata.audit ?? {};
+
     return {
-      ...((existingMetadata as Record<string, unknown>) || {}),
-      updatedBy: 'system',
-      updatedAt: new Date().toISOString(),
-    };
+      ...metadata,
+      audit: {
+        ownerUserId: requesterId,
+        createdByUserId: requesterId,
+        createdAt: now,
+        updatedByUserId: requesterId,
+        updatedAt: now,
+        version: typeof audit.version === 'number' ? audit.version : 1,
+      },
+    } satisfies TeamMetadata;
+  }
+
+  private buildMetadataOnUpdate(
+    existing: TeamMetadata | null | undefined,
+    patch: TeamMetadata | null | undefined,
+    requesterId: string,
+  ): TeamMetadata {
+    const now = new Date().toISOString();
+    const existingMetadata = this.toMetadataObject(existing);
+    const patchMetadata = this.toMetadataObject(patch);
+    const previousAudit = existingMetadata.audit ?? {};
+    const patchAudit = patchMetadata.audit ?? {};
+    const nextVersion =
+      typeof previousAudit.version === 'number' ? previousAudit.version + 1 : 1;
+
+    return {
+      ...existingMetadata,
+      ...patchMetadata,
+      profile: {
+        ...(existingMetadata.profile ?? {}),
+        ...(patchMetadata.profile ?? {}),
+      },
+      preferences: {
+        ...(existingMetadata.preferences ?? {}),
+        ...(patchMetadata.preferences ?? {}),
+      },
+      audit: {
+        ownerUserId:
+          patchAudit.ownerUserId ?? previousAudit.ownerUserId ?? requesterId,
+        createdByUserId: previousAudit.createdByUserId ?? requesterId,
+        createdAt: previousAudit.createdAt ?? now,
+        updatedByUserId: requesterId,
+        updatedAt: now,
+        version: nextVersion,
+      },
+    } satisfies TeamMetadata;
   }
 
   async confirmAuthorityOrThrow(userId: string, teamId: string): Promise<Role> {

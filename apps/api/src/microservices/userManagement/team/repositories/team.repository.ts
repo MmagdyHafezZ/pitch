@@ -56,7 +56,7 @@ export class TeamRepository {
           orderBy: [{ role: 'asc' }, { invitedAt: 'asc' }],
         },
       },
-    });
+    }) as unknown as Promise<Team>;
   }
 
   updateTeam(id: string, data: Partial<UpdateTeamDto>): Promise<Team> {
@@ -90,7 +90,7 @@ export class TeamRepository {
           orderBy: [{ role: 'asc' }, { invitedAt: 'asc' }],
         },
       },
-    });
+    }) as unknown as Promise<Team>;
   }
 
   async deleteTeam(id: string): Promise<void> {
@@ -208,15 +208,19 @@ export class TeamRepository {
           orderBy: [{ role: 'asc' }, { invitedAt: 'asc' }],
         },
       },
-    });
+    }) as unknown as Promise<Team[]>;
   }
 
   async findBySlug(slug: string): Promise<Team | null> {
-    return this.prisma.team.findFirst({ where: { slug, deletedAt: null } });
+    return this.prisma.team.findFirst({
+      where: { slug, deletedAt: null },
+    }) as unknown as Promise<Team | null>;
   }
 
   async findByName(name: string): Promise<Team | null> {
-    return this.prisma.team.findFirst({ where: { name, deletedAt: null } });
+    return this.prisma.team.findFirst({
+      where: { name, deletedAt: null },
+    }) as unknown as Promise<Team | null>;
   }
 
   async confirmAuthorityOrThrow(userId: string, teamId: string): Promise<Role> {

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-argument, @typescript-eslint/unbound-method */
 import { HttpException, HttpStatus } from '@nestjs/common';
 import type { ClientProxy } from '@nestjs/microservices';
 import { of } from 'rxjs';
