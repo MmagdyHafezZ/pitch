@@ -9,15 +9,19 @@ import {
   Inject,
   HttpException,
   HttpStatus,
+  UploadedFile,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { ClientProxy } from '@nestjs/microservices';
 import {
   ApiTags,
   ApiOperation,
   ApiResponse,
   ApiBearerAuth,
+  ApiBody,
+  ApiConsumes,
 } from '@nestjs/swagger';
 import { catchError, timeout } from 'rxjs/operators';
 import { throwError } from 'rxjs';
@@ -25,6 +29,7 @@ import { USER_SERVICE_PATTERNS } from '@pitch/shared-backend/interfaces/message-
 import type {
   CreateUserDto,
   UpdateUserDto,
+  UserSettings,
 } from '@pitch/shared-backend/interfaces/user.interface';
 import { GlobalJwtAuthGuard } from '../../guards/global-jwt-auth.guard';
 import { UserClaimsInterceptor } from '../../interceptors/user-claims.interceptor';
@@ -40,6 +45,24 @@ import { normalizeError } from '@pitch/shared-backend/helpers/exceptions';
 export class UserGatewayController {
   constructor(@Inject('USER_SERVICE') private userService: ClientProxy) {}
 
+  private updateCurrentUserAvatar(userClaims: UserClaimsType, avatar: string) {
+    return this.userService
+      .send(USER_SERVICE_PATTERNS.UPDATE_USER, {
+        userId: userClaims.id,
+        avatar,
+        userClaims,
+      })
+      .pipe(
+        timeout(10000),
+        catchError((err: unknown) => {
+          const error = normalizeError(err);
+          const message = error.message ?? 'Failed to update profile picture';
+          const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
+          return throwError(() => new HttpException(message, status));
+        }),
+      );
+  }
+
   @Get()
   @ApiOperation({ summary: 'Get all users' })
   @ApiResponse({ status: 200, description: 'Users retrieved successfully' })
@@ -53,6 +76,28 @@ export class UserGatewayController {
         catchError((err: unknown) => {
           const error = normalizeError(err);
           const message = error.message ?? 'Failed to get users';
+          const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
+          return throwError(() => new HttpException(message, status));
+        }),
+      );
+  }
+
+  @Get('me/settings')
+  @ApiOperation({ summary: 'Get current user settings' })
+  @ApiResponse({
+    status: 200,
+    description: 'User settings retrieved successfully',
+  })
+  getMySettings(@UserClaims() userClaims: UserClaimsType) {
+    return this.userService
+      .send(USER_SERVICE_PATTERNS.GET_MY_SETTINGS, {
+        userClaims,
+      })
+      .pipe(
+        timeout(5000),
+        catchError((err: unknown) => {
+          const error = normalizeError(err);
+          const message = error.message ?? 'Failed to get user settings';
           const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
           return throwError(() => new HttpException(message, status));
         }),
@@ -105,6 +150,112 @@ export class UserGatewayController {
           return throwError(() => new HttpException(message, status));
         }),
       );
+  }
+
+  @Put('me/settings')
+  @ApiOperation({ summary: 'Update current user settings' })
+  @ApiResponse({
+    status: 200,
+    description: 'User settings updated successfully',
+  })
+  updateMySettings(
+    @Body() body: { settings?: UserSettings } | UserSettings,
+    @UserClaims() userClaims: UserClaimsType,
+  ) {
+    const settings =
+      body && 'settings' in (body as Record<string, unknown>)
+        ? ((body as { settings?: UserSettings }).settings ?? {})
+        : (body as UserSettings);
+
+    return this.userService
+      .send(USER_SERVICE_PATTERNS.UPDATE_MY_SETTINGS, {
+        settings,
+        userClaims,
+      })
+      .pipe(
+        timeout(5000),
+        catchError((err: unknown) => {
+          const error = normalizeError(err);
+          const message = error.message ?? 'Failed to update user settings';
+          const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
+          return throwError(() => new HttpException(message, status));
+        }),
+      );
+  }
+
+  @Put('me/avatar')
+  @ApiOperation({ summary: 'Upload or update current user profile picture' })
+  @ApiConsumes('multipart/form-data', 'application/json')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        file: {
+          type: 'string',
+          format: 'binary',
+          description: 'Image file (jpg/png/webp/gif, max 2MB)',
+        },
+        avatarUrl: {
+          type: 'string',
+          description:
+            'Direct URL to use as avatar instead of uploading a file',
+        },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Profile picture updated successfully',
+  })
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: 2 * 1024 * 1024 },
+    }),
+  )
+  updateMyAvatar(
+    @UploadedFile()
+    file:
+      | {
+          mimetype: string;
+          buffer: Buffer;
+        }
+      | undefined,
+    @Body() body: { avatarUrl?: string; avatar?: string },
+    @UserClaims() userClaims: UserClaimsType,
+  ) {
+    let avatar: string | null = null;
+
+    if (file) {
+      const allowed = new Set([
+        'image/jpeg',
+        'image/png',
+        'image/webp',
+        'image/gif',
+      ]);
+
+      if (!allowed.has(file.mimetype)) {
+        throw new HttpException(
+          'Invalid image type. Allowed: jpeg, png, webp, gif',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      avatar = `data:${file.mimetype};base64,${file.buffer.toString('base64')}`;
+    } else {
+      const candidate = body?.avatarUrl ?? body?.avatar;
+      if (typeof candidate === 'string' && candidate.trim()) {
+        avatar = candidate.trim();
+      }
+    }
+
+    if (!avatar) {
+      throw new HttpException(
+        'Provide an image file (`file`) or an `avatarUrl`',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    return this.updateCurrentUserAvatar(userClaims, avatar);
   }
 
   @Put(':userId')

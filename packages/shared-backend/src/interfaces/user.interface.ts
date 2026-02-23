@@ -11,11 +11,52 @@ export interface User {
   email: string
   name: string
   avatar?: string | null
+  settings?: UserSettings | null
   isActive: boolean
   createdAt: Date
   updatedAt: Date
   oauthAccounts?: OAuthAccount[]
   memberships?: TeamMembership[]
+}
+
+export interface UserSettings {
+  account?: {
+    timezone?: string
+  }
+  notifications?: {
+    emailNotifications?: boolean
+    desktopNotifications?: boolean
+    productUpdates?: boolean
+  }
+  voiceVideo?: {
+    preferredMicrophone?: string
+    preferredSpeaker?: string
+    noiseSuppression?: boolean
+    echoCancellation?: boolean
+    autoJoinMuted?: boolean
+  }
+  appearance?: {
+    colorMode?: 'light' | 'dark' | 'system'
+    activeProfileId?: string
+    profiles?: unknown[]
+    customDraft?: Record<string, string>
+    customDraftGradient?: boolean
+  }
+  language?: {
+    locale?: string
+  }
+  browser?: {
+    openLinksInNewTab?: boolean
+    compactMode?: boolean
+    reduceMotion?: boolean
+  }
+  crm?: {
+    provider?: string | null
+    connected?: boolean
+    providerEmail?: string | null
+    lastSyncAt?: string | null
+    autoSync?: boolean
+  }
 }
 
 export interface UserSummary {
@@ -108,6 +149,11 @@ export interface UpdateUserDto {
   name?: string
   avatar?: string
   isActive?: boolean
+  settings?: UserSettings | null
+}
+
+export interface UpdateMySettingsDto {
+  settings: UserSettings
 }
 
 export interface CreateTeamDto {

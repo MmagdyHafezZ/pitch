@@ -4,7 +4,8 @@ import {
   AuthProvider,
   toPrismaAuthProvider,
 } from '../../auth/factories/oauth-provider.factory';
-import type { User, OAuthAccount } from '@prisma/user-client';
+import type { User, OAuthAccount, Prisma } from '@prisma/user-client';
+import type { UserSettings } from '@pitch/shared-backend/interfaces/user.interface';
 
 export interface CreateUserData {
   email: string;
@@ -31,6 +32,14 @@ export class UserRepository {
     private readonly prisma: UserPrismaService,
     private readonly logger: Logger,
   ) {}
+
+  private toUserSettings(value: unknown): UserSettings | null {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return null;
+    }
+
+    return value as UserSettings;
+  }
 
   async findMany(): Promise<User[]> {
     return await this.prisma.user.findMany();
@@ -174,5 +183,27 @@ export class UserRepository {
         },
       },
     });
+  }
+
+  async getSettings(userId: string): Promise<UserSettings | null> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { settings: true },
+    });
+
+    return this.toUserSettings(user?.settings);
+  }
+
+  async updateSettings(
+    userId: string,
+    settings: UserSettings,
+  ): Promise<UserSettings> {
+    const user = await this.prisma.user.update({
+      where: { id: userId },
+      data: { settings: settings as unknown as Prisma.InputJsonValue },
+      select: { settings: true },
+    });
+
+    return this.toUserSettings(user.settings) ?? {};
   }
 }

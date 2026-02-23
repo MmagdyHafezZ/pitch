@@ -10,6 +10,7 @@ import { UserRepository } from '../../user/repositories/user.repository';
 import { AuthRepository } from '../repositories/auth.repository';
 import { RegisterDto, LoginDto, AuthResponseDto } from '../dto/auth.dto';
 import { OAuthProfile, TokenPair } from './auth.service';
+import { AuthProvider } from '../factories/oauth-provider.factory';
 
 /**
  * Auth Application Service
@@ -31,6 +32,38 @@ export class AuthApplicationService {
     private readonly authRepository: AuthRepository,
     private readonly jwtService: JwtService,
   ) {}
+
+  private isGoogleHostedAvatar(url?: string | null): boolean {
+    if (!url) {
+      return false;
+    }
+    return (
+      url.includes('googleusercontent.com') || url.includes('googleapis.com')
+    );
+  }
+
+  private async syncGoogleAvatarIfNeeded<
+    T extends { id: string; avatar?: string | null },
+  >(user: T, profile: OAuthProfile): Promise<T> {
+    if (profile.provider !== AuthProvider.GOOGLE || !profile.avatar) {
+      return user;
+    }
+
+    const shouldUpdate =
+      !user.avatar ||
+      (this.isGoogleHostedAvatar(user.avatar) &&
+        user.avatar !== profile.avatar);
+
+    if (!shouldUpdate) {
+      return user;
+    }
+
+    const updated = await this.userRepository.update(user.id, {
+      avatar: profile.avatar,
+    });
+
+    return updated as unknown as T;
+  }
 
   /**
    * Register a new user
@@ -267,7 +300,7 @@ export class AuthApplicationService {
           expiresAt: tokenData?.expiresAt,
           userId: existingUser.id,
         });
-        user = existingUser;
+        user = await this.syncGoogleAvatarIfNeeded(existingUser, profile);
         this.logger.log(
           `Linked OAuth account to existing user: ${existingUser.id}`,
         );
@@ -304,6 +337,7 @@ export class AuthApplicationService {
           avatar: profile.avatar,
         },
       );
+      user = await this.syncGoogleAvatarIfNeeded(user, profile);
       this.logger.log(`Updated OAuth tokens for user: ${user.id}`);
     }
 

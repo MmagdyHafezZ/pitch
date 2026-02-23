@@ -43,6 +43,20 @@ export class UserController {
     }
   }
 
+  @MessagePattern(USER_SERVICE_PATTERNS.GET_MY_SETTINGS)
+  async getMySettings(
+    @Payload() data: userClaimsInterface.MessageWithUserClaims,
+  ) {
+    try {
+      this.logger.log(
+        `Getting settings for user ${data.userClaims.id} - Requested by: ${data.userClaims.email} (${data.userClaims.id})`,
+      );
+      return await this.userService.getSettings(data.userClaims.id);
+    } catch (error) {
+      throw toRpcException(error);
+    }
+  }
+
   @MessagePattern(USER_SERVICE_PATTERNS.CREATE_USER)
   @UsePipes(new ValidationPipe({ transform: true }))
   async createUser(
@@ -78,6 +92,25 @@ export class UserController {
       const { userClaims: _userClaims, userId, ...updateData } = data;
       void _userClaims;
       return await this.userService.update(userId, updateData);
+    } catch (error) {
+      throw toRpcException(error);
+    }
+  }
+
+  @MessagePattern(USER_SERVICE_PATTERNS.UPDATE_MY_SETTINGS)
+  async updateMySettings(
+    @Payload()
+    data: userInterface.UpdateMySettingsDto &
+      userClaimsInterface.MessageWithUserClaims,
+  ) {
+    try {
+      this.logger.log(
+        `Updating settings for user ${data.userClaims.id} - Requested by: ${data.userClaims.email} (${data.userClaims.id})`,
+      );
+      return await this.userService.updateSettings(
+        data.userClaims.id,
+        data.settings ?? {},
+      );
     } catch (error) {
       throw toRpcException(error);
     }

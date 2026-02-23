@@ -1,7 +1,9 @@
 export const USER_SERVICE_PATTERNS = {
   GET_USER: 'get_user',
+  GET_MY_SETTINGS: 'get_my_settings',
   CREATE_USER: 'create_user',
   UPDATE_USER: 'update_user',
+  UPDATE_MY_SETTINGS: 'update_my_settings',
   DELETE_USER: 'delete_user',
   GET_USERS: 'get_users',
   REGISTER: 'auth.register',

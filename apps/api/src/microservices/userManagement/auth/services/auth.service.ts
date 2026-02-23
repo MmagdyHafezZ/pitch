@@ -38,6 +38,39 @@ export class AuthService {
     private readonly authRepository: AuthRepository,
     private readonly jwtService: JwtService,
   ) {}
+
+  private isGoogleHostedAvatar(url?: string | null): boolean {
+    if (!url) {
+      return false;
+    }
+    return (
+      url.includes('googleusercontent.com') || url.includes('googleapis.com')
+    );
+  }
+
+  private async syncGoogleAvatarIfNeeded<
+    T extends { id: string; avatar?: string | null },
+  >(user: T, profile: OAuthProfile): Promise<T> {
+    if (profile.provider !== AuthProvider.GOOGLE || !profile.avatar) {
+      return user;
+    }
+
+    const shouldUpdate =
+      !user.avatar ||
+      (this.isGoogleHostedAvatar(user.avatar) &&
+        user.avatar !== profile.avatar);
+
+    if (!shouldUpdate) {
+      return user;
+    }
+
+    const updated = await this.userRepository.update(user.id, {
+      avatar: profile.avatar,
+    });
+
+    return updated as unknown as T;
+  }
+
   async validateOAuthUser(
     profile: OAuthProfile,
     tokenData?: ITokenData,
@@ -62,7 +95,7 @@ export class AuthService {
           expiresAt: tokenData?.expiresAt,
           userId: existingUser.id,
         });
-        user = existingUser;
+        user = await this.syncGoogleAvatarIfNeeded(existingUser, profile);
       } else {
         user = await this.userRepository.createWithOAuth(
           {
@@ -95,6 +128,7 @@ export class AuthService {
           avatar: profile.avatar,
         },
       );
+      user = await this.syncGoogleAvatarIfNeeded(user, profile);
     }
 
     return user;
