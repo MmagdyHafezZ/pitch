@@ -30,7 +30,9 @@ describe('FileService', () => {
 
   it('delegates presign download to repository', async () => {
     const repository = createRepositoryMock();
-    repository.createPresignedDownloadUrl.mockResolvedValue({ url: 'download' });
+    repository.createPresignedDownloadUrl.mockResolvedValue({
+      url: 'download',
+    });
     const service = new FileService(repository);
 
     const result = await service.createPresignedDownloadUrl({

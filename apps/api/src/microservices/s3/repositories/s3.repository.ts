@@ -110,7 +110,9 @@ export class S3Repository {
     let continuationToken: string | undefined;
 
     do {
-      const remainingLimit = params.limit ? params.limit - keys.length : undefined;
+      const remainingLimit = params.limit
+        ? params.limit - keys.length
+        : undefined;
       if (remainingLimit !== undefined && remainingLimit <= 0) break;
 
       const command = new ListObjectsV2Command({

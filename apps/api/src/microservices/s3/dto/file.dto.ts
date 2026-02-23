@@ -1,4 +1,11 @@
-import { IsInt, IsNotEmpty, IsOptional, IsString, Max, Min } from 'class-validator';
+import {
+  IsInt,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  Max,
+  Min,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 
 const MAX_PRESIGNED_URL_EXPIRY_SECONDS = 604800;
