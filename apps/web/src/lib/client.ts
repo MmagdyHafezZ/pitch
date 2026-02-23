@@ -219,10 +219,16 @@ export const api = {
   users: {
     getAll: () => apiRequest<any[]>('/users'),
     getById: (id: string) => apiRequest<any>(`/users/${id}`),
+    getMySettings: () => apiRequest<any>('/users/me/settings'),
     create: (data: any) =>
       apiRequest<any>('/users', {
         method: 'POST',
         body: JSON.stringify(data),
+      }),
+    updateMySettings: (settings: any) =>
+      apiRequest<any>('/users/me/settings', {
+        method: 'PUT',
+        body: JSON.stringify(settings),
       }),
     update: (id: string, data: any) =>
       apiRequest<any>(`/users/${id}`, {

@@ -23,12 +23,15 @@ import {
   Popover,
   ColorPicker,
 } from '@mantine/core'
+import { notifications } from '@mantine/notifications'
 import {
   IconUser,
   IconBell,
   IconMicrophone,
   IconPalette,
   IconWorld,
+  IconBrowser,
+  IconPlugConnected,
   IconUpload,
   IconX,
   IconTrash,
@@ -39,14 +42,73 @@ import {
 } from '@tabler/icons-react'
 import { modals } from '@mantine/modals'
 import { useAuth } from '@/features/auth'
+import { useAuthStore } from '@/features/auth/stores/auth.store'
+import { useCrm } from '@/features/crm'
 import { useRouter } from 'next/navigation'
+import { api } from '@/lib/client'
 import { useAppearanceStore } from '@/lib/stores/appearance.store'
-import type { ThemeTokens } from '@/lib/stores/appearance.store'
+import type { ThemeProfile, ThemeTokens } from '@/lib/stores/appearance.store'
 import { getReadableMutedColor, getReadableTextColor, mixColors } from '@/lib/colors/contrast'
 import classes from './SettingsModal.module.css'
 import inputClasses from './settingsInputs.module.css'
 
-type SettingsSection = 'Account' | 'Notifications' | 'Voice & Video' | 'Appearance' | 'Language'
+type SettingsSection =
+  | 'Account'
+  | 'Notifications'
+  | 'Voice & Video'
+  | 'Appearance'
+  | 'Language'
+  | 'Browser'
+  | 'CRM'
+
+type UserSettingsPayload = {
+  account?: {
+    timezone?: string
+  }
+  notifications?: {
+    emailNotifications?: boolean
+    desktopNotifications?: boolean
+    productUpdates?: boolean
+  }
+  voiceVideo?: {
+    preferredMicrophone?: string
+    preferredSpeaker?: string
+    noiseSuppression?: boolean
+    echoCancellation?: boolean
+    autoJoinMuted?: boolean
+  }
+  appearance?: {
+    colorMode?: 'light' | 'dark' | 'system'
+    activeProfileId?: string
+    profiles?: ThemeProfile[]
+    customDraft?: ThemeTokens
+    customDraftGradient?: boolean
+  }
+  language?: {
+    locale?: string
+  }
+  browser?: {
+    openLinksInNewTab?: boolean
+    compactMode?: boolean
+    reduceMotion?: boolean
+  }
+  crm?: {
+    provider?: string | null
+    connected?: boolean
+    providerEmail?: string | null
+    lastSyncAt?: string | null
+    autoSync?: boolean
+  }
+}
+
+const TIMEZONE_OPTIONS = [
+  '(GMT-5:00) Eastern Time',
+  '(GMT-6:00) Central Time',
+  '(GMT-7:00) Mountain Time',
+  '(GMT-8:00) Pacific Time',
+]
+
+const LANGUAGE_OPTIONS = ['English (US)', 'English (UK)', 'French', 'Spanish', 'German']
 
 interface SettingsModalProps {
   opened: boolean
@@ -57,9 +119,25 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
   const router = useRouter()
   const { user, logout } = useAuth()
   const [activeSection, setActiveSection] = useState<SettingsSection>('Account')
-  const [name, setName] = useState(user?.name || 'John Doe')
-  const [email, setEmail] = useState(user?.email || 'john.doe@ibm.com')
+  const [name, setName] = useState(user?.name || '')
+  const [email, setEmail] = useState(user?.email || '')
   const [timezone, setTimezone] = useState('(GMT-5:00) Eastern Time')
+  const [emailNotifications, setEmailNotifications] = useState(true)
+  const [desktopNotifications, setDesktopNotifications] = useState(true)
+  const [productUpdates, setProductUpdates] = useState(false)
+  const [preferredMicrophone, setPreferredMicrophone] = useState('System default')
+  const [preferredSpeaker, setPreferredSpeaker] = useState('System default')
+  const [noiseSuppression, setNoiseSuppression] = useState(true)
+  const [echoCancellation, setEchoCancellation] = useState(true)
+  const [autoJoinMuted, setAutoJoinMuted] = useState(false)
+  const [language, setLanguage] = useState('English (US)')
+  const [openLinksInNewTab, setOpenLinksInNewTab] = useState(true)
+  const [compactMode, setCompactMode] = useState(false)
+  const [reduceMotion, setReduceMotion] = useState(false)
+  const [crmAutoSync, setCrmAutoSync] = useState(true)
+  const [crmProvider, setCrmProvider] = useState<string | null>('salesforce')
+  const [isSaving, setIsSaving] = useState(false)
+  const [isLoadingSettings, setIsLoadingSettings] = useState(false)
   const {
     colorMode,
     setColorMode,
@@ -74,6 +152,13 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
     customDraftGradient,
     setCustomDraftGradient,
   } = useAppearanceStore()
+  const {
+    status: crmStatus,
+    loadingStatus: crmStatusLoading,
+    error: crmError,
+    fetchStatus: fetchCrmStatus,
+    connect: connectCrm,
+  } = useCrm()
 
   const activeProfile = useMemo(
     () => profiles.find((profile) => profile.id === activeProfileId),
@@ -139,6 +224,8 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
     { icon: IconMicrophone, label: 'Voice & Video' },
     { icon: IconPalette, label: 'Appearance' },
     { icon: IconWorld, label: 'Language' },
+    { icon: IconBrowser, label: 'Browser' },
+    { icon: IconPlugConnected, label: 'CRM' },
   ]
 
   const handleLogout = async () => {
@@ -147,8 +234,97 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
     router.push('/')
   }
 
-  const handleSave = () => {
-    onClose()
+  const handleSave = async () => {
+    if (!user?.id) {
+      notifications.show({
+        title: 'Unable to save',
+        message: 'You must be signed in to save settings.',
+        color: 'red',
+      })
+      return
+    }
+
+    const settingsPayload: UserSettingsPayload = {
+      account: { timezone },
+      notifications: {
+        emailNotifications,
+        desktopNotifications,
+        productUpdates,
+      },
+      voiceVideo: {
+        preferredMicrophone,
+        preferredSpeaker,
+        noiseSuppression,
+        echoCancellation,
+        autoJoinMuted,
+      },
+      appearance: {
+        colorMode,
+        activeProfileId,
+        profiles,
+        customDraft,
+        customDraftGradient,
+      },
+      language: {
+        locale: language,
+      },
+      browser: {
+        openLinksInNewTab,
+        compactMode,
+        reduceMotion,
+      },
+      crm: {
+        provider: crmProvider,
+        connected: crmStatus?.connected ?? false,
+        providerEmail: crmStatus?.providerEmail ?? null,
+        lastSyncAt: crmStatus?.lastSyncAt ?? null,
+        autoSync: crmAutoSync,
+      },
+    }
+
+    setIsSaving(true)
+    try {
+      await api.users.update(user.id, {
+        name: name.trim() || user.name,
+        email: email.trim() || user.email,
+      })
+      await api.users.updateMySettings(settingsPayload)
+
+      const authStore = useAuthStore.getState()
+      if (authStore.user) {
+        authStore.setUser({
+          ...authStore.user,
+          name: name.trim() || authStore.user.name,
+          email: email.trim() || authStore.user.email,
+        })
+      }
+
+      notifications.show({
+        title: 'Settings saved',
+        message: 'Your profile and preferences were saved to your account.',
+        color: 'green',
+      })
+      onClose()
+    } catch (error) {
+      notifications.show({
+        title: 'Save failed',
+        message: error instanceof Error ? error.message : 'Failed to save settings.',
+        color: 'red',
+      })
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const handleConnectCrm = async () => {
+    try {
+      const response = await connectCrm()
+      if (response?.authUrl) {
+        window.open(response.authUrl, '_blank', 'noopener,noreferrer')
+      }
+    } catch {
+      // errors are already stored in CRM store and shown in UI below
+    }
   }
 
   const openConfirmDelete = (id: string, name: string) => {
@@ -160,6 +336,102 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
       onConfirm: () => deleteProfile(id),
     })
   }
+
+  useEffect(() => {
+    if (!opened) {
+      return
+    }
+
+    setName(user?.name ?? '')
+    setEmail(user?.email ?? '')
+  }, [opened, user?.email, user?.name])
+
+  useEffect(() => {
+    if (!opened || !user?.id) {
+      return
+    }
+
+    let cancelled = false
+
+    const loadSettings = async () => {
+      setIsLoadingSettings(true)
+      try {
+        const settings = (await api.users.getMySettings()) as UserSettingsPayload
+        if (cancelled || !settings) return
+
+        if (settings.account?.timezone) setTimezone(settings.account.timezone)
+
+        if (settings.notifications) {
+          setEmailNotifications(settings.notifications.emailNotifications ?? true)
+          setDesktopNotifications(settings.notifications.desktopNotifications ?? true)
+          setProductUpdates(settings.notifications.productUpdates ?? false)
+        }
+
+        if (settings.voiceVideo) {
+          setPreferredMicrophone(settings.voiceVideo.preferredMicrophone ?? 'System default')
+          setPreferredSpeaker(settings.voiceVideo.preferredSpeaker ?? 'System default')
+          setNoiseSuppression(settings.voiceVideo.noiseSuppression ?? true)
+          setEchoCancellation(settings.voiceVideo.echoCancellation ?? true)
+          setAutoJoinMuted(settings.voiceVideo.autoJoinMuted ?? false)
+        }
+
+        if (settings.language?.locale) setLanguage(settings.language.locale)
+
+        if (settings.browser) {
+          setOpenLinksInNewTab(settings.browser.openLinksInNewTab ?? true)
+          setCompactMode(settings.browser.compactMode ?? false)
+          setReduceMotion(settings.browser.reduceMotion ?? false)
+        }
+
+        if (settings.crm) {
+          setCrmProvider(settings.crm.provider ?? 'salesforce')
+          setCrmAutoSync(settings.crm.autoSync ?? true)
+        }
+
+        const appearance = settings.appearance
+        if (appearance && !cancelled) {
+          useAppearanceStore.setState((state) => {
+            const nextProfiles =
+              Array.isArray(appearance.profiles) && appearance.profiles.length > 0
+                ? (appearance.profiles as ThemeProfile[])
+                : state.profiles
+            const nextActiveProfileId =
+              appearance.activeProfileId &&
+              nextProfiles.some((profile) => profile.id === appearance.activeProfileId)
+                ? appearance.activeProfileId
+                : state.activeProfileId
+
+            return {
+              colorMode: appearance.colorMode ?? state.colorMode,
+              profiles: nextProfiles,
+              activeProfileId: nextActiveProfileId,
+              customDraft: appearance.customDraft ?? state.customDraft,
+              customDraftGradient: appearance.customDraftGradient ?? state.customDraftGradient,
+            }
+          })
+        }
+      } catch {
+        // Missing settings is a valid first-run state; do not block modal.
+      } finally {
+        if (!cancelled) {
+          setIsLoadingSettings(false)
+        }
+      }
+    }
+
+    void loadSettings()
+
+    return () => {
+      cancelled = true
+    }
+  }, [opened, user?.id])
+
+  useEffect(() => {
+    if (!opened || activeSection !== 'CRM') {
+      return
+    }
+    void fetchCrmStatus()
+  }, [opened, activeSection, fetchCrmStatus])
 
   return (
     <Modal
@@ -254,6 +526,12 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
               color: 'var(--pitch-surface-text)',
             }}
           >
+            {isLoadingSettings && (
+              <Text size="sm" mb="md" c="var(--pitch-surface-text-dim)">
+                Loading saved settings...
+              </Text>
+            )}
+
             {activeSection === 'Account' && (
               <Stack gap="xl">
                 <Group justify="space-between" align="start">
@@ -301,12 +579,7 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
                   label="Time Zone"
                   value={timezone}
                   onChange={(val) => setTimezone(val || '')}
-                  data={[
-                    '(GMT-5:00) Eastern Time',
-                    '(GMT-6:00) Central Time',
-                    '(GMT-7:00) Mountain Time',
-                    '(GMT-8:00) Pacific Time',
-                  ]}
+                  data={TIMEZONE_OPTIONS}
                   size="md"
                   classNames={settingsInputClassNames}
                 />
@@ -322,7 +595,7 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
                   >
                     Delete Account
                   </Text>
-                  <Button onClick={handleSave} size="md">
+                  <Button onClick={() => void handleSave()} size="md" loading={isSaving}>
                     Save
                   </Button>
                 </Group>
@@ -334,7 +607,26 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
                 <Text size="xl" fw={600} mb="md" c="var(--pitch-surface-text)">
                   Notifications
                 </Text>
-                <Text c="var(--pitch-surface-text-dim)">Notification settings coming soon...</Text>
+                <Checkbox
+                  label="Email notifications"
+                  checked={emailNotifications}
+                  onChange={(event) => setEmailNotifications(event.currentTarget.checked)}
+                />
+                <Checkbox
+                  label="Desktop notifications"
+                  checked={desktopNotifications}
+                  onChange={(event) => setDesktopNotifications(event.currentTarget.checked)}
+                />
+                <Checkbox
+                  label="Product updates"
+                  checked={productUpdates}
+                  onChange={(event) => setProductUpdates(event.currentTarget.checked)}
+                />
+                <Group justify="flex-end" mt="sm">
+                  <Button onClick={() => void handleSave()} loading={isSaving}>
+                    Save
+                  </Button>
+                </Group>
               </Stack>
             )}
 
@@ -343,7 +635,40 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
                 <Text size="xl" fw={600} mb="md" c="var(--pitch-surface-text)">
                   Voice & Video
                 </Text>
-                <Text c="var(--pitch-surface-text-dim)">Voice & Video settings coming soon...</Text>
+                <Select
+                  label="Preferred microphone"
+                  value={preferredMicrophone}
+                  onChange={(value) => setPreferredMicrophone(value || 'System default')}
+                  data={['System default', 'Built-in Mic', 'USB Headset']}
+                  classNames={settingsInputClassNames}
+                />
+                <Select
+                  label="Preferred speaker"
+                  value={preferredSpeaker}
+                  onChange={(value) => setPreferredSpeaker(value || 'System default')}
+                  data={['System default', 'Built-in Speakers', 'Bluetooth Headset']}
+                  classNames={settingsInputClassNames}
+                />
+                <Checkbox
+                  label="Noise suppression"
+                  checked={noiseSuppression}
+                  onChange={(event) => setNoiseSuppression(event.currentTarget.checked)}
+                />
+                <Checkbox
+                  label="Echo cancellation"
+                  checked={echoCancellation}
+                  onChange={(event) => setEchoCancellation(event.currentTarget.checked)}
+                />
+                <Checkbox
+                  label="Join calls muted by default"
+                  checked={autoJoinMuted}
+                  onChange={(event) => setAutoJoinMuted(event.currentTarget.checked)}
+                />
+                <Group justify="flex-end" mt="sm">
+                  <Button onClick={() => void handleSave()} loading={isSaving}>
+                    Save
+                  </Button>
+                </Group>
               </Stack>
             )}
 
@@ -633,6 +958,12 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
                     </Stack>
                   </Tabs.Panel>
                 </Tabs>
+
+                <Group justify="flex-end">
+                  <Button onClick={() => void handleSave()} loading={isSaving}>
+                    Save appearance
+                  </Button>
+                </Group>
               </Stack>
             )}
 
@@ -641,7 +972,105 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
                 <Text size="xl" fw={600} mb="md" c="var(--pitch-surface-text)">
                   Language
                 </Text>
-                <Text c="var(--pitch-surface-text-dim)">Language settings coming soon...</Text>
+                <Select
+                  label="Application language"
+                  value={language}
+                  onChange={(value) => setLanguage(value || 'English (US)')}
+                  data={LANGUAGE_OPTIONS}
+                  classNames={settingsInputClassNames}
+                />
+                <Group justify="flex-end" mt="sm">
+                  <Button onClick={() => void handleSave()} loading={isSaving}>
+                    Save
+                  </Button>
+                </Group>
+              </Stack>
+            )}
+
+            {activeSection === 'Browser' && (
+              <Stack gap="md">
+                <Text size="xl" fw={600} mb="md" c="var(--pitch-surface-text)">
+                  Browser
+                </Text>
+                <Checkbox
+                  label="Open PITCH links in a new tab"
+                  checked={openLinksInNewTab}
+                  onChange={(event) => setOpenLinksInNewTab(event.currentTarget.checked)}
+                />
+                <Checkbox
+                  label="Compact layout mode"
+                  checked={compactMode}
+                  onChange={(event) => setCompactMode(event.currentTarget.checked)}
+                />
+                <Checkbox
+                  label="Reduce motion"
+                  checked={reduceMotion}
+                  onChange={(event) => setReduceMotion(event.currentTarget.checked)}
+                />
+                <Group justify="flex-end" mt="sm">
+                  <Button onClick={() => void handleSave()} loading={isSaving}>
+                    Save
+                  </Button>
+                </Group>
+              </Stack>
+            )}
+
+            {activeSection === 'CRM' && (
+              <Stack gap="md">
+                <Text size="xl" fw={600} mb="md" c="var(--pitch-surface-text)">
+                  CRM
+                </Text>
+                <Select
+                  label="CRM provider"
+                  value={crmProvider}
+                  onChange={(value) => setCrmProvider(value)}
+                  data={[{ value: 'salesforce', label: 'Salesforce' }]}
+                  classNames={settingsInputClassNames}
+                />
+                <Checkbox
+                  label="Auto-sync CRM selections"
+                  checked={crmAutoSync}
+                  onChange={(event) => setCrmAutoSync(event.currentTarget.checked)}
+                />
+                <Card withBorder radius="md" padding="md">
+                  <Stack gap={4}>
+                    <Text fw={600}>Connection status</Text>
+                    <Text size="sm" c="var(--pitch-surface-text-dim)">
+                      {crmStatusLoading
+                        ? 'Checking CRM connection...'
+                        : crmStatus?.connected
+                          ? `Connected${crmStatus.providerEmail ? ` as ${crmStatus.providerEmail}` : ''}`
+                          : 'Not connected'}
+                    </Text>
+                    {crmStatus?.lastSyncAt && (
+                      <Text size="xs" c="var(--pitch-surface-text-dim)">
+                        Last sync: {new Date(crmStatus.lastSyncAt).toLocaleString()}
+                      </Text>
+                    )}
+                    {crmError && (
+                      <Text size="xs" c="red">
+                        {crmError}
+                      </Text>
+                    )}
+                  </Stack>
+                </Card>
+                <Group justify="space-between" mt="sm">
+                  <Button
+                    variant="light"
+                    onClick={() => void fetchCrmStatus(true)}
+                    loading={crmStatusLoading}
+                  >
+                    Refresh status
+                  </Button>
+                  <Group>
+                    <Button variant="default" onClick={() => void handleSave()} loading={isSaving}>
+                      Save
+                    </Button>
+                    <Button onClick={() => void handleConnectCrm()}>
+                      {crmStatus?.connected ? 'Reconnect' : 'Connect'}
+                    </Button>
+                  </Group>
+                </Group>
               </Stack>
             )}
           </Box>

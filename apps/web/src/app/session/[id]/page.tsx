@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import {
   Box,
   Group,
@@ -50,7 +50,7 @@ export default function LiveSessionPage() {
   const [isMultiTurn, setIsMultiTurn] = useState(false)
   const assistantStartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const scheduleIdleHints = () => {
+  const scheduleIdleHints = useCallback(() => {
     if (!sessionId) return
     if (idleTimerRef.current) {
       clearTimeout(idleTimerRef.current)
@@ -66,11 +66,11 @@ export default function LiveSessionPage() {
         const nextHints = generated?.hints?.map((hint: { content: string }) => hint.content) ?? []
         setHints(nextHints)
         setHintsError(null)
-      } catch (err) {
+      } catch {
         setHintsError('Unable to load hints')
       }
     }, 20000)
-  }
+  }, [sessionId])
 
   const {
     isConnected,
@@ -133,7 +133,7 @@ export default function LiveSessionPage() {
     }
 
     void loadSession()
-  }, [sessionId])
+  }, [scheduleIdleHints, sessionId])
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60)
@@ -212,7 +212,7 @@ export default function LiveSessionPage() {
         clearTimeout(assistantStartTimerRef.current)
       }
     }
-  }, [sessionId])
+  }, [scheduleIdleHints, sessionId])
 
   useEffect(() => {
     if (!isMultiTurn || !isConnected) return
