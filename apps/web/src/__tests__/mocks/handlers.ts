@@ -253,6 +253,22 @@ export const handlers = [
     ])
   }),
 
+  // User settings endpoints
+  http.get(`${API_BASE_URL}/users/me/settings`, () => {
+    return HttpResponse.json({})
+  }),
+
+  http.put(`${API_BASE_URL}/users/me/settings`, async ({ request }) => {
+    const body = (await request.json()) as Record<string, unknown>
+    return HttpResponse.json(body ?? {})
+  }),
+
+  http.put(`${API_BASE_URL}/users/me/avatar`, () => {
+    return HttpResponse.json({
+      avatar: 'https://cdn.example.com/mock-avatar.png',
+    })
+  }),
+
   // Sessions endpoint
   http.post(`${API_BASE_URL}/simulation/sessions`, async ({ request }) => {
     const body = (await request.json()) as any

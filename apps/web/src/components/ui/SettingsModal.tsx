@@ -22,6 +22,7 @@ import {
   Checkbox,
   Popover,
   ColorPicker,
+  Badge,
 } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
 import {
@@ -45,6 +46,12 @@ import { useAuth } from '@/features/auth'
 import { useAuthStore } from '@/features/auth/stores/auth.store'
 import { getCachedAvatarForUser, setCachedAvatarForUser } from '@/features/auth/utils/avatar-cache'
 import { useCrm } from '@/features/crm'
+import {
+  getSavedCrmSessionConnections,
+  removeSavedCrmSessionConnection,
+  renameSavedCrmSessionConnection,
+  type UserSettingsWithCrmPrefs,
+} from '@/features/crm/utils/session-crm-preferences'
 import { useRouter } from 'next/navigation'
 import { api } from '@/lib/client'
 import { useAppearanceStore } from '@/lib/stores/appearance.store'
@@ -99,8 +106,13 @@ type UserSettingsPayload = {
     providerEmail?: string | null
     lastSyncAt?: string | null
     autoSync?: boolean
+    sessionDefaults?: {
+      savedConnections?: unknown[]
+    }
   }
 }
+
+type CrmSessionDefaults = NonNullable<UserSettingsPayload['crm']>['sessionDefaults']
 
 const TIMEZONE_OPTIONS = [
   '(GMT-5:00) Eastern Time',
@@ -138,6 +150,8 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
   const [reduceMotion, setReduceMotion] = useState(false)
   const [crmAutoSync, setCrmAutoSync] = useState(true)
   const [crmProvider, setCrmProvider] = useState<string | null>('salesforce')
+  const [crmSessionDefaults, setCrmSessionDefaults] = useState<CrmSessionDefaults>(undefined)
+  const [crmPresetNameDrafts, setCrmPresetNameDrafts] = useState<Record<string, string>>({})
   const [isSaving, setIsSaving] = useState(false)
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false)
   const [isLoadingSettings, setIsLoadingSettings] = useState(false)
@@ -283,6 +297,7 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
         providerEmail: crmStatus?.providerEmail ?? null,
         lastSyncAt: crmStatus?.lastSyncAt ?? null,
         autoSync: crmAutoSync,
+        sessionDefaults: crmSessionDefaults,
       },
     }
 
@@ -461,6 +476,13 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
         if (settings.crm) {
           setCrmProvider(settings.crm.provider ?? 'salesforce')
           setCrmAutoSync(settings.crm.autoSync ?? true)
+          setCrmSessionDefaults(settings.crm.sessionDefaults)
+          const savedConnections = getSavedCrmSessionConnections(
+            settings as UserSettingsWithCrmPrefs
+          )
+          setCrmPresetNameDrafts(
+            Object.fromEntries(savedConnections.map((preset) => [preset.id, preset.label]))
+          )
         }
 
         const appearance = settings.appearance
@@ -500,6 +522,58 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
       cancelled = true
     }
   }, [opened, user?.id])
+
+  const savedCrmPresets = useMemo(
+    () =>
+      getSavedCrmSessionConnections({
+        crm: {
+          sessionDefaults: crmSessionDefaults,
+        },
+      } as UserSettingsWithCrmPrefs),
+    [crmSessionDefaults]
+  )
+
+  const updateCrmSessionDefaultsFromSettings = (nextSettings: UserSettingsWithCrmPrefs) => {
+    setCrmSessionDefaults(nextSettings.crm?.sessionDefaults)
+    const nextPresets = getSavedCrmSessionConnections(nextSettings)
+    setCrmPresetNameDrafts(
+      Object.fromEntries(nextPresets.map((preset) => [preset.id, preset.label]))
+    )
+  }
+
+  const handleRenameCrmPresetDraft = (presetId: string, label: string) => {
+    setCrmPresetNameDrafts((current) => ({
+      ...current,
+      [presetId]: label,
+    }))
+  }
+
+  const handleApplyCrmPresetRename = (presetId: string) => {
+    const nextSettings = renameSavedCrmSessionConnection(
+      {
+        crm: {
+          sessionDefaults: crmSessionDefaults,
+        },
+      } as UserSettingsWithCrmPrefs,
+      presetId,
+      crmPresetNameDrafts[presetId] ?? ''
+    )
+
+    updateCrmSessionDefaultsFromSettings(nextSettings)
+  }
+
+  const handleRemoveCrmPreset = (presetId: string) => {
+    const nextSettings = removeSavedCrmSessionConnection(
+      {
+        crm: {
+          sessionDefaults: crmSessionDefaults,
+        },
+      } as UserSettingsWithCrmPrefs,
+      presetId
+    )
+
+    updateCrmSessionDefaultsFromSettings(nextSettings)
+  }
 
   useEffect(() => {
     if (!opened || activeSection !== 'CRM') {
@@ -1120,6 +1194,53 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
                   checked={crmAutoSync}
                   onChange={(event) => setCrmAutoSync(event.currentTarget.checked)}
                 />
+                <Card withBorder radius="md" padding="md">
+                  <Stack gap="sm">
+                    <Group justify="space-between" align="center">
+                      <Text fw={600}>Saved CRM session presets</Text>
+                      <Badge variant="light">{savedCrmPresets.length}</Badge>
+                    </Group>
+                    {savedCrmPresets.length === 0 ? (
+                      <Text size="sm" c="var(--pitch-surface-text-dim)">
+                        No saved CRM presets yet. Save one from the session CRM step.
+                      </Text>
+                    ) : (
+                      savedCrmPresets.map((preset) => (
+                        <Group key={preset.id} align="end" wrap="nowrap">
+                          <TextInput
+                            label="Preset name"
+                            value={crmPresetNameDrafts[preset.id] ?? preset.label}
+                            onChange={(event) =>
+                              handleRenameCrmPresetDraft(preset.id, event.currentTarget.value)
+                            }
+                            style={{ flex: 1 }}
+                            classNames={settingsInputClassNames}
+                          />
+                          <Tooltip label="Apply name">
+                            <ActionIcon
+                              variant="light"
+                              color="blue"
+                              onClick={() => handleApplyCrmPresetRename(preset.id)}
+                              aria-label={`Rename ${preset.label}`}
+                            >
+                              <IconPencil size={16} />
+                            </ActionIcon>
+                          </Tooltip>
+                          <Tooltip label="Remove preset">
+                            <ActionIcon
+                              variant="light"
+                              color="red"
+                              onClick={() => handleRemoveCrmPreset(preset.id)}
+                              aria-label={`Remove ${preset.label}`}
+                            >
+                              <IconTrash size={16} />
+                            </ActionIcon>
+                          </Tooltip>
+                        </Group>
+                      ))
+                    )}
+                  </Stack>
+                </Card>
                 <Card withBorder radius="md" padding="md">
                   <Stack gap={4}>
                     <Text fw={600}>Connection status</Text>

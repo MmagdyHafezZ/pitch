@@ -2,6 +2,16 @@ require('cross-fetch/polyfill')
 require('./test/polyfills')
 require('@testing-library/jest-dom')
 
+// MSW v2 expects Web Streams globals in the test runtime.
+try {
+  const { ReadableStream, WritableStream, TransformStream } = require('node:stream/web')
+  if (!global.ReadableStream) global.ReadableStream = ReadableStream
+  if (!global.WritableStream) global.WritableStream = WritableStream
+  if (!global.TransformStream) global.TransformStream = TransformStream
+} catch {
+  // Ignore when the runtime does not expose node:stream/web.
+}
+
 const { server } = require('./src/__tests__/mocks/server')
 const { resetStores } = require('./src/__tests__/utils/store-utils')
 

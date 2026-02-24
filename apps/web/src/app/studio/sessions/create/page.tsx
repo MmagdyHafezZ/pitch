@@ -46,6 +46,14 @@ import { StyleStep } from './components/StyleStep'
 import { ReviewStep } from './components/ReviewStep'
 import { SessionConfigForm, Persona, PersonaTraits } from './lib/types'
 import { useCrm } from '@/features/crm'
+import {
+  getSavedCrmSessionConnections,
+  normalizeCrmSelections,
+  removeSavedCrmSessionConnection,
+  upsertSavedCrmSessionConnection,
+  type SavedCrmSessionConnection,
+  type UserSettingsWithCrmPrefs,
+} from '@/features/crm/utils/session-crm-preferences'
 
 const spaceGrotesk = Space_Grotesk({ subsets: ['latin'], display: 'swap' })
 const fraunces = Fraunces({ subsets: ['latin'], display: 'swap' })
@@ -113,6 +121,10 @@ export default function CreateSessionPage() {
   const [selectedOpportunities, setSelectedOpportunities] = useState<string[]>([])
   const [selectedLeads, setSelectedLeads] = useState<string[]>([])
   const [selectedContacts, setSelectedContacts] = useState<string[]>([])
+  const [saveCrmForFutureUse, setSaveCrmForFutureUse] = useState(false)
+  const [savedCrmLabel, setSavedCrmLabel] = useState('')
+  const [userSettings, setUserSettings] = useState<UserSettingsWithCrmPrefs | null>(null)
+  const [savedCrmConnections, setSavedCrmConnections] = useState<SavedCrmSessionConnection[]>([])
 
   const [errors, setErrors] = useState<Record<string, string>>({})
 
@@ -269,6 +281,37 @@ export default function CreateSessionPage() {
     }
   }, [user?.id, fetchCrmStatus])
 
+  useEffect(() => {
+    if (!user?.id) return
+
+    let cancelled = false
+    const loadUserSettings = async () => {
+      try {
+        const settings = (await api.users.getMySettings()) as UserSettingsWithCrmPrefs
+        if (cancelled) return
+        setUserSettings(settings ?? {})
+        setSavedCrmConnections(getSavedCrmSessionConnections(settings))
+      } catch {
+        if (!cancelled) {
+          setUserSettings({})
+          setSavedCrmConnections([])
+        }
+      }
+    }
+
+    void loadUserSettings()
+    return () => {
+      cancelled = true
+    }
+  }, [user?.id])
+
+  useEffect(() => {
+    if (!crmStatus?.providerEmail) return
+    setSavedCrmLabel((current) =>
+      current.trim().length > 0 ? current : `Salesforce (${crmStatus.providerEmail})`
+    )
+  }, [crmStatus?.providerEmail])
+
   const validateStep = (step: number): boolean => {
     const newErrors: Record<string, string> = {}
 
@@ -350,6 +393,30 @@ export default function CreateSessionPage() {
     setIsSubmitting(true)
 
     try {
+      if (saveCrmForFutureUse && user?.id && crmStatus?.connected) {
+        const nextConnection: SavedCrmSessionConnection = {
+          id: `${Date.now()}`,
+          provider: 'salesforce',
+          providerEmail: crmStatus.providerEmail ?? null,
+          label:
+            savedCrmLabel.trim() ||
+            (crmStatus.providerEmail ? `Salesforce (${crmStatus.providerEmail})` : 'Salesforce'),
+          connected: crmStatus.connected ?? false,
+          savedAt: new Date().toISOString(),
+          selections: normalizeCrmSelections({
+            accounts: selectedAccounts,
+            opportunities: selectedOpportunities,
+            leads: selectedLeads,
+            contacts: selectedContacts,
+          }),
+        }
+
+        const nextSettings = upsertSavedCrmSessionConnection(userSettings ?? {}, nextConnection)
+        await api.users.updateMySettings(nextSettings)
+        setUserSettings(nextSettings)
+        setSavedCrmConnections(getSavedCrmSessionConnections(nextSettings))
+      }
+
       const sessionConfig: SessionConfigForm = {
         multiTurnEnabled,
         accent,
@@ -531,6 +598,41 @@ export default function CreateSessionPage() {
     }
   }
 
+  const handleUseSavedCrmConnection = (connection: SavedCrmSessionConnection) => {
+    const selections = normalizeCrmSelections(connection.selections)
+    setSelectedAccounts(selections.accounts)
+    setSelectedOpportunities(selections.opportunities)
+    setSelectedLeads(selections.leads)
+    setSelectedContacts(selections.contacts)
+    setSaveCrmForFutureUse(true)
+    setSavedCrmLabel(connection.label)
+    notifications.show({
+      title: 'Saved CRM setup applied',
+      message: `Applied ${connection.label} to this session.`,
+      color: 'green',
+    })
+  }
+
+  const handleRemoveSavedCrmConnection = async (connection: SavedCrmSessionConnection) => {
+    try {
+      const nextSettings = removeSavedCrmSessionConnection(userSettings ?? {}, connection.id)
+      await api.users.updateMySettings(nextSettings)
+      setUserSettings(nextSettings)
+      setSavedCrmConnections(getSavedCrmSessionConnections(nextSettings))
+      notifications.show({
+        title: 'Saved CRM preset removed',
+        message: `"${connection.label}" was removed from future session presets.`,
+        color: 'green',
+      })
+    } catch {
+      notifications.show({
+        title: 'Remove failed',
+        message: 'Could not remove saved CRM preset.',
+        color: 'red',
+      })
+    }
+  }
+
   const steps = [
     {
       label: 'Basics',
@@ -646,6 +748,13 @@ export default function CreateSessionPage() {
           setSelectedLeads={setSelectedLeads}
           selectedContacts={selectedContacts}
           setSelectedContacts={setSelectedContacts}
+          saveForFutureUse={saveCrmForFutureUse}
+          setSaveForFutureUse={setSaveCrmForFutureUse}
+          savedConnections={savedCrmConnections}
+          onUseSavedConnection={handleUseSavedCrmConnection}
+          onRemoveSavedConnection={(connection) => void handleRemoveSavedCrmConnection(connection)}
+          savedConnectionLabel={savedCrmLabel}
+          setSavedConnectionLabel={setSavedCrmLabel}
         />
       ),
     },
