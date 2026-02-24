@@ -33,6 +33,18 @@ export class AuthApplicationService {
     private readonly jwtService: JwtService,
   ) {}
 
+  private async touchLastSeenSafe(userId: string): Promise<void> {
+    try {
+      await this.userRepository.touchLastSeen(userId);
+    } catch (error) {
+      this.logger.warn(
+        `Failed to update lastSeen for user ${userId}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+  }
+
   private isGoogleHostedAvatar(url?: string | null): boolean {
     if (!url) {
       return false;
@@ -92,6 +104,7 @@ export class AuthApplicationService {
       tokens.refresh_token,
       expiresAt,
     );
+    await this.touchLastSeenSafe(user.id);
 
     this.logger.log(`User registered successfully: ${user.id}`);
 
@@ -137,6 +150,7 @@ export class AuthApplicationService {
       tokens.refresh_token,
       expiresAt,
     );
+    await this.touchLastSeenSafe(user.id);
 
     this.logger.log(`User logged in successfully: ${user.id}`);
 
@@ -208,6 +222,7 @@ export class AuthApplicationService {
         tokens.refresh_token,
         expiresAt,
       );
+      await this.touchLastSeenSafe(user.id);
 
       this.logger.log(`Token refreshed successfully for user: ${user.id}`);
       return tokens;
@@ -362,6 +377,7 @@ export class AuthApplicationService {
       tokens.refresh_token,
       expiresAt,
     );
+    await this.touchLastSeenSafe(user.id);
 
     return {
       user: {

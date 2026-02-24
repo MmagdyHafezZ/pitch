@@ -12,6 +12,7 @@ export interface CreateUserData {
   name: string;
   avatar?: string;
   isActive?: boolean;
+  lastSeen?: Date | null;
 }
 
 export interface CreateOAuthAccountData {
@@ -106,6 +107,14 @@ export class UserRepository {
     return await this.prisma.user.update({
       where: { id },
       data,
+      include: { oauthAccounts: true },
+    });
+  }
+
+  async touchLastSeen(id: string, at = new Date()): Promise<User> {
+    return await this.prisma.user.update({
+      where: { id },
+      data: { lastSeen: at },
       include: { oauthAccounts: true },
     });
   }

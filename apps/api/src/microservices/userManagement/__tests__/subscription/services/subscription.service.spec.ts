@@ -78,7 +78,11 @@ describe('SubscriptionService', () => {
     subscriptionRepository.findActiveByTeamId.mockResolvedValue(null);
     planRepository.findById.mockResolvedValue(basePlan);
     subscriptionRepository.create.mockResolvedValue(baseSubscriptionWithPlan);
-    coinRefillService.refillInitialForSubscription.mockResolvedValue(undefined);
+    coinRefillService.refillInitialForSubscription.mockResolvedValue({
+      periodKey: 'period-key',
+      allowance: 100,
+      remainingAfter: 100,
+    } as any);
 
     const result = await service.createSubscription(
       {

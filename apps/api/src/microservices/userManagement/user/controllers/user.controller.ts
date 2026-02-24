@@ -37,6 +37,9 @@ export class UserController {
       this.logger.log(
         `Getting user ${data.userId} - Requested by: ${data.userClaims.email} (${data.userClaims.id})`,
       );
+      if (data.userClaims.id === data.userId) {
+        return await this.userService.touchLastSeen(data.userId);
+      }
       return await this.userService.findOne(data.userId);
     } catch (error) {
       throw toRpcException(error);

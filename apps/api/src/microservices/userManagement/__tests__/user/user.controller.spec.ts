@@ -22,6 +22,7 @@ describe('UserController', () => {
       remove: jest.fn(),
       getOAuthAccountsByUserId: jest.fn(),
       updateSettings: jest.fn(),
+      touchLastSeen: jest.fn(),
     }) as unknown as jest.Mocked<UserService>;
 
   const createOauthProviderFactoryMock =
@@ -77,6 +78,26 @@ describe('UserController', () => {
 
     await expect(controller.getUser(payload)).resolves.toEqual(user);
     expect(service.findOne).toHaveBeenCalledWith('user-1');
+  });
+
+  it('touches last seen when user fetches their own profile', async () => {
+    const service = createServiceMock();
+    const oauthProviderFactory = createOauthProviderFactoryMock();
+    service.touchLastSeen.mockResolvedValue(user);
+    const controller = new UserController(service, oauthProviderFactory);
+
+    const payload = {
+      userId: 'admin-1',
+      userClaims: {
+        id: 'admin-1',
+        email: 'admin@example.com',
+        name: 'Admin User',
+      },
+    };
+
+    await expect(controller.getUser(payload)).resolves.toEqual(user);
+    expect(service.touchLastSeen).toHaveBeenCalledWith('admin-1');
+    expect(service.findOne).not.toHaveBeenCalled();
   });
 
   it('creates a user after removing user claims from payload', async () => {

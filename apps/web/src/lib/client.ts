@@ -82,9 +82,11 @@ export async function apiRequest<T>(
   let didRefresh = false
   const { timeoutMs, ...fetchOptions } = options
 
+  const isFormDataBody = typeof FormData !== 'undefined' && fetchOptions.body instanceof FormData
+
   const buildConfig = (token: string | null): RequestInit => ({
     headers: {
-      'Content-Type': 'application/json',
+      ...(isFormDataBody ? {} : { 'Content-Type': 'application/json' }),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...fetchOptions.headers,
     },
@@ -159,9 +161,11 @@ export async function apiRequestRoot<T>(
   let didRefresh = false
   const { timeoutMs, ...fetchOptions } = options
 
+  const isFormDataBody = typeof FormData !== 'undefined' && fetchOptions.body instanceof FormData
+
   const buildConfig = (token: string | null): RequestInit => ({
     headers: {
-      'Content-Type': 'application/json',
+      ...(isFormDataBody ? {} : { 'Content-Type': 'application/json' }),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...fetchOptions.headers,
     },
@@ -230,6 +234,21 @@ export const api = {
         method: 'PUT',
         body: JSON.stringify(settings),
       }),
+    updateMyAvatar: (data: { file?: File; avatarUrl?: string }) => {
+      if (data.file) {
+        const formData = new FormData()
+        formData.append('file', data.file)
+        return apiRequest<any>('/users/me/avatar', {
+          method: 'PUT',
+          body: formData,
+        })
+      }
+
+      return apiRequest<any>('/users/me/avatar', {
+        method: 'PUT',
+        body: JSON.stringify({ avatarUrl: data.avatarUrl }),
+      })
+    },
     update: (id: string, data: any) =>
       apiRequest<any>(`/users/${id}`, {
         method: 'PUT',

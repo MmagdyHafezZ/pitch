@@ -7,6 +7,7 @@ import {
   refreshAccessToken as refreshAccessTokenRequest,
 } from '@/lib/client'
 import { getJwtExpiry } from '../utils/token.utils'
+import { applyAvatarCacheToUser } from '../utils/avatar-cache'
 
 export interface AuthStore extends AuthState, AuthActions {}
 
@@ -41,9 +42,10 @@ export const useAuthStore = create<AuthStore>()((set, get) => ({
       set({ isLoading: true, error: null })
 
       const response = await api.auth.login({ email, password })
+      const user = applyAvatarCacheToUser(response.user)
 
       set({
-        user: response.user,
+        user,
         token: response.accessToken,
         isAuthenticated: true,
         isLoading: false,
@@ -68,9 +70,10 @@ export const useAuthStore = create<AuthStore>()((set, get) => ({
       set({ isLoading: true, error: null })
 
       const response = await api.auth.register({ email, password, name })
+      const user = applyAvatarCacheToUser(response.user)
 
       set({
-        user: response.user,
+        user,
         token: response.accessToken,
         isAuthenticated: true,
         isLoading: false,
@@ -107,7 +110,7 @@ export const useAuthStore = create<AuthStore>()((set, get) => ({
   },
 
   setUser: (user: User | null) => {
-    set({ user, isAuthenticated: !!user })
+    set({ user: applyAvatarCacheToUser(user), isAuthenticated: !!user })
   },
 
   setToken: (token: string | null) => {
@@ -161,7 +164,7 @@ export const useAuthStore = create<AuthStore>()((set, get) => ({
         return api.auth.me()
       })
       .then((user) => {
-        set({ user, isAuthenticated: true })
+        set({ user: applyAvatarCacheToUser(user), isAuthenticated: true })
       })
       .catch(() => {
         setAccessToken(null)

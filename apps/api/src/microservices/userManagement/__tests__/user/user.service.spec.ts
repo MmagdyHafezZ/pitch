@@ -26,6 +26,7 @@ describe('UserService', () => {
       findByOAuthAccount: jest.fn(),
       create: jest.fn(),
       update: jest.fn(),
+      touchLastSeen: jest.fn(),
       delete: jest.fn(),
       getOAuthAccounts: jest.fn(),
       createWithOAuth: jest.fn(),
@@ -165,6 +166,22 @@ describe('UserService', () => {
     mockRepository.updateSettings.mockRejectedValue({ code: 'P2025' });
 
     await expect(service.updateSettings('missing', {} as any)).rejects.toThrow(
+      new NotFoundException('User with ID missing not found').message,
+    );
+  });
+
+  it('touches last seen for an existing user', async () => {
+    const touched = { ...user, lastSeen: new Date() };
+    mockRepository.touchLastSeen.mockResolvedValue(touched as any);
+
+    await expect(service.touchLastSeen('user-1')).resolves.toEqual(touched);
+    expect(mockRepository.touchLastSeen).toHaveBeenCalledWith('user-1');
+  });
+
+  it('translates Prisma P2025 errors to NotFoundException when touching last seen', async () => {
+    mockRepository.touchLastSeen.mockRejectedValue({ code: 'P2025' });
+
+    await expect(service.touchLastSeen('missing')).rejects.toThrow(
       new NotFoundException('User with ID missing not found').message,
     );
   });

@@ -43,6 +43,7 @@ describe('AuthApplicationService', () => {
       findByOAuthAccount: jest.fn(),
       createWithOAuth: jest.fn(),
       update: jest.fn(),
+      touchLastSeen: jest.fn(),
     } as unknown as jest.Mocked<UserRepository>;
 
     authRepository = {
@@ -88,6 +89,7 @@ describe('AuthApplicationService', () => {
       expect.any(String),
       expect.any(Date),
     );
+    expect(userRepository.touchLastSeen).toHaveBeenCalledWith(baseUser.id);
     expect(result).toEqual(
       expect.objectContaining({
         token: expect.any(String),
@@ -124,6 +126,7 @@ describe('AuthApplicationService', () => {
       'refresh-login',
       expect.any(Date),
     );
+    expect(userRepository.touchLastSeen).toHaveBeenCalledWith(baseUser.id);
     expect(result.token).toBe('access-login');
     expect(result.refreshToken).toBe('refresh-login');
   });
@@ -172,6 +175,7 @@ describe('AuthApplicationService', () => {
       'refresh-refresh',
       expect.any(Date),
     );
+    expect(userRepository.touchLastSeen).toHaveBeenCalledWith(baseUser.id);
     expect(result).toEqual({
       access_token: 'access-refresh',
       refresh_token: 'refresh-refresh',
@@ -259,6 +263,7 @@ describe('AuthApplicationService', () => {
     );
     expect(result.token).toBe('oauth-access');
     expect(result.refreshToken).toBe('oauth-refresh');
+    expect(userRepository.touchLastSeen).toHaveBeenCalledWith(baseUser.id);
   });
 
   it('links OAuth to existing user and syncs empty google avatar', async () => {

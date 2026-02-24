@@ -89,6 +89,18 @@ export class UserService {
     }
   }
 
+  async touchLastSeen(id: string): Promise<User> {
+    try {
+      return this.toUser(await this.userRepository.touchLastSeen(id));
+    } catch (error) {
+      const err = error as PrismaError;
+      if (err.code === 'P2025') {
+        throw new NotFoundException(`User with ID ${id} not found`);
+      }
+      throw error;
+    }
+  }
+
   async remove(id: string): Promise<{ message: string }> {
     try {
       await this.userRepository.delete(id);

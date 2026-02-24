@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { ChangeEvent, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Modal,
   Box,
@@ -43,6 +43,7 @@ import {
 import { modals } from '@mantine/modals'
 import { useAuth } from '@/features/auth'
 import { useAuthStore } from '@/features/auth/stores/auth.store'
+import { getCachedAvatarForUser, setCachedAvatarForUser } from '@/features/auth/utils/avatar-cache'
 import { useCrm } from '@/features/crm'
 import { useRouter } from 'next/navigation'
 import { api } from '@/lib/client'
@@ -121,6 +122,7 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
   const [activeSection, setActiveSection] = useState<SettingsSection>('Account')
   const [name, setName] = useState(user?.name || '')
   const [email, setEmail] = useState(user?.email || '')
+  const [avatarSrc, setAvatarSrc] = useState<string | null>(user?.avatar ?? null)
   const [timezone, setTimezone] = useState('(GMT-5:00) Eastern Time')
   const [emailNotifications, setEmailNotifications] = useState(true)
   const [desktopNotifications, setDesktopNotifications] = useState(true)
@@ -137,7 +139,9 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
   const [crmAutoSync, setCrmAutoSync] = useState(true)
   const [crmProvider, setCrmProvider] = useState<string | null>('salesforce')
   const [isSaving, setIsSaving] = useState(false)
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false)
   const [isLoadingSettings, setIsLoadingSettings] = useState(false)
+  const avatarFileInputRef = useRef<HTMLInputElement | null>(null)
   const {
     colorMode,
     setColorMode,
@@ -296,6 +300,7 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
           ...authStore.user,
           name: name.trim() || authStore.user.name,
           email: email.trim() || authStore.user.email,
+          avatar: avatarSrc ?? authStore.user.avatar ?? null,
         })
       }
 
@@ -344,7 +349,77 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
 
     setName(user?.name ?? '')
     setEmail(user?.email ?? '')
-  }, [opened, user?.email, user?.name])
+    setAvatarSrc(user?.avatar ?? getCachedAvatarForUser(user?.id) ?? null)
+  }, [opened, user?.avatar, user?.email, user?.id, user?.name])
+
+  useEffect(() => {
+    if (!user?.id) {
+      return
+    }
+
+    if (user.avatar) {
+      setCachedAvatarForUser(user.id, user.avatar)
+      setAvatarSrc((current) => current ?? user.avatar ?? null)
+      return
+    }
+
+    const cached = getCachedAvatarForUser(user.id)
+    if (cached) {
+      setAvatarSrc((current) => current ?? cached)
+    }
+  }, [user?.avatar, user?.id])
+
+  const updateCachedAvatarState = (nextAvatar: string | null) => {
+    if (user?.id) {
+      setCachedAvatarForUser(user.id, nextAvatar)
+    }
+    setAvatarSrc(nextAvatar)
+    const authStore = useAuthStore.getState()
+    if (authStore.user && user?.id && authStore.user.id === user.id) {
+      authStore.setUser({
+        ...authStore.user,
+        avatar: nextAvatar,
+      })
+    }
+  }
+
+  const handleAvatarFileSelected = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file || !user?.id) {
+      return
+    }
+
+    setIsUploadingAvatar(true)
+    try {
+      const response = await api.users.updateMyAvatar({ file })
+      const nextAvatar =
+        typeof response?.avatar === 'string'
+          ? response.avatar
+          : typeof response?.user?.avatar === 'string'
+            ? response.user.avatar
+            : null
+
+      if (!nextAvatar) {
+        throw new Error('Avatar upload succeeded but no avatar URL was returned.')
+      }
+
+      updateCachedAvatarState(nextAvatar)
+      notifications.show({
+        title: 'Profile picture updated',
+        message: 'Your new profile picture has been saved.',
+        color: 'green',
+      })
+    } catch (error) {
+      notifications.show({
+        title: 'Upload failed',
+        message: error instanceof Error ? error.message : 'Failed to upload profile picture.',
+        color: 'red',
+      })
+    } finally {
+      event.currentTarget.value = ''
+      setIsUploadingAvatar(false)
+    }
+  }
 
   useEffect(() => {
     if (!opened || !user?.id) {
@@ -536,15 +611,28 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
               <Stack gap="xl">
                 <Group justify="space-between" align="start">
                   <Group gap="lg">
-                    <Avatar size={100} radius="xl" color="brand">
+                    <Avatar size={100} radius="xl" color="brand" src={avatarSrc ?? undefined}>
                       {name.charAt(0).toUpperCase()}
                     </Avatar>
                     <Box>
                       <Text size="xl" fw={600} mb="xs" c="var(--pitch-surface-text)">
                         Account
                       </Text>
-                      <Button leftSection={<IconUpload size={16} />} variant="light" size="xs">
-                        Upload
+                      <input
+                        ref={avatarFileInputRef}
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp,image/gif"
+                        hidden
+                        onChange={(event) => void handleAvatarFileSelected(event)}
+                      />
+                      <Button
+                        leftSection={<IconUpload size={16} />}
+                        variant="light"
+                        size="xs"
+                        loading={isUploadingAvatar}
+                        onClick={() => avatarFileInputRef.current?.click()}
+                      >
+                        {avatarSrc ? 'Change' : 'Upload'}
                       </Button>
                     </Box>
                   </Group>
