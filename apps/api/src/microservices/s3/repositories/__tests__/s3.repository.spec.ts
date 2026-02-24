@@ -7,7 +7,8 @@ const getSignedUrlMock = jest.fn<
 >();
 
 jest.mock('@aws-sdk/s3-request-presigner', () => ({
-  getSignedUrl: (...args: unknown[]) => getSignedUrlMock(...args),
+  getSignedUrl: (...args: [unknown, unknown, { expiresIn: number }]) =>
+    getSignedUrlMock(...args),
 }));
 
 jest.mock('@aws-sdk/client-s3', () => {
