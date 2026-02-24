@@ -11,6 +11,7 @@ import { SalesforceGatewayController } from './controllers/crm/salesforce-gatewa
 import { SessionGatewayController } from './controllers/simulation/session-gateway.controller';
 import { InvitationGatewayController } from './controllers/simulation/invitation-gateway.controller';
 import { HintsGatewayController } from './controllers/simulation/hints-gateway.controller';
+import { S3GatewayController } from './controllers/s3/s3-gateway.controller';
 import { GlobalJwtAuthGuard } from './guards/global-jwt-auth.guard';
 import { UserClaimsInterceptor } from './interceptors/user-claims.interceptor';
 import { TtsGatewayController } from './controllers/simulation/tts.controller';
@@ -56,6 +57,7 @@ import { APP_GUARD } from '@nestjs/core';
     SessionGatewayController,
     InvitationGatewayController,
     HintsGatewayController,
+    S3GatewayController,
   ],
   providers: [
     { provide: APP_GUARD, useClass: GlobalJwtAuthGuard },
