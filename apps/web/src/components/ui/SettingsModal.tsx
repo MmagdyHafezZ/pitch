@@ -128,6 +128,114 @@ interface SettingsModalProps {
   onClose: () => void
 }
 
+const MAX_AVATAR_UPLOAD_BYTES = 2 * 1024 * 1024
+const AVATAR_TARGET_SIZE = 512
+
+const loadImageFromFile = (file: File): Promise<HTMLImageElement> =>
+  new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file)
+    const img = new Image()
+    img.onload = () => {
+      URL.revokeObjectURL(url)
+      resolve(img)
+    }
+    img.onerror = () => {
+      URL.revokeObjectURL(url)
+      reject(new Error('Could not read the selected image file.'))
+    }
+    img.src = url
+  })
+
+const canvasToBlob = (canvas: HTMLCanvasElement, type: string, quality?: number): Promise<Blob> =>
+  new Promise((resolve, reject) => {
+    canvas.toBlob(
+      (blob) => {
+        if (!blob) {
+          reject(new Error('Failed to compress image in browser.'))
+          return
+        }
+        resolve(blob)
+      },
+      type,
+      quality
+    )
+  })
+
+const drawCenteredSquareAvatar = (
+  img: HTMLImageElement,
+  canvas: HTMLCanvasElement,
+  size: number
+) => {
+  canvas.width = size
+  canvas.height = size
+  const ctx = canvas.getContext('2d')
+  if (!ctx) {
+    throw new Error('Canvas is not available for image processing.')
+  }
+
+  const sourceSize = Math.min(img.naturalWidth, img.naturalHeight)
+  const sx = Math.max(0, (img.naturalWidth - sourceSize) / 2)
+  const sy = Math.max(0, (img.naturalHeight - sourceSize) / 2)
+
+  ctx.clearRect(0, 0, size, size)
+  ctx.drawImage(img, sx, sy, sourceSize, sourceSize, 0, 0, size, size)
+}
+
+const withExtension = (name: string, ext: string) => {
+  const base = name.replace(/\.[^/.]+$/, '')
+  return `${base}.${ext}`
+}
+
+const preprocessAvatarFile = async (file: File): Promise<File> => {
+  if (!file.type.startsWith('image/')) {
+    throw new Error('Please select an image file.')
+  }
+
+  const img = await loadImageFromFile(file)
+  const canvas = document.createElement('canvas')
+  const dimensionCandidates = [AVATAR_TARGET_SIZE, 384, 256]
+  const qualityCandidates = [0.9, 0.82, 0.72, 0.6]
+  let bestBlob: Blob | null = null
+  let bestMime = 'image/webp'
+
+  for (const size of dimensionCandidates) {
+    drawCenteredSquareAvatar(img, canvas, size)
+
+    for (const quality of qualityCandidates) {
+      for (const mime of ['image/webp', 'image/jpeg']) {
+        try {
+          const blob = await canvasToBlob(canvas, mime, quality)
+          if (!bestBlob || blob.size < bestBlob.size) {
+            bestBlob = blob
+            bestMime = mime
+          }
+          if (blob.size <= MAX_AVATAR_UPLOAD_BYTES) {
+            const ext = mime === 'image/webp' ? 'webp' : 'jpg'
+            return new File([blob], withExtension(file.name, ext), {
+              type: mime,
+              lastModified: Date.now(),
+            })
+          }
+        } catch {
+          // Try fallback format/quality.
+        }
+      }
+    }
+  }
+
+  if (bestBlob && bestBlob.size <= MAX_AVATAR_UPLOAD_BYTES) {
+    const ext = bestMime === 'image/webp' ? 'webp' : 'jpg'
+    return new File([bestBlob], withExtension(file.name, ext), {
+      type: bestMime,
+      lastModified: Date.now(),
+    })
+  }
+
+  throw new Error(
+    'Image is still too large after resizing/compression. Please choose a smaller image.'
+  )
+}
+
 export function SettingsModal({ opened, onClose }: SettingsModalProps) {
   const router = useRouter()
   const { user, logout } = useAuth()
@@ -399,14 +507,16 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
   }
 
   const handleAvatarFileSelected = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
+    const input = event.currentTarget
+    const file = input.files?.[0]
     if (!file || !user?.id) {
       return
     }
 
     setIsUploadingAvatar(true)
     try {
-      const response = await api.users.updateMyAvatar({ file })
+      const processedFile = await preprocessAvatarFile(file)
+      const response = await api.users.updateMyAvatar({ file: processedFile })
       const nextAvatar =
         typeof response?.avatar === 'string'
           ? response.avatar
@@ -421,7 +531,10 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
       updateCachedAvatarState(nextAvatar)
       notifications.show({
         title: 'Profile picture updated',
-        message: 'Your new profile picture has been saved.',
+        message:
+          processedFile.size < file.size
+            ? 'Your image was resized/compressed and saved as your profile picture.'
+            : 'Your new profile picture has been saved.',
         color: 'green',
       })
     } catch (error) {
@@ -431,8 +544,12 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
         color: 'red',
       })
     } finally {
-      event.currentTarget.value = ''
       setIsUploadingAvatar(false)
+      try {
+        input.value = ''
+      } catch {
+        // Input may be detached if the modal closed during upload.
+      }
     }
   }
 

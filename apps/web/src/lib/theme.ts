@@ -84,19 +84,6 @@ const baseTheme = createTheme({
         },
       },
     },
-    Button: {
-      styles: {
-        root: {
-          '&[data-variant="filled"]': {
-            backgroundColor: 'var(--pitch-accent)',
-            color: 'var(--mantine-color-white)',
-          },
-          '&[data-variant="filled"]:hover': {
-            backgroundColor: 'var(--pitch-accent-strong)',
-          },
-        },
-      },
-    },
     Progress: {
       styles: {
         section: {
