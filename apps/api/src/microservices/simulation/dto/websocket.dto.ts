@@ -37,6 +37,17 @@ export enum WsMessageType {
   CONVERSATION_STREAM_COMPLETED = 'conversation.stream.completed',
   CONVERSATION_STAGE_TRANSITION = 'conversation.stage.transition',
 
+  // New streaming text messages
+  CONVERSATION_TEXT_STREAM = 'conversation.text.stream',
+  CONVERSATION_TEXT_PARTIAL = 'conversation.text.partial',
+  CONVERSATION_TEXT_SENTENCE = 'conversation.text.sentence',
+  CONVERSATION_LLM_START = 'conversation.llm.start',
+  CONVERSATION_LLM_DELTA = 'conversation.llm.delta',
+  CONVERSATION_LLM_SENTENCE = 'conversation.llm.sentence',
+  CONVERSATION_TTS_START = 'conversation.tts.start',
+  CONVERSATION_AUDIO_CHUNK = 'conversation.audio.chunk',
+  CONVERSATION_COMPLETE = 'conversation.complete',
+
   PING = 'ping',
   PONG = 'pong',
 }
@@ -54,6 +65,10 @@ export class WsEnvelope<T = any> {
 
   @IsString()
   sessionId: string;
+
+  @IsString()
+  @IsOptional()
+  iterationId?: string;
 
   @IsString()
   @IsOptional()
@@ -378,7 +393,7 @@ export class ConversationErrorPayload {
 
   @IsString()
   @IsOptional()
-  stage?: 'llm' | 'tts';
+  stage?: 'llm' | 'tts' | 'gateway';
 }
 
 /**
@@ -446,6 +461,132 @@ export class ConversationStageTransitionPayload {
   @IsString()
   @IsOptional()
   reasoning?: string;
+}
+
+/**
+ * Conversation Text Stream Payload
+ * Streaming text input from Web Speech API
+ */
+export class ConversationTextStreamPayload {
+  @IsString()
+  text: string;
+
+  @IsOptional()
+  isFinal: boolean;
+
+  @IsOptional()
+  timestamp?: number;
+}
+
+/**
+ * Conversation Text Partial Payload
+ * Partial (interim) transcription from user
+ */
+export class ConversationTextPartialPayload {
+  @IsString()
+  text: string;
+
+  @IsOptional()
+  timestamp?: number;
+}
+
+/**
+ * Conversation Text Sentence Payload
+ * Complete sentence detected from user input
+ */
+export class ConversationTextSentencePayload {
+  @IsString()
+  sentence: string;
+
+  @IsOptional()
+  confidence?: number;
+
+  @IsOptional()
+  timestamp?: number;
+}
+
+/**
+ * Conversation LLM Start Payload
+ * LLM generation started
+ */
+export class ConversationLLMStartPayload {
+  @IsOptional()
+  timestamp?: number;
+}
+
+/**
+ * Conversation LLM Delta Payload
+ * Streaming text chunk from LLM
+ */
+export class ConversationLLMDeltaPayload {
+  @IsString()
+  delta: string;
+
+  @IsOptional()
+  timestamp?: number;
+}
+
+/**
+ * Conversation LLM Sentence Payload
+ * Complete sentence from LLM (queued for TTS)
+ */
+export class ConversationLLMSentencePayload {
+  @IsString()
+  sentence: string;
+
+  @IsOptional()
+  sentenceIndex: number;
+
+  @IsOptional()
+  timestamp?: number;
+}
+
+/**
+ * Conversation TTS Start Payload
+ * TTS synthesis started for a sentence
+ */
+export class ConversationTTSStartPayload {
+  @IsOptional()
+  sentenceIndex: number;
+
+  @IsString()
+  text: string;
+
+  @IsOptional()
+  timestamp?: number;
+}
+
+/**
+ * Conversation Audio Chunk Payload
+ * Audio chunk ready for a synthesized sentence
+ */
+export class ConversationAudioChunkPayload {
+  @IsOptional()
+  sentenceIndex: number;
+
+  @IsString()
+  audioBase64: string;
+
+  @IsString()
+  contentType: string;
+
+  @IsOptional()
+  timestamp?: number;
+}
+
+/**
+ * Conversation Complete Payload
+ * All streaming complete
+ */
+export class ConversationCompletePayload {
+  @IsString()
+  fullText: string;
+
+  @IsOptional()
+  totalSentences: number;
+
+  @IsOptional()
+  timestamp?: number;
 }
 
 /**

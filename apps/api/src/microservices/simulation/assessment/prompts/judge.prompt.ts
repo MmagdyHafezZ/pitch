@@ -2,30 +2,64 @@ import {
   ASSESSMENT_LABEL_DEFINITIONS,
   type AssessmentConfig,
 } from '../config/assessment.config';
+import { PromptTemplate } from '@langchain/core/prompts';
 
-export function buildJudgeSystemPrompt(config: AssessmentConfig): string {
+const JUDGE_SYSTEM_PROMPT_TEMPLATE = PromptTemplate.fromTemplate(
+  [
+    'You are an assessment judge for a simulated conversation.',
+    '',
+    '[RULES]',
+    '- Output MUST be valid JSON only.',
+    '- Evaluate each turn independently.',
+    '- Return one label entry for every evaluated turnId in the input.',
+    '- Include every evaluated turnId exactly once in labels.',
+    '- No grammar penalties.',
+    '- No external knowledge or assumptions beyond provided context.',
+    '- If ambiguous, choose Neutral.',
+    '- Negative labels require evidence excerpt from the turn.',
+    '- Summary must mention key wins/misses across the full chunk, not just one turn.',
+    '- judgeScope: {judgeScope}. If user-only, only evaluate user turns.',
+    '',
+    '[LABELS]',
+    '{labelDescriptions}',
+    '',
+    '[OUTPUT FORMAT: JSON ONLY]',
+    '{outputSchema}',
+  ].join('\n'),
+);
+
+export async function buildJudgeSystemPrompt(
+  config: AssessmentConfig,
+): Promise<string> {
   const labelDescriptions = Object.entries(ASSESSMENT_LABEL_DEFINITIONS)
     .map(([label, def]) => `- ${label}: ${def.description}`)
     .join('\n');
 
-  return (
-    `You are an assessment judge for a simulated conversation.\n\n` +
-    `Rules:\n` +
-    `- Output MUST be valid JSON only.\n` +
-    `- Evaluate each turn independently.\n` +
-    `- No grammar penalties.\n` +
-    `- No external knowledge or assumptions beyond provided context.\n` +
-    `- If ambiguous, choose Neutral.\n` +
-    `- Negative labels require evidence excerpt from the turn.\n` +
-    `- judgeScope: ${config.judgeScope}. If user-only, only evaluate user turns.\n` +
-    `\nLabels:\n${labelDescriptions}\n\n` +
-    `Return JSON with this shape:\n` +
-    `{"chunkIndex": number, "summary": string, "labels": [` +
-    `{"turnId": string, "label": string, "confidence": number, ` +
-    `"evidence": string | null, "scoreDelta": number, ` +
-    `"citations": string[], "reasonSummary": string}]}\n` +
-    `\nUse label names exactly as provided.`
+  const outputSchema = JSON.stringify(
+    {
+      chunkIndex: 0,
+      summary: 'Brief summary of the chunk',
+      labels: [
+        {
+          turnId: 'turn-id',
+          label: 'LabelName',
+          confidence: 0.0,
+          evidence: 'Short excerpt or null',
+          scoreDelta: 0,
+          citations: ['citation-id'],
+          reasonSummary: 'Short reason',
+        },
+      ],
+    },
+    null,
+    2,
   );
+
+  return await JUDGE_SYSTEM_PROMPT_TEMPLATE.format({
+    judgeScope: config.judgeScope,
+    labelDescriptions,
+    outputSchema,
+  });
 }
 
 export function buildJudgeUserPrompt(input: {

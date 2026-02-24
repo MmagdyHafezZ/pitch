@@ -4,6 +4,8 @@ import {
   WsMessageType,
   ConversationStartPayload,
   ConversationTextPayload,
+  ConversationStreamDeltaPayload,
+  ConversationStreamCompletedPayload,
   ConversationAudioReadyPayload,
   ConversationErrorPayload,
 } from '../types/conversation.types'
@@ -96,6 +98,20 @@ export class ConversationService {
     this.socket.on(WsMessageType.CONVERSATION_TEXT, callback)
   }
 
+  onConversationStreamDelta(callback: (data: WsEnvelope<ConversationStreamDeltaPayload>) => void) {
+    if (!this.socket) return
+
+    this.socket.on(WsMessageType.CONVERSATION_STREAM_DELTA, callback)
+  }
+
+  onConversationStreamCompleted(
+    callback: (data: WsEnvelope<ConversationStreamCompletedPayload>) => void
+  ) {
+    if (!this.socket) return
+
+    this.socket.on(WsMessageType.CONVERSATION_STREAM_COMPLETED, callback)
+  }
+
   onConversationAudioReady(callback: (data: WsEnvelope<ConversationAudioReadyPayload>) => void) {
     if (!this.socket) return
 
@@ -117,6 +133,16 @@ export class ConversationService {
   offConversationText() {
     if (!this.socket) return
     this.socket.off(WsMessageType.CONVERSATION_TEXT)
+  }
+
+  offConversationStreamDelta() {
+    if (!this.socket) return
+    this.socket.off(WsMessageType.CONVERSATION_STREAM_DELTA)
+  }
+
+  offConversationStreamCompleted() {
+    if (!this.socket) return
+    this.socket.off(WsMessageType.CONVERSATION_STREAM_COMPLETED)
   }
 
   offConversationAudioReady() {

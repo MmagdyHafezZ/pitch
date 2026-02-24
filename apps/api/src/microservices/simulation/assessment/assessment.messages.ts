@@ -1,6 +1,7 @@
 import { AssessmentMode } from '@prisma/simulation-client';
 export interface AssessmentRunRequestMessage {
   runId: string;
+  iterationId?: string;
   sessionId?: string;
   sessionMemberId?: string;
   mode: AssessmentMode;
@@ -10,6 +11,7 @@ export interface AssessmentRunRequestMessage {
 
 export interface AssessmentRunCompletedEvent {
   runId: string;
+  iterationId?: string;
   sessionId?: string;
   sessionMemberId?: string;
   totalScore: number;

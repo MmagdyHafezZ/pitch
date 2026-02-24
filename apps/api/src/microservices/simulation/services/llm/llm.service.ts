@@ -194,17 +194,17 @@ export class LLMService {
     providerName: string,
   ): Promise<void> {
     try {
-      const sessionMemberId = await this.resolveSessionMemberId(request);
-      if (!sessionMemberId) {
+      const iterationId = await this.resolveIterationId(request);
+      if (!iterationId) {
         this.logger.warn(
-          `Skipping metric persistence: no sessionMemberId for session ${request.sessionId}`,
+          `Skipping metric persistence: no iterationId for session ${request.sessionId}`,
         );
         return;
       }
 
       await this.prisma.metric.create({
         data: {
-          sessionMemberId,
+          iterationId,
           tokensInput: usage.promptTokens,
           tokensOutput: usage.completionTokens,
           latencyMs,
@@ -219,11 +219,20 @@ export class LLMService {
     }
   }
 
-  private async resolveSessionMemberId(
+  private async resolveIterationId(
     request: LLMRequestDto,
   ): Promise<string | null> {
+    if (request.iterationId) {
+      return request.iterationId;
+    }
+
     if (request.sessionMemberId) {
-      return request.sessionMemberId;
+      const iteration = await this.prisma.client.iteration.findFirst({
+        where: { sessionMemberId: request.sessionMemberId },
+        orderBy: { iterationNumber: 'desc' },
+        select: { id: true },
+      });
+      return iteration?.id ?? null;
     }
 
     if (request.userId) {
@@ -236,7 +245,17 @@ export class LLMService {
         },
         select: { id: true },
       });
-      return member?.id ?? null;
+      if (!member) {
+        return null;
+      }
+
+      const iteration = await this.prisma.client.iteration.findFirst({
+        where: { sessionMemberId: member.id },
+        orderBy: { iterationNumber: 'desc' },
+        select: { id: true },
+      });
+
+      return iteration?.id ?? null;
     }
 
     return null;

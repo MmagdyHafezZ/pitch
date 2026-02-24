@@ -22,6 +22,7 @@ enum SessionType {
   text
   voice
   video
+  phone
 }
 
 enum SessionMemberRole {
@@ -124,6 +125,7 @@ model Session {
 
   // Multi-user access control
   members SessionMember[]
+  iterations Iteration[]
 
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt
@@ -142,21 +144,9 @@ model SessionMember {
 
   userId String
   role   SessionMemberRole @default(viewer)
-  assessmentRuns AssessmentRun[] @relation("SessionMemberAssessmentRuns")
 
   // User-specific data relations
-  turns          Turn[]
-  events         Event[]
-  metrics        Metric[]
-  calls          CallSession[]
-  scorecards     Scorecard[]
-  drafts         DraftEmail[]
-  messages       Message[]
-  reportRequests ReportRequest[]
-  evalArtifacts  EvalArtifact[]
-  transcripts    Transcript[]
-  mediaAssets    MediaAsset[]
-  toolCalls      ToolCall[]
+  iterations Iteration[]
 
   // Denormalized user snapshot at join time
   userSnapshot Json?
@@ -169,12 +159,48 @@ model SessionMember {
   @@index([sessionId, role])
 }
 
+model Iteration {
+  id              String        @id @default(cuid())
+  sessionId       String
+  session         Session       @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sessionMemberId String
+  sessionMember   SessionMember @relation(fields: [sessionMemberId], references: [id], onDelete: Cascade)
+  iterationNumber Int
+  status          String        @default("active") // active|completed
+  endedReason     String?
+
+  // Per-iteration snapshot of user data
+  userSnapshot Json?
+
+  turns          Turn[]
+  events         Event[]
+  metrics        Metric[]
+  calls          CallSession[]
+  scorecards     Scorecard[]
+  drafts         DraftEmail[]
+  messages       Message[]
+  reportRequests ReportRequest[]
+  evalArtifacts  EvalArtifact[]
+  transcripts    Transcript[]
+  mediaAssets    MediaAsset[]
+  toolCalls      ToolCall[]
+  assessmentRuns AssessmentRun[] @relation("IterationAssessmentRuns")
+
+  startedAt DateTime @default(now())
+  endedAt   DateTime?
+
+  @@unique([sessionMemberId, iterationNumber])
+  @@index([sessionId, sessionMemberId])
+  @@index([status])
+  @@index([sessionMemberId, startedAt])
+}
+
 // SessionInvitation moved to MongoDB
 
 model Turn {
   id              String        @id @default(cuid())
-  sessionMemberId String
-  sessionMember   SessionMember @relation(fields: [sessionMemberId], references: [id], onDelete: Cascade)
+  iterationId     String
+  iteration       Iteration     @relation(fields: [iterationId], references: [id], onDelete: Cascade)
   role            TurnRole
   text            String?
   audioAssetId    String?
@@ -189,14 +215,14 @@ model Turn {
 
   createdAt DateTime @default(now())
 
-  @@index([sessionMemberId, order])
+  @@index([iterationId, order])
   @@index([role])
 }
 
 model Message {
   id              String        @id @default(cuid())
-  sessionMemberId String
-  sessionMember   SessionMember @relation(fields: [sessionMemberId], references: [id], onDelete: Cascade)
+  iterationId     String
+  iteration       Iteration     @relation(fields: [iterationId], references: [id], onDelete: Cascade)
   turnId          String?
   turn            Turn?         @relation(fields: [turnId], references: [id], onDelete: SetNull)
   role            TurnRole
@@ -208,13 +234,13 @@ model Message {
 
   createdAt DateTime @default(now())
 
-  @@index([sessionMemberId, turnId])
+  @@index([iterationId, turnId])
 }
 
 model ToolCall {
   id              String        @id @default(cuid())
-  sessionMemberId String
-  sessionMember   SessionMember @relation(fields: [sessionMemberId], references: [id], onDelete: Cascade)
+  iterationId     String
+  iteration       Iteration     @relation(fields: [iterationId], references: [id], onDelete: Cascade)
   turnId          String?
   turn            Turn?         @relation(fields: [turnId], references: [id], onDelete: SetNull)
   name            String
@@ -225,13 +251,13 @@ model ToolCall {
 
   createdAt DateTime @default(now())
 
-  @@index([sessionMemberId, turnId, name])
+  @@index([iterationId, turnId, name])
 }
 
 model Event {
   id              String        @id @default(cuid())
-  sessionMemberId String
-  sessionMember   SessionMember @relation(fields: [sessionMemberId], references: [id], onDelete: Cascade)
+  iterationId     String
+  iteration       Iteration     @relation(fields: [iterationId], references: [id], onDelete: Cascade)
   type            EventType
   // SMALL payload only (< 1KB). For verbose payloads, use EventLog in MongoDB
   payload         Json?
@@ -240,13 +266,13 @@ model Event {
 
   createdAt DateTime @default(now())
 
-  @@index([sessionMemberId, type, createdAt])
+  @@index([iterationId, type, createdAt])
 }
 
 model Metric {
   id              String        @id @default(cuid())
-  sessionMemberId String
-  sessionMember   SessionMember @relation(fields: [sessionMemberId], references: [id], onDelete: Cascade)
+  iterationId     String
+  iteration       Iteration     @relation(fields: [iterationId], references: [id], onDelete: Cascade)
 
   // One Metric row per session or per turn (define strict semantics)
   // Aggregate metrics for the session
@@ -259,7 +285,7 @@ model Metric {
 
   createdAt DateTime @default(now())
 
-  @@index([sessionMemberId, createdAt])
+  @@index([iterationId, createdAt])
 }
 
 /**
@@ -357,8 +383,8 @@ model Persona {
 
 model DraftEmail {
   id              String        @id @default(cuid())
-  sessionMemberId String
-  sessionMember   SessionMember @relation(fields: [sessionMemberId], references: [id], onDelete: Cascade)
+  iterationId     String
+  iteration       Iteration     @relation(fields: [iterationId], references: [id], onDelete: Cascade)
   audience        String
   purpose         String
   tone            String?
@@ -368,7 +394,7 @@ model DraftEmail {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([sessionMemberId, createdAt])
+  @@index([iterationId, createdAt])
 }
 
 /**
@@ -377,8 +403,8 @@ model DraftEmail {
 
 model CallSession {
   id              String        @id @default(cuid())
-  sessionMemberId String
-  sessionMember   SessionMember @relation(fields: [sessionMemberId], references: [id], onDelete: Cascade)
+  iterationId     String
+  iteration       Iteration     @relation(fields: [iterationId], references: [id], onDelete: Cascade)
   tracks          String[] // ["audio","video"]
   // Keep SDP offers/answers (small strings ~1-5KB)
   sdpOffer        String?
@@ -413,8 +439,8 @@ model MediaAsset {
   sizeBytes              BigInt
   storageKey             String // s3/minio key
   url                    String? // ephemeral pre-signed URL if needed
-  ownerSessionMemberId   String?
-  ownerSessionMember     SessionMember? @relation(fields: [ownerSessionMemberId], references: [id], onDelete: SetNull)
+  ownerIterationId       String?
+  ownerIteration         Iteration? @relation(fields: [ownerIterationId], references: [id], onDelete: SetNull)
 
   recordings    Recording[]
   transcripts   Transcript[]
@@ -457,8 +483,8 @@ model Transcript {
   id              String        @id @default(cuid())
   assetId         String
   asset           MediaAsset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
-  sessionMemberId String?
-  sessionMember   SessionMember? @relation(fields: [sessionMemberId], references: [id], onDelete: SetNull)
+  iterationId     String?
+  iteration       Iteration?    @relation(fields: [iterationId], references: [id], onDelete: SetNull)
   language        String?
 
   // Keep aggregate text summary and metadata for quick access
@@ -472,8 +498,8 @@ model Transcript {
   updatedAt DateTime @updatedAt
 
   @@index([assetId])
-  @@index([sessionMemberId])
-  @@index([sessionMemberId, createdAt])
+  @@index([iterationId])
+  @@index([iterationId, createdAt])
 }
 
 /**
@@ -493,8 +519,8 @@ model RedactionSpan {
 
 model EvalArtifact {
   id              String        @id @default(cuid())
-  sessionMemberId String
-  sessionMember   SessionMember @relation(fields: [sessionMemberId], references: [id], onDelete: Cascade)
+  iterationId     String
+  iteration       Iteration     @relation(fields: [iterationId], references: [id], onDelete: Cascade)
   turnId          String?
   turn            Turn?         @relation(fields: [turnId], references: [id], onDelete: SetNull)
   kind            String // "prompt_eval" | "ragas" | "deepeval" | "llm_judge"
@@ -505,7 +531,7 @@ model EvalArtifact {
 
   createdAt DateTime @default(now())
 
-  @@index([sessionMemberId, kind])
+  @@index([iterationId, kind])
   @@index([turnId])
 }
 
@@ -566,8 +592,8 @@ model Criterion {
 
 model Scorecard {
   id              String        @id @default(cuid())
-  sessionMemberId String
-  sessionMember   SessionMember @relation(fields: [sessionMemberId], references: [id], onDelete: Cascade)
+  iterationId     String
+  iteration       Iteration     @relation(fields: [iterationId], references: [id], onDelete: Cascade)
   rubricId        String?
   rubric          Rubric?       @relation(fields: [rubricId], references: [id], onDelete: SetNull)
   totalScore      Float?
@@ -580,7 +606,7 @@ model Scorecard {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([sessionMemberId])
+  @@index([iterationId])
   @@index([rubricId])
 }
 
@@ -637,8 +663,8 @@ model Benchmark {
 
 model AssessmentRun {
   id              String        @id @default(cuid())
-  sessionMemberId String
-  sessionMember   SessionMember @relation("SessionMemberAssessmentRuns", fields: [sessionMemberId], references: [id], onDelete: Cascade)
+  iterationId     String
+  iteration       Iteration     @relation("IterationAssessmentRuns", fields: [iterationId], references: [id], onDelete: Cascade)
 
   status        AssessmentRunStatus @default(queued)
   mode          AssessmentMode
@@ -662,8 +688,8 @@ model AssessmentRun {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([sessionMemberId, status])
-  @@index([sessionMemberId, createdAt(sort: Desc)])
+  @@index([iterationId, status])
+  @@index([iterationId, createdAt(sort: Desc)])
 }
 
 model TurnAssessmentLabel {
@@ -715,8 +741,8 @@ model AssessmentSummary {
 
 model ReportRequest {
   id              String        @id @default(cuid())
-  sessionMemberId String
-  sessionMember   SessionMember @relation(fields: [sessionMemberId], references: [id], onDelete: Cascade)
+  iterationId     String
+  iteration       Iteration     @relation(fields: [iterationId], references: [id], onDelete: Cascade)
   format          ReportFormat
   status          String        @default("queued") // queued|ready|failed
   assetId         String? // MediaAsset holding produced PDF/JSON
@@ -728,5 +754,5 @@ model ReportRequest {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([sessionMemberId, format, status])
+  @@index([iterationId, format, status])
 }

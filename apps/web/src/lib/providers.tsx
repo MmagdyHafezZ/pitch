@@ -1,6 +1,12 @@
 'use client'
 
-import { MantineProvider, ColorSchemeScript, createTheme } from '@mantine/core'
+import {
+  MantineProvider,
+  ColorSchemeScript,
+  createTheme,
+  type ButtonProps,
+  type MantineTheme,
+} from '@mantine/core'
 import { Notifications } from '@mantine/notifications'
 import { ModalsProvider } from '@mantine/modals'
 import { QueryClientProvider } from '@tanstack/react-query'
@@ -92,6 +98,18 @@ export function Providers({ children }: ProvidersProps) {
               color: 'var(--pitch-accent-strong)',
             },
           },
+        },
+        Button: {
+          vars: (_theme: MantineTheme, props: ButtonProps) => ({
+            root:
+              props.variant === 'filled'
+                ? {
+                    '--button-bg': 'var(--pitch-accent)',
+                    '--button-hover': 'var(--pitch-accent-strong)',
+                    '--button-color': 'var(--mantine-color-white)',
+                  }
+                : {},
+          }),
         },
         Progress: {
           styles: {

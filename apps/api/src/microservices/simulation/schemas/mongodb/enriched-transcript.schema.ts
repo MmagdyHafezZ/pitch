@@ -89,6 +89,7 @@ export interface IEnrichment {
 export interface IEnrichedTranscript extends Document {
   _id: Types.ObjectId;
   assetId: string;
+  iterationId?: string;
   sessionMemberId?: string;
   language?: string;
 
@@ -110,6 +111,7 @@ export const EnrichedTranscriptSchema = new Schema<IEnrichedTranscript>(
   {
     _id: { type: Schema.Types.ObjectId, required: true },
     assetId: { type: String, required: true },
+    iterationId: { type: String },
     sessionMemberId: { type: String },
     language: { type: String },
 
@@ -207,6 +209,8 @@ export const EnrichedTranscriptSchema = new Schema<IEnrichedTranscript>(
 );
 
 EnrichedTranscriptSchema.index({ assetId: 1 });
+EnrichedTranscriptSchema.index({ iterationId: 1 });
+EnrichedTranscriptSchema.index({ iterationId: 1, createdAt: -1 });
 EnrichedTranscriptSchema.index({ sessionMemberId: 1 });
 EnrichedTranscriptSchema.index({ sessionMemberId: 1, createdAt: -1 });
 EnrichedTranscriptSchema.index({ 'enrichment.topics.label': 1 });

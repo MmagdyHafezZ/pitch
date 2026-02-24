@@ -1,5 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { randomUUID } from 'crypto';
 import { LLMRouterService } from './llm/llm-router.service';
+import { buildStageDetectorSystemPrompt } from '../prompts/stage-detector.prompt';
 
 export interface ConversationStage {
   order: number;
@@ -136,7 +138,7 @@ export class StageDetectorService {
     userId?: string,
   ): Promise<StageDetectionResult> {
     const stagesList = plannedStages
-      .map((s, i) => `${i + 1}. ${s.label}: ${s.description || ''}`)
+      .map((s, i) => `${i}. ${s.label}: ${s.description || ''}`)
       .join('\n');
 
     const recentMessages = conversationHistory.slice(-6);
@@ -144,17 +146,7 @@ export class StageDetectorService {
       .map((m) => `${m.role}: ${m.content}`)
       .join('\n');
 
-    const systemPrompt = `You are a conversation stage analyzer. Given a conversation and a list of planned stages, determine which stage the conversation is currently in.
-
-Planned Stages:
-${stagesList}
-
-Analyze the conversation and respond with ONLY a JSON object in this format:
-{
-  "stageIndex": <0-based index>,
-  "confidence": <0.0-1.0>,
-  "reasoning": "<brief explanation>"
-}`;
+    const systemPrompt = await buildStageDetectorSystemPrompt(stagesList);
 
     const userPrompt = `Analyze this recent conversation:
 
@@ -163,19 +155,26 @@ ${conversationText}
 Which stage is this conversation in?`;
 
     try {
-      const response = await this.llmRouter.complete({
-        sessionId: `stage-detect:${sessionId}`,
-        userId,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt },
-        ],
-        config: {
-          model: 'gpt-4o-mini',
-          temperature: 0.3,
-          maxTokens: 200,
+      const response = await this.llmRouter.complete(
+        {
+          sessionId: `stage-detect:${sessionId}`,
+          userId,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt },
+          ],
+          config: {
+            model: 'gpt-4o-mini',
+            temperature: 0.3,
+            maxTokens: 200,
+          },
         },
-      });
+        {
+          userId,
+          requestId: randomUUID(),
+          purpose: 'stage_detection',
+        },
+      );
 
       const result = this.parseStageDetectionResponse(
         response.response.content ?? '',

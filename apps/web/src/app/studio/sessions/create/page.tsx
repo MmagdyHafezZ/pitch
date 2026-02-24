@@ -61,6 +61,9 @@ import {
 const spaceGrotesk = Space_Grotesk({ subsets: ['latin'], display: 'swap' })
 const fraunces = Fraunces({ subsets: ['latin'], display: 'swap' })
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+
 export default function CreateSessionPage() {
   const router = useRouter()
   const { user } = useAuth()
@@ -76,6 +79,7 @@ export default function CreateSessionPage() {
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null)
   const [sessionName, setSessionName] = useState('')
   const [sessionType, setSessionType] = useState<SessionType | null>(null)
+  const [phoneNumber, setPhoneNumber] = useState('')
   const [tags, setTags] = useState<string[]>([])
   const [language, setLanguage] = useState('en-US')
   const [durationMinutes, setDurationMinutes] = useState(30)
@@ -87,6 +91,7 @@ export default function CreateSessionPage() {
   const [scenarioObjective, setScenarioObjective] = useState('')
   const [scenarioContext, setScenarioContext] = useState('')
   const [aiRole, setAiRole] = useState('')
+  const [userRole, setUserRole] = useState('')
   const [scenarioGenerating, setScenarioGenerating] = useState(false)
   const [scenarioCount, setScenarioCount] = useState(3)
 
@@ -216,6 +221,67 @@ export default function CreateSessionPage() {
     setAccent(derivedAccent)
   }, [selectedPersonaData])
 
+  useEffect(() => {
+    if (!selectedScenarioId) return
+    const scenario = scenarios.find((item) => item.id === selectedScenarioId)
+    if (!scenario || !isRecord(scenario.config)) return
+
+    const scenarioConfig = scenario.config as Record<string, unknown>
+    const scenarioSessionConfig = isRecord(scenarioConfig.sessionConfig)
+      ? (scenarioConfig.sessionConfig as Record<string, unknown>)
+      : {}
+
+    const aiRoleFromSessionConfig =
+      typeof scenarioSessionConfig.aiRole === 'string' ? scenarioSessionConfig.aiRole : undefined
+    const userRoleFromSessionConfig =
+      typeof scenarioSessionConfig.userRole === 'string'
+        ? scenarioSessionConfig.userRole
+        : undefined
+
+    let aiRoleFromRoles: string | undefined
+    let userRoleFromRoles: string | undefined
+
+    if (isRecord(scenarioConfig.roles)) {
+      const rolesObj = scenarioConfig.roles as Record<string, unknown>
+      const assistantRole =
+        typeof rolesObj.assistant === 'string'
+          ? rolesObj.assistant
+          : typeof rolesObj.ai === 'string'
+            ? rolesObj.ai
+            : undefined
+      const clientRole = typeof rolesObj.client === 'string' ? rolesObj.client : undefined
+      const userRole = typeof rolesObj.user === 'string' ? rolesObj.user : undefined
+      aiRoleFromRoles = assistantRole ?? clientRole
+      userRoleFromRoles = userRole
+    } else if (Array.isArray(scenarioConfig.roles)) {
+      const rolesArray = scenarioConfig.roles as Array<{ name?: string }>
+      const preferredAiRole =
+        rolesArray.find((role) =>
+          String(role?.name || '')
+            .toLowerCase()
+            .match(/client|customer|partner|buyer|prospect|stakeholder|cto|cfo|vp|lead/i)
+        )?.name ?? rolesArray[0]?.name
+      aiRoleFromRoles = preferredAiRole
+      userRoleFromRoles = rolesArray.find(
+        (role) => role?.name && role.name !== preferredAiRole
+      )?.name
+    }
+
+    if (!aiRole.trim()) {
+      const nextAiRole = aiRoleFromSessionConfig ?? aiRoleFromRoles
+      if (nextAiRole) {
+        setAiRole(nextAiRole)
+      }
+    }
+
+    if (!userRole.trim()) {
+      const nextUserRole = userRoleFromSessionConfig ?? userRoleFromRoles
+      if (nextUserRole) {
+        setUserRole(nextUserRole)
+      }
+    }
+  }, [selectedScenarioId, scenarios, aiRole, userRole])
+
   const filteredPersonas = personas.filter((persona) => {
     const term = personaSearch.trim().toLowerCase()
     if (!term) return true
@@ -249,6 +315,12 @@ export default function CreateSessionPage() {
       setErrors(({ sessionType: _sessionType, ...rest }) => rest)
     }
   }, [sessionType, errors.sessionType])
+
+  useEffect(() => {
+    if (phoneNumber.trim() && errors.phoneNumber) {
+      setErrors(({ phoneNumber: _phoneNumber, ...rest }) => rest)
+    }
+  }, [phoneNumber, errors.phoneNumber])
 
   useEffect(() => {
     if (selectedPersona && errors.persona) {
@@ -324,6 +396,14 @@ export default function CreateSessionPage() {
 
     if (step === 0) {
       if (!sessionType) newErrors.sessionType = 'Session type is required'
+      if (sessionType === 'phone') {
+        const normalized = phoneNumber.trim()
+        if (!normalized) {
+          newErrors.phoneNumber = 'Phone number is required for phone calls'
+        } else if (!/^\+?[1-9]\d{7,14}$/.test(normalized)) {
+          newErrors.phoneNumber = 'Use E.164 format (e.g. +15551234567)'
+        }
+      }
     }
 
     if (step === 1) {
@@ -375,6 +455,19 @@ export default function CreateSessionPage() {
         icon: <IconAlertCircle />,
       })
       return
+    }
+
+    if (sessionType === 'phone') {
+      const normalized = phoneNumber.trim()
+      if (!normalized || !/^\+?[1-9]\d{7,14}$/.test(normalized)) {
+        notifications.show({
+          title: 'Error',
+          message: 'Enter a valid phone number in E.164 format (e.g. +15551234567)',
+          color: 'red',
+          icon: <IconAlertCircle />,
+        })
+        return
+      }
     }
 
     if (!selectedPersona) {
@@ -452,6 +545,7 @@ export default function CreateSessionPage() {
         difficulty,
         durationMinutes,
         aiRole: aiRole.trim() || undefined,
+        userRole: userRole.trim() || undefined,
       }
 
       if (llmProvider && llmModel) {
@@ -482,12 +576,18 @@ export default function CreateSessionPage() {
         },
       }
 
-      if (sessionType === 'voice' || sessionType === 'video') {
+      if (sessionType === 'voice' || sessionType === 'video' || sessionType === 'phone') {
         sessionConfig.ttsProvider = ttsProvider
         sessionConfig.ttsVoice = ttsVoice
         sessionConfig.voice = {
           provider: ttsProvider,
           voice: ttsVoice,
+        }
+      }
+
+      if (sessionType === 'phone') {
+        sessionConfig.phone = {
+          number: phoneNumber.trim(),
         }
       }
 
@@ -568,6 +668,8 @@ export default function CreateSessionPage() {
         sessionConfig: {
           difficulty,
           durationMinutes,
+          aiRole: aiRole.trim() || undefined,
+          userRole: userRole.trim() || undefined,
         },
         personaId: selectedPersona || undefined,
         crmContextId: undefined,
@@ -695,6 +797,8 @@ export default function CreateSessionPage() {
           errors={errors}
           sessionName={sessionName}
           setSessionName={setSessionName}
+          phoneNumber={phoneNumber}
+          setPhoneNumber={setPhoneNumber}
           teamsLoading={teamsLoading}
           selectedTeamId={selectedTeamId}
           setSelectedTeamId={setSelectedTeamId}
@@ -724,6 +828,8 @@ export default function CreateSessionPage() {
           setScenarioContext={setScenarioContext}
           aiRole={aiRole}
           setAiRole={setAiRole}
+          userRole={userRole}
+          setUserRole={setUserRole}
           durationMinutes={durationMinutes}
           setDurationMinutes={setDurationMinutes}
           scenarioCount={scenarioCount}
@@ -838,6 +944,7 @@ export default function CreateSessionPage() {
           selectedTeamId={selectedTeamId}
           teams={teams}
           sessionType={sessionType}
+          phoneNumber={phoneNumber}
           language={language}
           tags={tags}
           selectedPersona={selectedPersona}
@@ -849,6 +956,8 @@ export default function CreateSessionPage() {
           scenarioContext={scenarioContext}
           scenarioId={selectedScenarioId}
           scenarios={scenarios}
+          aiRole={aiRole}
+          userRole={userRole}
           durationMinutes={durationMinutes}
           crmSelections={{
             accounts: selectedAccounts,

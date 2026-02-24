@@ -8,7 +8,7 @@ import {
 } from '@prisma/simulation-client';
 
 export interface CreateAssessmentRunData {
-  sessionMemberId: string;
+  iterationId: string;
   mode: AssessmentMode;
   inputHash?: string | null;
   config: Prisma.InputJsonValue;
@@ -40,7 +40,7 @@ export class AssessmentRepository {
   async createRun(data: CreateAssessmentRunData) {
     return await this.prisma.client.assessmentRun.create({
       data: {
-        sessionMemberId: data.sessionMemberId,
+        iterationId: data.iterationId,
         mode: data.mode,
         inputHash: data.inputHash ?? undefined,
         config: data.config,
@@ -76,10 +76,10 @@ export class AssessmentRepository {
     });
   }
 
-  async findLatestCompletedForSessionMember(sessionMemberId: string) {
+  async findLatestCompletedForIteration(iterationId: string) {
     return await this.prisma.client.assessmentRun.findFirst({
       where: {
-        sessionMemberId,
+        iterationId,
         status: AssessmentRunStatus.completed,
       },
       include: { summary: true },
@@ -91,7 +91,7 @@ export class AssessmentRepository {
     return await this.prisma.client.assessmentRun.findFirst({
       where: {
         status: AssessmentRunStatus.completed,
-        sessionMember: { sessionId },
+        iteration: { sessionId },
       },
       include: { summary: true },
       orderBy: { completedAt: 'desc' },
