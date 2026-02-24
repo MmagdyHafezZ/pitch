@@ -117,7 +117,7 @@ export class TtsGatewayController {
           }
           const buf = Buffer.from(chunk.audioBase64, 'base64');
           res.write(buf);
-        } catch (err) {
+        } catch {
           // swallow individual chunk errors and continue
         }
       },

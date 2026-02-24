@@ -7,7 +7,11 @@ export type LLMRequestContext = {
     | 'tool_call'
     | 'evaluation'
     | 'enrichment'
+    | 'scenario_generation'
+    | 'conversation'
+    | 'conversation_stream'
     | 'hints'
+    | 'stage_detection'
     | 'other';
   traceId?: string;
 };

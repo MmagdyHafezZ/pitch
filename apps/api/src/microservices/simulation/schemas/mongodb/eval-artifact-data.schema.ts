@@ -14,7 +14,8 @@ import { Schema, Document } from 'mongoose';
 
 export interface IEvalArtifactData extends Document {
   _id: string;
-  sessionMemberId: string;
+  iterationId: string;
+  sessionMemberId?: string;
   turnId?: string;
   kind: string;
 
@@ -83,7 +84,8 @@ export interface IEvalArtifactData extends Document {
 export const EvalArtifactDataSchema = new Schema<IEvalArtifactData>(
   {
     _id: { type: String, required: true },
-    sessionMemberId: { type: String, required: true, index: true },
+    iterationId: { type: String, required: true, index: true },
+    sessionMemberId: { type: String, index: true },
     turnId: { type: String },
     kind: { type: String, required: true, index: true },
 
@@ -149,6 +151,7 @@ export const EvalArtifactDataSchema = new Schema<IEvalArtifactData>(
   },
 );
 
+EvalArtifactDataSchema.index({ iterationId: 1, kind: 1 });
 EvalArtifactDataSchema.index({ sessionMemberId: 1, kind: 1 });
 EvalArtifactDataSchema.index({ turnId: 1 });
 EvalArtifactDataSchema.index({ kind: 1, score: -1 });

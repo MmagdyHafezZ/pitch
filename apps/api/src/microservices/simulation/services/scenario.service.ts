@@ -10,6 +10,7 @@ import {
 import { LLMService } from './llm/llm.service';
 import { LLMRoutingConfigService } from './llm/llm-routing-config.service';
 import { LLMRequestDto } from '../dto/llm.dto';
+import { buildScenarioSystemPrompt } from '../prompts/scenario.prompt';
 
 @Injectable()
 export class ScenarioService {
@@ -61,13 +62,7 @@ export class ScenarioService {
       model: 'gpt-4o',
     };
 
-    const systemPrompt =
-      'You are a senior scenario designer for a sales simulation platform. ' +
-      'Generate a detailed, realistic scenario a user will be placed into. ' +
-      'Avoid generic language; include concrete context (company, role, setting, stakes, constraints). ' +
-      'Return ONLY valid JSON with keys: name, description, config. ' +
-      'config must be a JSON object and can include fields such as objective, background, roles, ' +
-      'successCriteria, constraints, difficulty, durationMinutes, tags, language, personaHints, crmContextId.';
+    const systemPrompt = await buildScenarioSystemPrompt();
 
     const userPrompt = JSON.stringify(
       {
@@ -108,7 +103,7 @@ export class ScenarioService {
     const response = await this.llmService.complete(llmRequest, {
       orgId: request.orgId,
       userId: request.requestedBy,
-      purpose: 'enrichment',
+      purpose: 'scenario_generation',
     });
 
     const parsed = this.extractScenario(response.content ?? '');

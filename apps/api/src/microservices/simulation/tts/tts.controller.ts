@@ -59,7 +59,7 @@ export class TtsMicroserviceController {
       );
 
       return new Observable<SpeakResponse>((subscriber) => {
-        (async () => {
+        void (async () => {
           try {
             const result = await this.ttsService.synthesizeStream(
               data.text,

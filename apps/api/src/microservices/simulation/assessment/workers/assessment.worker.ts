@@ -5,8 +5,9 @@ import { AssessmentService } from '../assessment.service';
 
 interface TurnCompletedEventPayload {
   type: 'turn_completed';
-  sessionMemberId: string;
+  iterationId?: string;
   sessionId: string;
+  sessionMemberId?: string;
 }
 
 const isTurnCompletedEventPayload = (
@@ -16,10 +17,12 @@ const isTurnCompletedEventPayload = (
     return false;
   }
   const record = payload as Record<string, unknown>;
+  const hasIteration = typeof record.iterationId === 'string';
+  const hasSessionMember = typeof record.sessionMemberId === 'string';
   return (
     record.type === 'turn_completed' &&
-    typeof record.sessionMemberId === 'string' &&
-    typeof record.sessionId === 'string'
+    typeof record.sessionId === 'string' &&
+    (hasIteration || hasSessionMember)
   );
 };
 
@@ -34,6 +37,7 @@ export class AssessmentWorker {
     @Payload()
     payload: {
       runId: string;
+      iterationId?: string;
       sessionMemberId?: string;
       sessionId?: string;
       mode?: string;
@@ -48,6 +52,7 @@ export class AssessmentWorker {
     this.logger.log(`Processing assessment run ${payload.runId}`);
     await this.assessmentService.executeRun({
       runId: payload.runId,
+      iterationId: payload.iterationId,
       sessionMemberId: payload.sessionMemberId,
       sessionId: payload.sessionId,
       configVersion: payload.configVersion,
@@ -61,8 +66,27 @@ export class AssessmentWorker {
     }
 
     await this.assessmentService.enqueueLiveForTurn({
+      iterationId: payload.iterationId,
       sessionMemberId: payload.sessionMemberId,
       sessionId: payload.sessionId,
     });
+  }
+
+  @EventPattern(SIMULATION_SERVICE_PATTERNS.ASSESSMENT_RUN_COMPLETED)
+  handleRunCompleted(@Payload() payload: { runId?: string }) {
+    if (!payload?.runId) {
+      return;
+    }
+    this.logger.debug(`Received assessment completed event: ${payload.runId}`);
+  }
+
+  @EventPattern(SIMULATION_SERVICE_PATTERNS.ASSESSMENT_RUN_FAILED)
+  handleRunFailed(@Payload() payload: { runId?: string; error?: string }) {
+    if (!payload?.runId) {
+      return;
+    }
+    this.logger.warn(
+      `Received assessment failed event: ${payload.runId} ${payload.error ? `(${payload.error})` : ''}`,
+    );
   }
 }

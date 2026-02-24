@@ -198,7 +198,7 @@ export class AssessmentGraphRunner {
 
   private loadSessionData = async (state: AssessmentStateType) => {
     const turns = await this.prisma.client.turn.findMany({
-      where: { sessionMemberId: state.sessionMemberId },
+      where: { iterationId: state.iterationId },
       orderBy: { order: 'asc' },
       include: { messages: true },
     });
@@ -356,6 +356,9 @@ export class AssessmentGraphRunner {
     state: AssessmentStateType,
   ): Promise<Partial<AssessmentStateType>> => {
     const config = state.config;
+    const turnById = new Map(
+      (state.turns ?? []).map((turn) => [turn.turnId, turn]),
+    );
     const finalLabels = (state.labels ?? []).map((label) => {
       const scoreDelta =
         label.scoreDelta ?? config.labelScoreDelta[label.label] ?? 0;
@@ -377,21 +380,35 @@ export class AssessmentGraphRunner {
       .map((judgment) => judgment.summary)
       .filter(Boolean)
       .join('\n');
+    const coachTips = this.buildCoachTips(finalLabels);
 
     const summary: AssessmentSummaryResult = {
       totalScore: scoreResult.totalScore,
       scoreBreakdown: scoreResult.scoreBreakdown,
       narrativeSummary: narrativeSummary || undefined,
+      coachTips: coachTips.length ? coachTips : undefined,
     };
+
+    const objectiveMetCount = scoreResult.scoreBreakdown?.ObjectiveMet ?? 0;
+    const objectiveNotMetCount =
+      scoreResult.scoreBreakdown?.ObjectiveNotMet ?? 0;
+    const objectiveMet =
+      objectiveMetCount + objectiveNotMetCount > 0
+        ? objectiveMetCount >= objectiveNotMetCount
+        : undefined;
 
     const report: AssessmentReportPayload = {
       totalScore: scoreResult.totalScore,
       scoreBreakdown: scoreResult.scoreBreakdown,
       summary: {
         narrativeSummary: narrativeSummary || undefined,
+        coachTips: coachTips.length ? coachTips : undefined,
+        objectiveMet,
       },
       turnAnnotations: finalLabels.map((label) => ({
         turnId: label.turnId,
+        role: turnById.get(label.turnId)?.role,
+        text: turnById.get(label.turnId)?.text,
         label: label.label,
         confidence: label.confidence,
         evidence: label.evidence ?? undefined,
@@ -419,6 +436,65 @@ export class AssessmentGraphRunner {
 
     return Promise.resolve({ summary, report, labels: finalLabels });
   };
+
+  private buildCoachTips(
+    labels: ChunkJudgment['labels'],
+  ): Array<{ text: string; link?: string }> {
+    if (!labels || labels.length === 0) {
+      return [];
+    }
+
+    const counts = labels.reduce(
+      (acc, label) => {
+        acc[label.label] = (acc[label.label] ?? 0) + 1;
+        return acc;
+      },
+      {} as Record<string, number>,
+    );
+
+    const tips: Array<{ text: string; link?: string }> = [];
+
+    if ((counts.ObjectiveNotMet ?? 0) > 0) {
+      tips.push({
+        text: 'Open with direct objective fit, then support it with one concrete proof point and one explicit next step.',
+      });
+    }
+
+    if ((counts.NegativeExample ?? 0) + (counts.MissedOpportunity ?? 0) > 0) {
+      tips.push({
+        text: 'When the other party raises a concern, answer that concern first before introducing additional benefits.',
+      });
+    }
+
+    if ((counts.InsightfulQuestion ?? 0) === 0) {
+      tips.push({
+        text: 'Add one focused follow-up question each turn to uncover constraints, timeline, or decision criteria.',
+      });
+    }
+
+    if (
+      (counts.Neutral ?? 0) >=
+      Math.max(2, Math.ceil((labels.length || 1) * 0.6))
+    ) {
+      tips.push({
+        text: 'Replace vague language with specifics: include a number, timeline, or concrete implementation detail.',
+      });
+    }
+
+    if ((counts.PositiveExample ?? 0) > 0) {
+      tips.push({
+        text: 'Keep your strongest behavior: concise, relevant responses that directly map to stakeholder concerns.',
+      });
+    }
+
+    if (tips.length === 0) {
+      tips.push({
+        text: 'Stay structured: answer directly, add evidence, and close with a clear next action.',
+      });
+    }
+
+    return tips.slice(0, 4);
+  }
 
   private persistResults = async (state: AssessmentStateType) => {
     if (!state.summary || !state.report) {
@@ -448,6 +524,7 @@ export class AssessmentGraphRunner {
     try {
       await this.assessmentReportRepository.upsert({
         runId: state.runId,
+        iterationId: state.iterationId,
         sessionMemberId: state.sessionMemberId,
         sessionId: state.sessionId ?? undefined,
         mode: state.mode,
@@ -546,7 +623,7 @@ export class AssessmentGraphRunner {
     config: AssessmentConfig,
     state: AssessmentStateType,
   ): Promise<JudgeOutput> {
-    const systemPrompt = buildJudgeSystemPrompt(config);
+    const systemPrompt = await buildJudgeSystemPrompt(config);
     const userPrompt = buildJudgeUserPrompt({
       chunkIndex: chunk.chunkIndex,
       turns: chunk.turns.map((turn) => ({
@@ -561,8 +638,8 @@ export class AssessmentGraphRunner {
     const executeJudgeRaw = async (): Promise<string> => {
       const response = await this.llmService.complete(
         {
-          sessionId: state.sessionId ?? state.sessionMemberId,
-          sessionMemberId: state.sessionMemberId,
+          sessionId: state.sessionId,
+          iterationId: state.iterationId,
           messages: [
             { role: 'system', content: systemPrompt },
             { role: 'user', content: userPrompt },
@@ -575,8 +652,9 @@ export class AssessmentGraphRunner {
           },
         },
         {
-          userId: state.sessionMemberId,
+          userId: state.userId ?? undefined,
           requestId: `assessment-${state.runId}-${chunk.chunkIndex}`,
+          purpose: 'evaluation',
         },
       );
       return response.content ?? '';
@@ -599,18 +677,25 @@ export class AssessmentGraphRunner {
       primary = this.parseJudgeOutput(retryRaw, chunk.chunkIndex);
     }
     if (!primary) {
-      return { chunkIndex: chunk.chunkIndex, summary: '', labels: [] };
+      return {
+        chunkIndex: chunk.chunkIndex,
+        summary:
+          'Judge output could not be parsed. Marked turns as neutral for this chunk.',
+        labels: this.ensureTurnCoverage([], chunk.turns, config),
+      };
     }
 
-    const allowedTurnIds = new Set(
-      chunk.turns.filter((turn) => turn.isEvaluated).map((turn) => turn.turnId),
-    );
-    primary.labels = primary.labels.filter((label) =>
-      allowedTurnIds.has(label.turnId),
+    primary.labels = this.ensureTurnCoverage(
+      primary.labels,
+      chunk.turns,
+      config,
     );
 
     if (!primary.labels || primary.labels.length === 0) {
-      return primary;
+      return {
+        ...primary,
+        labels: this.ensureTurnCoverage([], chunk.turns, config),
+      };
     }
 
     if (!this.shouldRunSecondJudge(primary, config)) {
@@ -628,11 +713,60 @@ export class AssessmentGraphRunner {
       return primary;
     }
 
-    secondary.labels = secondary.labels.filter((label) =>
-      allowedTurnIds.has(label.turnId),
+    secondary.labels = this.ensureTurnCoverage(
+      secondary.labels,
+      chunk.turns,
+      config,
     );
 
     return this.mergeJudgeOutputs(primary, secondary, config);
+  }
+
+  private ensureTurnCoverage(
+    labels: JudgeOutput['labels'],
+    turns: NormalizedTurn[],
+    config: AssessmentConfig,
+  ): JudgeOutput['labels'] {
+    const evaluatedTurns = turns.filter((turn) => turn.isEvaluated);
+    if (evaluatedTurns.length === 0) {
+      return [];
+    }
+
+    const evaluatedIds = new Set(evaluatedTurns.map((turn) => turn.turnId));
+    const bestByTurn = new Map<string, JudgeOutput['labels'][number]>();
+
+    for (const label of labels ?? []) {
+      if (!evaluatedIds.has(label.turnId)) {
+        continue;
+      }
+      const existing = bestByTurn.get(label.turnId);
+      const existingConfidence = existing?.confidence ?? 0;
+      const currentConfidence = label.confidence ?? 0;
+      if (!existing || currentConfidence >= existingConfidence) {
+        bestByTurn.set(label.turnId, label);
+      }
+    }
+
+    for (const turn of evaluatedTurns) {
+      if (bestByTurn.has(turn.turnId)) {
+        continue;
+      }
+      bestByTurn.set(turn.turnId, {
+        turnId: turn.turnId,
+        label: AssessmentLabelValue.Neutral,
+        confidence: config.thresholds.confidenceCutoff,
+        evidence: null,
+        scoreDelta: config.labelScoreDelta[AssessmentLabelValue.Neutral] ?? 0,
+        citations: [],
+        reasonSummary: 'No clear positive or negative signal identified.',
+      });
+    }
+
+    return evaluatedTurns
+      .map((turn) => bestByTurn.get(turn.turnId))
+      .filter((label): label is JudgeOutput['labels'][number] =>
+        Boolean(label),
+      );
   }
 
   private parseJudgeOutput(
