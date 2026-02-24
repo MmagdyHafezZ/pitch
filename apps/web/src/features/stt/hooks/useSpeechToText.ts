@@ -79,12 +79,35 @@ export function useSpeechToText(options: UseSpeechToTextOptions = {}) {
   const [transcript, setTranscript] = useState('')
   const [interimTranscript, setInterimTranscript] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [errorCode, setErrorCode] = useState<string | null>(null)
   const [isSupported, setIsSupported] = useState(true)
+  const [microphonePermission, setMicrophonePermission] = useState<
+    'unknown' | 'granted' | 'denied'
+  >('unknown')
 
   const recognitionRef = useRef<SpeechRecognition | null>(null)
   const isListeningRef = useRef(false)
+  const shouldAutoRestartRef = useRef(true)
   const onResultRef = useRef(onResult)
   const onErrorRef = useRef(onError)
+
+  const mapSpeechError = useCallback((code: string) => {
+    switch (code) {
+      case 'not-allowed':
+      case 'service-not-allowed':
+        return 'Microphone permission is blocked. Allow microphone access in your browser settings.'
+      case 'audio-capture':
+        return 'No microphone was found. Check your input device and OS permissions.'
+      case 'network':
+        return 'Speech recognition network issue. Check your connection and try again.'
+      case 'no-speech':
+        return 'No speech detected. Try speaking again.'
+      case 'aborted':
+        return 'Speech capture was interrupted. Please try again.'
+      default:
+        return code || 'Unknown error occurred'
+    }
+  }, [])
 
   useEffect(() => {
     isListeningRef.current = isListening
@@ -134,11 +157,11 @@ export function useSpeechToText(options: UseSpeechToTextOptions = {}) {
       }
 
       if (finalText) {
-        setTranscript((prev) => {
-          const newTranscript = prev + finalText
-          onResultRef.current?.(newTranscript, true)
-          return newTranscript
-        })
+        setTranscript((prev) => prev + finalText)
+        const trimmedFinal = finalText.trim()
+        if (trimmedFinal) {
+          onResultRef.current?.(trimmedFinal, true)
+        }
       }
 
       if (interimText) {
@@ -148,9 +171,16 @@ export function useSpeechToText(options: UseSpeechToTextOptions = {}) {
     }
 
     recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
-      const errorMessage = event.error || 'Unknown error occurred'
+      const code = event.error || 'Unknown error occurred'
+      const errorMessage = mapSpeechError(code)
+      setErrorCode(code)
       setError(errorMessage)
       onErrorRef.current?.(errorMessage)
+
+      if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+        setMicrophonePermission('denied')
+        shouldAutoRestartRef.current = false
+      }
 
       if (event.error === 'no-speech' || event.error === 'audio-capture') {
         return
@@ -160,6 +190,10 @@ export function useSpeechToText(options: UseSpeechToTextOptions = {}) {
     }
 
     recognition.onend = () => {
+      if (!shouldAutoRestartRef.current) {
+        setIsListening(false)
+        return
+      }
       if (isListeningRef.current && continuous) {
         try {
           recognition.start()
@@ -180,36 +214,115 @@ export function useSpeechToText(options: UseSpeechToTextOptions = {}) {
         } catch (err) {}
       }
     }
-  }, [lang, continuous, interimResults, maxAlternatives])
+  }, [lang, continuous, interimResults, maxAlternatives, mapSpeechError])
 
-  const startListening = useCallback(() => {
+  useEffect(() => {
+    if (typeof navigator === 'undefined' || !navigator.permissions?.query) {
+      return
+    }
+
+    let cancelled = false
+    let statusRef: PermissionStatus | null = null
+    const syncStatus = (state: PermissionState) => {
+      if (cancelled) return
+      if (state === 'granted') {
+        setMicrophonePermission('granted')
+      } else if (state === 'denied') {
+        setMicrophonePermission('denied')
+      } else {
+        setMicrophonePermission('unknown')
+      }
+    }
+
+    navigator.permissions
+      .query({ name: 'microphone' as PermissionName })
+      .then((status) => {
+        if (cancelled) return
+        statusRef = status
+        syncStatus(status.state)
+        status.onchange = () => syncStatus(status.state)
+      })
+      .catch(() => {})
+
+    return () => {
+      cancelled = true
+      if (statusRef) {
+        statusRef.onchange = null
+      }
+    }
+  }, [])
+
+  const requestMicrophoneAccess = useCallback(async () => {
+    if (typeof navigator === 'undefined') return false
+    if (microphonePermission === 'granted') return true
+    if (!navigator.mediaDevices?.getUserMedia) {
+      const message = 'Microphone access is not supported in this browser'
+      setErrorCode('audio-capture')
+      setError(message)
+      onErrorRef.current?.(message)
+      return false
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      stream.getTracks().forEach((track) => track.stop())
+      setMicrophonePermission('granted')
+      shouldAutoRestartRef.current = true
+      setError(null)
+      setErrorCode(null)
+      return true
+    } catch {
+      const message =
+        'Microphone permission is blocked. Allow microphone access in your browser settings.'
+      setMicrophonePermission('denied')
+      shouldAutoRestartRef.current = false
+      setErrorCode('not-allowed')
+      setError(message)
+      onErrorRef.current?.(message)
+      return false
+    }
+  }, [microphonePermission])
+
+  const startListening = useCallback(async () => {
     if (!recognitionRef.current || !isSupported) {
       setError('Speech recognition is not available')
-      return
+      return false
     }
 
     try {
       setError(null)
+      setErrorCode(null)
+      shouldAutoRestartRef.current = true
       setIsListening(true)
       recognitionRef.current.start()
+      return true
     } catch (err) {
       if (err instanceof Error) {
         if (err.message.includes('already started')) {
           setIsListening(true)
-          return
+          return true
         }
-        setError(err.message)
-        onError?.(err.message)
+        const lowered = err.message.toLowerCase()
+        const inferredCode =
+          lowered.includes('not-allowed') || lowered.includes('permission')
+            ? 'not-allowed'
+            : 'start-failed'
+        const message = mapSpeechError(inferredCode)
+        setErrorCode(inferredCode)
+        setError(message)
+        onError?.(message)
       }
       setIsListening(false)
+      return false
     }
-  }, [isSupported, onError])
+  }, [isSupported, onError, mapSpeechError])
 
   const stopListening = useCallback(() => {
     if (!recognitionRef.current) return
 
     try {
       setIsListening(false)
+      shouldAutoRestartRef.current = false
       recognitionRef.current.stop()
       setInterimTranscript('')
     } catch (err) {}
@@ -224,7 +337,7 @@ export function useSpeechToText(options: UseSpeechToTextOptions = {}) {
     if (isListening) {
       stopListening()
     } else {
-      startListening()
+      void startListening()
     }
   }, [isListening, startListening, stopListening])
 
@@ -233,10 +346,17 @@ export function useSpeechToText(options: UseSpeechToTextOptions = {}) {
     transcript,
     interimTranscript,
     error,
+    errorCode,
     isSupported,
+    microphonePermission,
+    isPermissionBlocked:
+      microphonePermission === 'denied' ||
+      errorCode === 'not-allowed' ||
+      errorCode === 'service-not-allowed',
     startListening,
     stopListening,
     toggleListening,
     resetTranscript,
+    requestMicrophoneAccess,
   }
 }

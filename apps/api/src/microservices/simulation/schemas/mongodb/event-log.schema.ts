@@ -15,7 +15,8 @@ import { Schema, Document } from 'mongoose';
 export interface IEventLog extends Document {
   _id: string;
   eventId?: string;
-  sessionMemberId: string;
+  iterationId: string;
+  sessionMemberId?: string;
   type: string;
 
   payload: Record<string, any>;
@@ -44,7 +45,8 @@ export const EventLogSchema = new Schema<IEventLog>(
   {
     _id: { type: String, required: true },
     eventId: { type: String, index: true },
-    sessionMemberId: { type: String, required: true, index: true },
+    iterationId: { type: String, required: true, index: true },
+    sessionMemberId: { type: String, index: true },
     type: { type: String, required: true, index: true },
 
     payload: { type: Schema.Types.Mixed, required: true },
@@ -71,6 +73,8 @@ export const EventLogSchema = new Schema<IEventLog>(
   },
 );
 
+EventLogSchema.index({ iterationId: 1, type: 1 });
+EventLogSchema.index({ iterationId: 1, createdAt: -1 });
 EventLogSchema.index({ sessionMemberId: 1, type: 1 });
 EventLogSchema.index({ sessionMemberId: 1, createdAt: -1 });
 EventLogSchema.index({ type: 1, createdAt: -1 });

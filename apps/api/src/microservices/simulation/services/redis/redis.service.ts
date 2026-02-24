@@ -1,5 +1,6 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Inject } from '@nestjs/common';
 import { Redis } from 'ioredis';
+import { REDIS_CLIENT } from '@pitch/shared-backend/redis/constants';
 import {
   RedisKeys,
   RedisTTL,
@@ -32,7 +33,7 @@ import {
 export class SimulationRedisService {
   private readonly logger = new Logger(SimulationRedisService.name);
 
-  constructor(private readonly redis: Redis) {}
+  constructor(@Inject(REDIS_CLIENT) private readonly redis: Redis) {}
 
   async setSessionCache(sessionId: string, data: ISessionCache): Promise<void> {
     const key = RedisKeys.session(sessionId);

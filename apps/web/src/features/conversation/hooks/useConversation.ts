@@ -5,6 +5,8 @@ import {
   ConversationStartPayload,
   WsEnvelope,
   ConversationTextPayload,
+  ConversationStreamDeltaPayload,
+  ConversationStreamCompletedPayload,
   ConversationAudioReadyPayload,
   ConversationErrorPayload,
 } from '../types/conversation.types'
@@ -41,8 +43,8 @@ export function useConversation(options: UseConversationOptions) {
   const [isAudioPlaying, setIsAudioPlaying] = useState(false)
 
   const currentRequestIdRef = useRef<string | null>(null)
-  const audioContextRef = useRef<AudioContext | null>(null)
   const currentAudioRef = useRef<HTMLAudioElement | null>(null)
+  const pendingAudioUrlRef = useRef<string | null>(null)
   const onErrorRef = useRef(onError)
   const messagesRef = useRef<ConversationMessage[]>([])
   const isHungUpRef = useRef(false)
@@ -69,11 +71,8 @@ export function useConversation(options: UseConversationOptions) {
         setIsAudioPlaying(false)
       }
 
-      if (!audioContextRef.current) {
-        audioContextRef.current = new AudioContext()
-      }
-
       const newAudio = new Audio(audioUrl)
+      newAudio.preload = 'auto'
       currentAudioRef.current = newAudio
 
       newAudio.onplay = () => {
@@ -93,7 +92,21 @@ export function useConversation(options: UseConversationOptions) {
       }
 
       await newAudio.play()
+      pendingAudioUrlRef.current = null
+      setError((previousError) =>
+        previousError === AUDIO_AUTOPLAY_BLOCKED_ERROR ? null : previousError
+      )
     } catch (err) {
+      if (err instanceof DOMException && err.name === 'NotAllowedError') {
+        pendingAudioUrlRef.current = audioUrl
+        setError(AUDIO_AUTOPLAY_BLOCKED_ERROR)
+        onErrorRef.current?.(AUDIO_AUTOPLAY_BLOCKED_ERROR)
+      } else {
+        const errorMsg =
+          err instanceof Error ? `Failed to play audio: ${err.message}` : 'Failed to play audio'
+        setError(errorMsg)
+        onErrorRef.current?.(errorMsg)
+      }
       setIsAudioPlaying(false)
     }
   }, [])
@@ -110,41 +123,127 @@ export function useConversation(options: UseConversationOptions) {
       setCurrentAudioUrl(null)
       setIsAudioPlaying(false)
     }
+    pendingAudioUrlRef.current = null
   }, [])
-  const setupEventListeners = useCallback(() => {
+
+  const disconnect = useCallback(() => {
     conversationService.offConversationText()
+    conversationService.offConversationStreamDelta()
+    conversationService.offConversationStreamCompleted()
     conversationService.offConversationAudioReady()
     conversationService.offConversationError()
     conversationService.offConversationEnd()
     conversationService.offConversationCancel()
 
-    conversationService.onConversationText((data: WsEnvelope<ConversationTextPayload>) => {
-      if (isHungUpRef.current) return
-      if (data.requestId === currentRequestIdRef.current) {
-        const message: ConversationMessage = {
-          id: data.requestId,
-          role: 'assistant',
-          text: data.payload.text,
-          timestamp: new Date(),
-          usage: data.payload.usage,
+    conversationService.disconnect()
+    setIsConnected(false)
+  }, [])
+
+  const revokeAudioUrls = useCallback(() => {
+    messagesRef.current.forEach((msg) => {
+      if (msg.audioUrl && msg.audioUrl.startsWith('blob:')) {
+        try {
+          URL.revokeObjectURL(msg.audioUrl)
+        } catch (err) {
+          // Ignore if already revoked
         }
-        setMessages((prev) => [...prev, message])
       }
     })
+  }, [])
+  const setupEventListeners = useCallback(() => {
+    conversationService.offConversationText()
+    conversationService.offConversationStreamDelta()
+    conversationService.offConversationStreamCompleted()
+    conversationService.offConversationAudioReady()
+    conversationService.offConversationError()
+    conversationService.offConversationEnd()
+    conversationService.offConversationCancel()
+
+    const upsertAssistantMessage = (
+      requestId: string,
+      updater: (current?: ConversationMessage) => ConversationMessage
+    ) => {
+      setMessages((prev) => {
+        const index = prev.findIndex((msg) => msg.id === requestId)
+        if (index === -1) {
+          return [...prev, updater()]
+        }
+        const updated = [...prev]
+        updated[index] = updater(updated[index])
+        return updated
+      })
+    }
+
+    conversationService.onConversationText((data: WsEnvelope<ConversationTextPayload>) => {
+      if (isHungUpRef.current) return
+      if (data.requestId !== currentRequestIdRef.current) return
+
+      upsertAssistantMessage(data.requestId, (current) => ({
+        id: data.requestId,
+        role: 'assistant',
+        text: data.payload.text,
+        timestamp: current?.timestamp ?? new Date(),
+        usage: data.payload.usage ?? current?.usage,
+        audioUrl: current?.audioUrl,
+      }))
+    })
+
+    conversationService.onConversationStreamDelta(
+      (data: WsEnvelope<ConversationStreamDeltaPayload>) => {
+        if (isHungUpRef.current) return
+        if (data.requestId !== currentRequestIdRef.current) return
+
+        upsertAssistantMessage(data.requestId, (current) => ({
+          id: data.requestId,
+          role: 'assistant',
+          text: `${current?.text ?? ''}${data.payload.delta ?? ''}`,
+          timestamp: current?.timestamp ?? new Date(),
+          usage: current?.usage,
+          audioUrl: current?.audioUrl,
+        }))
+      }
+    )
+
+    conversationService.onConversationStreamCompleted(
+      (data: WsEnvelope<ConversationStreamCompletedPayload>) => {
+        if (isHungUpRef.current) return
+        if (data.requestId !== currentRequestIdRef.current) return
+
+        upsertAssistantMessage(data.requestId, (current) => ({
+          id: data.requestId,
+          role: 'assistant',
+          text: data.payload.fullText ?? current?.text ?? '',
+          timestamp: current?.timestamp ?? new Date(),
+          usage: data.payload.usage ?? current?.usage,
+          audioUrl: current?.audioUrl,
+        }))
+      }
+    )
 
     conversationService.onConversationAudioReady(
       (data: WsEnvelope<ConversationAudioReadyPayload>) => {
         if (isHungUpRef.current) return
         if (data.requestId === currentRequestIdRef.current) {
+          if (!data.payload.audioBase64 || !data.payload.contentType) {
+            const errorMsg = 'Audio unavailable for this turn'
+            setError(errorMsg)
+            onErrorRef.current?.(errorMsg)
+            return
+          }
           const audioBlob = base64ToBlob(data.payload.audioBase64, data.payload.contentType)
           const audioUrl = URL.createObjectURL(audioBlob)
           setCurrentAudioUrl(audioUrl)
 
-          setMessages((prev) =>
-            prev.map((msg) => (msg.id === data.requestId ? { ...msg, audioUrl } : msg))
-          )
+          upsertAssistantMessage(data.requestId, (current) => ({
+            id: data.requestId,
+            role: 'assistant',
+            text: current?.text ?? data.payload.text ?? '',
+            timestamp: current?.timestamp ?? new Date(),
+            usage: current?.usage,
+            audioUrl,
+          }))
 
-          playAudio(audioUrl)
+          void playAudio(audioUrl)
         }
       }
     )
@@ -156,6 +255,8 @@ export function useConversation(options: UseConversationOptions) {
         setError(errorMsg)
         onErrorRef.current?.(errorMsg)
         setIsProcessing(false)
+        stopAudio()
+        revokeAudioUrls()
         currentRequestIdRef.current = null
       }
     })
@@ -175,7 +276,7 @@ export function useConversation(options: UseConversationOptions) {
         stopAudio()
       }
     })
-  }, [playAudio, stopAudio])
+  }, [playAudio, stopAudio, revokeAudioUrls])
 
   const connect = useCallback(async () => {
     const token = getAccessToken()
@@ -201,17 +302,6 @@ export function useConversation(options: UseConversationOptions) {
       setIsConnecting(false)
     }
   }, [setupEventListeners])
-
-  const disconnect = useCallback(() => {
-    conversationService.offConversationText()
-    conversationService.offConversationAudioReady()
-    conversationService.offConversationError()
-    conversationService.offConversationEnd()
-    conversationService.offConversationCancel()
-
-    conversationService.disconnect()
-    setIsConnected(false)
-  }, [])
 
   const hangUp = useCallback(() => {
     // Mark as hung up to prevent further message processing
@@ -321,6 +411,27 @@ export function useConversation(options: UseConversationOptions) {
     setMessages([])
   }, [])
 
+  const replayAudio = useCallback(() => {
+    if (!currentAudioUrl) return
+    void playAudio(currentAudioUrl)
+  }, [currentAudioUrl, playAudio])
+
+  useEffect(() => {
+    const replayPendingAudio = () => {
+      const pendingAudioUrl = pendingAudioUrlRef.current
+      if (!pendingAudioUrl) return
+      void playAudio(pendingAudioUrl)
+    }
+
+    window.addEventListener('pointerdown', replayPendingAudio)
+    window.addEventListener('keydown', replayPendingAudio)
+
+    return () => {
+      window.removeEventListener('pointerdown', replayPendingAudio)
+      window.removeEventListener('keydown', replayPendingAudio)
+    }
+  }, [playAudio])
+
   useEffect(() => {
     if (autoConnect) {
       isHungUpRef.current = false
@@ -330,15 +441,11 @@ export function useConversation(options: UseConversationOptions) {
     return () => {
       // Clean up on unmount
       stopAudio()
-      messagesRef.current.forEach((msg) => {
-        if (msg.audioUrl) {
-          URL.revokeObjectURL(msg.audioUrl)
-        }
-      })
+      revokeAudioUrls()
       disconnect()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoConnect])
+  }, [autoConnect, revokeAudioUrls])
 
   return {
     isConnected,
@@ -356,15 +463,29 @@ export function useConversation(options: UseConversationOptions) {
     startAssistantTurn,
     clearMessages,
     stopAudio,
+    replayAudio,
   }
 }
 
+const AUDIO_AUTOPLAY_BLOCKED_ERROR =
+  'Audio is ready, but your browser blocked autoplay. Press Play once to enable sound.'
+
 function base64ToBlob(base64: string, contentType: string): Blob {
-  const byteCharacters = atob(base64)
+  const normalizedBase64 = normalizeBase64(base64)
+  const byteCharacters = atob(normalizedBase64)
   const byteNumbers = new Array(byteCharacters.length)
   for (let i = 0; i < byteCharacters.length; i++) {
     byteNumbers[i] = byteCharacters.charCodeAt(i)
   }
   const byteArray = new Uint8Array(byteNumbers)
   return new Blob([byteArray], { type: contentType })
+}
+
+function normalizeBase64(value: string): string {
+  const cleaned = value.replace(/\s+/g, '').replace(/-/g, '+').replace(/_/g, '/')
+  const remainder = cleaned.length % 4
+  if (remainder === 0) {
+    return cleaned
+  }
+  return `${cleaned}${'='.repeat(4 - remainder)}`
 }

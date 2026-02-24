@@ -152,7 +152,11 @@ export class SessionGatewayController {
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiQuery({ name: 'userId', required: false, type: String })
   @ApiQuery({ name: 'orgId', required: false, type: String })
-  @ApiQuery({ name: 'type', required: false, enum: ['text', 'voice', 'video'] })
+  @ApiQuery({
+    name: 'type',
+    required: false,
+    enum: ['text', 'voice', 'video', 'phone'],
+  })
   @ApiQuery({ name: 'status', required: false, type: String })
   @ApiQuery({ name: 'scenarioId', required: false, type: String })
   @ApiQuery({ name: 'personaId', required: false, type: String })

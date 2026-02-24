@@ -2,7 +2,7 @@ import { DynamicModule, Global, Module, Provider } from '@nestjs/common'
 import { RedisService } from './redis.service'
 import { createRedisProvider } from './redis.provider'
 import { RedisHealthIndicator } from './redis-health.indicator'
-import { REDIS_MODULE_OPTIONS } from './constants'
+import { REDIS_CLIENT, REDIS_MODULE_OPTIONS } from './constants'
 import {
   RedisModuleOptions,
   RedisModuleAsyncOptions,
@@ -82,7 +82,7 @@ export class RedisModule {
         RedisService,
         RedisHealthIndicator,
       ],
-      exports: [RedisService, RedisHealthIndicator],
+      exports: [REDIS_CLIENT, RedisService, RedisHealthIndicator],
     }
   }
 
@@ -104,7 +104,7 @@ export class RedisModule {
         RedisService,
         RedisHealthIndicator,
       ],
-      exports: [RedisService, RedisHealthIndicator],
+      exports: [REDIS_CLIENT, RedisService, RedisHealthIndicator],
     }
   }
 

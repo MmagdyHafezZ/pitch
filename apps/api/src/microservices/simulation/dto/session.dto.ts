@@ -18,6 +18,7 @@ export enum SessionType {
   text = 'text',
   voice = 'voice',
   video = 'video',
+  phone = 'phone',
 }
 
 /**
@@ -61,7 +62,7 @@ export class CreateSessionDto {
   @ApiProperty({
     enum: SessionType,
     example: SessionType.text,
-    description: 'Type of session (text, voice, or video)',
+    description: 'Type of session (text, voice, video, or phone)',
   })
   @IsEnum(SessionType)
   type: SessionType;
@@ -150,7 +151,7 @@ export class UpdateSessionDto {
   @ApiPropertyOptional({
     enum: SessionType,
     example: SessionType.text,
-    description: 'Type of session (text, voice, or video)',
+    description: 'Type of session (text, voice, video, or phone)',
   })
   @IsEnum(SessionType)
   @IsOptional()

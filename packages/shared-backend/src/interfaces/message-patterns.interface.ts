@@ -88,6 +88,7 @@ export const SIMULATION_SERVICE_PATTERNS = {
 
   CONVERSATION_PROCESS: 'simulation.conversation.process',
   CONVERSATION_STREAM: 'simulation.conversation.stream',
+  CONVERSATION_TEXT_STREAM: 'simulation.conversation.text.stream',
 
   LLM_ROUTING_GET: 'simulation.llm.routing.get',
   LLM_ROUTING_UPSERT: 'simulation.llm.routing.upsert',
@@ -137,6 +138,8 @@ export const SIMULATION_SERVICE_PATTERNS = {
 
   HINTS_GENERATE: 'simulation.hints.generate',
   HINTS_HISTORY: 'simulation.hints.history',
+
+  PHONE_CALL_START: 'simulation.phone.call.start',
 } as const
 
 export type UserServicePattern = (typeof USER_SERVICE_PATTERNS)[keyof typeof USER_SERVICE_PATTERNS]
