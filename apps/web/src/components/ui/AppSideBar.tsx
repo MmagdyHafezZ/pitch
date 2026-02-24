@@ -27,6 +27,7 @@ type Props = {
   >
   selectedDate: Date | null
   setSelectedDate: Dispatch<SetStateAction<Date | null>>
+  showTeamConfig?: boolean
   mainLinks?: SidebarLink[]
   secondaryLinks?: SidebarLink[]
 }
@@ -43,10 +44,14 @@ export function AppSidebar({
   setActive,
   selectedDate,
   setSelectedDate,
+  showTeamConfig = true,
   mainLinks = DEFAULT_MAIN,
 }: Props) {
   const router = useRouter()
   const [settingsOpened, setSettingsOpened] = useState(false)
+  const resolvedMainLinks = showTeamConfig
+    ? mainLinks
+    : mainLinks.filter((link) => link.label !== 'Team Config')
 
   return (
     <>
@@ -74,7 +79,7 @@ export function AppSidebar({
           }}
         >
           <Stack gap={6} mt="xs" flex={1}>
-            {mainLinks.map(({ icon: Icon, label }) => (
+            {resolvedMainLinks.map(({ icon: Icon, label }) => (
               <NavLink
                 key={label}
                 active={active === label}

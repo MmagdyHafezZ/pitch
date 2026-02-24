@@ -3,6 +3,7 @@ import { AppLayout } from '@/components/layout/AppLayout'
 import { AppSidebar } from '@/components/ui/AppSideBar'
 import { AppTopBar } from '@/components/ui/AppTopBar'
 import { TeamSideBar } from '@/components/ui/TeamSideBar'
+import { useAuth } from '@/features/auth'
 import { useTeams } from '@/features/teams/hooks/useTeams'
 import { Box } from '@mantine/core'
 import { useState, useEffect, useMemo, Suspense } from 'react'
@@ -14,6 +15,7 @@ export default function ClientLayerComponent({ children }: { children: React.Rea
   >('Home')
   const [selectedDate, setSelectedDate] = useState<Date | null>(new Date())
   const { teams, activeTeamId, setActiveTeamId, fetchUserTeams } = useTeams()
+  const { user } = useAuth()
   const pathname = usePathname()
   const pageInfo = useMemo(() => {
     if (!pathname) {
@@ -38,6 +40,12 @@ export default function ClientLayerComponent({ children }: { children: React.Rea
     () => teams.find((t) => t.id === activeTeamId) ?? null,
     [teams, activeTeamId]
   )
+  const canManageActiveTeam = useMemo(() => {
+    if (!user || !activeTeam?.memberships?.length) return false
+
+    const membership = activeTeam.memberships.find((m) => m.userId === user.id)
+    return membership?.role === 'OWNER' || membership?.role === 'ADMIN'
+  }, [activeTeam, user])
   useEffect(() => {
     fetchUserTeams()
   }, [fetchUserTeams])
@@ -69,6 +77,7 @@ export default function ClientLayerComponent({ children }: { children: React.Rea
             setActive={setActive}
             selectedDate={selectedDate}
             setSelectedDate={setSelectedDate}
+            showTeamConfig={canManageActiveTeam}
           />
         </Box>
       }

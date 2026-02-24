@@ -101,6 +101,7 @@ type UserSettingsPayload = {
     reduceMotion?: boolean
   }
   crm?: {
+    name?: string | null
     provider?: string | null
     connected?: boolean
     providerEmail?: string | null
@@ -112,7 +113,23 @@ type UserSettingsPayload = {
   }
 }
 
+type SavedCrmConnection = {
+  id: string
+  name: string
+  provider: string
+  providerEmail?: string | null
+  connected?: boolean
+  lastSyncAt?: string | null
+  autoSync?: boolean
+  savedAt: string
+}
+
 type CrmSessionDefaults = NonNullable<UserSettingsPayload['crm']>['sessionDefaults']
+
+const formatCrmConnectionName = (provider: string, providerEmail?: string | null) => {
+  const providerLabel = provider ? provider.charAt(0).toUpperCase() + provider.slice(1) : 'CRM'
+  return providerEmail ? `${providerLabel} (${providerEmail})` : providerLabel
+}
 
 const TIMEZONE_OPTIONS = [
   '(GMT-5:00) Eastern Time',
@@ -258,6 +275,8 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
   const [reduceMotion, setReduceMotion] = useState(false)
   const [crmAutoSync, setCrmAutoSync] = useState(true)
   const [crmProvider, setCrmProvider] = useState<string | null>('salesforce')
+  const [crmConnections, setCrmConnections] = useState<SavedCrmConnection[]>([])
+  const [crmConnectionName, setCrmConnectionName] = useState('')
   const [crmSessionDefaults, setCrmSessionDefaults] = useState<CrmSessionDefaults>(undefined)
   const [crmPresetNameDrafts, setCrmPresetNameDrafts] = useState<Record<string, string>>({})
   const [isSaving, setIsSaving] = useState(false)
@@ -400,6 +419,7 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
         reduceMotion,
       },
       crm: {
+        name: crmConnections[0]?.name ?? (crmConnectionName.trim() || null),
         provider: crmProvider,
         connected: crmStatus?.connected ?? false,
         providerEmail: crmStatus?.providerEmail ?? null,
@@ -593,6 +613,26 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
         if (settings.crm) {
           setCrmProvider(settings.crm.provider ?? 'salesforce')
           setCrmAutoSync(settings.crm.autoSync ?? true)
+          setCrmConnectionName(settings.crm.name ?? '')
+          if (settings.crm.provider) {
+            setCrmConnections([
+              {
+                id: `${settings.crm.provider}:${settings.crm.providerEmail ?? 'default'}`,
+                name:
+                  settings.crm.name?.trim() ||
+                  formatCrmConnectionName(settings.crm.provider, settings.crm.providerEmail),
+                provider: settings.crm.provider,
+                providerEmail: settings.crm.providerEmail ?? null,
+                connected: settings.crm.connected ?? false,
+                lastSyncAt: settings.crm.lastSyncAt ?? null,
+                autoSync: settings.crm.autoSync ?? true,
+                savedAt: new Date().toISOString(),
+              },
+            ])
+          } else {
+            setCrmConnections([])
+            setCrmConnectionName('')
+          }
           setCrmSessionDefaults(settings.crm.sessionDefaults)
           const savedConnections = getSavedCrmSessionConnections(
             settings as UserSettingsWithCrmPrefs
@@ -600,6 +640,10 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
           setCrmPresetNameDrafts(
             Object.fromEntries(savedConnections.map((preset) => [preset.id, preset.label]))
           )
+        }
+        if (!settings.crm) {
+          setCrmConnections([])
+          setCrmConnectionName('')
         }
 
         const appearance = settings.appearance
@@ -690,6 +734,49 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
     )
 
     updateCrmSessionDefaultsFromSettings(nextSettings)
+  }
+
+  const handleSaveCurrentCrmConnection = () => {
+    if (!crmProvider) {
+      notifications.show({
+        title: 'No CRM provider selected',
+        message: 'Choose a CRM provider before saving a CRM connection.',
+        color: 'red',
+      })
+      return
+    }
+
+    const providerEmail = crmStatus?.providerEmail ?? null
+    const nextConnection: SavedCrmConnection = {
+      id:
+        globalThis.crypto?.randomUUID?.() ??
+        `${crmProvider}:${providerEmail ?? 'default'}:${Date.now()}`,
+      name: crmConnectionName.trim() || formatCrmConnectionName(crmProvider, providerEmail),
+      provider: crmProvider,
+      providerEmail,
+      connected: crmStatus?.connected ?? false,
+      lastSyncAt: crmStatus?.lastSyncAt ?? null,
+      autoSync: crmAutoSync,
+      savedAt: new Date().toISOString(),
+    }
+
+    setCrmConnections([nextConnection])
+    setCrmConnectionName('')
+    notifications.show({
+      title: 'CRM connection saved',
+      message: 'This CRM connection is now saved in your account settings.',
+      color: 'green',
+    })
+  }
+
+  const handleRenameCrmConnection = (id: string, name: string) => {
+    setCrmConnections((current) =>
+      current.map((entry) => (entry.id === id ? { ...entry, name } : entry))
+    )
+  }
+
+  const handleRemoveCrmConnection = (id: string) => {
+    setCrmConnections((current) => current.filter((entry) => entry.id !== id))
   }
 
   useEffect(() => {
@@ -1311,6 +1398,74 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
                   checked={crmAutoSync}
                   onChange={(event) => setCrmAutoSync(event.currentTarget.checked)}
                 />
+                <Card withBorder radius="md" padding="md">
+                  <Stack gap="sm">
+                    <Group justify="space-between" align="center">
+                      <Text fw={600}>Saved CRM connections</Text>
+                      <Badge variant="light">{crmConnections.length}</Badge>
+                    </Group>
+                    <Group align="end" wrap="nowrap">
+                      <TextInput
+                        label="CRM name"
+                        placeholder="e.g. RevOps Salesforce"
+                        value={crmConnectionName}
+                        onChange={(event) => setCrmConnectionName(event.currentTarget.value)}
+                        style={{ flex: 1 }}
+                        classNames={settingsInputClassNames}
+                      />
+                      <Button
+                        variant="light"
+                        onClick={handleSaveCurrentCrmConnection}
+                        disabled={!crmProvider}
+                      >
+                        Save current CRM
+                      </Button>
+                    </Group>
+                    <Text size="xs" c="var(--pitch-surface-text-dim)">
+                      Saves the current CRM provider/account to your account settings for reuse.
+                    </Text>
+                    {crmConnections.length === 0 ? (
+                      <Text size="sm" c="var(--pitch-surface-text-dim)">
+                        No saved CRM connections yet.
+                      </Text>
+                    ) : (
+                      crmConnections.map((connection) => (
+                        <Stack key={connection.id} gap={6}>
+                          <Group align="end" wrap="nowrap">
+                            <TextInput
+                              label="Name"
+                              value={connection.name}
+                              onChange={(event) =>
+                                handleRenameCrmConnection(connection.id, event.currentTarget.value)
+                              }
+                              style={{ flex: 1 }}
+                              classNames={settingsInputClassNames}
+                            />
+                            <Tooltip label="Remove saved CRM">
+                              <ActionIcon
+                                variant="light"
+                                color="red"
+                                onClick={() => handleRemoveCrmConnection(connection.id)}
+                                aria-label={`Remove ${connection.name}`}
+                              >
+                                <IconTrash size={16} />
+                              </ActionIcon>
+                            </Tooltip>
+                          </Group>
+                          <Group gap="xs">
+                            <Badge variant="outline">{connection.provider}</Badge>
+                            {connection.providerEmail && (
+                              <Badge variant="light">{connection.providerEmail}</Badge>
+                            )}
+                            <Badge color={connection.connected ? 'green' : 'gray'} variant="light">
+                              {connection.connected ? 'Connected' : 'Disconnected'}
+                            </Badge>
+                          </Group>
+                        </Stack>
+                      ))
+                    )}
+                  </Stack>
+                </Card>
                 <Card withBorder radius="md" padding="md">
                   <Stack gap="sm">
                     <Group justify="space-between" align="center">

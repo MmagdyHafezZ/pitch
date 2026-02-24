@@ -10,6 +10,7 @@ import {
   Button,
   Badge,
   MultiSelect,
+  Select,
   SimpleGrid,
   Alert,
   Anchor,
@@ -30,7 +31,10 @@ import {
   IconTrash,
 } from '@tabler/icons-react'
 import classes from '../create-session.module.css'
-import type { SavedCrmSessionConnection } from '@/features/crm/utils/session-crm-preferences'
+import type {
+  SavedCrmConnection,
+  SavedCrmSessionConnection,
+} from '@/features/crm/utils/session-crm-preferences'
 
 export interface CrmOption {
   value: string
@@ -63,6 +67,9 @@ interface CrmStepProps {
   setSelectedContacts: (value: string[]) => void
   saveForFutureUse?: boolean
   setSaveForFutureUse?: (value: boolean) => void
+  savedCrms?: SavedCrmConnection[]
+  selectedSavedCrmId?: string | null
+  onSelectSavedCrm?: (crmId: string | null) => void
   savedConnections?: SavedCrmSessionConnection[]
   onUseSavedConnection?: (connection: SavedCrmSessionConnection) => void
   onRemoveSavedConnection?: (connection: SavedCrmSessionConnection) => void
@@ -91,6 +98,9 @@ export function CrmStep({
   setSelectedContacts,
   saveForFutureUse = false,
   setSaveForFutureUse,
+  savedCrms = [],
+  selectedSavedCrmId = null,
+  onSelectSavedCrm,
   savedConnections = [],
   onUseSavedConnection,
   onRemoveSavedConnection,
@@ -166,6 +176,34 @@ export function CrmStep({
           </>
         ) : null}
       </Paper>
+
+      {savedCrms.length > 0 && onSelectSavedCrm ? (
+        <Paper withBorder p="md" radius="lg" className={classes.crmCard}>
+          <Stack gap="sm">
+            <Text fw={600}>Saved CRMs</Text>
+            <Text size="sm" c="dimmed">
+              Select one of your saved CRM connections for this session.
+            </Text>
+            <Select
+              label="Saved CRM connection"
+              placeholder="Choose a saved CRM"
+              value={selectedSavedCrmId}
+              onChange={onSelectSavedCrm}
+              data={savedCrms.map((crm) => ({
+                value: crm.id,
+                label: `${crm.name}${crm.providerEmail ? ` • ${crm.providerEmail}` : ''}`,
+              }))}
+              clearable
+            />
+            {selectedSavedCrmId ? (
+              <Text size="xs" c="dimmed">
+                Selecting a saved CRM applies its provider/account metadata to this session. Record
+                selections are still managed below.
+              </Text>
+            ) : null}
+          </Stack>
+        </Paper>
+      ) : null}
 
       {savedConnections.length > 0 && onUseSavedConnection ? (
         <Paper withBorder p="md" radius="lg" className={classes.crmCard}>

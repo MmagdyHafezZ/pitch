@@ -208,4 +208,45 @@ describe('SettingsModal', () => {
     expect(jest.mocked(notifications.show)).toHaveBeenCalled()
     expect(onClose).toHaveBeenCalled()
   })
+
+  it('saves a single named crm in settings.crm and not crm.connections', async () => {
+    const onClose = jest.fn()
+    const user = userEvent.setup()
+
+    mockApi.users.getMySettings.mockResolvedValueOnce({
+      crm: {
+        provider: 'salesforce',
+        connected: true,
+        providerEmail: 'old@example.com',
+        name: 'Old CRM',
+      },
+    })
+
+    render(<SettingsModal opened onClose={onClose} />)
+
+    await waitFor(() => {
+      expect(mockApi.users.getMySettings).toHaveBeenCalled()
+    })
+
+    await user.click(screen.getByText('CRM'))
+
+    const crmNameInput = await screen.findByLabelText('CRM name')
+    await user.clear(crmNameInput)
+    await user.type(crmNameInput, 'Revenue Salesforce')
+    await user.click(screen.getByRole('button', { name: 'Save current CRM' }))
+    await user.click(screen.getByRole('button', { name: /^Save$/ }))
+
+    await waitFor(() => {
+      expect(mockApi.users.updateMySettings).toHaveBeenCalled()
+    })
+
+    const payload = mockApi.users.updateMySettings.mock.calls.at(-1)?.[0]
+    expect(payload.crm).toEqual(
+      expect.objectContaining({
+        name: 'Revenue Salesforce',
+        provider: expect.anything(),
+      })
+    )
+    expect(payload.crm.connections).toBeUndefined()
+  })
 })

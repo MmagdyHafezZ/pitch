@@ -15,8 +15,20 @@ export type SavedCrmSessionConnection = {
   selections: CrmSelectionGroups
 }
 
+export type SavedCrmConnection = {
+  id: string
+  name: string
+  provider: string
+  providerEmail?: string | null
+  connected?: boolean
+  lastSyncAt?: string | null
+  autoSync?: boolean
+  savedAt: string
+}
+
 export type UserSettingsWithCrmPrefs = {
   crm?: {
+    name?: string | null
     provider?: string | null
     connected?: boolean
     providerEmail?: string | null
@@ -54,6 +66,51 @@ export const getSavedCrmSessionConnections = (
       ...item,
       selections: normalizeCrmSelections(item.selections),
     }))
+}
+
+export const getSavedCrmConnections = (
+  settings: UserSettingsWithCrmPrefs | null | undefined
+): SavedCrmConnection[] => {
+  const crm = settings?.crm
+  if (!crm?.provider) return []
+
+  const provider = crm.provider
+  const providerEmail = crm.providerEmail ?? null
+  return [
+    {
+      id: `${provider}:${providerEmail ?? 'default'}`,
+      name:
+        (typeof crm.name === 'string' && crm.name.trim()) ||
+        (providerEmail ? `${provider} (${providerEmail})` : provider),
+      provider,
+      providerEmail,
+      connected: crm.connected ?? false,
+      lastSyncAt: crm.lastSyncAt ?? null,
+      autoSync: crm.autoSync ?? true,
+      savedAt: new Date().toISOString(),
+    },
+  ]
+}
+
+export const upsertSavedCrmConnection = (
+  settings: UserSettingsWithCrmPrefs,
+  connection: SavedCrmConnection,
+  _maxEntries = 10
+): UserSettingsWithCrmPrefs => {
+  void _maxEntries
+
+  return {
+    ...settings,
+    crm: {
+      ...(settings.crm ?? {}),
+      name: connection.name,
+      provider: connection.provider,
+      providerEmail: connection.providerEmail ?? null,
+      connected: connection.connected ?? false,
+      lastSyncAt: connection.lastSyncAt ?? null,
+      autoSync: connection.autoSync ?? true,
+    },
+  }
 }
 
 export const upsertSavedCrmSessionConnection = (

@@ -32,8 +32,8 @@ function TeamConfigInner() {
   const searchParams = useSearchParams()
   const isCreateMode = searchParams.get('mode') === 'create'
 
-  const { logout } = useAuth()
-  const { currentTeam, updateTeam } = useTeams()
+  const { user, logout } = useAuth()
+  const { currentTeam, updateTeam, loading } = useTeams()
   const { values, errors, setField, submit, submitting, apiError } = useCreateTeamForm()
   const [editValues, setEditValues] = useState({
     name: '',
@@ -62,6 +62,30 @@ function TeamConfigInner() {
       setEditError(null)
     }
   }, [isCreateMode, currentTeam])
+
+  const hasElevatedAccess = (() => {
+    if (isCreateMode) return true
+    if (!user || !currentTeam?.memberships?.length) return false
+
+    const membership = currentTeam.memberships.find((m) => m.userId === user.id)
+    return membership?.role === 'OWNER' || membership?.role === 'ADMIN'
+  })()
+
+  useEffect(() => {
+    if (isCreateMode || loading) return
+    if (!currentTeam) return
+    if (!hasElevatedAccess) {
+      router.replace('/studio/home')
+    }
+  }, [currentTeam, hasElevatedAccess, isCreateMode, loading, router])
+
+  if (!isCreateMode && loading && !currentTeam) {
+    return <div>Loading team configuration…</div>
+  }
+
+  if (!isCreateMode && currentTeam && !hasElevatedAccess) {
+    return null
+  }
 
   const handleCreateClick = async () => {
     const ok = await submit()

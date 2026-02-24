@@ -119,6 +119,26 @@ describe('UserController', () => {
     });
   });
 
+  it('strips transport-only __claims field when creating a user', async () => {
+    const service = createServiceMock();
+    const oauthProviderFactory = createOauthProviderFactoryMock();
+    service.create.mockResolvedValue(user);
+    const controller = new UserController(service, oauthProviderFactory);
+
+    const payload = {
+      email: 'user@example.com',
+      name: 'User',
+      __claims: { id: 'admin-1', email: 'admin@example.com', name: 'Admin' },
+      ...basePayload,
+    } as any;
+
+    await expect(controller.createUser(payload)).resolves.toEqual(user);
+    expect(service.create).toHaveBeenCalledWith({
+      email: 'user@example.com',
+      name: 'User',
+    });
+  });
+
   it('updates a user', async () => {
     const service = createServiceMock();
     const oauthProviderFactory = createOauthProviderFactoryMock();
@@ -130,6 +150,23 @@ describe('UserController', () => {
       name: 'Updated',
       ...basePayload,
     };
+
+    await expect(controller.updateUser(payload)).resolves.toEqual(user);
+    expect(service.update).toHaveBeenCalledWith('user-1', { name: 'Updated' });
+  });
+
+  it('strips transport-only __claims field when updating a user', async () => {
+    const service = createServiceMock();
+    const oauthProviderFactory = createOauthProviderFactoryMock();
+    service.update.mockResolvedValue(user);
+    const controller = new UserController(service, oauthProviderFactory);
+
+    const payload = {
+      userId: 'user-1',
+      name: 'Updated',
+      __claims: { id: 'admin-1', email: 'admin@example.com', name: 'Admin' },
+      ...basePayload,
+    } as any;
 
     await expect(controller.updateUser(payload)).resolves.toEqual(user);
     expect(service.update).toHaveBeenCalledWith('user-1', { name: 'Updated' });

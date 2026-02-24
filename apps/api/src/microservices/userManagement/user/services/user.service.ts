@@ -7,6 +7,7 @@ import {
   UserSettings,
 } from '@pitch/shared-backend/interfaces/user.interface';
 import { UserRepository } from '../repositories/user.repository';
+import type { CreateUserData } from '../repositories/user.repository';
 import type { PrismaError } from '@pitch/shared-backend/interfaces/error.interface';
 import { AuthProvider } from '../../auth/factories/oauth-provider.factory';
 
@@ -21,6 +22,24 @@ export interface EmailCheckResult {
 @Injectable()
 export class UserService {
   constructor(private readonly userRepository: UserRepository) {}
+
+  private toCreateUserData(dto: CreateUserDto): CreateUserData {
+    return {
+      email: dto.email,
+      name: dto.name,
+      ...(dto.avatar !== undefined ? { avatar: dto.avatar } : {}),
+      ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {}),
+    };
+  }
+
+  private toUpdateUserData(dto: UpdateUserDto): Partial<CreateUserData> {
+    return {
+      ...(dto.email !== undefined ? { email: dto.email } : {}),
+      ...(dto.name !== undefined ? { name: dto.name } : {}),
+      ...(dto.avatar !== undefined ? { avatar: dto.avatar } : {}),
+      ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {}),
+    };
+  }
 
   private toUser<T extends PrismaUser & Record<string, unknown>>(
     user: T,
@@ -74,12 +93,19 @@ export class UserService {
   }
 
   async create(createUserDto: CreateUserDto): Promise<User> {
-    return this.toUser(await this.userRepository.create(createUserDto));
+    return this.toUser(
+      await this.userRepository.create(this.toCreateUserData(createUserDto)),
+    );
   }
 
   async update(id: string, updateUserDto: UpdateUserDto): Promise<User> {
     try {
-      return this.toUser(await this.userRepository.update(id, updateUserDto));
+      return this.toUser(
+        await this.userRepository.update(
+          id,
+          this.toUpdateUserData(updateUserDto),
+        ),
+      );
     } catch (error) {
       const err = error as PrismaError;
       if (err.code === 'P2025') {

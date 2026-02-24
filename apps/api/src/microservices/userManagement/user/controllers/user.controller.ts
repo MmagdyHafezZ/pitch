@@ -71,8 +71,14 @@ export class UserController {
       this.logger.log(
         `Creating user - Requested by: ${data.userClaims.email} (${data.userClaims.id})`,
       );
-      const { userClaims: _userClaims, ...createUserDto } = data;
+      const {
+        userClaims: _userClaims,
+        __claims: _claims,
+        ...createUserDto
+      } = data as userInterface.CreateUserDto &
+        userClaimsInterface.MessageWithUserClaims & { __claims?: unknown };
       void _userClaims;
+      void _claims;
       return await this.userService.create(createUserDto);
     } catch (error) {
       throw toRpcException(error);
@@ -92,8 +98,15 @@ export class UserController {
       this.logger.log(
         `Updating user ${data.userId} - Requested by: ${data.userClaims.email} (${data.userClaims.id})`,
       );
-      const { userClaims: _userClaims, userId, ...updateData } = data;
+      const {
+        userClaims: _userClaims,
+        userId,
+        __claims: _claims,
+        ...updateData
+      } = data as { userId: string } & userInterface.UpdateUserDto &
+        userClaimsInterface.MessageWithUserClaims & { __claims?: unknown };
       void _userClaims;
+      void _claims;
       return await this.userService.update(userId, updateData);
     } catch (error) {
       throw toRpcException(error);

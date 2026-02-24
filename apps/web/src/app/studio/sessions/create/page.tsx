@@ -47,10 +47,13 @@ import { ReviewStep } from './components/ReviewStep'
 import { SessionConfigForm, Persona, PersonaTraits } from './lib/types'
 import { useCrm } from '@/features/crm'
 import {
+  getSavedCrmConnections,
   getSavedCrmSessionConnections,
   normalizeCrmSelections,
   removeSavedCrmSessionConnection,
+  upsertSavedCrmConnection,
   upsertSavedCrmSessionConnection,
+  type SavedCrmConnection,
   type SavedCrmSessionConnection,
   type UserSettingsWithCrmPrefs,
 } from '@/features/crm/utils/session-crm-preferences'
@@ -125,6 +128,8 @@ export default function CreateSessionPage() {
   const [savedCrmLabel, setSavedCrmLabel] = useState('')
   const [userSettings, setUserSettings] = useState<UserSettingsWithCrmPrefs | null>(null)
   const [savedCrmConnections, setSavedCrmConnections] = useState<SavedCrmSessionConnection[]>([])
+  const [savedCrmAccounts, setSavedCrmAccounts] = useState<SavedCrmConnection[]>([])
+  const [selectedSavedCrmAccountId, setSelectedSavedCrmAccountId] = useState<string | null>(null)
 
   const [errors, setErrors] = useState<Record<string, string>>({})
 
@@ -291,10 +296,12 @@ export default function CreateSessionPage() {
         if (cancelled) return
         setUserSettings(settings ?? {})
         setSavedCrmConnections(getSavedCrmSessionConnections(settings))
+        setSavedCrmAccounts(getSavedCrmConnections(settings))
       } catch {
         if (!cancelled) {
           setUserSettings({})
           setSavedCrmConnections([])
+          setSavedCrmAccounts([])
         }
       }
     }
@@ -394,6 +401,25 @@ export default function CreateSessionPage() {
 
     try {
       if (saveCrmForFutureUse && user?.id && crmStatus?.connected) {
+        let nextSettings = userSettings ?? {}
+
+        const nextSavedCrmAccount: SavedCrmConnection = {
+          id:
+            globalThis.crypto?.randomUUID?.() ??
+            `crm:${Date.now()}:${crmStatus.providerEmail ?? 'default'}`,
+          name:
+            savedCrmLabel.trim() ||
+            (crmStatus.providerEmail ? `Salesforce (${crmStatus.providerEmail})` : 'Salesforce'),
+          provider: 'salesforce',
+          providerEmail: crmStatus.providerEmail ?? null,
+          connected: crmStatus.connected ?? false,
+          lastSyncAt: crmStatus.lastSyncAt ?? null,
+          autoSync: true,
+          savedAt: new Date().toISOString(),
+        }
+
+        nextSettings = upsertSavedCrmConnection(nextSettings, nextSavedCrmAccount)
+
         const nextConnection: SavedCrmSessionConnection = {
           id: `${Date.now()}`,
           provider: 'salesforce',
@@ -411,9 +437,10 @@ export default function CreateSessionPage() {
           }),
         }
 
-        const nextSettings = upsertSavedCrmSessionConnection(userSettings ?? {}, nextConnection)
+        nextSettings = upsertSavedCrmSessionConnection(nextSettings, nextConnection)
         await api.users.updateMySettings(nextSettings)
         setUserSettings(nextSettings)
+        setSavedCrmAccounts(getSavedCrmConnections(nextSettings))
         setSavedCrmConnections(getSavedCrmSessionConnections(nextSettings))
       }
 
@@ -442,8 +469,11 @@ export default function CreateSessionPage() {
       }
 
       sessionConfig.crm = {
-        provider: 'salesforce',
+        provider: selectedSavedCrmAccount?.provider ?? 'salesforce',
         connected: crmStatus?.connected ?? false,
+        providerEmail:
+          selectedSavedCrmAccount?.providerEmail ?? crmStatus?.providerEmail ?? undefined,
+        connectionName: selectedSavedCrmAccount?.name,
         selections: {
           accounts: selectedAccounts,
           opportunities: selectedOpportunities,
@@ -613,6 +643,26 @@ export default function CreateSessionPage() {
     })
   }
 
+  const selectedSavedCrmAccount =
+    savedCrmAccounts.find((entry) => entry.id === selectedSavedCrmAccountId) ?? null
+
+  const handleSelectSavedCrmAccount = (crmId: string | null) => {
+    setSelectedSavedCrmAccountId(crmId)
+    if (!crmId) {
+      return
+    }
+
+    const selected = savedCrmAccounts.find((entry) => entry.id === crmId)
+    if (!selected) return
+
+    setSavedCrmLabel((current) => current.trim() || selected.name)
+    notifications.show({
+      title: 'Saved CRM selected',
+      message: `Using ${selected.name} for this session.`,
+      color: 'green',
+    })
+  }
+
   const handleRemoveSavedCrmConnection = async (connection: SavedCrmSessionConnection) => {
     try {
       const nextSettings = removeSavedCrmSessionConnection(userSettings ?? {}, connection.id)
@@ -750,6 +800,9 @@ export default function CreateSessionPage() {
           setSelectedContacts={setSelectedContacts}
           saveForFutureUse={saveCrmForFutureUse}
           setSaveForFutureUse={setSaveCrmForFutureUse}
+          savedCrms={savedCrmAccounts}
+          selectedSavedCrmId={selectedSavedCrmAccountId}
+          onSelectSavedCrm={handleSelectSavedCrmAccount}
           savedConnections={savedCrmConnections}
           onUseSavedConnection={handleUseSavedCrmConnection}
           onRemoveSavedConnection={(connection) => void handleRemoveSavedCrmConnection(connection)}

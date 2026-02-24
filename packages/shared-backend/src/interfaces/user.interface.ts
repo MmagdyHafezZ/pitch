@@ -51,6 +51,7 @@ export interface UserSettings {
     reduceMotion?: boolean
   }
   crm?: {
+    name?: string | null
     provider?: string | null
     connected?: boolean
     providerEmail?: string | null

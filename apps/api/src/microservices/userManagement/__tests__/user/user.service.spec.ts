@@ -76,20 +76,30 @@ describe('UserService', () => {
   });
 
   it('creates a new user', async () => {
-    const dto = { email: 'a', name: 'c' } as any;
+    const dto = { email: 'a', name: 'c', __claims: { id: 'x' } } as any;
     mockRepository.create.mockResolvedValue({ ...user, ...dto });
 
     await expect(service.create(dto)).resolves.toEqual({ ...user, ...dto });
-    expect(mockRepository.create).toHaveBeenCalledWith(dto);
+    expect(mockRepository.create).toHaveBeenCalledWith({
+      email: 'a',
+      name: 'c',
+    });
   });
 
   it('updates an existing user', async () => {
-    const dto = { name: 'Updated' } as any;
+    const dto = {
+      name: 'Updated',
+      settings: { browser: { compactMode: true } },
+      __claims: { id: 'x' },
+    } as any;
     mockRepository.update.mockResolvedValue({ ...user, ...dto });
 
     await expect(service.update('user-1', dto)).resolves.toEqual({
       ...user,
       ...dto,
+    });
+    expect(mockRepository.update).toHaveBeenCalledWith('user-1', {
+      name: 'Updated',
     });
   });
 
