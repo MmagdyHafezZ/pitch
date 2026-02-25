@@ -442,6 +442,36 @@ export const api = {
       }),
   },
 
+  plans: {
+    getAll: () => apiRequest<any[]>('/plans'),
+    getById: (id: string) => apiRequest<any>(`/plans/${id}`),
+  },
+
+  subscriptions: {
+    getAll: () => apiRequest<any[]>('/subscriptions'),
+    getById: (id: string) => apiRequest<any>(`/subscriptions/${id}`),
+    getByTeamId: (teamId: string) => apiRequest<any>(`/subscriptions/teams/${teamId}`),
+    create: (data: any) =>
+      apiRequest<any>('/subscriptions', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    update: (id: string, data: any) =>
+      apiRequest<any>(`/subscriptions/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      }),
+    upgrade: (id: string, data: any) =>
+      apiRequest<any>(`/subscriptions/${id}/upgrade`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      }),
+    delete: (id: string) =>
+      apiRequest<any>(`/subscriptions/${id}`, {
+        method: 'DELETE',
+      }),
+  },
+
   sessions: {
     getAll: (params?: {
       userId?: string

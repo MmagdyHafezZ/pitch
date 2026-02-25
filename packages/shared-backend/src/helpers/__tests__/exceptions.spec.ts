@@ -1,3 +1,4 @@
+import { NotFoundException } from '@nestjs/common'
 import { RpcException } from '@nestjs/microservices'
 import { toRpcException } from '../exceptions'
 
@@ -15,5 +16,16 @@ describe('toRpcException', () => {
 
     expect(rpcException).toBeInstanceOf(RpcException)
     expect(rpcException.getError()).toBe('[object Object]')
+  })
+
+  it('preserves Nest HTTP status codes', () => {
+    const rpcException = toRpcException(new NotFoundException('Missing subscription'))
+
+    expect(rpcException).toBeInstanceOf(RpcException)
+    expect(rpcException.getError()).toEqual({
+      message: 'Missing subscription',
+      status: 404,
+      code: undefined,
+    })
   })
 })
