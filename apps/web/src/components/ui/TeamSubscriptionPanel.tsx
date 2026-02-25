@@ -9,6 +9,7 @@ import {
   Group,
   Loader,
   Paper,
+  Progress,
   SegmentedControl,
   SimpleGrid,
   Stack,
@@ -18,6 +19,7 @@ import {
 import { IconAlertCircle, IconBolt, IconCreditCard, IconStars } from '@tabler/icons-react'
 import { notifications } from '@mantine/notifications'
 import { api } from '@/lib/client'
+import classes from './TeamSubscriptionPanel.module.css'
 
 type BillingInterval = 'MONTH' | 'YEAR'
 
@@ -55,6 +57,20 @@ const formatDate = (value?: string) => {
 const formatCoins = (value?: number) => {
   if (typeof value !== 'number' || Number.isNaN(value)) return '—'
   return new Intl.NumberFormat().format(value)
+}
+
+const getPlanAccent = (planLevel?: string) => {
+  const level = String(planLevel ?? '').toLowerCase()
+  if (level.includes('enterprise')) {
+    return { tone: 'violet', scoreA: 94, scoreB: 88 }
+  }
+  if (level.includes('pro')) {
+    return { tone: 'blue', scoreA: 81, scoreB: 72 }
+  }
+  if (level.includes('team')) {
+    return { tone: 'cyan', scoreA: 74, scoreB: 68 }
+  }
+  return { tone: 'gray', scoreA: 62, scoreB: 54 }
 }
 
 type Props = {
@@ -176,22 +192,14 @@ export function TeamSubscriptionPanel({ teamId, teamName, canManage }: Props) {
   }
 
   return (
-    <Card
-      withBorder
-      radius="xl"
-      p="lg"
-      shadow="lg"
-      style={{
-        background:
-          'linear-gradient(160deg, color-mix(in srgb, var(--mantine-color-teal-6) 10%, var(--mantine-color-dark-8)), var(--mantine-color-dark-8))',
-        borderColor: 'color-mix(in srgb, var(--mantine-color-teal-6) 28%, transparent)',
-      }}
-    >
+    <Card withBorder radius="xl" p="lg" shadow="lg" className={classes.panelShell}>
       <Stack gap="md">
         <Group justify="space-between" align="flex-start">
           <Stack gap={2}>
             <Group gap="xs">
-              <IconCreditCard size={16} />
+              <div className={classes.panelIconWrap}>
+                <IconCreditCard size={15} />
+              </div>
               <Text fw={700}>Subscription</Text>
             </Group>
             <Text size="sm" c="dimmed">
@@ -199,6 +207,7 @@ export function TeamSubscriptionPanel({ teamId, teamName, canManage }: Props) {
             </Text>
           </Stack>
           <SegmentedControl
+            className={classes.intervalControl}
             value={interval}
             onChange={(value) => setInterval(value as BillingInterval)}
             data={[
@@ -216,7 +225,7 @@ export function TeamSubscriptionPanel({ teamId, teamName, canManage }: Props) {
           </Alert>
         )}
 
-        <Paper withBorder radius="lg" p="md" bg="dark.7">
+        <Paper withBorder radius="lg" p="md" className={classes.subscriptionSummary}>
           {loading ? (
             <Group gap="xs">
               <Loader size="sm" />
@@ -232,7 +241,7 @@ export function TeamSubscriptionPanel({ teamId, teamName, canManage }: Props) {
                   <Title order={5}>{subscription.plan?.name ?? 'Active plan'}</Title>
                 </Group>
                 <Group gap="xs">
-                  <Badge color="teal" variant="light">
+                  <Badge color="blue" variant="light">
                     {String(subscription.interval ?? interval)}
                   </Badge>
                   {subscription.cancelAtPeriodEnd && (
@@ -268,55 +277,140 @@ export function TeamSubscriptionPanel({ teamId, teamName, canManage }: Props) {
           <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
             {activePlans.map((plan) => {
               const selected = currentPlanId === plan.id
+              const accent = getPlanAccent(plan.planLevel)
+              const coinValue = typeof plan.maxCoins === 'number' ? plan.maxCoins : 0
+              const coinScale = Math.min(
+                100,
+                Math.max(8, Math.round((Math.log10(coinValue + 10) / 4) * 100))
+              )
               return (
                 <Paper
                   key={plan.id}
                   withBorder
                   radius="lg"
                   p="md"
-                  style={{
-                    background: selected
-                      ? 'linear-gradient(135deg, color-mix(in srgb, var(--mantine-color-teal-6) 14%, var(--mantine-color-dark-8)), var(--mantine-color-dark-8))'
-                      : 'color-mix(in srgb, var(--mantine-color-dark-8) 95%, transparent)',
-                    borderColor: selected
-                      ? 'var(--mantine-color-teal-6)'
-                      : 'color-mix(in srgb, var(--mantine-color-dark-4) 45%, transparent)',
-                  }}
+                  className={classes.planCard}
+                  data-selected={selected ? 'true' : 'false'}
+                  data-tone={accent.tone}
                 >
-                  <Stack gap="sm">
+                  <Stack gap="sm" className={classes.planStack}>
                     <Group justify="space-between" align="flex-start">
-                      <Stack gap={2}>
-                        <Text fw={700}>{plan.name ?? 'Unnamed plan'}</Text>
-                        <Text size="xs" c="dimmed">
-                          {plan.planLevel ?? 'Custom'}
-                        </Text>
+                      <Group gap="sm" align="flex-start" wrap="nowrap">
+                        <div className={classes.planAvatar}>
+                          <IconStars size={18} />
+                        </div>
+                        <Stack gap={2}>
+                          <Text fw={700} className={classes.planTitle}>
+                            {plan.name ?? 'Unnamed plan'}
+                          </Text>
+                          <Text size="sm" c="dimmed">
+                            {plan.planLevel ?? 'Custom'} plan
+                          </Text>
+                        </Stack>
+                      </Group>
+                      <Stack gap={6} align="flex-end">
+                        <Badge variant="light" color="blue" className={classes.planChip}>
+                          {interval === 'MONTH' ? 'Monthly billing' : 'Yearly billing'}
+                        </Badge>
+                        <Badge
+                          variant="outline"
+                          color={selected ? 'cyan' : 'gray'}
+                          className={classes.planChip}
+                        >
+                          {selected ? 'Current selection' : 'Available'}
+                        </Badge>
                       </Stack>
+                    </Group>
+
+                    <Group gap="xs">
+                      <Badge variant="light" color="blue" className={classes.planTag}>
+                        {String(plan.planLevel ?? 'Custom').toUpperCase()}
+                      </Badge>
+                      <Badge variant="outline" color="pink" className={classes.planTag}>
+                        TEAM
+                      </Badge>
                       {selected && (
-                        <Badge color="teal" variant="filled">
-                          Current
+                        <Badge color="cyan" variant="filled" className={classes.planTag}>
+                          ACTIVE
                         </Badge>
                       )}
                     </Group>
 
-                    <Text size="sm" c="dimmed" lineClamp={2}>
+                    <Text size="sm" className={classes.planDescription} lineClamp={2}>
                       {plan.description || 'Subscription plan for team usage and coin allowance.'}
                     </Text>
 
-                    <Group justify="space-between" align="center">
+                    <div className={classes.infoStrip}>
+                      <Badge variant="light" color="blue" radius="sm">
+                        COINS
+                      </Badge>
+                      <Text size="sm" c="dimmed" truncate>
+                        {interval === 'MONTH'
+                          ? 'Allowance resets monthly'
+                          : 'Allowance resets yearly'}
+                      </Text>
+                    </div>
+
+                    <SimpleGrid cols={2} spacing="xs">
+                      <div className={classes.metricCard}>
+                        <Group justify="space-between" mb={6}>
+                          <Text size="sm">Allowance</Text>
+                          <Text size="sm" c="dimmed">
+                            {formatCoins(plan.maxCoins)}
+                          </Text>
+                        </Group>
+                        <Progress
+                          value={coinScale}
+                          size="xs"
+                          radius="xl"
+                          color={selected ? 'cyan' : 'blue'}
+                          className={classes.metricProgress}
+                        />
+                      </div>
+                      <div className={classes.metricCard}>
+                        <Group justify="space-between" mb={6}>
+                          <Text size="sm">Team fit</Text>
+                          <Text size="sm" c="dimmed">
+                            {accent.scoreA}
+                          </Text>
+                        </Group>
+                        <Progress
+                          value={accent.scoreA}
+                          size="xs"
+                          radius="xl"
+                          color={selected ? 'cyan' : 'blue'}
+                          className={classes.metricProgress}
+                        />
+                      </div>
+                    </SimpleGrid>
+
+                    <Group gap="xs" className={classes.capabilityPills}>
+                      <span className={classes.capabilityPill}>Usage Tracking</span>
+                      <span className={classes.capabilityPill}>Team Billing</span>
+                      <span className={classes.capabilityPill}>Plan Controls</span>
+                    </Group>
+
+                    <Group justify="space-between" align="end">
                       <Stack gap={0}>
                         <Text size="xs" c="dimmed">
                           Coin allowance
                         </Text>
-                        <Text fw={700}>{formatCoins(plan.maxCoins)}</Text>
+                        <Text fw={800} size="xl" className={classes.coinValue}>
+                          {formatCoins(plan.maxCoins)}
+                        </Text>
+                        <Text size="xs" c="dimmed">
+                          per {interval === 'MONTH' ? 'month' : 'year'}
+                        </Text>
                       </Stack>
                       <Button
                         size="sm"
                         variant={selected ? 'default' : 'filled'}
-                        color="teal"
+                        color={selected ? 'gray' : 'blue'}
                         leftSection={<IconBolt size={14} />}
                         loading={savingPlanId === plan.id}
                         onClick={() => void handleSelectPlan(plan)}
                         disabled={!canManage}
+                        className={classes.planAction}
                       >
                         {selected ? 'Update interval' : 'Select plan'}
                       </Button>
