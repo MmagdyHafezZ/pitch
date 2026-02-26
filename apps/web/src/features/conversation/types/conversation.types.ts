@@ -22,6 +22,9 @@ export enum WsMessageType {
   CONVERSATION_CANCEL = 'conversation.cancel',
   CONVERSATION_STREAM_DELTA = 'conversation.stream.delta',
   CONVERSATION_STREAM_COMPLETED = 'conversation.stream.completed',
+  CONVERSATION_STAGE_TRANSITION = 'conversation.stage.transition',
+  CONVERSATION_AUDIO_CHUNK = 'conversation.audio.chunk',
+  CONVERSATION_VISUAL_STATE = 'conversation.visual_state',
 
   PING = 'ping',
   PONG = 'pong',
@@ -86,6 +89,13 @@ export interface ConversationStreamCompletedPayload {
     confidence: number
   }
   progress?: number
+  totalSentences?: number
+}
+
+export interface ConversationAudioChunkPayload {
+  sentenceIndex: number
+  audio: ArrayBuffer
+  contentType: string
 }
 
 export interface ConversationAudioReadyPayload {

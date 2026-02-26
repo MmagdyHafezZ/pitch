@@ -7,6 +7,7 @@ interface UseSpeechToTextOptions {
   maxAlternatives?: number
   onError?: (error: string) => void
   onResult?: (transcript: string, isFinal: boolean) => void
+  onSpeechEnd?: () => void
 }
 
 interface SpeechRecognitionEvent extends Event {
@@ -73,6 +74,7 @@ export function useSpeechToText(options: UseSpeechToTextOptions = {}) {
     maxAlternatives = 1,
     onError,
     onResult,
+    onSpeechEnd,
   } = options
 
   const [isListening, setIsListening] = useState(false)
@@ -90,6 +92,7 @@ export function useSpeechToText(options: UseSpeechToTextOptions = {}) {
   const shouldAutoRestartRef = useRef(true)
   const onResultRef = useRef(onResult)
   const onErrorRef = useRef(onError)
+  const onSpeechEndRef = useRef(onSpeechEnd)
 
   const mapSpeechError = useCallback((code: string) => {
     switch (code) {
@@ -120,6 +123,10 @@ export function useSpeechToText(options: UseSpeechToTextOptions = {}) {
   useEffect(() => {
     onErrorRef.current = onError
   }, [onError])
+
+  useEffect(() => {
+    onSpeechEndRef.current = onSpeechEnd
+  }, [onSpeechEnd])
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -168,6 +175,10 @@ export function useSpeechToText(options: UseSpeechToTextOptions = {}) {
         setInterimTranscript(interimText)
         onResultRef.current?.(interimText, false)
       }
+    }
+
+    recognition.onspeechend = () => {
+      onSpeechEndRef.current?.()
     }
 
     recognition.onerror = (event: SpeechRecognitionErrorEvent) => {

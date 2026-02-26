@@ -8,6 +8,7 @@ import {
   ConversationStreamDeltaPayload,
   ConversationStreamCompletedPayload,
   ConversationAudioReadyPayload,
+  ConversationAudioChunkPayload,
   ConversationErrorPayload,
 } from '../types/conversation.types'
 
@@ -49,6 +50,13 @@ export function useConversation(options: UseConversationOptions) {
   const messagesRef = useRef<ConversationMessage[]>([])
   const isHungUpRef = useRef(false)
 
+  // Sentence audio queue — keyed by sentenceIndex for ordered playback
+  const audioQueueRef = useRef<Map<number, string>>(new Map())
+  const nextPlayIndexRef = useRef(0)
+  const isPlayingChunkRef = useRef(false)
+  // Set once the 'completed' event arrives so gap detection can skip failed sentences
+  const totalSentencesRef = useRef<number | null>(null)
+
   useEffect(() => {
     onErrorRef.current = onError
   }, [onError])
@@ -56,7 +64,7 @@ export function useConversation(options: UseConversationOptions) {
   useEffect(() => {
     messagesRef.current = messages
   }, [messages])
-  const playAudio = useCallback(async (audioUrl: string) => {
+  const playAudio = useCallback(async (audioUrl: string, onEnded?: () => void) => {
     try {
       // Stop any currently playing audio first
       const audio = currentAudioRef.current
@@ -80,15 +88,21 @@ export function useConversation(options: UseConversationOptions) {
       }
 
       newAudio.onended = () => {
-        setCurrentAudioUrl(null)
-        setIsAudioPlaying(false)
-        currentAudioRef.current = null
+        if (onEnded) {
+          // Caller handles state cleanup (e.g. sentence queue plays next)
+          onEnded()
+        } else {
+          setCurrentAudioUrl(null)
+          setIsAudioPlaying(false)
+          currentAudioRef.current = null
+        }
       }
 
       newAudio.onerror = () => {
         setCurrentAudioUrl(null)
         setIsAudioPlaying(false)
         currentAudioRef.current = null
+        onEnded?.()
       }
 
       await newAudio.play()
@@ -108,6 +122,7 @@ export function useConversation(options: UseConversationOptions) {
         onErrorRef.current?.(errorMsg)
       }
       setIsAudioPlaying(false)
+      onEnded?.()
     }
   }, [])
 
@@ -126,11 +141,57 @@ export function useConversation(options: UseConversationOptions) {
     pendingAudioUrlRef.current = null
   }, [])
 
+  const clearAudioQueue = useCallback(() => {
+    audioQueueRef.current.forEach((url) => URL.revokeObjectURL(url))
+    audioQueueRef.current.clear()
+    nextPlayIndexRef.current = 0
+    totalSentencesRef.current = null
+    isPlayingChunkRef.current = false
+  }, [])
+
+  const tryPlayNext = useCallback(() => {
+    if (isPlayingChunkRef.current) return
+
+    const total = totalSentencesRef.current
+    const idx = nextPlayIndexRef.current
+
+    // All sentences have played — reset audio state
+    if (total !== null && idx >= total) {
+      setCurrentAudioUrl(null)
+      setIsAudioPlaying(false)
+      currentAudioRef.current = null
+      return
+    }
+
+    const url = audioQueueRef.current.get(idx)
+
+    if (!url) {
+      // Gap: TTS failed for this sentence; skip it once totalSentences is known
+      if (total !== null && idx < total) {
+        nextPlayIndexRef.current++
+        tryPlayNext()
+      }
+      // totalSentences not yet known — wait for more chunks or 'completed' event
+      return
+    }
+
+    isPlayingChunkRef.current = true
+    setCurrentAudioUrl(url) // expose URL so the replay button always reflects current sentence
+    void playAudio(url, () => {
+      URL.revokeObjectURL(url)
+      audioQueueRef.current.delete(nextPlayIndexRef.current)
+      nextPlayIndexRef.current++
+      isPlayingChunkRef.current = false
+      tryPlayNext()
+    })
+  }, [playAudio])
+
   const disconnect = useCallback(() => {
     conversationService.offConversationText()
     conversationService.offConversationStreamDelta()
     conversationService.offConversationStreamCompleted()
     conversationService.offConversationAudioReady()
+    conversationService.offConversationAudioChunk()
     conversationService.offConversationError()
     conversationService.offConversationEnd()
     conversationService.offConversationCancel()
@@ -155,6 +216,7 @@ export function useConversation(options: UseConversationOptions) {
     conversationService.offConversationStreamDelta()
     conversationService.offConversationStreamCompleted()
     conversationService.offConversationAudioReady()
+    conversationService.offConversationAudioChunk()
     conversationService.offConversationError()
     conversationService.offConversationEnd()
     conversationService.offConversationCancel()
@@ -209,6 +271,11 @@ export function useConversation(options: UseConversationOptions) {
         if (isHungUpRef.current) return
         if (data.requestId !== currentRequestIdRef.current) return
 
+        // Record totalSentences so tryPlayNext can gap-skip any failed TTS sentences
+        totalSentencesRef.current = data.payload.totalSentences ?? null
+        // Trigger gap resolution in case all audio arrived before this event
+        tryPlayNext()
+
         upsertAssistantMessage(data.requestId, (current) => ({
           id: data.requestId,
           role: 'assistant',
@@ -248,6 +315,24 @@ export function useConversation(options: UseConversationOptions) {
       }
     )
 
+    // Binary per-sentence audio chunks — play in index order via the sentence queue
+    conversationService.onConversationAudioChunk(
+      (envelope: {
+        requestId: string
+        sessionId: string
+        payload: ConversationAudioChunkPayload
+      }) => {
+        if (isHungUpRef.current) return
+        if (envelope.requestId !== currentRequestIdRef.current) return
+
+        const { sentenceIndex, audio, contentType } = envelope.payload
+        const blob = new Blob([audio], { type: contentType })
+        const url = URL.createObjectURL(blob)
+        audioQueueRef.current.set(sentenceIndex, url)
+        tryPlayNext()
+      }
+    )
+
     conversationService.onConversationError((data: WsEnvelope<ConversationErrorPayload>) => {
       if (isHungUpRef.current) return
       if (data.requestId === currentRequestIdRef.current) {
@@ -256,6 +341,7 @@ export function useConversation(options: UseConversationOptions) {
         onErrorRef.current?.(errorMsg)
         setIsProcessing(false)
         stopAudio()
+        clearAudioQueue()
         revokeAudioUrls()
         currentRequestIdRef.current = null
       }
@@ -274,9 +360,10 @@ export function useConversation(options: UseConversationOptions) {
         setIsProcessing(false)
         currentRequestIdRef.current = null
         stopAudio()
+        clearAudioQueue()
       }
     })
-  }, [playAudio, stopAudio, revokeAudioUrls])
+  }, [playAudio, stopAudio, revokeAudioUrls, tryPlayNext, clearAudioQueue])
 
   const connect = useCallback(async () => {
     const token = getAccessToken()
@@ -313,8 +400,9 @@ export function useConversation(options: UseConversationOptions) {
       currentRequestIdRef.current = null
     }
 
-    // Stop audio immediately
+    // Stop audio immediately and clear sentence queue
     stopAudio()
+    clearAudioQueue()
 
     // Reset processing state
     setIsProcessing(false)
@@ -329,7 +417,7 @@ export function useConversation(options: UseConversationOptions) {
         URL.revokeObjectURL(msg.audioUrl)
       }
     })
-  }, [sessionId, disconnect, stopAudio])
+  }, [sessionId, disconnect, stopAudio, clearAudioQueue])
 
   const interrupt = useCallback(() => {
     // Cancel current request but stay connected
@@ -338,12 +426,13 @@ export function useConversation(options: UseConversationOptions) {
       currentRequestIdRef.current = null
     }
 
-    // Stop audio
+    // Stop audio and clear sentence queue
     stopAudio()
+    clearAudioQueue()
 
     // Reset processing state
     setIsProcessing(false)
-  }, [sessionId, stopAudio])
+  }, [sessionId, stopAudio, clearAudioQueue])
 
   const sendMessage = useCallback(
     (text: string, options?: Partial<ConversationStartPayload>) => {
@@ -362,6 +451,7 @@ export function useConversation(options: UseConversationOptions) {
       setIsProcessing(true)
       setError(null)
       stopAudio()
+      clearAudioQueue()
 
       const userMessage: ConversationMessage = {
         id: `user_${Date.now()}`,
@@ -379,7 +469,7 @@ export function useConversation(options: UseConversationOptions) {
       const requestId = conversationService.sendConversation(sessionId, payload)
       currentRequestIdRef.current = requestId
     },
-    [sessionId, stopAudio, interrupt]
+    [sessionId, stopAudio, interrupt, clearAudioQueue]
   )
 
   const startAssistantTurn = useCallback(
