@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { NotificationController } from './notification.controller';
-import { NotificationService } from './notification.service';
+import { NotificationController } from './controllers/notification.controller';
+import { NotificationService } from './service/notification.service';
 import { MongoConnectionService } from '../services/mongo/mongo-connection.service';
 
 @Module({

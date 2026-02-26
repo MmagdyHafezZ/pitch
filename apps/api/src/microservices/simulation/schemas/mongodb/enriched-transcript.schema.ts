@@ -1,4 +1,4 @@
-import { Schema, Document } from 'mongoose';
+import { Schema, Document, Types } from 'mongoose';
 
 /**
  * EnrichedTranscript - MongoDB document
@@ -87,7 +87,7 @@ export interface IEnrichment {
 }
 
 export interface IEnrichedTranscript extends Document {
-  _id: string;
+  _id: Types.ObjectId;
   assetId: string;
   iterationId?: string;
   sessionMemberId?: string;
@@ -109,7 +109,7 @@ export interface IEnrichedTranscript extends Document {
 
 export const EnrichedTranscriptSchema = new Schema<IEnrichedTranscript>(
   {
-    _id: { type: String, required: true },
+    _id: { type: Schema.Types.ObjectId, required: true },
     assetId: { type: String, required: true },
     iterationId: { type: String },
     sessionMemberId: { type: String },

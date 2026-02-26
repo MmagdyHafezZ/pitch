@@ -82,9 +82,11 @@ export async function apiRequest<T>(
   let didRefresh = false
   const { timeoutMs, ...fetchOptions } = options
 
+  const isFormDataBody = typeof FormData !== 'undefined' && fetchOptions.body instanceof FormData
+
   const buildConfig = (token: string | null): RequestInit => ({
     headers: {
-      'Content-Type': 'application/json',
+      ...(isFormDataBody ? {} : { 'Content-Type': 'application/json' }),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...fetchOptions.headers,
     },
@@ -159,9 +161,11 @@ export async function apiRequestRoot<T>(
   let didRefresh = false
   const { timeoutMs, ...fetchOptions } = options
 
+  const isFormDataBody = typeof FormData !== 'undefined' && fetchOptions.body instanceof FormData
+
   const buildConfig = (token: string | null): RequestInit => ({
     headers: {
-      'Content-Type': 'application/json',
+      ...(isFormDataBody ? {} : { 'Content-Type': 'application/json' }),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...fetchOptions.headers,
     },
@@ -219,11 +223,32 @@ export const api = {
   users: {
     getAll: () => apiRequest<any[]>('/users'),
     getById: (id: string) => apiRequest<any>(`/users/${id}`),
+    getMySettings: () => apiRequest<any>('/users/me/settings'),
     create: (data: any) =>
       apiRequest<any>('/users', {
         method: 'POST',
         body: JSON.stringify(data),
       }),
+    updateMySettings: (settings: any) =>
+      apiRequest<any>('/users/me/settings', {
+        method: 'PUT',
+        body: JSON.stringify(settings),
+      }),
+    updateMyAvatar: (data: { file?: File; avatarUrl?: string }) => {
+      if (data.file) {
+        const formData = new FormData()
+        formData.append('file', data.file)
+        return apiRequest<any>('/users/me/avatar', {
+          method: 'PUT',
+          body: formData,
+        })
+      }
+
+      return apiRequest<any>('/users/me/avatar', {
+        method: 'PUT',
+        body: JSON.stringify({ avatarUrl: data.avatarUrl }),
+      })
+    },
     update: (id: string, data: any) =>
       apiRequest<any>(`/users/${id}`, {
         method: 'PUT',
@@ -414,6 +439,36 @@ export const api = {
       apiRequest<any>(`/teams/${id}/members/${userId}`, {
         method: 'DELETE',
         body: JSON.stringify(data),
+      }),
+  },
+
+  plans: {
+    getAll: () => apiRequest<any[]>('/plans'),
+    getById: (id: string) => apiRequest<any>(`/plans/${id}`),
+  },
+
+  subscriptions: {
+    getAll: () => apiRequest<any[]>('/subscriptions'),
+    getById: (id: string) => apiRequest<any>(`/subscriptions/${id}`),
+    getByTeamId: (teamId: string) => apiRequest<any>(`/subscriptions/teams/${teamId}`),
+    create: (data: any) =>
+      apiRequest<any>('/subscriptions', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    update: (id: string, data: any) =>
+      apiRequest<any>(`/subscriptions/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      }),
+    upgrade: (id: string, data: any) =>
+      apiRequest<any>(`/subscriptions/${id}/upgrade`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      }),
+    delete: (id: string) =>
+      apiRequest<any>(`/subscriptions/${id}`, {
+        method: 'DELETE',
       }),
   },
 

@@ -1,0 +1,305 @@
+/**
+ * @jest-environment jsdom
+ */
+import userEvent from '@testing-library/user-event'
+import { act, render, screen, waitFor } from '@/__tests__/utils/test-utils'
+import { notifications } from '@mantine/notifications'
+import { SettingsModal } from '../SettingsModal'
+
+var mockPush: jest.Mock
+var mockLogout: jest.Mock
+var mockDeleteAccount: jest.Mock
+var mockAuthStoreSetUser: jest.Mock
+var mockAppearanceSetState: jest.Mock
+var mockFetchCrmStatus: jest.Mock
+var mockOpenConfirmModal: jest.Mock
+var mockApi: {
+  users: {
+    getMySettings: jest.Mock
+    update: jest.Mock
+    updateMySettings: jest.Mock
+  }
+}
+
+jest.mock('next/navigation', () => ({
+  useRouter: () => {
+    mockPush ??= jest.fn()
+    return { push: mockPush }
+  },
+}))
+
+jest.mock('@mantine/notifications', () => {
+  const actual = jest.requireActual('@mantine/notifications')
+  const show = jest.fn()
+  return {
+    ...actual,
+    notifications: {
+      show,
+    },
+  }
+})
+
+jest.mock('@mantine/modals', () => {
+  const actual = jest.requireActual('@mantine/modals')
+  mockOpenConfirmModal = jest.fn()
+  return {
+    ...actual,
+    modals: {
+      ...actual.modals,
+      openConfirmModal: mockOpenConfirmModal,
+    },
+  }
+})
+
+jest.mock('@/features/auth', () => ({
+  useAuth: () => {
+    mockLogout ??= jest.fn()
+    mockDeleteAccount ??= jest.fn().mockResolvedValue(undefined)
+    return {
+      user: {
+        id: 'user-1',
+        name: 'Test User',
+        email: 'test@example.com',
+      },
+      logout: mockLogout,
+      deleteAccount: mockDeleteAccount,
+    }
+  },
+}))
+
+jest.mock('@/features/auth/stores/auth.store', () => ({
+  useAuthStore: {
+    getState: () => {
+      mockAuthStoreSetUser ??= jest.fn()
+      return {
+        user: {
+          id: 'user-1',
+          name: 'Test User',
+          email: 'test@example.com',
+        },
+        setUser: mockAuthStoreSetUser,
+      }
+    },
+  },
+}))
+
+jest.mock('@/features/crm', () => ({
+  useCrm: () => {
+    mockFetchCrmStatus ??= jest.fn()
+    return {
+      status: { connected: false, provider: 'salesforce' },
+      loadingStatus: false,
+      error: null,
+      fetchStatus: mockFetchCrmStatus,
+      connect: jest.fn().mockResolvedValue(null),
+    }
+  },
+}))
+
+jest.mock('@/lib/client', () => {
+  mockApi = {
+    users: {
+      getMySettings: jest.fn(),
+      update: jest.fn(),
+      updateMySettings: jest.fn(),
+    },
+  }
+  return { api: mockApi }
+})
+
+jest.mock('@/lib/stores/appearance.store', () => {
+  mockAppearanceSetState ??= jest.fn()
+  const hook = jest.fn(() => ({
+    colorMode: 'system',
+    setColorMode: jest.fn(),
+    profiles: [
+      {
+        id: 'ocean',
+        name: 'Ocean',
+        isCustom: false,
+        tokens: {
+          navBg: '#0f172a',
+          surfaceBg: '#f1f3f5',
+          accent: '#228be6',
+          selected: '#4c6ef5',
+          success: '#2f9e44',
+          info: '#15aabf',
+        },
+      },
+    ],
+    activeProfileId: 'ocean',
+    setActiveProfile: jest.fn(),
+    deleteProfile: jest.fn(),
+    customDraft: {
+      navBg: '#0f172a',
+      surfaceBg: '#f1f3f5',
+      accent: '#228be6',
+      selected: '#4c6ef5',
+      success: '#2f9e44',
+      info: '#15aabf',
+    },
+    updateCustomDraft: jest.fn(),
+    randomizeCustomDraft: jest.fn(),
+    createProfileFromDraft: jest.fn(),
+    customDraftGradient: false,
+    setCustomDraftGradient: jest.fn(),
+  }))
+
+  ;(hook as any).setState = mockAppearanceSetState
+  return {
+    useAppearanceStore: hook,
+  }
+})
+
+describe('SettingsModal', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+    mockApi.users.getMySettings.mockResolvedValue({})
+    mockApi.users.update.mockResolvedValue({})
+    mockApi.users.updateMySettings.mockResolvedValue({})
+  })
+
+  it('loads persisted settings when opened', async () => {
+    mockApi.users.getMySettings.mockResolvedValueOnce({
+      account: { timezone: '(GMT-8:00) Pacific Time' },
+      appearance: { colorMode: 'dark' },
+      browser: { compactMode: true },
+    })
+
+    render(<SettingsModal opened onClose={jest.fn()} />)
+
+    await waitFor(() => {
+      expect(mockApi.users.getMySettings).toHaveBeenCalledTimes(1)
+    })
+    expect(mockAppearanceSetState).toHaveBeenCalled()
+  })
+
+  it('saves profile and settings to the account', async () => {
+    const onClose = jest.fn()
+    const user = userEvent.setup()
+
+    render(<SettingsModal opened onClose={onClose} />)
+
+    await waitFor(() => {
+      expect(mockApi.users.getMySettings).toHaveBeenCalled()
+    })
+
+    const nameInput = screen.getByLabelText('Name')
+    const emailInput = screen.getByLabelText('Email')
+
+    await user.clear(nameInput)
+    await user.type(nameInput, 'Updated User')
+    await user.clear(emailInput)
+    await user.type(emailInput, 'updated@example.com')
+
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => {
+      expect(mockApi.users.update).toHaveBeenCalledWith('user-1', {
+        name: 'Updated User',
+        email: 'updated@example.com',
+      })
+    })
+
+    expect(mockApi.users.updateMySettings).toHaveBeenCalledTimes(1)
+    expect(mockApi.users.updateMySettings.mock.calls[0][0]).toEqual(
+      expect.objectContaining({
+        account: expect.objectContaining({ timezone: expect.any(String) }),
+        appearance: expect.objectContaining({
+          colorMode: 'system',
+          activeProfileId: 'ocean',
+        }),
+        crm: expect.objectContaining({
+          provider: expect.anything(),
+          connected: false,
+        }),
+      })
+    )
+    expect(mockAuthStoreSetUser).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'Updated User',
+        email: 'updated@example.com',
+      })
+    )
+    expect(jest.mocked(notifications.show)).toHaveBeenCalled()
+    expect(onClose).toHaveBeenCalled()
+  })
+
+  it('saves a single named crm in settings.crm and not crm.connections', async () => {
+    const onClose = jest.fn()
+    const user = userEvent.setup()
+
+    mockApi.users.getMySettings.mockResolvedValueOnce({
+      crm: {
+        provider: 'salesforce',
+        connected: true,
+        providerEmail: 'old@example.com',
+        name: 'Old CRM',
+      },
+    })
+
+    render(<SettingsModal opened onClose={onClose} />)
+
+    await waitFor(() => {
+      expect(mockApi.users.getMySettings).toHaveBeenCalled()
+    })
+
+    await user.click(screen.getByText('CRM'))
+
+    const crmNameInput = await screen.findByLabelText('CRM name')
+    await user.clear(crmNameInput)
+    await user.type(crmNameInput, 'Revenue Salesforce')
+    await user.click(screen.getByRole('button', { name: 'Save current CRM' }))
+    await user.click(screen.getByRole('button', { name: /^Save$/ }))
+
+    await waitFor(() => {
+      expect(mockApi.users.updateMySettings).toHaveBeenCalled()
+    })
+
+    const payload = mockApi.users.updateMySettings.mock.calls.at(-1)?.[0]
+    expect(payload.crm).toEqual(
+      expect.objectContaining({
+        name: 'Revenue Salesforce',
+        provider: expect.anything(),
+      })
+    )
+    expect(payload.crm.connections).toBeUndefined()
+  })
+
+  it('opens delete account confirmation and deletes account on confirm', async () => {
+    const onClose = jest.fn()
+    const user = userEvent.setup()
+
+    render(<SettingsModal opened onClose={onClose} />)
+
+    await waitFor(() => {
+      expect(mockApi.users.getMySettings).toHaveBeenCalled()
+    })
+
+    await user.click(screen.getByText('Delete Account'))
+
+    expect(mockOpenConfirmModal).toHaveBeenCalledTimes(1)
+    const confirmConfig = mockOpenConfirmModal.mock.calls[0]?.[0]
+    expect(confirmConfig).toEqual(
+      expect.objectContaining({
+        title: 'Delete account',
+        labels: expect.objectContaining({ confirm: 'Delete account', cancel: 'Cancel' }),
+      })
+    )
+
+    await act(async () => {
+      await confirmConfig.onConfirm()
+    })
+
+    await waitFor(() => {
+      expect(mockDeleteAccount).toHaveBeenCalledTimes(1)
+    })
+    expect(jest.mocked(notifications.show)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: 'Account deleted',
+        color: 'green',
+      })
+    )
+    expect(onClose).toHaveBeenCalled()
+  })
+})

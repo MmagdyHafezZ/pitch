@@ -1,23 +1,53 @@
 'use client'
 
+import { Suspense, useEffect, useMemo, useState } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import {
+  Alert,
+  Badge,
   Box,
   Button,
-  Card,
+  Container,
   Group,
+  Paper,
+  SimpleGrid,
   Stack,
+  Stepper,
   Text,
   TextInput,
   Title,
-  SimpleGrid,
-  Paper,
 } from '@mantine/core'
-import { Suspense, useEffect, useState } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useMediaQuery } from '@mantine/hooks'
+import {
+  IconAlertCircle,
+  IconBuildingSkyscraper,
+  IconChevronLeft,
+  IconChevronRight,
+  IconCreditCard,
+  IconMapPin,
+  IconSettings,
+  IconUsersGroup,
+} from '@tabler/icons-react'
+import { Space_Grotesk, Fraunces } from 'next/font/google'
 import { useTeams } from '@/features/teams/hooks/useTeams'
 import { useAuth } from '@/features/auth'
 import { useCreateTeamForm } from '@/features/teams/hooks/useTeamForm'
 import { TeamMembersPanel } from '@/components/ui/TeamMembersPanel'
+import { TeamSubscriptionPanel } from '@/components/ui/TeamSubscriptionPanel'
+import classes from './team-config.module.css'
+
+const spaceGrotesk = Space_Grotesk({ subsets: ['latin'], display: 'swap' })
+const fraunces = Fraunces({ subsets: ['latin'], display: 'swap' })
+
+type TeamEditValues = {
+  name: string
+  billingEmail: string
+  street: string
+  city: string
+  stateProvince: string
+  postalCode: string
+  country: string
+}
 
 export default function TeamConfigPage() {
   return (
@@ -31,11 +61,14 @@ function TeamConfigInner() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const isCreateMode = searchParams.get('mode') === 'create'
+  const isCompactStepper = useMediaQuery('(max-width: 900px)')
 
-  const { logout } = useAuth()
-  const { currentTeam, updateTeam } = useTeams()
+  const { user } = useAuth()
+  const { currentTeam, updateTeam, loading, fetchTeamById } = useTeams()
   const { values, errors, setField, submit, submitting, apiError } = useCreateTeamForm()
-  const [editValues, setEditValues] = useState({
+
+  const [activeStep, setActiveStep] = useState(0)
+  const [editValues, setEditValues] = useState<TeamEditValues>({
     name: '',
     billingEmail: '',
     street: '',
@@ -48,8 +81,14 @@ function TeamConfigInner() {
   const [savingEdit, setSavingEdit] = useState(false)
 
   useEffect(() => {
+    if (!isCreateMode && currentTeam && !currentTeam.memberships?.length) {
+      void fetchTeamById(currentTeam.id)
+    }
+  }, [currentTeam, fetchTeamById, isCreateMode])
+
+  useEffect(() => {
     if (!isCreateMode && currentTeam) {
-      const addr = currentTeam.billingAddress ?? ({} as any)
+      const addr = (currentTeam.billingAddress ?? {}) as Partial<TeamEditValues>
       setEditValues({
         name: currentTeam.name ?? '',
         billingEmail: currentTeam.billingEmail ?? '',
@@ -63,6 +102,39 @@ function TeamConfigInner() {
     }
   }, [isCreateMode, currentTeam])
 
+  const hasElevatedAccess = useMemo(() => {
+    if (isCreateMode) return true
+    if (!user || !currentTeam?.memberships?.length) return false
+
+    const membership = currentTeam.memberships.find((m) => m.userId === user.id)
+    return membership?.role === 'OWNER' || membership?.role === 'ADMIN'
+  }, [currentTeam, isCreateMode, user])
+
+  useEffect(() => {
+    if (isCreateMode || loading) return
+    if (!currentTeam) return
+    if (!hasElevatedAccess) {
+      router.replace('/studio/home')
+    }
+  }, [currentTeam, hasElevatedAccess, isCreateMode, loading, router])
+
+  if (!isCreateMode && loading && !currentTeam) {
+    return <div>Loading team configuration…</div>
+  }
+
+  if (!isCreateMode && currentTeam && !hasElevatedAccess) {
+    return null
+  }
+
+  const formValues = isCreateMode ? values : editValues
+  const formErrors = isCreateMode ? errors : ({} as typeof errors)
+  const bannerError = isCreateMode ? apiError : editError
+  const primaryLoading = isCreateMode ? submitting : savingEdit
+
+  const setEditField = (field: keyof TeamEditValues, value: string) => {
+    setEditValues((prev) => ({ ...prev, [field]: value }))
+  }
+
   const handleCreateClick = async () => {
     const ok = await submit()
     if (!ok) return
@@ -73,10 +145,11 @@ function TeamConfigInner() {
     if (!currentTeam) return
 
     setEditError(null)
-
     const name = editValues.name.trim()
+
     if (!name) {
       setEditError('Team name is required')
+      setActiveStep(0)
       return
     }
 
@@ -93,208 +166,401 @@ function TeamConfigInner() {
           country: editValues.country,
         },
       })
-    } catch (e) {
-      setEditError(e instanceof Error ? e.message : 'Failed to update team')
+    } catch (error) {
+      setEditError(error instanceof Error ? error.message : 'Failed to update team')
     } finally {
       setSavingEdit(false)
     }
   }
 
-  const formValues = isCreateMode ? values : editValues
-  const formErrors = isCreateMode ? errors : ({} as typeof errors)
-  const bannerError = isCreateMode ? apiError : editError
-  const primaryLoading = isCreateMode ? submitting : savingEdit
-
-  const setEditField = (field: keyof typeof editValues, value: string) => {
-    setEditValues((prev) => ({ ...prev, [field]: value }))
-  }
-
-  const handlePrimaryClick = () => {
-    if (isCreateMode) {
-      void handleCreateClick()
-    } else {
-      void handleSaveEditClick()
-    }
-  }
-
-  const pageTitle = isCreateMode ? 'Create a new team' : 'Team settings'
-  const pageSubtitle = isCreateMode
-    ? 'Set up your team details and billing information. You can invite members after the team is created.'
-    : 'Manage your team details, billing information, and members.'
-  const primaryLabel = isCreateMode ? 'Create team' : 'Save changes'
+  const pageTitle = 'Create a new team'
+  const pageSubtitle =
+    'Set up your team profile and billing details. Members and subscriptions can be managed after creation.'
 
   return (
-    <Paper p="xl" radius="md" shadow="xs" withBorder>
-      {/* header */}
-      <Group justify="space-between" align="flex-start" mb="md">
-        <Stack gap={4}>
-          <Title order={2}>{pageTitle}</Title>
+    <Container size="xl" py="xl" className={classes.page}>
+      <Paper className={classes.shell} p={{ base: 'md', sm: 'xl' }}>
+        <Stack gap="lg">
+          {isCreateMode && (
+            <Paper className={classes.heroCard} p={{ base: 'md', sm: 'xl' }}>
+              <Group justify="space-between" align="flex-start" wrap="wrap">
+                <Stack gap="sm" maw={700}>
+                  <Group gap="xs">
+                    <Badge variant="light" color="blue">
+                      Studio
+                    </Badge>
+                    <Badge variant="light" color="cyan">
+                      New team
+                    </Badge>
+                  </Group>
+                  <Title className={`${fraunces.className} ${classes.heroTitle}`} order={1}>
+                    {pageTitle}
+                  </Title>
+                  <Text c="dimmed">{pageSubtitle}</Text>
+                </Stack>
+
+                <Group gap="sm">
+                  <Button
+                    variant="default"
+                    leftSection={<IconChevronLeft size={16} />}
+                    onClick={() => router.back()}
+                  >
+                    Cancel
+                  </Button>
+                  <Button onClick={() => void handleCreateClick()} loading={primaryLoading}>
+                    Create team
+                  </Button>
+                </Group>
+              </Group>
+            </Paper>
+          )}
+
+          {bannerError && (
+            <Alert variant="light" color="red" icon={<IconAlertCircle size={16} />} radius="md">
+              {bannerError}
+            </Alert>
+          )}
+
+          {isCreateMode ? (
+            <CreateModeLayout
+              formValues={formValues}
+              formErrors={formErrors}
+              setField={setField}
+              classes={classes}
+              fontClass={spaceGrotesk.className}
+            />
+          ) : (
+            <EditModeLayout
+              activeStep={activeStep}
+              setActiveStep={setActiveStep}
+              isCompactStepper={!!isCompactStepper}
+              currentTeamName={currentTeam?.name ?? 'Team'}
+              currentTeamId={currentTeam?.id ?? ''}
+              canManage={hasElevatedAccess}
+              formValues={editValues}
+              setEditField={setEditField}
+              onSaveProfile={() => void handleSaveEditClick()}
+              savingEdit={savingEdit}
+              classes={classes}
+              fontClass={spaceGrotesk.className}
+            />
+          )}
+        </Stack>
+      </Paper>
+    </Container>
+  )
+}
+
+function CreateModeLayout({
+  formValues,
+  formErrors,
+  setField,
+  classes,
+  fontClass,
+}: {
+  formValues: any
+  formErrors: any
+  setField: (field: any, value: string) => void
+  classes: Record<string, string>
+  fontClass: string
+}) {
+  return (
+    <SimpleGrid cols={{ base: 1, lg: 2 }} spacing="lg">
+      <Paper className={classes.contentCard} p="lg">
+        <Stack gap="md">
+          <Group gap="xs">
+            <IconBuildingSkyscraper size={18} />
+            <Title order={3} className={fontClass}>
+              Team details
+            </Title>
+          </Group>
+
+          <TextInput
+            label="Team name"
+            placeholder="Revenue Operations"
+            value={formValues.name}
+            error={formErrors.name}
+            onChange={(e) => setField('name', e.currentTarget.value)}
+            required
+          />
+
+          <TextInput
+            label="Billing email (optional)"
+            placeholder="billing@company.com"
+            value={formValues.billingEmail}
+            error={formErrors.billingEmail}
+            onChange={(e) => setField('billingEmail', e.currentTarget.value)}
+          />
+
           <Text size="sm" c="dimmed">
-            {pageSubtitle}
+            You can invite members and assign a plan right after the team is created.
           </Text>
         </Stack>
+      </Paper>
 
-        <Group gap="xs">
-          <Button variant="default" size="sm" onClick={() => router.back()}>
-            Cancel
-          </Button>
-          <Button size="sm" onClick={handlePrimaryClick} loading={primaryLoading}>
-            {primaryLabel}
-          </Button>
-        </Group>
-      </Group>
+      <Paper className={classes.contentCard} p="lg">
+        <Stack gap="md">
+          <Group gap="xs">
+            <IconMapPin size={18} />
+            <Title order={3} className={fontClass}>
+              Billing address
+            </Title>
+            <Badge variant="light" color="gray">
+              Optional
+            </Badge>
+          </Group>
 
-      {/* error banner */}
-      {bannerError && (
-        <Box
-          mb="md"
-          p="sm"
-          style={{
-            borderRadius: 8,
-            background: 'var(--mantine-color-red-0)',
-            border: '1px solid var(--mantine-color-red-3)',
-          }}
+          <TextInput
+            label="Street address"
+            placeholder="123 Main St"
+            value={formValues.street}
+            error={formErrors.street}
+            onChange={(e) => setField('street', e.currentTarget.value)}
+          />
+          <Group grow align="flex-start">
+            <TextInput
+              label="City"
+              placeholder="New York"
+              value={formValues.city}
+              error={formErrors.city}
+              onChange={(e) => setField('city', e.currentTarget.value)}
+            />
+            <TextInput
+              label="State / Province"
+              placeholder="NY"
+              value={formValues.stateProvince}
+              error={formErrors.stateProvince}
+              onChange={(e) => setField('stateProvince', e.currentTarget.value)}
+            />
+          </Group>
+          <Group grow align="flex-start">
+            <TextInput
+              label="Postal code"
+              placeholder="10001"
+              value={formValues.postalCode}
+              error={formErrors.postalCode}
+              onChange={(e) => setField('postalCode', e.currentTarget.value)}
+            />
+            <TextInput
+              label="Country"
+              placeholder="United States"
+              value={formValues.country}
+              error={formErrors.country}
+              onChange={(e) => setField('country', e.currentTarget.value)}
+            />
+          </Group>
+        </Stack>
+      </Paper>
+    </SimpleGrid>
+  )
+}
+
+function EditModeLayout({
+  activeStep,
+  setActiveStep,
+  isCompactStepper,
+  currentTeamName,
+  currentTeamId,
+  canManage,
+  formValues,
+  setEditField,
+  onSaveProfile,
+  savingEdit,
+  classes,
+  fontClass,
+}: {
+  activeStep: number
+  setActiveStep: (value: number) => void
+  isCompactStepper: boolean
+  currentTeamName: string
+  currentTeamId: string
+  canManage: boolean
+  formValues: TeamEditValues
+  setEditField: (field: keyof TeamEditValues, value: string) => void
+  onSaveProfile: () => void
+  savingEdit: boolean
+  classes: Record<string, string>
+  fontClass: string
+}) {
+  const maxStep = 3
+  const profileIcon = <IconSettings size={16} />
+  const membersIcon = <IconUsersGroup size={16} />
+  const billingIcon = <IconMapPin size={16} />
+  const subscriptionIcon = <IconCreditCard size={16} />
+
+  return (
+    <Stack gap="lg">
+      <Stack gap={4}>
+        <Title order={2} className={fontClass}>
+          {currentTeamName}
+        </Title>
+      </Stack>
+
+      <Paper className={classes.stepperWrap} p="md">
+        <Stepper
+          active={activeStep}
+          onStepClick={setActiveStep}
+          allowNextStepsSelect
+          orientation={isCompactStepper ? 'vertical' : 'horizontal'}
+          size="sm"
+          className={classes.stepper}
         >
-          <Text size="sm" c="red.7">
-            {bannerError}
-          </Text>
-        </Box>
-      )}
+          <Stepper.Step
+            className={`${classes.stepItem} ${activeStep === 0 ? classes.stepCurrent : ''}`}
+            icon={profileIcon}
+            completedIcon={profileIcon}
+            label="Profile"
+            description="Team identity"
+          />
+          <Stepper.Step
+            className={`${classes.stepItem} ${activeStep === 1 ? classes.stepCurrent : ''}`}
+            icon={membersIcon}
+            completedIcon={membersIcon}
+            label="Members"
+            description="Roster + invites"
+          />
+          <Stepper.Step
+            className={`${classes.stepItem} ${activeStep === 2 ? classes.stepCurrent : ''}`}
+            icon={billingIcon}
+            completedIcon={billingIcon}
+            label="Billing"
+            description="Address + contact"
+          />
+          <Stepper.Step
+            className={`${classes.stepItem} ${activeStep === 3 ? classes.stepCurrent : ''}`}
+            icon={subscriptionIcon}
+            completedIcon={subscriptionIcon}
+            label="Subscription"
+            description="Plans"
+          />
+        </Stepper>
+      </Paper>
 
-      {/* main layout */}
-      <SimpleGrid cols={{ base: 1, md: isCreateMode ? 1 : 2 }} spacing="xl">
-        {/* LEFT: team details + billing address */}
-        <Stack gap="lg">
-          <Stack gap="sm">
-            <Title order={3}>Team details</Title>
-            <Text size="sm" c="dimmed">
-              Give your team a clear name. You can change this later in team settings.
+      {activeStep === 0 && (
+        <Paper className={classes.contentCard} p="lg">
+          <Stack gap="md">
+            <Title order={3} className={fontClass}>
+              Team profile
+            </Title>
+            <Text c="dimmed" size="sm">
+              Basic organization identity used across invitations, billing, and studio workflows.
             </Text>
 
             <TextInput
               label="Team name"
-              placeholder="e.g. Sales Team"
+              placeholder="Revenue Operations"
               value={formValues.name}
-              error={formErrors.name}
-              onChange={(e) =>
-                isCreateMode
-                  ? setField('name', e.currentTarget.value)
-                  : setEditField('name', e.currentTarget.value)
-              }
+              onChange={(e) => setEditField('name', e.currentTarget.value)}
               required
             />
 
             <TextInput
-              label="Billing email (optional)"
-              placeholder="billing@example.com"
+              label="Billing email"
+              placeholder="billing@company.com"
               value={formValues.billingEmail}
-              error={formErrors.billingEmail}
-              onChange={(e) =>
-                isCreateMode
-                  ? setField('billingEmail', e.currentTarget.value)
-                  : setEditField('billingEmail', e.currentTarget.value)
-              }
+              onChange={(e) => setEditField('billingEmail', e.currentTarget.value)}
             />
-          </Stack>
 
-          <Stack gap="sm" mt="md">
-            <Group justify="space-between">
-              <Title order={3}>Billing address</Title>
-              <Text size="xs" c="dimmed">
-                Optional
+            <Group justify="space-between" wrap="wrap">
+              <Text size="sm" c="dimmed">
+                Manage the team profile used across invites and billing.
               </Text>
+              <Button onClick={onSaveProfile} loading={savingEdit} disabled={!canManage}>
+                Save profile
+              </Button>
             </Group>
-            <Text size="sm" c="dimmed">
-              Used for invoices and account communication.
-            </Text>
+          </Stack>
+        </Paper>
+      )}
 
-            <TextInput
-              label="Street address"
-              placeholder="123 Main St"
-              value={formValues.street}
-              error={formErrors.street}
-              onChange={(e) =>
-                isCreateMode
-                  ? setField('street', e.currentTarget.value)
-                  : setEditField('street', e.currentTarget.value)
-              }
-            />
-            <Group grow>
-              <TextInput
-                label="City"
-                placeholder="Calgary"
-                value={formValues.city}
-                error={formErrors.city}
-                onChange={(e) =>
-                  isCreateMode
-                    ? setField('city', e.currentTarget.value)
-                    : setEditField('city', e.currentTarget.value)
-                }
-              />
-              <TextInput
-                label="State / Province"
-                placeholder="AB"
-                value={formValues.stateProvince}
-                error={formErrors.stateProvince}
-                onChange={(e) =>
-                  isCreateMode
-                    ? setField('stateProvince', e.currentTarget.value)
-                    : setEditField('stateProvince', e.currentTarget.value)
-                }
-              />
+      {activeStep === 1 && (
+        <Box>
+          <TeamMembersPanel />
+        </Box>
+      )}
+
+      {activeStep === 2 && (
+        <Paper className={classes.contentCard} p="lg">
+          <Stack gap="md">
+            <Group justify="space-between" align="center" wrap="wrap">
+              <Group gap="xs">
+                <IconMapPin size={18} />
+                <Title order={3} className={fontClass}>
+                  Billing address
+                </Title>
+              </Group>
+              <Badge variant="light" color="gray">
+                Used for invoices
+              </Badge>
             </Group>
-            <Group grow>
+
+            <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
               <TextInput
-                label="Postal code"
-                placeholder="T2N 1N4"
-                value={formValues.postalCode}
-                error={formErrors.postalCode}
-                onChange={(e) =>
-                  isCreateMode
-                    ? setField('postalCode', e.currentTarget.value)
-                    : setEditField('postalCode', e.currentTarget.value)
-                }
+                label="Street address"
+                placeholder="123 Main St"
+                value={formValues.street}
+                onChange={(e) => setEditField('street', e.currentTarget.value)}
               />
               <TextInput
                 label="Country"
-                placeholder="Canada"
+                placeholder="United States"
                 value={formValues.country}
-                error={formErrors.country}
-                onChange={(e) =>
-                  isCreateMode
-                    ? setField('country', e.currentTarget.value)
-                    : setEditField('country', e.currentTarget.value)
-                }
+                onChange={(e) => setEditField('country', e.currentTarget.value)}
               />
+              <TextInput
+                label="City"
+                placeholder="New York"
+                value={formValues.city}
+                onChange={(e) => setEditField('city', e.currentTarget.value)}
+              />
+              <TextInput
+                label="State / Province"
+                placeholder="NY"
+                value={formValues.stateProvince}
+                onChange={(e) => setEditField('stateProvince', e.currentTarget.value)}
+              />
+              <TextInput
+                label="Postal code"
+                placeholder="10001"
+                value={formValues.postalCode}
+                onChange={(e) => setEditField('postalCode', e.currentTarget.value)}
+              />
+            </SimpleGrid>
+
+            <Group justify="flex-end">
+              <Button onClick={onSaveProfile} loading={savingEdit} disabled={!canManage}>
+                Save billing details
+              </Button>
             </Group>
           </Stack>
-        </Stack>
-
-        {/* RIGHT: members management only makes sense in edit mode */}
-        {!isCreateMode && (
-          <Card withBorder radius="md" shadow="xs" p="lg">
-            <TeamMembersPanel />
-          </Card>
-        )}
-      </SimpleGrid>
-
-      {/* Light-weight hint in create mode so we don't waste a full column */}
-      {isCreateMode && (
-        <Box
-          mt="xl"
-          p="md"
-          style={{
-            borderRadius: 8,
-            background: 'var(--mantine-color-gray-0)',
-            border: '1px solid var(--mantine-color-gray-3)',
-          }}
-        >
-          <Text size="sm" c="dimmed">
-            Once you create this team, you can invite members and manage roles from the Team Config
-            view.
-          </Text>
-        </Box>
+        </Paper>
       )}
-    </Paper>
+
+      {activeStep === 3 && currentTeamId && (
+        <TeamSubscriptionPanel
+          teamId={currentTeamId}
+          teamName={currentTeamName}
+          canManage={canManage}
+        />
+      )}
+
+      <Group justify="space-between" wrap="wrap">
+        <Button
+          variant="default"
+          leftSection={<IconChevronLeft size={16} />}
+          onClick={() => setActiveStep(Math.max(0, activeStep - 1))}
+          disabled={activeStep === 0}
+        >
+          Back
+        </Button>
+        <Button
+          rightSection={<IconChevronRight size={16} />}
+          onClick={() => setActiveStep(Math.min(maxStep, activeStep + 1))}
+          disabled={activeStep === maxStep}
+        >
+          Next
+        </Button>
+      </Group>
+    </Stack>
   )
 }

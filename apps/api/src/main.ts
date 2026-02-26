@@ -1,6 +1,16 @@
+/* eslint-disable */
 import 'dotenv/config';
 import { NestFactory } from '@nestjs/core';
-import { Logger, ValidationPipe, VersioningType } from '@nestjs/common';
+import {
+  ArgumentsHost,
+  BadRequestException,
+  Catch,
+  ExceptionFilter,
+  HttpException,
+  Logger,
+  ValidationPipe,
+  VersioningType,
+} from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import helmet from 'helmet';
 import compression from 'compression';
@@ -22,6 +32,43 @@ import {
   normalizeError,
   safeStringify,
 } from '@pitch/shared-backend/utils/error-logging';
+
+@Catch()
+export class LogAllHttpExceptionsFilter implements ExceptionFilter {
+  private readonly logger = new Logger('HTTP');
+  catch(exception: unknown, host: ArgumentsHost): unknown {
+    const ctx = host.switchToHttp();
+    const res = ctx.getResponse<any>();
+    const req = ctx.getRequest<any>();
+
+    if (exception instanceof HttpException) {
+      const status = exception.getStatus();
+      const payload = exception.getResponse();
+
+      this.logger.error(
+        `${status} ${req.method} ${req.url} -> ${JSON.stringify(payload)}`,
+      );
+
+      return res
+        .status(status)
+        .json(
+          typeof payload === 'object'
+            ? payload
+            : { statusCode: status, message: payload },
+        );
+    }
+
+    this.logger.error(
+      `${req.method} ${req.url} -> ${String(exception)}`,
+      (exception as any)?.stack,
+    );
+
+    return res.status(500).json({
+      statusCode: 500,
+      message: 'Internal server error',
+    });
+  }
+}
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
@@ -84,12 +131,15 @@ async function bootstrap() {
       transform: true,
       transformOptions: { enableImplicitConversion: true },
       validationError: { target: false },
+      exceptionFactory: (errors) =>
+        new BadRequestException({ message: 'Validation failed', errors }),
     }),
   );
 
   app.useGlobalFilters(
     new MicroserviceExceptionFilter(),
     new PrismaClientExceptionFilter(),
+    new LogAllHttpExceptionsFilter(),
   );
 
   const config = new DocumentBuilder()

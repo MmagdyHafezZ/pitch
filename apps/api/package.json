@@ -75,6 +75,8 @@
     "db:deploy:all": "pnpm run db:deploy:userManagement && pnpm run db:deploy:simulation && pnpm run db:deploy:support && pnpm run db:deploy:analytics && pnpm run db:deploy:crm && pnpm run db:deploy:lti"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.993.0",
+    "@aws-sdk/s3-request-presigner": "^3.993.0",
     "@elevenlabs/elevenlabs-js": "^2.33.0",
     "@langchain/core": "^0.3.80",
     "@langchain/langgraph": "^0.4.9",
@@ -83,9 +85,11 @@
     "@nestjs/core": "^11.0.1",
     "@nestjs/jwt": "^11.0.2",
     "@nestjs/microservices": "^11.0.1",
+    "@nestjs/mongoose": "^11.0.4",
     "@nestjs/passport": "^11.0.5",
     "@nestjs/platform-express": "^11.0.1",
     "@nestjs/platform-socket.io": "^11.0.1",
+    "@nestjs/schedule": "^6.1.0",
     "@nestjs/swagger": "^11.2.0",
     "@nestjs/terminus": "^11.0.0",
     "@nestjs/websockets": "^11.0.1",
@@ -110,7 +114,7 @@
     "helmet": "^8.1.0",
     "ioredis": "^5.8.2",
     "langsmith": "^0.4.7",
-    "mongoose": "^8.19.4",
+    "mongoose": "8.19.4",
     "morgan": "^1.10.1",
     "nodemailer": "^7.0.13",
     "openai": "^4.96.0",
@@ -161,7 +165,7 @@
     "ts-node": "^10.9.2",
     "ts-node-dev": "^2.0.0",
     "tsconfig-paths": "^4.2.0",
-    "typescript": "^5.7.3",
+    "typescript": "^5.9.3",
     "typescript-eslint": "^8.20.0"
   }
 }

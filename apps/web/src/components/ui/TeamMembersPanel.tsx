@@ -1,25 +1,47 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
+  ActionIcon,
+  Alert,
+  Avatar,
+  Badge,
+  Button,
   Card,
+  Divider,
   Stack,
   Group,
+  Paper,
   Text,
   TextInput,
   Select,
+  SegmentedControl,
   Table,
-  Badge,
-  ActionIcon,
   NumberInput,
-  Button,
   Tooltip,
-  Divider,
   ScrollArea,
+  SimpleGrid,
+  Loader,
 } from '@mantine/core'
-import { IconSearch, IconFilter, IconTrash, IconUserPlus } from '@tabler/icons-react'
+import {
+  IconAlertCircle,
+  IconCrown,
+  IconFilter,
+  IconHash,
+  IconMailPlus,
+  IconSearch,
+  IconShield,
+  IconTrash,
+  IconUser,
+  IconUserPlus,
+  IconUsers,
+  IconUserCheck,
+} from '@tabler/icons-react'
 import { useTeams } from '@/features/teams/hooks/useTeams'
+import { useTeamConfigStore } from '@/features/teams/stores/team-config.store'
 import type { TeamMembership } from '@/features/teams/types/teams.types'
+import { notifications } from '@mantine/notifications'
+import { modals } from '@mantine/modals'
 
 const ROLE_OPTIONS = [
   { value: 'OWNER', label: 'Owner' },
@@ -27,50 +49,186 @@ const ROLE_OPTIONS = [
   { value: 'MEMBER', label: 'Member' },
 ]
 
+const MEMBER_ROLE_OPTIONS = [
+  { value: 'OWNER', label: 'Owner (transfer)' },
+  { value: 'ADMIN', label: 'Admin' },
+  { value: 'MEMBER', label: 'Member' },
+]
+
+const INVITE_ROLE_OPTIONS = [
+  { value: 'ADMIN', label: 'Admin' },
+  { value: 'MEMBER', label: 'Member' },
+]
+
+const roleMeta = {
+  OWNER: { label: 'Owner', icon: IconCrown, color: 'yellow' },
+  ADMIN: { label: 'Admin', icon: IconShield, color: 'blue' },
+  MEMBER: { label: 'Member', icon: IconUser, color: 'gray' },
+} as const
+
+const isValidEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
+
+const formatDate = (value?: string | null) => {
+  if (!value) return null
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return null
+  return new Intl.DateTimeFormat(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  }).format(date)
+}
+
+const isMembershipPending = (membership: TeamMembership) => {
+  if (membership.isActive === false) return true
+  if (membership.acceptedAt) return false
+  return Boolean(membership.user?.invitedAt)
+}
+
 export function TeamMembersPanel() {
   const { currentTeam, addMember, updateMember, deleteMember, loading } = useTeams()
+  const orgUsers = useTeamConfigStore((s) => s.orgUsers)
+  const orgUsersLoading = useTeamConfigStore((s) => s.orgUsersLoading)
+  const orgUsersError = useTeamConfigStore((s) => s.orgUsersError)
+  const fetchOrgUsers = useTeamConfigStore((s) => s.fetchOrgUsers)
 
   const [search, setSearch] = useState('')
   const [roleFilter, setRoleFilter] = useState<'ALL' | 'OWNER' | 'ADMIN' | 'MEMBER'>('ALL')
 
-  const [newUserId, setNewUserId] = useState('')
+  const [inviteEmail, setInviteEmail] = useState('')
   const [newRole, setNewRole] = useState<'MEMBER' | 'ADMIN' | 'OWNER'>('MEMBER')
   const [submitting, setSubmitting] = useState(false)
+  const [inviteError, setInviteError] = useState<string | null>(null)
+  const [quickInvitingUserId, setQuickInvitingUserId] = useState<string | null>(null)
+  const [membershipFilter, setMembershipFilter] = useState<'IN_TEAM' | 'NOT_IN_TEAM' | 'ALL'>('ALL')
 
-  // Always call hooks – guard nulls inside useMemo
+  useEffect(() => {
+    void fetchOrgUsers()
+  }, [fetchOrgUsers])
+
   const members: TeamMembership[] = useMemo(
-    () =>
-      (currentTeam?.memberships ?? []).filter(
-        (m) => m.isActive !== false // hide inactive
-      ),
+    () => (currentTeam?.memberships ?? []).filter((m) => m.isActive !== false),
     [currentTeam]
   )
+  const currentOwner = useMemo(
+    () => members.find((m) => m.role === 'OWNER' && m.isActive !== false) ?? null,
+    [members]
+  )
 
-  const filteredMembers = useMemo(() => {
+  const memberStats = useMemo(() => {
+    const total = members.length
+    const pending = members.filter(isMembershipPending).length
+    const admins = members.filter((m) => m.role === 'ADMIN' || m.role === 'OWNER').length
+    return { total, pending, admins }
+  }, [members])
+
+  const peopleRows = useMemo(() => {
     const q = search.trim().toLowerCase()
+    const rows = orgUsers
+      .map((user) => {
+        const membership = members.find((m) => m.userId === user?.id)
+        const inTeam = Boolean(membership)
+        return { user, membership, inTeam }
+      })
+      .filter(({ user, membership, inTeam }) => {
+        const name = String(user?.name ?? '').toLowerCase()
+        const email = String(user?.email ?? '').toLowerCase()
+        const matchesSearch = !q || name.includes(q) || email.includes(q)
+        if (!matchesSearch) return false
 
-    return members.filter((m) => {
-      if (roleFilter !== 'ALL' && m.role !== roleFilter) return false
+        if (membershipFilter === 'IN_TEAM' && !inTeam) return false
+        if (membershipFilter === 'NOT_IN_TEAM' && inTeam) return false
 
-      if (!q) return true
+        if (roleFilter === 'ALL') return true
+        return membership?.role === roleFilter
+      })
+      .sort((a, b) => {
+        // In team first when viewing all
+        if (membershipFilter === 'ALL' && a.inTeam !== b.inTeam) {
+          return a.inTeam ? -1 : 1
+        }
 
-      const name = m.user?.name?.toLowerCase() ?? ''
-      const email = m.user?.email?.toLowerCase() ?? ''
-      return name.includes(q) || email.includes(q)
-    })
-  }, [members, search, roleFilter])
+        const roleRank = (role?: string) => {
+          if (role === 'OWNER') return 0
+          if (role === 'ADMIN') return 1
+          if (role === 'MEMBER') return 2
+          return 3
+        }
+
+        // Elevated access first for members in team
+        if (a.inTeam && b.inTeam) {
+          const diff = roleRank(a.membership?.role) - roleRank(b.membership?.role)
+          if (diff !== 0) return diff
+        }
+
+        return String(a.user?.name ?? a.user?.email ?? '').localeCompare(
+          String(b.user?.name ?? b.user?.email ?? '')
+        )
+      })
+
+    return rows
+  }, [orgUsers, members, membershipFilter, roleFilter, search])
+
+  const inviteExistingUserToTeam = async (user: any) => {
+    if (!currentTeam?.id || !user?.id) return
+    setInviteError(null)
+    setQuickInvitingUserId(user.id)
+    try {
+      await addMember(currentTeam.id, {
+        userId: user.id,
+        role: newRole,
+      })
+      notifications.show({
+        title: 'Member invited',
+        message: `${user.name ?? user.email} was added to ${currentTeam.name}.`,
+        color: 'teal',
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to invite member'
+      setInviteError(message)
+    } finally {
+      setQuickInvitingUserId(null)
+    }
+  }
 
   const handleAddMember = async () => {
-    const userId = newUserId.trim()
-    if (!userId || !currentTeam) return
+    const email = inviteEmail.trim().toLowerCase()
+    if (!email || !currentTeam) return
+
+    setInviteError(null)
+    if (!isValidEmail(email)) {
+      setInviteError('Enter a valid email address')
+      return
+    }
 
     setSubmitting(true)
     try {
+      const users = orgUsers.length > 0 ? orgUsers : await fetchOrgUsers()
+      const matchedUser = users.find(
+        (candidate: any) => String(candidate?.email ?? '').toLowerCase() === email
+      )
+
+      if (!matchedUser?.id) {
+        setInviteError(
+          'No account found for that email. Ask them to register first, then invite them again.'
+        )
+        return
+      }
+
       await addMember(currentTeam.id, {
-        userId,
+        userId: matchedUser.id,
         role: newRole,
       })
-      setNewUserId('')
+
+      setInviteEmail('')
+      notifications.show({
+        title: 'Member invited',
+        message: `${matchedUser.name ?? matchedUser.email} was added to ${currentTeam.name}.`,
+        color: 'teal',
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to invite member'
+      setInviteError(message)
     } finally {
       setSubmitting(false)
     }
@@ -80,9 +238,58 @@ export function TeamMembersPanel() {
     if (!currentTeam || !roleValue) return
     if (roleValue === membership.role) return
 
+    if (roleValue === 'OWNER' && membership.role !== 'OWNER') {
+      const targetName = membership.user?.name ?? membership.user?.email ?? 'this member'
+      const currentOwnerName =
+        currentOwner?.userId && currentOwner.userId !== membership.userId
+          ? (currentOwner.user?.name ?? currentOwner.user?.email ?? 'the current owner')
+          : null
+      modals.openConfirmModal({
+        title: 'Transfer ownership',
+        centered: true,
+        labels: {
+          confirm: 'Transfer ownership',
+          cancel: 'Cancel',
+        },
+        children: (
+          <Stack gap={6}>
+            <Text size="sm">
+              The ownership of <strong>{currentTeam.name}</strong> will be transferred to{' '}
+              <strong>{targetName}</strong>. Are you sure?
+            </Text>
+            {currentOwnerName ? (
+              <Text size="xs" c="dimmed">
+                {currentOwnerName} will be changed to Admin.
+              </Text>
+            ) : null}
+          </Stack>
+        ),
+        onConfirm: async () => {
+          await updateMember(currentTeam.id, membership.userId, {
+            role: roleValue as any,
+          })
+
+          notifications.show({
+            title: 'Ownership transferred',
+            message: `${membership.user?.name ?? membership.user?.email ?? 'Member'} is now the team owner.`,
+            color: 'teal',
+          })
+        },
+      })
+      return
+    }
+
     await updateMember(currentTeam.id, membership.userId, {
       role: roleValue as any,
     })
+
+    if (roleValue === 'OWNER') {
+      notifications.show({
+        title: 'Ownership transferred',
+        message: `${membership.user?.name ?? membership.user?.email ?? 'Member'} is now the team owner.`,
+        color: 'teal',
+      })
+    }
   }
 
   const handleUpdateTokenLimit = async (membership: TeamMembership, nextValue: string | number) => {
@@ -112,14 +319,27 @@ export function TeamMembersPanel() {
     return 0 // TODO: replace with real logic
   }
 
+  const getRoleSelectOptions = (membership: TeamMembership) =>
+    membership.role === 'OWNER' ? ROLE_OPTIONS : MEMBER_ROLE_OPTIONS
+
+  const getRoleIcon = (role?: TeamMembership['role']) => {
+    if (!role) return <IconUser size={14} />
+    if (!(role in roleMeta)) return <IconUser size={14} />
+    const meta = roleMeta[role as keyof typeof roleMeta]
+    const Icon = meta.icon
+    return <Icon size={14} />
+  }
+
   return (
     <Card
       withBorder
-      radius="md"
-      shadow="xs"
+      radius="xl"
+      shadow="lg"
       p="lg"
       style={{
-        background: 'var(--mantine-color-gray-1)',
+        background:
+          'linear-gradient(160deg, color-mix(in srgb, var(--mantine-color-blue-6) 10%, var(--mantine-color-dark-8)), var(--mantine-color-dark-8))',
+        borderColor: 'color-mix(in srgb, var(--mantine-color-blue-6) 25%, transparent)',
       }}
     >
       {!currentTeam ? (
@@ -130,142 +350,245 @@ export function TeamMembersPanel() {
         <Stack gap="md">
           <Group justify="space-between" align="center">
             <Stack gap={2}>
-              <Text fw={600}>Team members</Text>
+              <Group gap="xs">
+                <IconUsers size={16} />
+                <Text fw={700}>Team members</Text>
+              </Group>
               <Text size="sm" c="dimmed">
-                Manage who has access to this team, their roles, and their session assignments.
+                See everyone in this organization team, invite by email, and manage access roles.
               </Text>
             </Stack>
-
-            <Group gap="xs">
-              <TextInput
-                leftSection={<IconSearch size={14} />}
-                placeholder="Search by name or email"
-                value={search}
-                onChange={(e) => setSearch(e.currentTarget.value)}
-                size="xs"
-              />
-              <Select
-                leftSection={<IconFilter size={14} />}
-                size="xs"
-                w={160}
-                value={roleFilter}
-                onChange={(v) => setRoleFilter((v as any) ?? 'ALL')}
-                data={[
-                  { value: 'ALL', label: 'All roles' },
-                  { value: 'OWNER', label: 'Owner' },
-                  { value: 'ADMIN', label: 'Admin' },
-                  { value: 'MEMBER', label: 'Member' },
-                ]}
-              />
-            </Group>
           </Group>
 
-          <Divider label="Add member" labelPosition="left" />
+          <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="sm">
+            <Paper withBorder radius="lg" p="sm" bg="dark.7">
+              <Text size="xs" c="dimmed">
+                Active members
+              </Text>
+              <Text fw={700} size="xl">
+                {memberStats.total}
+              </Text>
+            </Paper>
+            <Paper withBorder radius="lg" p="sm" bg="dark.7">
+              <Text size="xs" c="dimmed">
+                Admins / Owners
+              </Text>
+              <Text fw={700} size="xl">
+                {memberStats.admins}
+              </Text>
+            </Paper>
+            <Paper withBorder radius="lg" p="sm" bg="dark.7">
+              <Text size="xs" c="dimmed">
+                Pending invites
+              </Text>
+              <Text fw={700} size="xl">
+                {memberStats.pending}
+              </Text>
+            </Paper>
+          </SimpleGrid>
 
-          <Group align="flex-end" gap="sm">
+          <Divider label="Roster" labelPosition="left" />
+
+          <Group gap="xs" wrap="wrap">
             <TextInput
-              label="User ID (or email placeholder)"
-              placeholder="user_123 / email@example.com"
-              value={newUserId}
-              onChange={(e) => setNewUserId(e.currentTarget.value)}
-              style={{ flex: 1 }}
+              leftSection={<IconSearch size={14} />}
+              placeholder="Search by name or email"
+              value={search}
+              onChange={(e) => setSearch(e.currentTarget.value)}
+              size="sm"
+              style={{ flex: 1, minWidth: 220 }}
             />
             <Select
-              label="Role"
-              value={newRole}
-              onChange={(v) => setNewRole((v as any) ?? 'MEMBER')}
-              data={ROLE_OPTIONS}
-              style={{ width: 140 }}
+              leftSection={<IconFilter size={14} />}
+              size="sm"
+              w={180}
+              value={roleFilter}
+              onChange={(v) => setRoleFilter((v as any) ?? 'ALL')}
+              data={[
+                { value: 'ALL', label: 'All roles' },
+                { value: 'OWNER', label: 'Owner' },
+                { value: 'ADMIN', label: 'Admin' },
+                { value: 'MEMBER', label: 'Member' },
+              ]}
             />
-            <Button
-              leftSection={<IconUserPlus size={16} />}
-              onClick={handleAddMember}
-              loading={submitting || loading}
-            >
-              Add
-            </Button>
           </Group>
 
-          <Divider label="Current members" labelPosition="left" />
-
-          {filteredMembers.length === 0 ? (
+          <Group justify="space-between" align="center" wrap="wrap">
             <Text size="sm" c="dimmed">
-              No matching members.
+              All users in the organization. Use filters to focus on in-team or not-in-team users.
+            </Text>
+            <SegmentedControl
+              size="xs"
+              value={membershipFilter}
+              onChange={(value) => setMembershipFilter(value as 'IN_TEAM' | 'NOT_IN_TEAM' | 'ALL')}
+              data={[
+                { label: 'In team', value: 'IN_TEAM' },
+                { label: 'Not in team', value: 'NOT_IN_TEAM' },
+                { label: 'All', value: 'ALL' },
+              ]}
+            />
+          </Group>
+
+          {orgUsersError && (
+            <Alert color="red" variant="light" icon={<IconAlertCircle size={16} />}>
+              {orgUsersError}
+            </Alert>
+          )}
+
+          {orgUsersLoading ? (
+            <Group gap="xs">
+              <Loader size="sm" />
+              <Text size="sm" c="dimmed">
+                Loading people…
+              </Text>
+            </Group>
+          ) : peopleRows.length === 0 ? (
+            <Text size="sm" c="dimmed">
+              No users match the current filters.
             </Text>
           ) : (
-            <ScrollArea h={300} type="auto">
-              <Table
-                striped
-                highlightOnHover
-                withColumnBorders={false}
-                verticalSpacing="xs"
-                horizontalSpacing="md"
-              >
+            <ScrollArea h={420} type="auto">
+              <Table highlightOnHover verticalSpacing="xs" horizontalSpacing="md">
                 <Table.Thead>
                   <Table.Tr>
-                    <Table.Th>Member</Table.Th>
+                    <Table.Th>User</Table.Th>
+                    <Table.Th>Team status</Table.Th>
                     <Table.Th>Role</Table.Th>
                     <Table.Th>Token limit</Table.Th>
                     <Table.Th>Sessions</Table.Th>
-                    <Table.Th style={{ width: 60 }} />
+                    <Table.Th style={{ width: 170 }}>Actions</Table.Th>
                   </Table.Tr>
                 </Table.Thead>
                 <Table.Tbody>
-                  {filteredMembers.map((m) => {
-                    const name = m.user?.name ?? 'Unknown'
-                    const email = m.user?.email ?? '—'
-                    const sessions = getSessionCount(m.userId)
+                  {peopleRows.map(({ user, membership, inTeam }) => {
+                    const name = user?.name ?? 'Unknown user'
+                    const email = user?.email ?? '—'
+                    const avatarSrc =
+                      user?.avatar ?? user?.avatarUrl ?? membership?.user?.avatar ?? undefined
+                    const isPending = membership ? isMembershipPending(membership) : false
+                    const sessions = membership ? getSessionCount(membership.userId) : 0
 
                     return (
-                      <Table.Tr key={m.id}>
+                      <Table.Tr key={user.id}>
                         <Table.Td>
-                          <Stack gap={2} justify="center">
-                            <Text size="sm" fw={500}>
-                              {name}
+                          <Group gap="sm" wrap="nowrap">
+                            <Avatar
+                              radius="xl"
+                              color={inTeam ? 'blue' : 'cyan'}
+                              variant="light"
+                              src={avatarSrc}
+                              alt={name}
+                            >
+                              {String(name || email)
+                                .slice(0, 1)
+                                .toUpperCase()}
+                            </Avatar>
+                            <Stack gap={2}>
+                              <Text size="sm" fw={600}>
+                                {name}
+                              </Text>
+                              <Text size="xs" c="dimmed">
+                                {email}
+                              </Text>
+                            </Stack>
+                          </Group>
+                        </Table.Td>
+
+                        <Table.Td>
+                          {inTeam ? (
+                            <Badge
+                              color={isPending ? 'yellow' : 'teal'}
+                              variant="light"
+                              leftSection={!isPending ? <IconUserCheck size={12} /> : undefined}
+                            >
+                              {isPending ? 'Pending' : 'In team'}
+                            </Badge>
+                          ) : (
+                            <Badge color="gray" variant="light">
+                              Not in team
+                            </Badge>
+                          )}
+                        </Table.Td>
+
+                        <Table.Td>
+                          {membership ? (
+                            <Select
+                              size="xs"
+                              value={membership.role}
+                              data={getRoleSelectOptions(membership)}
+                              onChange={(v) => handleUpdateRole(membership, v)}
+                              leftSection={getRoleIcon(membership.role)}
+                              w={170}
+                            />
+                          ) : (
+                            <Text size="sm" c="dimmed">
+                              —
                             </Text>
-                            <Text size="xs" c="dimmed">
-                              {email}
+                          )}
+                        </Table.Td>
+
+                        <Table.Td>
+                          {membership ? (
+                            <NumberInput
+                              size="xs"
+                              min={0}
+                              value={membership.tokenLimit}
+                              onChange={(val) => handleUpdateTokenLimit(membership, val)}
+                              leftSection={<IconHash size={13} />}
+                              thousandSeparator=","
+                              allowDecimal={false}
+                              clampBehavior="strict"
+                              w={190}
+                              styles={{
+                                input: {
+                                  background:
+                                    'color-mix(in srgb, var(--mantine-color-dark-7) 80%, transparent)',
+                                  borderColor:
+                                    'color-mix(in srgb, var(--mantine-color-blue-6) 18%, var(--mantine-color-dark-4))',
+                                  fontWeight: 600,
+                                },
+                              }}
+                            />
+                          ) : (
+                            <Text size="sm" c="dimmed">
+                              —
                             </Text>
-                          </Stack>
+                          )}
                         </Table.Td>
 
                         <Table.Td>
-                          <Select
-                            size="xs"
-                            value={m.role}
-                            data={ROLE_OPTIONS}
-                            onChange={(v) => handleUpdateRole(m, v)}
-                          />
-                        </Table.Td>
-
-                        <Table.Td>
-                          <NumberInput
-                            size="xs"
-                            min={0}
-                            value={m.tokenLimit}
-                            onChange={(val) => handleUpdateTokenLimit(m, val)}
-                          />
-                        </Table.Td>
-
-                        <Table.Td>
-                          <Badge size="sm" variant="light">
-                            {sessions}
+                          <Badge size="sm" variant="light" color={inTeam ? 'blue' : 'gray'}>
+                            {inTeam ? sessions : '—'}
                           </Badge>
                         </Table.Td>
 
                         <Table.Td>
-                          <Group justify="flex-end" gap={4}>
-                            <Tooltip label="Remove from team" withArrow>
-                              <ActionIcon
-                                size="sm"
-                                color="red"
-                                variant="subtle"
-                                onClick={() => handleKickMember(m)}
+                          {membership ? (
+                            <Group justify="flex-end" gap={4}>
+                              <Tooltip label="Remove from team" withArrow>
+                                <ActionIcon
+                                  size="sm"
+                                  color="red"
+                                  variant="subtle"
+                                  onClick={() => handleKickMember(membership)}
+                                >
+                                  <IconTrash size={14} />
+                                </ActionIcon>
+                              </Tooltip>
+                            </Group>
+                          ) : (
+                            <Group justify="flex-end">
+                              <Button
+                                size="xs"
+                                variant="light"
+                                leftSection={<IconUserPlus size={14} />}
+                                onClick={() => void inviteExistingUserToTeam(user)}
+                                loading={quickInvitingUserId === user.id || loading}
                               >
-                                <IconTrash size={14} />
-                              </ActionIcon>
-                            </Tooltip>
-                          </Group>
+                                Invite to team
+                              </Button>
+                            </Group>
+                          )}
                         </Table.Td>
                       </Table.Tr>
                     )
@@ -274,6 +597,59 @@ export function TeamMembersPanel() {
               </Table>
             </ScrollArea>
           )}
+
+          {inviteError && (
+            <Alert color="red" variant="light" icon={<IconAlertCircle size={16} />}>
+              {inviteError}
+            </Alert>
+          )}
+
+          <Paper
+            withBorder
+            radius="lg"
+            p="sm"
+            bg="dark.7"
+            style={{
+              borderColor: 'color-mix(in srgb, var(--mantine-color-dark-4) 35%, transparent)',
+            }}
+          >
+            <Stack gap="xs">
+              <Text size="sm" fw={600}>
+                Can&apos;t find who you&apos;re looking for?
+              </Text>
+              <Text size="xs" c="dimmed">
+                Invite them by email!
+              </Text>
+              <Group align="end" gap="xs" wrap="wrap">
+                <TextInput
+                  placeholder="teammate@company.com"
+                  type="email"
+                  value={inviteEmail}
+                  onChange={(e) => {
+                    setInviteEmail(e.currentTarget.value)
+                    if (inviteError) setInviteError(null)
+                  }}
+                  size="sm"
+                  style={{ flex: 1, minWidth: 220 }}
+                />
+                <Select
+                  value={newRole}
+                  onChange={(v) => setNewRole((v as any) ?? 'MEMBER')}
+                  data={INVITE_ROLE_OPTIONS}
+                  size="sm"
+                  w={130}
+                />
+                <Button
+                  leftSection={<IconMailPlus size={16} />}
+                  onClick={handleAddMember}
+                  loading={submitting || loading}
+                  size="sm"
+                >
+                  Invite
+                </Button>
+              </Group>
+            </Stack>
+          </Paper>
         </Stack>
       )}
     </Card>

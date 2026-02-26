@@ -34,7 +34,7 @@ import {
   UpdateTeamRequestDto,
   AddMemberRequestDTO,
   UpdateMemberRequestDto,
-} from '@microservices/userManagement/dto/team.dto';
+} from '@microservices/userManagement/team/dto/team.dto';
 
 @UsePipes(
   new ValidationPipe({
@@ -88,7 +88,7 @@ export class TeamGatewayController {
   ) {
     return this.teamService
       .send(USER_SERVICE_PATTERNS.UPDATE_TEAM, {
-        teamId,
+        teamId: teamId,
         ...updateTeamDto,
         userClaims,
       })
@@ -113,7 +113,7 @@ export class TeamGatewayController {
   ) {
     return this.teamService
       .send(USER_SERVICE_PATTERNS.DELETE_TEAM, {
-        teamId,
+        teamId: teamId,
         userClaims,
       })
       .pipe(
@@ -175,7 +175,7 @@ export class TeamGatewayController {
   ) {
     return this.teamService
       .send(USER_SERVICE_PATTERNS.GET_TEAM, {
-        teamId,
+        teamId: teamId,
         userClaims,
       })
       .pipe(
@@ -202,7 +202,7 @@ export class TeamGatewayController {
   ) {
     return this.teamService
       .send(USER_SERVICE_PATTERNS.ADD_TEAM_MEMBER, {
-        teamId,
+        teamId: teamId,
         ...addMemberDto,
         userClaims,
       })
@@ -229,9 +229,9 @@ export class TeamGatewayController {
     @UserClaims() userClaims: UserClaimsType,
   ) {
     return this.teamService
-      .send(USER_SERVICE_PATTERNS.UPDATE_TEAM_MEMBER, {
-        teamId,
-        userId,
+      .send(USER_SERVICE_PATTERNS.ADD_TEAM_MEMBER, {
+        teamId: teamId,
+        userId: userId,
         ...updateMemberDto,
         userClaims,
       })
@@ -258,15 +258,15 @@ export class TeamGatewayController {
   ) {
     return this.teamService
       .send(USER_SERVICE_PATTERNS.DELETE_TEAM_MEMBER, {
-        teamId,
-        userId,
+        teamId: teamId,
+        userId: userId,
         userClaims,
       })
       .pipe(
         timeout(5000),
         catchError((err: unknown) => {
           const error = normalizeError(err);
-          const message = error.message ?? 'Failed to delete team';
+          const message = error.message ?? 'Failed to remove member from team';
           const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
           return throwError(() => new HttpException(message, status));
         }),
