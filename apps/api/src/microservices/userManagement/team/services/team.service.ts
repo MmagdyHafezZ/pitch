@@ -102,6 +102,31 @@ export class TeamService {
       requesterId,
       addMemberDto.teamId,
     );
+    if (addMemberDto.role === Role.OWNER) {
+      const activeOwners = await this.teamRepository.findActiveOwners(
+        addMemberDto.teamId,
+      );
+      if (activeOwners.length > 0) {
+        throw new ConflictException(
+          'This team already has an owner. Transfer ownership from an existing member instead.',
+        );
+      }
+    }
+
+    const existingMembership = await this.teamRepository.findMembership(
+      addMemberDto.teamId,
+      addMemberDto.userId,
+    );
+    if (existingMembership) {
+      if (existingMembership.isActive !== false) {
+        throw new ConflictException('User is already a member of this team');
+      }
+      return this.teamRepository.reactivateMember({
+        ...addMemberDto,
+        isActive: true,
+      });
+    }
+
     return this.teamRepository.addMember({
       ...addMemberDto,
     });
@@ -116,6 +141,36 @@ export class TeamService {
       updateMemberDto.teamId,
     );
 
+    const existingMembership = await this.teamRepository.findMembership(
+      updateMemberDto.teamId,
+      updateMemberDto.userId,
+    );
+    if (!existingMembership) {
+      throw new NotFoundException(
+        `Membership for user ${updateMemberDto.userId} in team ${updateMemberDto.teamId} not found`,
+      );
+    }
+
+    if (
+      updateMemberDto.role &&
+      updateMemberDto.role !== Role.OWNER &&
+      existingMembership.role === Role.OWNER
+    ) {
+      throw new ConflictException(
+        'Transfer ownership to another member before changing the current owner role.',
+      );
+    }
+
+    if (
+      updateMemberDto.role === Role.OWNER &&
+      existingMembership.role !== Role.OWNER
+    ) {
+      return this.teamRepository.transferOwnership({
+        ...updateMemberDto,
+        acceptedAt: updateMemberDto.acceptedAt ?? new Date(),
+      });
+    }
+
     return this.teamRepository.updateMember({
       ...updateMemberDto,
       acceptedAt: updateMemberDto.acceptedAt ?? new Date(),
@@ -128,6 +183,17 @@ export class TeamService {
     requesterId: string,
   ): Promise<{ message: string }> {
     await this.teamRepository.confirmAuthorityOrThrow(requesterId, teamId);
+    const membership = await this.teamRepository.findMembership(teamId, userId);
+    if (!membership) {
+      throw new NotFoundException(
+        `Membership for user ${userId} in team ${teamId} not found`,
+      );
+    }
+    if (membership.isActive !== false && membership.role === Role.OWNER) {
+      throw new ConflictException(
+        'Transfer ownership to another member before removing the current owner.',
+      );
+    }
     await this.teamRepository.deleteTeamMember(teamId, userId);
     return {
       message: `User with ID ${userId} has been removed from team with ID: ${teamId}`,

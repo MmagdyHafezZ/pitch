@@ -30,6 +30,7 @@ type TeamsState = {
   deleteMember: (teamId: string, userId: string) => Promise<void>
 
   setActiveTeamId: (id: string | null) => void
+  resetStore: () => void
 }
 
 export const useTeamsStore = create<TeamsState>()(
@@ -42,6 +43,14 @@ export const useTeamsStore = create<TeamsState>()(
       error: null,
 
       setActiveTeamId: (id) => set({ activeTeamId: id }),
+      resetStore: () =>
+        set({
+          teams: [],
+          activeTeamId: null,
+          currentTeam: null,
+          loading: false,
+          error: null,
+        }),
 
       fetchTeams: async () => {
         const { loading, teams } = get()
@@ -65,10 +74,18 @@ export const useTeamsStore = create<TeamsState>()(
       },
 
       fetchUserTeams: async () => {
-        const { loading, teams } = get()
-        if (loading || teams.length > 0) return
+        const { loading } = get()
+        if (loading) return
 
-        set({ loading: true, error: null })
+        // Always refresh from the user-scoped endpoint to avoid stale persisted team lists
+        // (e.g. after switching accounts in the same browser session).
+        set({
+          loading: true,
+          error: null,
+          teams: [],
+          activeTeamId: null,
+          currentTeam: null,
+        })
         try {
           const data = await TeamService.getUserTeams()
           set({

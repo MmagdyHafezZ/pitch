@@ -8,6 +8,7 @@ import {
 } from '@/lib/client'
 import { getJwtExpiry } from '../utils/token.utils'
 import { applyAvatarCacheToUser } from '../utils/avatar-cache'
+import { useTeamsStore } from '@/features/teams/stores/teams.store'
 
 export interface AuthStore extends AuthState, AuthActions {}
 
@@ -43,6 +44,7 @@ export const useAuthStore = create<AuthStore>()((set, get) => ({
 
       const response = await api.auth.login({ email, password })
       const user = applyAvatarCacheToUser(response.user)
+      useTeamsStore.getState().resetStore()
 
       set({
         user,
@@ -71,6 +73,7 @@ export const useAuthStore = create<AuthStore>()((set, get) => ({
 
       const response = await api.auth.register({ email, password, name })
       const user = applyAvatarCacheToUser(response.user)
+      useTeamsStore.getState().resetStore()
 
       set({
         user,
@@ -104,6 +107,7 @@ export const useAuthStore = create<AuthStore>()((set, get) => ({
 
     api.auth.logout().catch(() => {})
     setAccessToken(null)
+    useTeamsStore.getState().resetStore()
     if (typeof window !== 'undefined' && process.env.NODE_ENV !== 'test') {
       window.location.href = '/auth/login'
     }
@@ -129,6 +133,7 @@ export const useAuthStore = create<AuthStore>()((set, get) => ({
         error: null,
       })
       setAccessToken(null)
+      useTeamsStore.getState().resetStore()
 
       api.auth.logout().catch(() => {})
       if (typeof window !== 'undefined' && process.env.NODE_ENV !== 'test') {
@@ -201,6 +206,7 @@ export const useAuthStore = create<AuthStore>()((set, get) => ({
       .catch(() => {
         setAccessToken(null)
         set({ token: null, user: null, isAuthenticated: false })
+        useTeamsStore.getState().resetStore()
       })
   },
 }))

@@ -25,10 +25,14 @@ import {
 } from '@mantine/core'
 import {
   IconAlertCircle,
+  IconCrown,
   IconFilter,
+  IconHash,
   IconMailPlus,
   IconSearch,
+  IconShield,
   IconTrash,
+  IconUser,
   IconUserPlus,
   IconUsers,
   IconUserCheck,
@@ -37,12 +41,30 @@ import { useTeams } from '@/features/teams/hooks/useTeams'
 import { useTeamConfigStore } from '@/features/teams/stores/team-config.store'
 import type { TeamMembership } from '@/features/teams/types/teams.types'
 import { notifications } from '@mantine/notifications'
+import { modals } from '@mantine/modals'
 
 const ROLE_OPTIONS = [
   { value: 'OWNER', label: 'Owner' },
   { value: 'ADMIN', label: 'Admin' },
   { value: 'MEMBER', label: 'Member' },
 ]
+
+const MEMBER_ROLE_OPTIONS = [
+  { value: 'OWNER', label: 'Owner (transfer)' },
+  { value: 'ADMIN', label: 'Admin' },
+  { value: 'MEMBER', label: 'Member' },
+]
+
+const INVITE_ROLE_OPTIONS = [
+  { value: 'ADMIN', label: 'Admin' },
+  { value: 'MEMBER', label: 'Member' },
+]
+
+const roleMeta = {
+  OWNER: { label: 'Owner', icon: IconCrown, color: 'yellow' },
+  ADMIN: { label: 'Admin', icon: IconShield, color: 'blue' },
+  MEMBER: { label: 'Member', icon: IconUser, color: 'gray' },
+} as const
 
 const isValidEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
 
@@ -87,6 +109,10 @@ export function TeamMembersPanel() {
   const members: TeamMembership[] = useMemo(
     () => (currentTeam?.memberships ?? []).filter((m) => m.isActive !== false),
     [currentTeam]
+  )
+  const currentOwner = useMemo(
+    () => members.find((m) => m.role === 'OWNER' && m.isActive !== false) ?? null,
+    [members]
   )
 
   const memberStats = useMemo(() => {
@@ -212,9 +238,58 @@ export function TeamMembersPanel() {
     if (!currentTeam || !roleValue) return
     if (roleValue === membership.role) return
 
+    if (roleValue === 'OWNER' && membership.role !== 'OWNER') {
+      const targetName = membership.user?.name ?? membership.user?.email ?? 'this member'
+      const currentOwnerName =
+        currentOwner?.userId && currentOwner.userId !== membership.userId
+          ? (currentOwner.user?.name ?? currentOwner.user?.email ?? 'the current owner')
+          : null
+      modals.openConfirmModal({
+        title: 'Transfer ownership',
+        centered: true,
+        labels: {
+          confirm: 'Transfer ownership',
+          cancel: 'Cancel',
+        },
+        children: (
+          <Stack gap={6}>
+            <Text size="sm">
+              The ownership of <strong>{currentTeam.name}</strong> will be transferred to{' '}
+              <strong>{targetName}</strong>. Are you sure?
+            </Text>
+            {currentOwnerName ? (
+              <Text size="xs" c="dimmed">
+                {currentOwnerName} will be changed to Admin.
+              </Text>
+            ) : null}
+          </Stack>
+        ),
+        onConfirm: async () => {
+          await updateMember(currentTeam.id, membership.userId, {
+            role: roleValue as any,
+          })
+
+          notifications.show({
+            title: 'Ownership transferred',
+            message: `${membership.user?.name ?? membership.user?.email ?? 'Member'} is now the team owner.`,
+            color: 'teal',
+          })
+        },
+      })
+      return
+    }
+
     await updateMember(currentTeam.id, membership.userId, {
       role: roleValue as any,
     })
+
+    if (roleValue === 'OWNER') {
+      notifications.show({
+        title: 'Ownership transferred',
+        message: `${membership.user?.name ?? membership.user?.email ?? 'Member'} is now the team owner.`,
+        color: 'teal',
+      })
+    }
   }
 
   const handleUpdateTokenLimit = async (membership: TeamMembership, nextValue: string | number) => {
@@ -242,6 +317,16 @@ export function TeamMembersPanel() {
 
   const getSessionCount = (userId: string): number => {
     return 0 // TODO: replace with real logic
+  }
+
+  const getRoleSelectOptions = (membership: TeamMembership) =>
+    membership.role === 'OWNER' ? ROLE_OPTIONS : MEMBER_ROLE_OPTIONS
+
+  const getRoleIcon = (role?: TeamMembership['role']) => {
+    if (!role) return <IconUser size={14} />
+    const meta = roleMeta[role]
+    const Icon = meta.icon
+    return <Icon size={14} />
   }
 
   return (
@@ -429,8 +514,10 @@ export function TeamMembersPanel() {
                             <Select
                               size="xs"
                               value={membership.role}
-                              data={ROLE_OPTIONS}
+                              data={getRoleSelectOptions(membership)}
                               onChange={(v) => handleUpdateRole(membership, v)}
+                              leftSection={getRoleIcon(membership.role)}
+                              w={170}
                             />
                           ) : (
                             <Text size="sm" c="dimmed">
@@ -446,6 +533,20 @@ export function TeamMembersPanel() {
                               min={0}
                               value={membership.tokenLimit}
                               onChange={(val) => handleUpdateTokenLimit(membership, val)}
+                              leftSection={<IconHash size={13} />}
+                              thousandSeparator=","
+                              allowDecimal={false}
+                              clampBehavior="strict"
+                              w={190}
+                              styles={{
+                                input: {
+                                  background:
+                                    'color-mix(in srgb, var(--mantine-color-dark-7) 80%, transparent)',
+                                  borderColor:
+                                    'color-mix(in srgb, var(--mantine-color-blue-6) 18%, var(--mantine-color-dark-4))',
+                                  fontWeight: 600,
+                                },
+                              }}
                             />
                           ) : (
                             <Text size="sm" c="dimmed">
@@ -533,7 +634,7 @@ export function TeamMembersPanel() {
                 <Select
                   value={newRole}
                   onChange={(v) => setNewRole((v as any) ?? 'MEMBER')}
-                  data={ROLE_OPTIONS}
+                  data={INVITE_ROLE_OPTIONS}
                   size="sm"
                   w={130}
                 />

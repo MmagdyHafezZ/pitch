@@ -1,4 +1,5 @@
 import {
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -101,14 +102,40 @@ export class TeamRepository {
   }
 
   async addMember(data: AddMemberDto): Promise<TeamMembership> {
-    return this.prisma.teamMembership.create({
+    try {
+      return await this.prisma.teamMembership.create({
+        data: {
+          userId: data.userId,
+          teamId: data.teamId,
+          role: data.role,
+          tokenLimit: data.tokenLimit,
+          isActive: data.isActive ?? true,
+          invitedByUserId: data.invitedByUserId,
+        },
+      });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        throw new ConflictException('User is already a member of this team');
+      }
+      throw error;
+    }
+  }
+
+  async reactivateMember(data: AddMemberDto): Promise<TeamMembership> {
+    return this.prisma.teamMembership.update({
+      where: {
+        userId_teamId: { userId: data.userId, teamId: data.teamId },
+      },
       data: {
-        userId: data.userId,
-        teamId: data.teamId,
         role: data.role,
         tokenLimit: data.tokenLimit,
         isActive: data.isActive ?? true,
         invitedByUserId: data.invitedByUserId,
+        acceptedAt: null,
+        invitedAt: new Date(),
       },
     });
   }
@@ -124,6 +151,55 @@ export class TeamRepository {
         isActive: data.isActive,
         acceptedAt: data.acceptedAt,
       },
+    });
+  }
+
+  async findMembership(
+    teamId: string,
+    userId: string,
+  ): Promise<TeamMembership | null> {
+    return this.prisma.teamMembership.findUnique({
+      where: {
+        userId_teamId: { userId, teamId },
+      },
+    });
+  }
+
+  async findActiveOwners(teamId: string): Promise<TeamMembership[]> {
+    return this.prisma.teamMembership.findMany({
+      where: {
+        teamId,
+        isActive: true,
+        role: Role.OWNER,
+      },
+    });
+  }
+
+  async transferOwnership(data: UpdateMemberDto): Promise<TeamMembership> {
+    return this.prisma.$transaction(async (tx) => {
+      await tx.teamMembership.updateMany({
+        where: {
+          teamId: data.teamId,
+          isActive: true,
+          role: Role.OWNER,
+          NOT: { userId: data.userId },
+        },
+        data: {
+          role: Role.ADMIN,
+        },
+      });
+
+      return tx.teamMembership.update({
+        where: {
+          userId_teamId: { userId: data.userId, teamId: data.teamId },
+        },
+        data: {
+          role: Role.OWNER,
+          tokenLimit: data.tokenLimit,
+          isActive: data.isActive,
+          acceptedAt: data.acceptedAt,
+        },
+      });
     });
   }
 

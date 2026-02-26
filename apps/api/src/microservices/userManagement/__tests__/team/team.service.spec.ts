@@ -1,5 +1,6 @@
 import { TeamService } from '../../team/services/team.service';
-import { NotFoundException } from '@nestjs/common';
+import { ConflictException, NotFoundException } from '@nestjs/common';
+import { Role } from '@prisma/user-client';
 import type {
   Team,
   TeamMembership,
@@ -17,8 +18,12 @@ describe('TeamService', () => {
     updateTeam: jest.fn(),
     deleteTeam: jest.fn(),
     addMember: jest.fn(),
+    reactivateMember: jest.fn(),
     updateMember: jest.fn(),
+    transferOwnership: jest.fn(),
     deleteTeamMember: jest.fn(),
+    findMembership: jest.fn(),
+    findActiveOwners: jest.fn(),
     findByName: jest.fn(),
     findMany: jest.fn(),
     findUserTeams: jest.fn(),
@@ -176,6 +181,7 @@ describe('TeamService', () => {
     const membership = { id: 'm1' } as TeamMembership;
 
     repo.confirmAuthorityOrThrow.mockResolvedValue(undefined);
+    repo.findMembership.mockResolvedValue(null);
     repo.addMember.mockResolvedValue(membership);
 
     const result = await service.addMember(dto, 'admin-1');
@@ -186,6 +192,80 @@ describe('TeamService', () => {
     );
     expect(repo.addMember).toHaveBeenCalledWith(dto);
     expect(result).toEqual(membership);
+  });
+
+  it('rejects adding a second owner to a team', async () => {
+    const dto: AddMemberDto = {
+      teamId: 'team-1',
+      userId: 'user-2',
+      role: 'OWNER',
+    };
+
+    repo.confirmAuthorityOrThrow.mockResolvedValue(Role.ADMIN);
+    repo.findActiveOwners.mockResolvedValue([{ id: 'owner-membership' }]);
+
+    await expect(service.addMember(dto, 'admin-1')).rejects.toThrow(
+      ConflictException,
+    );
+    expect(repo.addMember).not.toHaveBeenCalled();
+  });
+
+  it('reactivates an existing inactive membership instead of creating a duplicate', async () => {
+    const dto: AddMemberDto = {
+      teamId: 'team-1',
+      userId: 'user-2',
+      role: 'MEMBER',
+    };
+    const reactivated = { id: 'm1', isActive: true } as TeamMembership;
+
+    repo.confirmAuthorityOrThrow.mockResolvedValue(Role.ADMIN);
+    repo.findMembership.mockResolvedValue({
+      id: 'm1',
+      teamId: 'team-1',
+      userId: 'user-2',
+      role: 'MEMBER',
+      tokenLimit: 0,
+      isActive: false,
+      invitedByUserId: null,
+    });
+    repo.reactivateMember.mockResolvedValue(reactivated);
+
+    const result = await service.addMember(dto, 'admin-1');
+
+    expect(repo.reactivateMember).toHaveBeenCalledWith(
+      expect.objectContaining({
+        teamId: 'team-1',
+        userId: 'user-2',
+        isActive: true,
+      }),
+    );
+    expect(repo.addMember).not.toHaveBeenCalled();
+    expect(result).toEqual(reactivated);
+  });
+
+  it('returns conflict when adding a user who is already an active member', async () => {
+    const dto: AddMemberDto = {
+      teamId: 'team-1',
+      userId: 'user-2',
+      role: 'MEMBER',
+    };
+
+    repo.confirmAuthorityOrThrow.mockResolvedValue(Role.ADMIN);
+    repo.findMembership.mockResolvedValue({
+      id: 'm1',
+      teamId: 'team-1',
+      userId: 'user-2',
+      role: 'MEMBER',
+      tokenLimit: 0,
+      isActive: true,
+      invitedByUserId: null,
+    });
+
+    await expect(service.addMember(dto, 'admin-1')).rejects.toThrow(
+      ConflictException,
+    );
+    expect(repo.addMember).not.toHaveBeenCalled();
+    expect(repo.reactivateMember).not.toHaveBeenCalled();
   });
 
   // --------------------
@@ -201,6 +281,14 @@ describe('TeamService', () => {
     const membership = { id: 'm1' } as TeamMembership;
 
     repo.confirmAuthorityOrThrow.mockResolvedValue(undefined);
+    repo.findMembership.mockResolvedValue({
+      id: 'm1',
+      teamId: 'team-1',
+      userId: 'user-2',
+      role: 'MEMBER',
+      tokenLimit: 0,
+      invitedByUserId: null,
+    });
     repo.updateMember.mockResolvedValue(membership);
 
     const result = await service.updateMember(dto, 'admin-1');
@@ -218,12 +306,79 @@ describe('TeamService', () => {
     expect(result).toEqual(membership);
   });
 
+  it('transfers ownership when a different member is promoted to OWNER', async () => {
+    const dto: UpdateMemberDto = {
+      teamId: 'team-1',
+      userId: 'user-2',
+      role: 'OWNER',
+    };
+    const membership = { id: 'm2', role: 'OWNER' } as TeamMembership;
+
+    repo.confirmAuthorityOrThrow.mockResolvedValue(Role.OWNER);
+    repo.findMembership.mockResolvedValue({
+      id: 'm2',
+      teamId: 'team-1',
+      userId: 'user-2',
+      role: 'ADMIN',
+      tokenLimit: 0,
+      invitedByUserId: null,
+      isActive: true,
+    });
+    repo.transferOwnership.mockResolvedValue(membership);
+
+    const result = await service.updateMember(dto, 'owner-1');
+
+    expect(repo.transferOwnership).toHaveBeenCalledWith(
+      expect.objectContaining({
+        teamId: 'team-1',
+        userId: 'user-2',
+        role: 'OWNER',
+        acceptedAt: expect.any(Date),
+      }),
+    );
+    expect(repo.updateMember).not.toHaveBeenCalled();
+    expect(result).toEqual(membership);
+  });
+
+  it('blocks demoting the current owner without transferring ownership', async () => {
+    const dto: UpdateMemberDto = {
+      teamId: 'team-1',
+      userId: 'owner-1',
+      role: 'ADMIN',
+    };
+
+    repo.confirmAuthorityOrThrow.mockResolvedValue(Role.OWNER);
+    repo.findMembership.mockResolvedValue({
+      id: 'm-owner',
+      teamId: 'team-1',
+      userId: 'owner-1',
+      role: 'OWNER',
+      tokenLimit: 0,
+      invitedByUserId: null,
+      isActive: true,
+    });
+
+    await expect(service.updateMember(dto, 'owner-1')).rejects.toThrow(
+      ConflictException,
+    );
+    expect(repo.updateMember).not.toHaveBeenCalled();
+  });
+
   // --------------------
   // removeTeamMember
   // --------------------
 
   it('removes a team member with authority check', async () => {
     repo.confirmAuthorityOrThrow.mockResolvedValue(undefined);
+    repo.findMembership.mockResolvedValue({
+      id: 'm2',
+      teamId: 'team-1',
+      userId: 'user-2',
+      role: 'MEMBER',
+      tokenLimit: 0,
+      invitedByUserId: null,
+      isActive: true,
+    });
     repo.deleteTeamMember.mockResolvedValue(undefined);
 
     const result = await service.removeTeamMember(
@@ -238,6 +393,24 @@ describe('TeamService', () => {
     );
     expect(repo.deleteTeamMember).toHaveBeenCalledWith('team-1', 'user-2');
     expect(result.message).toContain('user-2');
+  });
+
+  it('blocks removing the current owner before ownership transfer', async () => {
+    repo.confirmAuthorityOrThrow.mockResolvedValue(undefined);
+    repo.findMembership.mockResolvedValue({
+      id: 'm-owner',
+      teamId: 'team-1',
+      userId: 'owner-1',
+      role: 'OWNER',
+      tokenLimit: 0,
+      invitedByUserId: null,
+      isActive: true,
+    });
+
+    await expect(
+      service.removeTeamMember('team-1', 'owner-1', 'admin-1'),
+    ).rejects.toThrow(ConflictException);
+    expect(repo.deleteTeamMember).not.toHaveBeenCalled();
   });
 
   // --------------------
