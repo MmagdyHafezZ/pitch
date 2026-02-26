@@ -15,6 +15,8 @@ import {
   ITurnContext,
   ILLMStreamState,
   IVADState,
+  IConversationMessage,
+  ISessionMemberIteration,
 } from './redis-key-patterns';
 
 /**
@@ -391,6 +393,92 @@ export class SimulationRedisService {
   async deleteVADState(callId: string): Promise<void> {
     const key = RedisKeys.vadState(callId);
     await this.redis.del(key);
+  }
+
+  // ── Full session cache (with scenario + persona relations) ─────────────────
+
+  async setSessionFull<T>(sessionId: string, data: T): Promise<void> {
+    const key = RedisKeys.sessionFull(sessionId);
+    await this.redis.setex(key, RedisTTL.SESSION_FULL, JSON.stringify(data));
+  }
+
+  async getSessionFull<T>(sessionId: string): Promise<T | null> {
+    const key = RedisKeys.sessionFull(sessionId);
+    const data = await this.redis.get(key);
+    if (!data) return null;
+    return JSON.parse(data) as T;
+  }
+
+  async deleteSessionFull(sessionId: string): Promise<void> {
+    await this.redis.del(RedisKeys.sessionFull(sessionId));
+  }
+
+  // ── Iteration message history cache ────────────────────────────────────────
+
+  async setIterationHistory(
+    iterationId: string,
+    messages: IConversationMessage[],
+  ): Promise<void> {
+    const key = RedisKeys.iterationHistory(iterationId);
+    await this.redis.setex(
+      key,
+      RedisTTL.ITERATION_HISTORY,
+      JSON.stringify(messages),
+    );
+  }
+
+  async getIterationHistory(
+    iterationId: string,
+  ): Promise<IConversationMessage[] | null> {
+    const key = RedisKeys.iterationHistory(iterationId);
+    const data = await this.redis.get(key);
+    if (!data) return null;
+    return JSON.parse(data) as IConversationMessage[];
+  }
+
+  async appendIterationMessage(
+    iterationId: string,
+    message: IConversationMessage,
+  ): Promise<void> {
+    const existing = await this.getIterationHistory(iterationId);
+    const updated = existing ? [...existing, message] : [message];
+    await this.setIterationHistory(iterationId, updated);
+  }
+
+  async deleteIterationHistory(iterationId: string): Promise<void> {
+    await this.redis.del(RedisKeys.iterationHistory(iterationId));
+  }
+
+  // ── Session-member ↔ iteration mapping ─────────────────────────────────────
+
+  async setSessionMemberIteration(
+    sessionId: string,
+    userId: string,
+    data: ISessionMemberIteration,
+  ): Promise<void> {
+    const key = RedisKeys.sessionMemberIteration(sessionId, userId);
+    await this.redis.setex(
+      key,
+      RedisTTL.SESSION_MEMBER_ITER,
+      JSON.stringify(data),
+    );
+  }
+
+  async getSessionMemberIteration(
+    sessionId: string,
+    userId: string,
+  ): Promise<ISessionMemberIteration | null> {
+    const key = RedisKeys.sessionMemberIteration(sessionId, userId);
+    const data = await this.redis.get(key);
+    if (!data) return null;
+    return JSON.parse(data) as ISessionMemberIteration;
+  }
+
+  async deleteSessionMemberIteration(
+    sessionId: string,
+    userId: string,
+  ): Promise<void> {
+    await this.redis.del(RedisKeys.sessionMemberIteration(sessionId, userId));
   }
 
   /**

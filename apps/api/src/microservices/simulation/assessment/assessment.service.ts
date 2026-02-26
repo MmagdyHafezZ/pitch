@@ -283,6 +283,61 @@ export class AssessmentService {
     return tips.length ? tips : undefined;
   }
 
+  async getDashboard(userId: string) {
+    const members = await this.prisma.client.sessionMember.findMany({
+      where: { userId },
+      include: {
+        session: {
+          select: {
+            id: true,
+            name: true,
+            type: true,
+            status: true,
+            createdAt: true,
+            endedAt: true,
+          },
+        },
+        iterations: {
+          orderBy: { iterationNumber: 'desc' },
+          take: 1,
+          include: {
+            assessmentRuns: {
+              where: {
+                status: AssessmentRunStatus.completed,
+              },
+              orderBy: { completedAt: 'desc' },
+              take: 1,
+              include: {
+                summary: { select: { totalScore: true, scoreBreakdown: true } },
+              },
+            },
+          },
+        },
+      },
+      orderBy: { joinedAt: 'desc' },
+    });
+
+    return {
+      sessions: members.map((member) => {
+        const latestRun = member.iterations[0]?.assessmentRuns[0] ?? null;
+        const summary = latestRun?.summary ?? null;
+        return {
+          id: member.session.id,
+          name: member.session.name ?? null,
+          type: member.session.type as string,
+          status: member.session.status,
+          createdAt: member.session.createdAt.toISOString(),
+          endedAt: member.session.endedAt?.toISOString() ?? null,
+          runId: latestRun?.id ?? null,
+          totalScore: latestRun?.totalScore ?? summary?.totalScore ?? null,
+          scoreBreakdown:
+            this.normalizeScoreBreakdown(summary?.scoreBreakdown ?? null) ??
+            null,
+        };
+      }),
+    };
+  }
+
   async getReport(runId: string) {
     const report = await this.assessmentReportRepository.findByRunId(runId);
     if (!report) {
@@ -589,9 +644,17 @@ export class AssessmentService {
     persona: { id: string; updatedAt?: Date | null } | null;
   }): Promise<string> {
     const turns = await this.prisma.client.turn.findMany({
-      where: { iterationId: input.iterationId },
-      orderBy: { order: 'asc' },
-      include: { messages: true },
+      where: {
+        iteration: {
+          sessionId: input.sessionId,
+          sessionMemberId: input.sessionMemberId,
+        },
+      },
+      orderBy: [{ iteration: { iterationNumber: 'asc' } }, { order: 'asc' }],
+      include: {
+        messages: true,
+        iteration: { select: { iterationNumber: true } },
+      },
     });
 
     const normalizedTurns = turns.map((turn) => {
@@ -604,6 +667,8 @@ export class AssessmentService {
 
       return {
         id: turn.id,
+        iterationId: turn.iterationId,
+        iterationNumber: turn.iteration?.iterationNumber ?? null,
         role: turn.role,
         text: content ?? '',
         createdAt: turn.createdAt.toISOString(),

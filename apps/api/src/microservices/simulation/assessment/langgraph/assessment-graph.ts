@@ -24,6 +24,7 @@ import { JudgeOutputSchema, type JudgeOutput } from './judge-output.schema';
 import { AssessmentLabelValue } from '@prisma/simulation-client';
 import { computeScore } from '../utils/scoring';
 import type { AssessmentConfig } from '../config/assessment.config';
+import { RagService } from '../../rag/rag.service';
 
 interface AssessmentGraphResult {
   summary: AssessmentSummaryResult;
@@ -35,6 +36,11 @@ interface AssessmentGraphResult {
   reportId?: string;
 }
 
+type TimedResult<T> =
+  | { status: 'ok'; value: T }
+  | { status: 'timeout' }
+  | { status: 'error' };
+
 @Injectable()
 export class AssessmentGraphRunner {
   private readonly logger = new Logger(AssessmentGraphRunner.name);
@@ -45,6 +51,7 @@ export class AssessmentGraphRunner {
     private readonly assessmentRepository: AssessmentRepository,
     private readonly assessmentReportRepository: AssessmentReportRepository,
     private readonly llmService: LLMService,
+    private readonly ragService: RagService,
   ) {
     this.graph = this.buildGraph();
   }
@@ -198,9 +205,17 @@ export class AssessmentGraphRunner {
 
   private loadSessionData = async (state: AssessmentStateType) => {
     const turns = await this.prisma.client.turn.findMany({
-      where: { iterationId: state.iterationId },
-      orderBy: { order: 'asc' },
-      include: { messages: true },
+      where: {
+        iteration: {
+          sessionId: state.sessionId,
+          sessionMemberId: state.sessionMemberId,
+        },
+      },
+      orderBy: [{ iteration: { iterationNumber: 'asc' } }, { order: 'asc' }],
+      include: {
+        messages: true,
+        iteration: { select: { iterationNumber: true } },
+      },
     });
 
     if (state.mode === 'live' && state.config.live.maxTurns > 0) {
@@ -230,6 +245,8 @@ export class AssessmentGraphRunner {
         role,
         text: text ?? '',
         createdAt: turn.createdAt?.toISOString?.() ?? undefined,
+        iterationId: turn.iterationId ?? undefined,
+        iterationNumber: turn.iteration?.iterationNumber ?? undefined,
         isEvaluated,
       };
     });
@@ -256,7 +273,7 @@ export class AssessmentGraphRunner {
     return Promise.resolve({ chunks });
   };
 
-  private retrieveContext = (
+  private retrieveContext = async (
     state: AssessmentStateType,
   ): Promise<Partial<AssessmentStateType>> => {
     const chunks = state.chunks ?? [];
@@ -273,19 +290,49 @@ export class AssessmentGraphRunner {
       items: RetrievalItem[];
     }> = [];
 
-    for (const chunk of chunks) {
-      // Placeholder: no retrieval engine wired yet
-      retrievalResults.push({ chunkIndex: chunk.chunkIndex, items: [] });
-    }
+    await Promise.all(
+      chunks.map(async (chunk) => {
+        try {
+          const queryText = chunk.turns
+            .map((t) => t.text)
+            .join(' ')
+            .slice(0, 1000);
 
-    if (retrievalResults.length === 0) {
+          const items = await this.ragService.retrieve({
+            query: queryText,
+            namespaces: [state.config.rag.namespace ?? 'kb', 'history'],
+            topK: 5,
+            minScore: 0.72,
+          });
+
+          retrievalResults.push({
+            chunkIndex: chunk.chunkIndex,
+            items: items.map((r) => ({
+              id: r.id,
+              source: r.source ?? r.refType,
+              content: r.text,
+            })),
+          });
+        } catch (err) {
+          warnings.push(
+            `RAG retrieval failed for chunk ${chunk.chunkIndex}: ${(err as Error)?.message ?? err}`,
+          );
+          retrievalResults.push({ chunkIndex: chunk.chunkIndex, items: [] });
+        }
+      }),
+    );
+
+    // Sort by chunkIndex to maintain stable ordering
+    retrievalResults.sort((a, b) => a.chunkIndex - b.chunkIndex);
+
+    if (retrievalResults.every((r) => r.items.length === 0)) {
       warnings.push('RAG enabled but no retrieval results produced.');
     }
 
-    return Promise.resolve({
+    return {
       retrievalByChunk: retrievalResults,
       warnings,
-    } as Partial<AssessmentStateType>);
+    } as Partial<AssessmentStateType>;
   };
 
   private judgeChunks = async (state: AssessmentStateType) => {
@@ -416,6 +463,15 @@ export class AssessmentGraphRunner {
         citations: label.citations,
         reasonSummary: label.reasonSummary,
         isFinal: label.isFinal,
+      })),
+      conversationHistory: (state.turns ?? []).map((turn) => ({
+        turnId: turn.turnId,
+        role: turn.role,
+        text: turn.text,
+        createdAt: turn.createdAt,
+        iterationId: turn.iterationId,
+        iterationNumber: turn.iterationNumber,
+        isEvaluated: turn.isEvaluated,
       })),
       chunks: (state.judgments ?? []).map((judgment) => ({
         chunkIndex: judgment.chunkIndex,
@@ -660,29 +716,29 @@ export class AssessmentGraphRunner {
       return response.content ?? '';
     };
 
-    const primaryRaw = await this.withTimeout(
+    const primaryAttempt = await this.withTimeout(
       executeJudgeRaw(),
       config.timeBudgetMs.judge,
       { chunkIndex: chunk.chunkIndex },
-      '',
     );
-    let primary = this.parseJudgeOutput(primaryRaw, chunk.chunkIndex);
+    if (primaryAttempt.status !== 'ok') {
+      return this.buildNeutralJudgeOutput(chunk, config);
+    }
+
+    let primary = this.parseJudgeOutput(primaryAttempt.value, chunk.chunkIndex);
     if (!primary) {
-      const retryRaw = await this.withTimeout(
+      const retryAttempt = await this.withTimeout(
         executeJudgeRaw(),
         config.timeBudgetMs.judge,
         { chunkIndex: chunk.chunkIndex },
-        '',
       );
-      primary = this.parseJudgeOutput(retryRaw, chunk.chunkIndex);
+      if (retryAttempt.status !== 'ok') {
+        return this.buildNeutralJudgeOutput(chunk, config);
+      }
+      primary = this.parseJudgeOutput(retryAttempt.value, chunk.chunkIndex);
     }
     if (!primary) {
-      return {
-        chunkIndex: chunk.chunkIndex,
-        summary:
-          'Judge output could not be parsed. Marked turns as neutral for this chunk.',
-        labels: this.ensureTurnCoverage([], chunk.turns, config),
-      };
+      return this.buildNeutralJudgeOutput(chunk, config);
     }
 
     primary.labels = this.ensureTurnCoverage(
@@ -702,13 +758,19 @@ export class AssessmentGraphRunner {
       return primary;
     }
 
-    const secondaryRaw = await this.withTimeout(
+    const secondaryAttempt = await this.withTimeout(
       executeJudgeRaw(),
       config.timeBudgetMs.judge,
       { chunkIndex: chunk.chunkIndex },
-      '',
     );
-    const secondary = this.parseJudgeOutput(secondaryRaw, chunk.chunkIndex);
+    if (secondaryAttempt.status !== 'ok') {
+      return primary;
+    }
+
+    const secondary = this.parseJudgeOutput(
+      secondaryAttempt.value,
+      chunk.chunkIndex,
+    );
     if (!secondary) {
       return primary;
     }
@@ -773,6 +835,11 @@ export class AssessmentGraphRunner {
     raw: string,
     chunkIndex: number,
   ): JudgeOutput | null {
+    if (!raw || raw.trim().length === 0) {
+      this.logger.warn(`Judge returned empty output for chunk ${chunkIndex}`);
+      return null;
+    }
+
     try {
       const jsonText = this.extractJson(raw);
       return JudgeOutputSchema.parse(JSON.parse(jsonText));
@@ -824,31 +891,58 @@ export class AssessmentGraphRunner {
     promise: Promise<T>,
     timeoutMs: number,
     context: { chunkIndex: number },
-    fallback: T,
-  ): Promise<T> {
+  ): Promise<TimedResult<T>> {
     if (!timeoutMs || timeoutMs <= 0) {
-      return promise;
+      try {
+        const value = await promise;
+        return { status: 'ok', value };
+      } catch (error) {
+        this.logger.warn(
+          `Judge request failed for chunk ${context.chunkIndex}: ${String((error as Error)?.message || error)}`,
+        );
+        return { status: 'error' };
+      }
     }
 
+    const timeoutSentinel = Symbol('judge-timeout');
     let timeoutHandle: NodeJS.Timeout | undefined;
-    const timeoutPromise = new Promise<T>((_resolve, reject) => {
+    const timeoutPromise = new Promise<typeof timeoutSentinel>((resolve) => {
       timeoutHandle = setTimeout(() => {
-        reject(new Error(`Timeout after ${timeoutMs}ms`));
+        resolve(timeoutSentinel);
       }, timeoutMs);
     });
 
     try {
-      return await Promise.race([promise, timeoutPromise]);
+      const raced = await Promise.race([promise, timeoutPromise]);
+      if (raced === timeoutSentinel) {
+        this.logger.warn(
+          `Judge timeout for chunk ${context.chunkIndex}: Timeout after ${timeoutMs}ms`,
+        );
+        return { status: 'timeout' };
+      }
+      return { status: 'ok', value: raced as T };
     } catch (error) {
       this.logger.warn(
-        `Judge timeout for chunk ${context.chunkIndex}: ${String((error as Error)?.message || error)}`,
+        `Judge request failed for chunk ${context.chunkIndex}: ${String((error as Error)?.message || error)}`,
       );
-      return fallback;
+      return { status: 'error' };
     } finally {
       if (timeoutHandle) {
         clearTimeout(timeoutHandle);
       }
     }
+  }
+
+  private buildNeutralJudgeOutput(
+    chunk: AssessmentChunk,
+    config: AssessmentConfig,
+  ): JudgeOutput {
+    return {
+      chunkIndex: chunk.chunkIndex,
+      summary:
+        'Judge output could not be parsed. Marked turns as neutral for this chunk.',
+      labels: this.ensureTurnCoverage([], chunk.turns, config),
+    };
   }
 
   private shouldRunSecondJudge(

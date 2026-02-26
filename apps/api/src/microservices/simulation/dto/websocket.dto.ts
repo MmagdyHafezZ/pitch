@@ -48,6 +48,8 @@ export enum WsMessageType {
   CONVERSATION_AUDIO_CHUNK = 'conversation.audio.chunk',
   CONVERSATION_COMPLETE = 'conversation.complete',
 
+  CONVERSATION_VISUAL_STATE = 'conversation.visual_state',
+
   PING = 'ping',
   PONG = 'pong',
 }
@@ -344,6 +346,59 @@ export class ConversationStartPayload {
     provider?: string;
     voice?: string;
   };
+
+  /**
+   * Serialised visual context injected by the gateway from the latest
+   * CONVERSATION_VISUAL_STATE update received from this session.
+   * Human-readable one-liner — injected directly into the system prompt.
+   */
+  @IsString()
+  @IsOptional()
+  visualContext?: string;
+}
+
+/**
+ * Visual State Payload
+ * Semantic summary of what the camera sees — computed on the client
+ * (MediaPipe Pose Landmarker) and sent at ~2–5 Hz via CONVERSATION_VISUAL_STATE.
+ */
+export class VisualStatePayload {
+  /** Whether a person is detected with sufficient landmark confidence */
+  present: boolean;
+
+  /** Upper-body posture from shoulder/hip or Z-depth analysis */
+  posture: 'leaning_in' | 'upright' | 'leaning_back' | 'unknown';
+
+  /** Head gaze direction from ear visibility asymmetry */
+  gaze: 'camera' | 'left' | 'right' | 'down' | 'unknown';
+
+  /** Body movement level from rolling nose-delta average */
+  movement: 'low' | 'medium' | 'high';
+
+  /** What kind of movement is occurring (head only, gesturing, body shift, restless) */
+  movementType: 'still' | 'head_only' | 'gesturing' | 'body_shift' | 'restless';
+
+  /** Head gesture detected in the last ~1 second (nod = agreement, shake = objection) */
+  headMotion: 'nodding' | 'shaking' | 'still';
+
+  /**
+   * Camera-attention percentage over the last ~10 seconds (0–100).
+   * -1 = insufficient history (session just started).
+   */
+  attention: number;
+
+  /**
+   * Emotion inferred from MediaPipe Face Landmarker blendshapes.
+   * 'unknown' when face is not detected.
+   */
+  emotion:
+    | 'happy'
+    | 'sad'
+    | 'angry'
+    | 'frustrated'
+    | 'surprised'
+    | 'neutral'
+    | 'unknown';
 }
 
 /**
@@ -436,6 +491,9 @@ export class ConversationStreamCompletedPayload {
 
   @IsOptional()
   progress?: number;
+
+  @IsOptional()
+  totalSentences?: number;
 }
 
 /**

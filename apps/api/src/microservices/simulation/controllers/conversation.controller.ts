@@ -8,6 +8,7 @@ import { TtsService } from '../tts/tts.service';
 import { SimulationPrismaService } from '../prisma/simulation-prisma.service';
 import { StageDetectorService } from '../services/stage-detector.service';
 import { StreamingConversationService } from '../services/streaming-conversation.service';
+import { ConversationOrchestrationService } from '../services/conversation-orchestration.service';
 import { AssessmentService } from '../assessment/assessment.service';
 import type { LLMConfigDto, LLMMessageDto } from '../dto/llm.dto';
 import { Prisma } from '@prisma/simulation-client';
@@ -100,24 +101,19 @@ export class ConversationController {
     private readonly prisma: SimulationPrismaService,
     private readonly stageDetector: StageDetectorService,
     private readonly streamingConversation: StreamingConversationService,
+    private readonly conversationOrchestration: ConversationOrchestrationService,
     private readonly assessmentService: AssessmentService,
   ) {}
 
   /**
-   * Streaming conversation handler with real-time text, stage detection, and audio
+   * Streaming conversation handler — delegates to ConversationOrchestrationService
+   * which applies Redis caching and fire-and-forget writes to minimise TTFT.
    */
   @MessagePattern(SIMULATION_SERVICE_PATTERNS.CONVERSATION_STREAM)
   streamConversation(
     @Payload() envelope: WsEnvelope<ConversationStartPayload>,
   ): Observable<any> {
-    const subject = new Subject<any>();
-
-    this.processStreamingConversation(envelope, subject).catch((error) => {
-      this.logger.error('Streaming conversation failed', error);
-      subject.error(toRpcException(error));
-    });
-
-    return subject.asObservable();
+    return this.conversationOrchestration.stream(envelope);
   }
 
   private async processStreamingConversation(
@@ -253,7 +249,7 @@ export class ConversationController {
       // Build system message
       const systemMessage: LLMMessageDto = {
         role: 'system',
-        content: await buildConversationSystemPrompt({
+        content: buildConversationSystemPrompt({
           persona: personaData,
           session,
           sessionConfig,
@@ -839,7 +835,7 @@ export class ConversationController {
 
       const systemMessage: LLMMessageDto = {
         role: 'system',
-        content: await buildConversationSystemPrompt({
+        content: buildConversationSystemPrompt({
           persona: personaData,
           session,
           sessionConfig,

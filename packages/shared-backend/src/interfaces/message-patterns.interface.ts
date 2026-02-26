@@ -122,12 +122,15 @@ export const SIMULATION_SERVICE_PATTERNS = {
   ASSESSMENT_RUN_FAILED: 'assessment.run.failed',
   ASSESSMENT_RUN: 'assessment.run',
   ASSESSMENT_STATUS: 'assessment.status',
+  ASSESSMENT_REPORT: 'assessment.report',
   ASSESSMENT_LATEST: 'assessment.latest',
 
   HINTS_GENERATE: 'simulation.hints.generate',
   HINTS_HISTORY: 'simulation.hints.history',
 
   PHONE_CALL_START: 'simulation.phone.call.start',
+
+  ANALYTICS_DASHBOARD: 'analytics.dashboard',
 } as const
 
 export type UserServicePattern = (typeof USER_SERVICE_PATTERNS)[keyof typeof USER_SERVICE_PATTERNS]

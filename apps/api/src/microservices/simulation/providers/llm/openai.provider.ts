@@ -47,7 +47,7 @@ export class OpenAIProvider implements ILLMProvider {
     this.client = new OpenAI({
       apiKey: apiKey || 'placeholder',
       timeout: 60000,
-      maxRetries: 2,
+      maxRetries: 1,
     });
   }
 
@@ -261,6 +261,45 @@ export class OpenAIProvider implements ILLMProvider {
 
   getModelCapabilities(model: string): ModelCapabilities {
     const modelLower = model.toLowerCase();
+
+    if (modelLower.includes('gpt-4.1-nano')) {
+      return {
+        maxTokens: 1047576,
+        maxOutputTokens: 32768,
+        supportsStreaming: true,
+        supportsTools: true,
+        supportsVision: true,
+        supportsAudio: false,
+        supportedModalities: ['text', 'image'],
+        pricing: this.buildPricing(model),
+      };
+    }
+
+    if (modelLower.includes('gpt-4.1-mini')) {
+      return {
+        maxTokens: 1047576,
+        maxOutputTokens: 32768,
+        supportsStreaming: true,
+        supportsTools: true,
+        supportsVision: true,
+        supportsAudio: false,
+        supportedModalities: ['text', 'image'],
+        pricing: this.buildPricing(model),
+      };
+    }
+
+    if (modelLower.includes('gpt-4.1')) {
+      return {
+        maxTokens: 1047576,
+        maxOutputTokens: 32768,
+        supportsStreaming: true,
+        supportsTools: true,
+        supportsVision: true,
+        supportsAudio: false,
+        supportedModalities: ['text', 'image'],
+        pricing: this.buildPricing(model),
+      };
+    }
 
     if (modelLower.includes('gpt-4o-mini')) {
       return {

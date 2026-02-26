@@ -39,11 +39,13 @@ import { HintsRepository } from './repositories/hints.repository';
 import { HintsService } from './services/hints.service';
 import { StageDetectorService } from './services/stage-detector.service';
 import { StreamingConversationService } from './services/streaming-conversation.service';
+import { ConversationOrchestrationService } from './services/conversation-orchestration.service';
 import { SimulationRedisService } from './services/redis/redis.service';
 import { RedisModule } from '@pitch/shared-backend/redis/index';
 import { TtsModule } from './tts/tts.module';
 import { AssessmentModule } from './assessment/assessment.module';
 import { PhoneModule } from './phone/phone.module';
+import { RagModule } from './rag/rag.module';
 
 @Module({
   imports: [
@@ -57,6 +59,7 @@ import { PhoneModule } from './phone/phone.module';
     }),
     TtsModule,
     PhoneModule,
+    RagModule,
     forwardRef(() => AssessmentModule),
   ],
   controllers: [
@@ -115,9 +118,12 @@ import { PhoneModule } from './phone/phone.module';
     StageDetectorService,
     SimulationRedisService,
     StreamingConversationService,
+    ConversationOrchestrationService,
   ],
   exports: [
     LLMService,
+    StreamingConversationService,
+    ConversationOrchestrationService,
     SessionService,
     SessionMemberService,
     InvitationService,
@@ -125,6 +131,7 @@ import { PhoneModule } from './phone/phone.module';
     HintsService,
     SimulationPrismaService,
     MongoConnectionService,
+    RagModule,
   ],
 })
 export class SimulationModule {}
