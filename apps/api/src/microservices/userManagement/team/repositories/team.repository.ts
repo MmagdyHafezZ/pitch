@@ -176,7 +176,7 @@ export class TeamRepository {
   }
 
   async transferOwnership(data: UpdateMemberDto): Promise<TeamMembership> {
-    const membership = (await this.prisma.$transaction(
+    const membership = (await this.prisma.client.$transaction(
       async (tx: Prisma.TransactionClient) => {
         await tx.teamMembership.updateMany({
           where: {

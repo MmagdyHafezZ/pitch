@@ -324,7 +324,8 @@ export function TeamMembersPanel() {
 
   const getRoleIcon = (role?: TeamMembership['role']) => {
     if (!role) return <IconUser size={14} />
-    const meta = roleMeta[role]
+    if (!(role in roleMeta)) return <IconUser size={14} />
+    const meta = roleMeta[role as keyof typeof roleMeta]
     const Icon = meta.icon
     return <Icon size={14} />
   }
