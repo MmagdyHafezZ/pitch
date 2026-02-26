@@ -232,6 +232,7 @@ export default function LiveSessionPage() {
     sessionId,
     videoRef: poseActiveRef,
     enabled: visualEnabled && isConnected,
+    sendIntervalMs: 5000,
     onUserAbsent: () => {},
   })
 

@@ -119,7 +119,7 @@ export function useVisualState({
 
         const last = lastSentRef.current
         const now = Date.now()
-        if (!last || last.state.present || now - last.at > 3000) {
+        if (!last || last.state.present || now - last.at >= sendIntervalMs) {
           setCurrentState(UNKNOWN_VISUAL_STATE)
           conversationService.sendVisualState(sessionId, UNKNOWN_VISUAL_STATE)
           lastSentRef.current = { state: UNKNOWN_VISUAL_STATE, at: now }
@@ -195,9 +195,12 @@ export function useVisualState({
       // ── Throttled send ─────────────────────────────────────────────────────
       const now = Date.now()
       const last = lastSentRef.current
+      // Hard cap outbound visual-state updates to at most one every sendIntervalMs.
+      if (last && now - last.at < sendIntervalMs) {
+        return
+      }
       if (
         last &&
-        now - last.at < sendIntervalMs &&
         last.state.present === state.present &&
         last.state.posture === state.posture &&
         last.state.gaze === state.gaze &&

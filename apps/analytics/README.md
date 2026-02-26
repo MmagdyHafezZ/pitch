@@ -17,7 +17,19 @@ Then, run the microservice in development mode:
 pnpm --filter analytics dev
 ```
 
-The microservice will be running on port 3000.
+By default the microservice runs on port `3001`.
+
+You can override this with either:
+
+```bash
+ANALYTICS_PORT=3010 pnpm --filter analytics dev
+```
+
+or:
+
+```bash
+PORT=3010 pnpm --filter analytics dev
+```
 
 ## Building the microservice
 
