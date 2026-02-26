@@ -7,6 +7,8 @@ import {
   refreshAccessToken as refreshAccessTokenRequest,
 } from '@/lib/client'
 import { getJwtExpiry } from '../utils/token.utils'
+import { applyAvatarCacheToUser } from '../utils/avatar-cache'
+import { useTeamsStore } from '@/features/teams/stores/teams.store'
 
 export interface AuthStore extends AuthState, AuthActions {}
 
@@ -41,9 +43,11 @@ export const useAuthStore = create<AuthStore>()((set, get) => ({
       set({ isLoading: true, error: null })
 
       const response = await api.auth.login({ email, password })
+      const user = applyAvatarCacheToUser(response.user)
+      useTeamsStore.getState().resetStore()
 
       set({
-        user: response.user,
+        user,
         token: response.accessToken,
         isAuthenticated: true,
         isLoading: false,
@@ -68,9 +72,11 @@ export const useAuthStore = create<AuthStore>()((set, get) => ({
       set({ isLoading: true, error: null })
 
       const response = await api.auth.register({ email, password, name })
+      const user = applyAvatarCacheToUser(response.user)
+      useTeamsStore.getState().resetStore()
 
       set({
-        user: response.user,
+        user,
         token: response.accessToken,
         isAuthenticated: true,
         isLoading: false,
@@ -101,13 +107,47 @@ export const useAuthStore = create<AuthStore>()((set, get) => ({
 
     api.auth.logout().catch(() => {})
     setAccessToken(null)
+    useTeamsStore.getState().resetStore()
     if (typeof window !== 'undefined' && process.env.NODE_ENV !== 'test') {
       window.location.href = '/auth/login'
     }
   },
 
+  deleteAccount: async () => {
+    const currentUser = get().user
+    if (!currentUser?.id) {
+      const error = new Error('No authenticated user found')
+      set({ error: error.message })
+      throw error
+    }
+
+    try {
+      set({ isLoading: true, error: null })
+      await api.users.delete(currentUser.id)
+
+      set({
+        user: null,
+        token: null,
+        isAuthenticated: false,
+        isLoading: false,
+        error: null,
+      })
+      setAccessToken(null)
+      useTeamsStore.getState().resetStore()
+
+      api.auth.logout().catch(() => {})
+      if (typeof window !== 'undefined' && process.env.NODE_ENV !== 'test') {
+        window.location.href = '/auth/login'
+      }
+    } catch (error) {
+      const { message, throwValue } = resolveAuthError(error, 'Failed to delete account')
+      set({ isLoading: false, error: message })
+      throw throwValue
+    }
+  },
+
   setUser: (user: User | null) => {
-    set({ user, isAuthenticated: !!user })
+    set({ user: applyAvatarCacheToUser(user), isAuthenticated: !!user })
   },
 
   setToken: (token: string | null) => {
@@ -161,11 +201,12 @@ export const useAuthStore = create<AuthStore>()((set, get) => ({
         return api.auth.me()
       })
       .then((user) => {
-        set({ user, isAuthenticated: true })
+        set({ user: applyAvatarCacheToUser(user), isAuthenticated: true })
       })
       .catch(() => {
         setAccessToken(null)
         set({ token: null, user: null, isAuthenticated: false })
+        useTeamsStore.getState().resetStore()
       })
   },
 }))

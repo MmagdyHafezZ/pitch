@@ -10,6 +10,7 @@ import {
   UpdateSubscriptionDto,
   UpgradeSubscriptionDto,
   Period,
+  SubscriptionMetadata,
 } from '@pitch/shared-backend/interfaces/user.interface';
 import {
   SubscriptionRepository,
@@ -29,6 +30,91 @@ export class SubscriptionService {
     private readonly subscriptionRepository: SubscriptionRepository,
     private readonly planRepository: PlanRepository,
   ) {}
+
+  private toSubscription<T extends { metadata?: unknown }>(
+    value: T,
+  ): Subscription {
+    const metadata =
+      value.metadata &&
+      typeof value.metadata === 'object' &&
+      !Array.isArray(value.metadata)
+        ? (value.metadata as SubscriptionMetadata)
+        : value.metadata === null
+          ? null
+          : undefined;
+
+    return {
+      ...(value as unknown as Subscription),
+      metadata,
+    };
+  }
+
+  private toMetadataObject(value: unknown): SubscriptionMetadata {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return {};
+    }
+    return value as SubscriptionMetadata;
+  }
+
+  private buildMetadataOnCreate(
+    input: SubscriptionMetadata | null | undefined,
+    requesterId: string,
+  ): Prisma.InputJsonValue {
+    const now = new Date().toISOString();
+    const metadata = this.toMetadataObject(input);
+    const audit = metadata.audit ?? {};
+    return {
+      ...metadata,
+      audit: {
+        ...audit,
+        createdByUserId: requesterId,
+        createdAt: audit.createdAt ?? now,
+        updatedByUserId: requesterId,
+        updatedAt: now,
+        version: typeof audit.version === 'number' ? audit.version : 1,
+      },
+    } as Prisma.InputJsonValue;
+  }
+
+  private buildMetadataOnUpdate(
+    existing: unknown,
+    patch: SubscriptionMetadata | null | undefined,
+    requesterId: string,
+    mode: 'update' | 'upgrade' = 'update',
+  ): Prisma.InputJsonValue {
+    const now = new Date().toISOString();
+    const existingMetadata = this.toMetadataObject(existing);
+    const patchMetadata = this.toMetadataObject(patch);
+    const previousAudit = existingMetadata.audit ?? {};
+    const patchAudit = patchMetadata.audit ?? {};
+    const nextVersion =
+      typeof previousAudit.version === 'number' ? previousAudit.version + 1 : 1;
+
+    return {
+      ...existingMetadata,
+      ...patchMetadata,
+      billing: {
+        ...(existingMetadata.billing ?? {}),
+        ...(patchMetadata.billing ?? {}),
+      },
+      seating: {
+        ...(existingMetadata.seating ?? {}),
+        ...(patchMetadata.seating ?? {}),
+      },
+      audit: {
+        ...previousAudit,
+        ...patchAudit,
+        createdByUserId: previousAudit.createdByUserId ?? requesterId,
+        createdAt: previousAudit.createdAt ?? now,
+        updatedByUserId: requesterId,
+        updatedAt: now,
+        version: nextVersion,
+        ...(mode === 'upgrade'
+          ? { upgradedByUserId: requesterId, upgradedAt: now }
+          : {}),
+      },
+    } as Prisma.InputJsonValue;
+  }
 
   async createSubscription(
     createSubscriptionDto: CreateSubscriptionDto,
@@ -67,6 +153,10 @@ export class SubscriptionService {
       currentPeriodStart: createSubscriptionDto.currentPeriodStart,
       currentPeriodEnd: period_end,
       cancelAtPeriodEnd: createSubscriptionDto.cancelAtPeriodEnd ?? false,
+      metadata: this.buildMetadataOnCreate(
+        createSubscriptionDto.metadata,
+        requesterId,
+      ),
     });
     await this.coinRefillService.refillInitialForSubscription(sub, requesterId);
     return sub;
@@ -75,6 +165,7 @@ export class SubscriptionService {
   async updateSubscription(
     subscriptionId: string,
     dto: UpdateSubscriptionDto,
+    requesterId = 'system',
   ): Promise<Subscription> {
     const existing = await this.subscriptionRepository.findById(subscriptionId);
     if (!existing) {
@@ -101,17 +192,30 @@ export class SubscriptionService {
         | Prisma.NullableJsonNullValueInput =
         dto.metadata === null
           ? Prisma.JsonNull
-          : (dto.metadata as Prisma.InputJsonValue);
+          : this.buildMetadataOnUpdate(
+              existing.metadata,
+              dto.metadata,
+              requesterId,
+            );
 
       data.metadata = metadata;
+    } else {
+      data.metadata = this.buildMetadataOnUpdate(
+        existing.metadata,
+        undefined,
+        requesterId,
+      );
     }
 
-    return this.subscriptionRepository.update(subscriptionId, data);
+    return this.toSubscription(
+      await this.subscriptionRepository.update(subscriptionId, data),
+    );
   }
 
   async upgradeSubscription(
     subscriptionId: string,
     dto: UpgradeSubscriptionDto,
+    requesterId = 'system',
   ): Promise<SubscriptionWithPlan> {
     const existing = await this.subscriptionRepository.findById(subscriptionId);
     if (!existing) {
@@ -158,9 +262,29 @@ export class SubscriptionService {
       ttlSeconds,
     });
 
-    return await this.subscriptionRepository.update(subscriptionId, {
+    const updateData: Prisma.SubscriptionUncheckedUpdateInput = {
       planId: dto.planId,
-    });
+    };
+    if (dto.metadata !== undefined) {
+      updateData.metadata =
+        dto.metadata === null
+          ? Prisma.JsonNull
+          : this.buildMetadataOnUpdate(
+              existing.metadata,
+              dto.metadata,
+              requesterId,
+              'upgrade',
+            );
+    } else {
+      updateData.metadata = this.buildMetadataOnUpdate(
+        existing.metadata,
+        undefined,
+        requesterId,
+        'upgrade',
+      );
+    }
+
+    return await this.subscriptionRepository.update(subscriptionId, updateData);
   }
 
   async removeSubscription(
@@ -213,10 +337,12 @@ export class SubscriptionService {
       );
     }
 
-    return this.subscriptionRepository.update(subscriptionId, {
-      currentPeriodStart: dto.start,
-      currentPeriodEnd: dto.end,
-    });
+    return this.toSubscription(
+      await this.subscriptionRepository.update(subscriptionId, {
+        currentPeriodStart: dto.start,
+        currentPeriodEnd: dto.end,
+      }),
+    );
   }
 
   async checkExistingSubscription(teamId: string): Promise<boolean> {
@@ -226,11 +352,13 @@ export class SubscriptionService {
   }
 
   async findAll(): Promise<Subscription[]> {
-    return this.subscriptionRepository.findAll();
+    const subs = await this.subscriptionRepository.findAll();
+    return subs.map((sub) => this.toSubscription(sub));
   }
 
   async findActiveByTeam(teamId: string): Promise<Subscription | null> {
-    return this.subscriptionRepository.findActiveByTeamId(teamId);
+    const sub = await this.subscriptionRepository.findActiveByTeamId(teamId);
+    return sub ? this.toSubscription(sub) : null;
   }
 
   async findOne(id: string): Promise<Subscription> {
@@ -238,7 +366,7 @@ export class SubscriptionService {
     if (!subscription) {
       throw new NotFoundException(`Subscription with ID ${id} not found`);
     }
-    return subscription;
+    return this.toSubscription(subscription);
   }
 
   async findSubForTeam(teamId: string): Promise<Subscription> {
@@ -249,11 +377,12 @@ export class SubscriptionService {
         `Couldn't find a subscription for team with ID ${teamId}`,
       );
     }
-    return subscription;
+    return this.toSubscription(subscription);
   }
 
   async findActiveSubscriptions(): Promise<Subscription[]> {
-    return this.subscriptionRepository.findAllActive();
+    const subs = await this.subscriptionRepository.findAllActive();
+    return subs.map((sub) => this.toSubscription(sub));
   }
 
   async findDueForRollover(): Promise<SubscriptionWithPlan[]> {

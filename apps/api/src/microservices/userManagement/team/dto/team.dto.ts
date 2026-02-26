@@ -49,6 +49,20 @@ export class CreateTeamRequestDto {
   @IsObject()
   @IsOptional()
   billingAddress?: Prisma.JsonValue | null;
+
+  @ApiProperty({
+    description:
+      'Optional team metadata (profile, preferences, tags, audit extras)',
+    example: {
+      profile: { industry: 'Software', timezone: 'America/New_York' },
+      preferences: { allowMemberInvites: true },
+      tags: ['sales-enablement'],
+    },
+    required: false,
+  })
+  @IsObject()
+  @IsOptional()
+  metadata?: Prisma.JsonValue | null;
 }
 
 export class UpdateTeamRequestDto {
@@ -92,6 +106,18 @@ export class UpdateTeamRequestDto {
   @IsObject()
   @IsOptional()
   billingAddress?: Prisma.JsonValue | null;
+
+  @ApiProperty({
+    description: 'Optional team metadata patch',
+    example: {
+      profile: { industry: 'Healthcare' },
+      tags: ['enterprise'],
+    },
+    required: false,
+  })
+  @IsObject()
+  @IsOptional()
+  metadata?: Prisma.JsonValue | null;
 }
 
 export class AddMemberRequestDTO {
@@ -111,6 +137,7 @@ export class AddMemberRequestDTO {
   @ApiProperty({ description: 'Per-member token limit', example: 0 })
   @Min(0)
   @IsNumber()
+  @IsOptional()
   tokenLimit?: number;
 
   @ApiProperty({

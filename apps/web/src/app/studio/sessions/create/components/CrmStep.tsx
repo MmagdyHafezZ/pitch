@@ -10,9 +10,14 @@ import {
   Button,
   Badge,
   MultiSelect,
+  Select,
   SimpleGrid,
   Alert,
   Anchor,
+  Checkbox,
+  Divider,
+  TextInput,
+  ActionIcon,
 } from '@mantine/core'
 import {
   IconPlugConnected,
@@ -23,8 +28,13 @@ import {
   IconUserCircle,
   IconClipboardList,
   IconAlertCircle,
+  IconTrash,
 } from '@tabler/icons-react'
 import classes from '../create-session.module.css'
+import type {
+  SavedCrmConnection,
+  SavedCrmSessionConnection,
+} from '@/features/crm/utils/session-crm-preferences'
 
 export interface CrmOption {
   value: string
@@ -55,6 +65,16 @@ interface CrmStepProps {
   setSelectedLeads: (value: string[]) => void
   selectedContacts: string[]
   setSelectedContacts: (value: string[]) => void
+  saveForFutureUse?: boolean
+  setSaveForFutureUse?: (value: boolean) => void
+  savedCrms?: SavedCrmConnection[]
+  selectedSavedCrmId?: string | null
+  onSelectSavedCrm?: (crmId: string | null) => void
+  savedConnections?: SavedCrmSessionConnection[]
+  onUseSavedConnection?: (connection: SavedCrmSessionConnection) => void
+  onRemoveSavedConnection?: (connection: SavedCrmSessionConnection) => void
+  savedConnectionLabel?: string
+  setSavedConnectionLabel?: (value: string) => void
 }
 
 export function CrmStep({
@@ -76,6 +96,16 @@ export function CrmStep({
   setSelectedLeads,
   selectedContacts,
   setSelectedContacts,
+  saveForFutureUse = false,
+  setSaveForFutureUse,
+  savedCrms = [],
+  selectedSavedCrmId = null,
+  onSelectSavedCrm,
+  savedConnections = [],
+  onUseSavedConnection,
+  onRemoveSavedConnection,
+  savedConnectionLabel = '',
+  setSavedConnectionLabel,
 }: CrmStepProps) {
   const isConnected = crmStatus?.connected
   const connectLabel = isConnected ? 'Connected' : 'Connect'
@@ -124,7 +154,101 @@ export function CrmStep({
             </Button>
           </Group>
         </Group>
+        {isConnected && setSaveForFutureUse ? (
+          <>
+            <Divider my="md" />
+            <Checkbox
+              label="Save this CRM connection/setup for future sessions"
+              description="If checked, your current CRM provider + selected records can be reused next time."
+              checked={saveForFutureUse}
+              onChange={(event) => setSaveForFutureUse(event.currentTarget.checked)}
+            />
+            {saveForFutureUse && setSavedConnectionLabel ? (
+              <TextInput
+                mt="sm"
+                label="Saved preset name"
+                placeholder="e.g. Enterprise pipeline (Q2)"
+                value={savedConnectionLabel}
+                onChange={(event) => setSavedConnectionLabel(event.currentTarget.value)}
+                description="Name this CRM setup so you can recognize it next time."
+              />
+            ) : null}
+          </>
+        ) : null}
       </Paper>
+
+      {savedCrms.length > 0 && onSelectSavedCrm ? (
+        <Paper withBorder p="md" radius="lg" className={classes.crmCard}>
+          <Stack gap="sm">
+            <Text fw={600}>Saved CRMs</Text>
+            <Text size="sm" c="dimmed">
+              Select one of your saved CRM connections for this session.
+            </Text>
+            <Select
+              label="Saved CRM connection"
+              placeholder="Choose a saved CRM"
+              value={selectedSavedCrmId}
+              onChange={onSelectSavedCrm}
+              data={savedCrms.map((crm) => ({
+                value: crm.id,
+                label: `${crm.name}${crm.providerEmail ? ` • ${crm.providerEmail}` : ''}`,
+              }))}
+              clearable
+            />
+            {selectedSavedCrmId ? (
+              <Text size="xs" c="dimmed">
+                Selecting a saved CRM applies its provider/account metadata to this session. Record
+                selections are still managed below.
+              </Text>
+            ) : null}
+          </Stack>
+        </Paper>
+      ) : null}
+
+      {savedConnections.length > 0 && onUseSavedConnection ? (
+        <Paper withBorder p="md" radius="lg" className={classes.crmCard}>
+          <Stack gap="sm">
+            <Text fw={600}>Saved CRM connections for future sessions</Text>
+            <Text size="sm" c="dimmed">
+              Reuse a previously saved CRM selection set for this session.
+            </Text>
+            {savedConnections.map((connection) => {
+              const totalSelections =
+                connection.selections.accounts.length +
+                connection.selections.opportunities.length +
+                connection.selections.leads.length +
+                connection.selections.contacts.length
+
+              return (
+                <Group key={connection.id} justify="space-between" align="center" wrap="wrap">
+                  <Box>
+                    <Text fw={500}>{connection.label}</Text>
+                    <Text size="xs" c="dimmed">
+                      {connection.providerEmail ?? 'Salesforce'} · {totalSelections} selections ·
+                      saved {new Date(connection.savedAt).toLocaleString()}
+                    </Text>
+                  </Box>
+                  <Group gap="xs">
+                    <Button variant="light" onClick={() => onUseSavedConnection(connection)}>
+                      Use for this session
+                    </Button>
+                    {onRemoveSavedConnection ? (
+                      <ActionIcon
+                        variant="subtle"
+                        color="red"
+                        aria-label={`Remove ${connection.label}`}
+                        onClick={() => onRemoveSavedConnection(connection)}
+                      >
+                        <IconTrash size={16} />
+                      </ActionIcon>
+                    ) : null}
+                  </Group>
+                </Group>
+              )
+            })}
+          </Stack>
+        </Paper>
+      ) : null}
 
       <Alert icon={<IconAlertCircle size={16} />} color="yellow" variant="light" radius="md">
         <Text size="sm" fw={600}>

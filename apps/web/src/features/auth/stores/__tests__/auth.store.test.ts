@@ -2,6 +2,7 @@ import { act } from '@testing-library/react'
 import { server } from '../../../../__tests__/mocks/server'
 import { resetStores } from '../../../../__tests__/utils/store-utils'
 import { useAuthStore } from '../auth.store'
+import { useTeamsStore } from '@/features/teams/stores/teams.store'
 import { api } from '@/lib/client'
 import { http, HttpResponse } from 'msw'
 
@@ -12,6 +13,9 @@ const flushPromises = () => new Promise((resolve) => setTimeout(resolve, 0))
 describe('AuthStore', () => {
   beforeEach(() => {
     resetStores()
+    act(() => {
+      useTeamsStore.getState().resetStore()
+    })
   })
 
   describe('Initial State', () => {
@@ -189,6 +193,31 @@ describe('AuthStore', () => {
       expect(state.token).toBeNull()
       expect(state.isAuthenticated).toBe(false)
       expect(state.error).toBeNull()
+    })
+
+    it('should clear teams store on logout', async () => {
+      act(() => {
+        useTeamsStore.setState({
+          teams: [{ id: 'team-admin', name: 'Admin Team' } as any],
+          activeTeamId: 'team-admin',
+          currentTeam: { id: 'team-admin', name: 'Admin Team' } as any,
+          loading: false,
+          error: null,
+        })
+      })
+
+      const logoutSpy = jest
+        .spyOn(api.auth, 'logout')
+        .mockRejectedValueOnce(new Error('network error'))
+      act(() => {
+        useAuthStore.getState().logout()
+      })
+      logoutSpy.mockRestore()
+
+      const teamsState = useTeamsStore.getState()
+      expect(teamsState.teams).toEqual([])
+      expect(teamsState.activeTeamId).toBeNull()
+      expect(teamsState.currentTeam).toBeNull()
     })
   })
 

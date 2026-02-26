@@ -18,6 +18,7 @@ import {
   CreateSubscriptionDto,
   UpdateSubscriptionDto,
   UpgradeSubscriptionDto,
+  SubscriptionMetadata,
 } from '@pitch/shared-backend/interfaces/user.interface';
 import { SubscriptionService } from '../services/subscription.service';
 import { ElevatedAccessGuard } from '../../guards/elevated-access.guard';
@@ -51,6 +52,8 @@ export class SubscriptionController {
           ? new Date(createSubscriptionDto.currentPeriodStart)
           : null,
         cancelAtPeriodEnd: createSubscriptionDto.cancelAtPeriodEnd ?? false,
+        metadata:
+          createSubscriptionDto.metadata as unknown as SubscriptionMetadata,
       };
 
       return await this.subscriptionService.createSubscription(
@@ -84,9 +87,15 @@ export class SubscriptionController {
         planId: updateData.planId,
         interval: updateData.interval,
         limits: updateData.limits,
+        metadata: updateData.metadata as unknown as SubscriptionMetadata,
+        cancelAtPeriodEnd: updateData.cancelAtPeriodEnd,
       };
 
-      return await this.subscriptionService.updateSubscription(id, dto);
+      return await this.subscriptionService.updateSubscription(
+        id,
+        dto,
+        data.userClaims.id,
+      );
     } catch (error) {
       throw toRpcException(error);
     }
@@ -113,9 +122,14 @@ export class SubscriptionController {
         planId: updateData.planId,
         interval: updateData.interval,
         limits: updateData.limits,
+        metadata: updateData.metadata as unknown as SubscriptionMetadata,
       };
 
-      return await this.subscriptionService.upgradeSubscription(id, dto);
+      return await this.subscriptionService.upgradeSubscription(
+        id,
+        dto,
+        data.userClaims.id,
+      );
     } catch (error) {
       throw toRpcException(error);
     }

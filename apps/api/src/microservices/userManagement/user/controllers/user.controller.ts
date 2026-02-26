@@ -37,7 +37,24 @@ export class UserController {
       this.logger.log(
         `Getting user ${data.userId} - Requested by: ${data.userClaims.email} (${data.userClaims.id})`,
       );
+      if (data.userClaims.id === data.userId) {
+        return await this.userService.touchLastSeen(data.userId);
+      }
       return await this.userService.findOne(data.userId);
+    } catch (error) {
+      throw toRpcException(error);
+    }
+  }
+
+  @MessagePattern(USER_SERVICE_PATTERNS.GET_MY_SETTINGS)
+  async getMySettings(
+    @Payload() data: userClaimsInterface.MessageWithUserClaims,
+  ) {
+    try {
+      this.logger.log(
+        `Getting settings for user ${data.userClaims.id} - Requested by: ${data.userClaims.email} (${data.userClaims.id})`,
+      );
+      return await this.userService.getSettings(data.userClaims.id);
     } catch (error) {
       throw toRpcException(error);
     }
@@ -54,8 +71,14 @@ export class UserController {
       this.logger.log(
         `Creating user - Requested by: ${data.userClaims.email} (${data.userClaims.id})`,
       );
-      const { userClaims: _userClaims, ...createUserDto } = data;
+      const {
+        userClaims: _userClaims,
+        __claims: _claims,
+        ...createUserDto
+      } = data as userInterface.CreateUserDto &
+        userClaimsInterface.MessageWithUserClaims & { __claims?: unknown };
       void _userClaims;
+      void _claims;
       return await this.userService.create(createUserDto);
     } catch (error) {
       throw toRpcException(error);
@@ -75,9 +98,35 @@ export class UserController {
       this.logger.log(
         `Updating user ${data.userId} - Requested by: ${data.userClaims.email} (${data.userClaims.id})`,
       );
-      const { userClaims: _userClaims, userId, ...updateData } = data;
+      const {
+        userClaims: _userClaims,
+        userId,
+        __claims: _claims,
+        ...updateData
+      } = data as { userId: string } & userInterface.UpdateUserDto &
+        userClaimsInterface.MessageWithUserClaims & { __claims?: unknown };
       void _userClaims;
+      void _claims;
       return await this.userService.update(userId, updateData);
+    } catch (error) {
+      throw toRpcException(error);
+    }
+  }
+
+  @MessagePattern(USER_SERVICE_PATTERNS.UPDATE_MY_SETTINGS)
+  async updateMySettings(
+    @Payload()
+    data: userInterface.UpdateMySettingsDto &
+      userClaimsInterface.MessageWithUserClaims,
+  ) {
+    try {
+      this.logger.log(
+        `Updating settings for user ${data.userClaims.id} - Requested by: ${data.userClaims.email} (${data.userClaims.id})`,
+      );
+      return await this.userService.updateSettings(
+        data.userClaims.id,
+        data.settings ?? {},
+      );
     } catch (error) {
       throw toRpcException(error);
     }

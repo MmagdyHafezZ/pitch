@@ -18,6 +18,7 @@ export const useAuth = () => {
     setLoading,
     setError,
     clearError,
+    deleteAccount,
     setUser,
     setToken,
     logout: logoutStore,
@@ -114,6 +115,7 @@ export const useAuth = () => {
     login,
     register,
     logout,
+    deleteAccount,
     clearError,
 
     // Query states

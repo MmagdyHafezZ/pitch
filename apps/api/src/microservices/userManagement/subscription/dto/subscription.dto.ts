@@ -4,10 +4,11 @@ import {
   IsEnum,
   IsISO8601,
   IsNumber,
+  IsObject,
   IsOptional,
   IsString,
 } from 'class-validator';
-import { BillingInterval } from '@prisma/user-client';
+import { BillingInterval, Prisma } from '@prisma/user-client';
 
 export class CreateSubscriptionRequestDTO {
   @ApiProperty({
@@ -55,6 +56,18 @@ export class CreateSubscriptionRequestDTO {
   })
   @IsOptional()
   cancelAtPeriodEnd?: boolean;
+
+  @ApiProperty({
+    description: 'Optional subscription metadata',
+    required: false,
+    example: {
+      billing: { provider: 'stripe', externalSubscriptionId: 'sub_123' },
+      notes: 'Imported from legacy billing',
+    },
+  })
+  @IsObject()
+  @IsOptional()
+  metadata?: Prisma.JsonValue | null;
 }
 
 export class UpdateSubscriptionRequestDTO {
@@ -95,6 +108,15 @@ export class UpdateSubscriptionRequestDTO {
   })
   @IsOptional()
   cancelAtPeriodEnd?: boolean;
+
+  @ApiProperty({
+    description: 'Optional metadata patch',
+    required: false,
+    example: { notes: 'Updated by admin' },
+  })
+  @IsObject()
+  @IsOptional()
+  metadata?: Prisma.JsonValue | null;
 }
 
 export class UpgradeSubscriptionRequestDTO {
@@ -136,4 +158,13 @@ export class UpgradeSubscriptionRequestDTO {
   })
   @IsOptional()
   cancelAtPeriodEnd?: boolean;
+
+  @ApiProperty({
+    description: 'Optional metadata patch for upgrade events',
+    required: false,
+    example: { notes: 'Upgraded to PRO after trial' },
+  })
+  @IsObject()
+  @IsOptional()
+  metadata?: Prisma.JsonValue | null;
 }
