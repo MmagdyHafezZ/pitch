@@ -34,6 +34,14 @@ export const USER_SERVICE_PATTERNS = {
   GET_PLAN: 'get_plan',
 } as const
 
+export const S3_SERVICE_PATTERNS = {
+  PRESIGN_UPLOAD: 's3.presign.upload',
+  PRESIGN_DOWNLOAD: 's3.presign.download',
+  PRESIGN_DELETE: 's3.presign.delete',
+  LIST_FILES: 's3.files.list',
+  DELETE_PREFIX: 's3.files.deletePrefix',
+} as const
+
 export const BUSINESS_SERVICE_PATTERNS = {
   GET_BUSINESS: 'get_business',
   GET_BUSINESS_WITH_USER: 'get_business_with_user',
@@ -143,6 +151,7 @@ export const SIMULATION_SERVICE_PATTERNS = {
 } as const
 
 export type UserServicePattern = (typeof USER_SERVICE_PATTERNS)[keyof typeof USER_SERVICE_PATTERNS]
+export type S3ServicePattern = (typeof S3_SERVICE_PATTERNS)[keyof typeof S3_SERVICE_PATTERNS]
 export type BusinessServicePattern =
   (typeof BUSINESS_SERVICE_PATTERNS)[keyof typeof BUSINESS_SERVICE_PATTERNS]
 export type CrmServicePattern = (typeof CRM_SERVICE_PATTERNS)[keyof typeof CRM_SERVICE_PATTERNS]

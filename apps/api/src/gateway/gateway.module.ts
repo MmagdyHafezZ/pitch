@@ -11,6 +11,7 @@ import { SalesforceGatewayController } from './controllers/crm/salesforce-gatewa
 import { SessionGatewayController } from './controllers/simulation/session-gateway.controller';
 import { InvitationGatewayController } from './controllers/simulation/invitation-gateway.controller';
 import { HintsGatewayController } from './controllers/simulation/hints-gateway.controller';
+import { S3GatewayController } from './controllers/s3/s3-gateway.controller';
 import { AssessmentGatewayController } from './controllers/simulation/assessment-gateway.controller';
 import { PhoneCallGatewayController } from './controllers/simulation/phone-call-gateway.controller';
 import { PhoneCallWebhookController } from './controllers/simulation/phone-call-webhook.controller';
@@ -59,6 +60,7 @@ import { APP_GUARD } from '@nestjs/core';
     SessionGatewayController,
     InvitationGatewayController,
     HintsGatewayController,
+    S3GatewayController,
     AssessmentGatewayController,
     PhoneCallGatewayController,
     PhoneCallWebhookController,
