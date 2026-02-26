@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { useAuthStore } from '@/features/auth/stores/auth.store'
 import { isTokenExpiringSoon } from '@/features/auth/utils/token.utils'
+import { LoadingScreen } from '@/components/ui/LoadingScreen'
 
 const AUTH_PATH_PREFIX = '/auth'
 const AUTH_CALLBACK_PATH = '/auth/callback'
@@ -101,7 +102,7 @@ export function AuthGate({ children }: AuthGateProps) {
   }, [refreshAccessToken, token])
 
   if (!checked) {
-    return null
+    return <LoadingScreen />
   }
 
   return children

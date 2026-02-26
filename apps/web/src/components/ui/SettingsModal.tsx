@@ -22,6 +22,7 @@ import {
   Checkbox,
   Popover,
   ColorPicker,
+  useComputedColorScheme,
 } from '@mantine/core'
 import {
   IconUser,
@@ -56,6 +57,8 @@ interface SettingsModalProps {
 export function SettingsModal({ opened, onClose }: SettingsModalProps) {
   const router = useRouter()
   const { user, logout } = useAuth()
+  const computedColorScheme = useComputedColorScheme('light')
+  const isDark = computedColorScheme === 'dark'
   const [activeSection, setActiveSection] = useState<SettingsSection>('Account')
   const [name, setName] = useState(user?.name || 'John Doe')
   const [email, setEmail] = useState(user?.email || 'john.doe@ibm.com')
@@ -80,7 +83,7 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
     [profiles, activeProfileId]
   )
 
-  const appearanceBackground = activeProfile?.tokens.surfaceBg ?? 'var(--mantine-color-body)'
+  const appearanceBackground = isDark ? '#25262b' : (activeProfile?.tokens.surfaceBg ?? '#ffffff')
   const navBackground = activeProfile?.tokens.navBg ?? 'var(--mantine-color-dark-8)'
   const navText = useMemo(() => getReadableTextColor(navBackground), [navBackground])
   const tabsHoverBg = useMemo(
@@ -102,6 +105,20 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
   } as const
 
   const contentBackground = appearanceBackground
+  const contentText = useMemo(() => getReadableTextColor(contentBackground), [contentBackground])
+  const contentMuted = useMemo(() => getReadableMutedColor(contentBackground), [contentBackground])
+  const inputBackground = useMemo(
+    () => mixColors(contentBackground, contentText, 0.06),
+    [contentBackground, contentText]
+  )
+  const inputBorder = useMemo(
+    () => mixColors(contentBackground, contentText, 0.22),
+    [contentBackground, contentText]
+  )
+  const inputPlaceholder = useMemo(
+    () => mixColors(contentBackground, contentMuted, 0.72),
+    [contentBackground, contentMuted]
+  )
 
   const [profileName, setProfileName] = useState(activeProfile?.name ?? 'Custom theme')
   const [activeTab, setActiveTab] = useState<'profiles' | 'custom'>('profiles')
@@ -251,7 +268,13 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
               padding: rem(40),
               backgroundColor: contentBackground,
               minHeight: '100%',
-              color: 'var(--pitch-surface-text)',
+              color: contentText,
+              ['--pitch-surface-text' as string]: contentText,
+              ['--pitch-surface-text-dim' as string]: contentMuted,
+              ['--pitch-input-bg' as string]: inputBackground,
+              ['--pitch-input-text' as string]: contentText,
+              ['--pitch-input-placeholder' as string]: inputPlaceholder,
+              ['--pitch-border' as string]: inputBorder,
             }}
           >
             {activeSection === 'Account' && (
@@ -519,7 +542,7 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
                             padding: rem(12),
                             borderRadius: rem(12),
                             border: '1px solid var(--mantine-color-default-border)',
-                            backgroundColor: 'var(--pitch-surface-bg)',
+                            backgroundColor: 'var(--pitch-input-bg)',
                           }}
                         >
                           <Group justify="space-between" align="center">
@@ -534,10 +557,10 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
                                 }}
                               />
                               <Box>
-                                <Text size="sm" fw={600} c="var(--mantine-color-text)">
+                                <Text size="sm" fw={600} c="var(--pitch-surface-text)">
                                   {row.label}
                                 </Text>
-                                <Text size="xs" c="dimmed">
+                                <Text size="xs" c="var(--pitch-surface-text-dim)">
                                   {customDraft[row.key].toUpperCase()}
                                 </Text>
                               </Box>

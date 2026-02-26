@@ -36,6 +36,11 @@ export default function ClientLayerComponent({ children }: { children: React.Rea
         params.set('filter', tab)
         router.replace(`${pathname}?${params.toString()}`)
       }
+      if (page === 'Analytics') {
+        const params = new URLSearchParams(searchParams.toString())
+        params.set('tab', tab)
+        router.replace(`${pathname}?${params.toString()}`)
+      }
     }
   }
 
@@ -59,7 +64,13 @@ export default function ClientLayerComponent({ children }: { children: React.Rea
   }, [pathname])
 
   const sessionFilter = searchParams.get('filter') ?? 'All'
-  const selectedTab = pageInfo.page === 'Sessions' ? sessionFilter : tabsByPage[pageInfo.page]
+  const analyticsTab = searchParams.get('tab') ?? 'Personal'
+  const selectedTab =
+    pageInfo.page === 'Sessions'
+      ? sessionFilter
+      : pageInfo.page === 'Analytics'
+        ? analyticsTab
+        : tabsByPage[pageInfo.page]
 
   const activeTeam = useMemo(
     () => teams.find((t) => t.id === activeTeamId) ?? null,
