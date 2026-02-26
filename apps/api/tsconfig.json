@@ -18,7 +18,8 @@
     "baseUrl": "./",
     "paths": {
       "@gateway/*": ["src/gateway/*"],
-      "@microservices/*": ["src/microservices/*"]
+      "@microservices/*": ["src/microservices/*"],
+      "@api/*": ["src/*"]
     },
     "incremental": true,
     "skipLibCheck": true,

@@ -25,7 +25,8 @@
     "noFallthroughCasesInSwitch": false,
     "paths": {
       "@gateway/*": ["../../gateway/*"],
-      "@microservices/*": ["../../microservices/*"]
+      "@microservices/*": ["../../microservices/*"],
+      "@api/*": ["../../*"]
     }
   },
   "include": ["**/*.ts", "main.ts"],

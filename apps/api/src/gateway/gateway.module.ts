@@ -14,6 +14,10 @@ import { PhoneCallWebhookController } from './controllers/simulation/phone-call-
 import { GlobalJwtAuthGuard } from './guards/global-jwt-auth.guard';
 import { UserClaimsInterceptor } from './interceptors/user-claims.interceptor';
 import { TtsGatewayController } from './controllers/simulation/tts.controller';
+import { LtiV1p3GatewayController } from './controllers/lti/lti-v1.3-gateway.controller';
+import { LtiV1p1GatewayController } from './controllers/lti/lti-v1.1-gateway.controller';
+import { LtiAdvantageGatewayController } from './controllers/lti/lti-advantage-gateway.controller';
+import { LtiManagementGatewayController } from './controllers/lti/lti-management-gateway.controller';
 import {
   MICROSERVICES_CONFIG,
   getRabbitMQUrl,
@@ -25,6 +29,8 @@ import {
 } from '@pitch/shared-backend/config/jwt.config';
 import { APP_GUARD } from '@nestjs/core';
 import { SimulationWsGateway } from './controllers/simulation/simulation-ws.gateway';
+import { SimulationModule } from '@microservices/simulation/simulation.module';
+import { RagController } from '@microservices/simulation/rag/rag.controller';
 
 @Module({
   imports: [
@@ -45,6 +51,7 @@ import { SimulationWsGateway } from './controllers/simulation/simulation-ws.gate
         },
       })),
     ),
+    SimulationModule,
   ],
   controllers: [
     UserGatewayController,
@@ -58,6 +65,11 @@ import { SimulationWsGateway } from './controllers/simulation/simulation-ws.gate
     AssessmentGatewayController,
     PhoneCallGatewayController,
     PhoneCallWebhookController,
+    LtiV1p3GatewayController,
+    LtiV1p1GatewayController,
+    LtiAdvantageGatewayController,
+    LtiManagementGatewayController,
+    RagController,
   ],
   providers: [
     { provide: APP_GUARD, useClass: GlobalJwtAuthGuard },

@@ -46,7 +46,9 @@
     "db:generate:support": "prisma generate --schema=./src/microservices/support/prisma/schema.prisma",
     "db:generate:analytics": "prisma generate --schema=./src/microservices/analytics/prisma/schema.prisma",
     "db:generate:crm": "prisma generate --schema=./src/microservices/crm/prisma/schema.prisma",
-    "db:generate:all": "pnpm run db:generate:userManagement && pnpm run db:generate:simulation && pnpm run db:generate:support && pnpm run db:generate:analytics && pnpm run db:generate:crm",
+    "db:generate:lti": "prisma generate --schema=./src/microservices/lti/prisma/schema.prisma",
+    "db:generate:all": "pnpm run db:generate:userManagement && pnpm run db:generate:simulation && pnpm run db:generate:support && pnpm run db:generate:analytics && pnpm run db:generate:crm && pnpm run db:generate:lti",
+    "db:migrate:lti": "prisma migrate dev --schema=./src/microservices/lti/prisma/schema.prisma",
     "db:migrate:userManagement": "prisma migrate dev --schema=./src/microservices/userManagement/prisma/schema.prisma",
     "db:migrate:simulation": "prisma migrate dev --schema=./src/microservices/simulation/prisma/schema.prisma",
     "db:migrate:support": "prisma migrate dev --schema=./src/microservices/support/prisma/schema.prisma",
@@ -69,7 +71,8 @@
     "db:deploy:support": "prisma migrate deploy --schema=./src/microservices/support/prisma/schema.prisma",
     "db:deploy:analytics": "prisma migrate deploy --schema=./src/microservices/analytics/prisma/schema.prisma",
     "db:deploy:crm": "prisma migrate deploy --schema=./src/microservices/crm/prisma/schema.prisma",
-    "db:deploy:all": "pnpm run db:deploy:userManagement && pnpm run db:deploy:simulation && pnpm run db:deploy:support && pnpm run db:deploy:analytics && pnpm run db:deploy:crm"
+    "db:deploy:lti": "prisma migrate deploy --schema=./src/microservices/lti/prisma/schema.prisma",
+    "db:deploy:all": "pnpm run db:deploy:userManagement && pnpm run db:deploy:simulation && pnpm run db:deploy:support && pnpm run db:deploy:analytics && pnpm run db:deploy:crm && pnpm run db:deploy:lti"
   },
   "dependencies": {
     "@elevenlabs/elevenlabs-js": "^2.33.0",

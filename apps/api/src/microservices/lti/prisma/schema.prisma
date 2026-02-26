@@ -1,0 +1,221 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../../../../../../node_modules/@prisma/lti-client"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("LTI_DATABASE_URL")
+  directUrl = env("LTI_DIRECT_URL")
+}
+
+//// ======================================
+//// ENUMS
+//// ======================================
+
+enum LtiVersion {
+  V1P1
+  V1P3
+}
+
+enum LtiRole {
+  INSTRUCTOR
+  LEARNER
+  TEACHING_ASSISTANT
+  ADMINISTRATOR
+  CONTENT_DEVELOPER
+  MENTOR
+  OBSERVER
+  GRADER
+  UNKNOWN
+}
+
+enum ContentItemType {
+  LINK
+  LTI_RESOURCE_LINK
+  FILE
+  HTML
+  IMAGE
+}
+
+enum ActivityProgress {
+  INITIALIZED
+  STARTED
+  IN_PROGRESS
+  SUBMITTED
+  COMPLETED
+}
+
+enum GradingProgress {
+  NOT_READY
+  FAILED
+  PENDING
+  PENDING_MANUAL
+  FULLY_GRADED
+}
+
+//// ======================================
+//// PLATFORM (LMS) REGISTRATION
+//// ======================================
+
+/// Represents a registered LMS platform (Canvas, Moodle, Blackboard, D2L, etc.)
+model LtiPlatform {
+  id   String @id @default(cuid())
+  name String /// Human-readable name, e.g. "Acme University Canvas"
+
+  // LTI 1.1 credentials
+  consumerKey    String? @unique /// OAuth 1.0 consumer key
+  consumerSecret String? /// HMAC-SHA1 shared secret (hashed at rest)
+
+  // LTI 1.3 / Advantage
+  issuer       String? /// Platform's OIDC issuer (e.g. https://canvas.instructure.com)
+  clientId     String? /// Client ID assigned by the platform
+  authLoginUrl String? /// Platform's OIDC auth endpoint
+  authTokenUrl String? /// Platform's OAuth2 token endpoint
+  keysetUrl    String? /// Platform's JWKS URL for verifying ID tokens
+  redirectUris String[] /// Allowed redirect URIs for this tool
+
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  deployments LtiDeployment[]
+  sessions    LtiSession[]
+
+  @@unique([issuer, clientId])
+  @@index([consumerKey])
+  @@map("lti_platforms")
+}
+
+/// A deployment of a tool within a platform context
+model LtiDeployment {
+  id           String @id @default(cuid())
+  platformId   String
+  deploymentId String /// deployment_id from LTI 1.3 claims
+
+  platform LtiPlatform  @relation(fields: [platformId], references: [id], onDelete: Cascade)
+  sessions LtiSession[]
+
+  @@unique([platformId, deploymentId])
+  @@map("lti_deployments")
+}
+
+//// ======================================
+//// NONCE / STATE (OIDC anti-replay)
+//// ======================================
+
+/// Short-lived nonce records used for LTI 1.3 OIDC state validation and replay prevention
+model LtiNonce {
+  id         String    @id @default(cuid())
+  nonce      String    @unique
+  state      String    @unique
+  platformId String
+  expiresAt  DateTime
+  usedAt     DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([nonce])
+  @@index([state])
+  @@index([expiresAt])
+  @@map("lti_nonces")
+}
+
+//// ======================================
+//// SESSION (active LTI launches)
+//// ======================================
+
+/// Represents an active LTI launch session (user context injected from LMS)
+model LtiSession {
+  id           String     @id @default(cuid())
+  platformId   String
+  deploymentId String?
+  version      LtiVersion
+
+  // User context
+  userId String? /// External user ID from the LMS
+  email  String?
+  name   String?
+  roles  LtiRole[]
+
+  // Course context
+  contextId    String? /// LMS course / context ID
+  contextLabel String?
+  contextTitle String?
+
+  // Resource link
+  resourceLinkId    String? /// Unique per placement in LMS
+  resourceLinkTitle String?
+
+  // LTI 1.3 specific
+  sub      String? /// JWT subject (LMS user identifier)
+  nonce    String?
+  issuedAt DateTime?
+
+  // Internal mapping — link to PITCH simulation / session
+  pitchSessionId String?
+  pitchUserId    String?
+
+  // Advantage service endpoints (from launch claims)
+  deepLinkReturnUrl    String?
+  namesRolesServiceUrl String?
+  lineItemsServiceUrl  String?
+
+  platform  LtiPlatform   @relation(fields: [platformId], references: [id])
+  lineItems LtiLineItem[]
+
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  LtiDeployment   LtiDeployment? @relation(fields: [ltiDeploymentId], references: [id])
+  ltiDeploymentId String?
+
+  @@index([platformId, contextId])
+  @@index([userId, platformId])
+  @@index([pitchSessionId])
+  @@map("lti_sessions")
+}
+
+//// ======================================
+//// ASSIGNMENT & GRADES (AGS)
+//// ======================================
+
+/// A gradebook column in the LMS (LTI Advantage AGS line item)
+model LtiLineItem {
+  id           String  @id @default(cuid())
+  sessionId    String
+  label        String /// Column label in LMS gradebook
+  scoreMaximum Float
+  resourceId   String? /// Platform's resource identifier
+  tag          String? /// Optional categorisation tag
+  lineItemUrl  String? /// The URL on the LMS for this line item
+
+  session LtiSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  scores  LtiScore[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([sessionId])
+  @@map("lti_line_items")
+}
+
+/// A grade submission for a learner on a line item
+model LtiScore {
+  id               String           @id @default(cuid())
+  lineItemId       String
+  userId           String /// LMS user identifier (sub)
+  scoreGiven       Float?
+  scoreMaximum     Float
+  comment          String?
+  activityProgress ActivityProgress @default(INITIALIZED)
+  gradingProgress  GradingProgress  @default(NOT_READY)
+  submittedAt      DateTime?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  lineItem LtiLineItem @relation(fields: [lineItemId], references: [id], onDelete: Cascade)
+
+  @@unique([lineItemId, userId])
+  @@index([lineItemId])
+  @@index([userId])
+  @@map("lti_scores")
+}
