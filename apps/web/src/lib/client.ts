@@ -705,6 +705,23 @@ export const api = {
     getById: (id: string) => apiRequest<any>(`/simulation/personas/${id}`),
   },
 
+  analytics: {
+    getDashboard: (userId: string) =>
+      apiRequest<{
+        sessions: Array<{
+          id: string
+          name: string | null
+          type: string
+          status: string
+          createdAt: string
+          endedAt: string | null
+          runId: string | null
+          totalScore: number | null
+          scoreBreakdown: Record<string, number> | null
+        }>
+      }>(`/simulation/analytics/dashboard?userId=${encodeURIComponent(userId)}`),
+  },
+
   llm: {
     getProviders: () =>
       apiRequest<{

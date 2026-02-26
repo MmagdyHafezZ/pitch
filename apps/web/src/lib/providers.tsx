@@ -21,6 +21,7 @@ import {
   getReadableTextColor,
   isLightColor,
   mixColors,
+  setColorLightness,
 } from '@/lib/colors/contrast'
 
 // Import Mantine CSS
@@ -142,7 +143,17 @@ export function Providers({ children }: ProvidersProps) {
       }
       return light ? color : mixColors(color, '#ffffff', lightRatio)
     }
-    const navBg = adjustForScheme(activeProfile.tokens.navBg, 0.7, 0.65)
+    // In dark mode: keep the nav at its raw dark token (darken only if somehow light).
+    // In light mode: lift the nav's HSL lightness to ~42% so it reads as a bright
+    // medium-tone that shows the profile's hue, rather than the near-black raw token.
+    const rawNavBg = activeProfile.tokens.navBg
+    const navBg = preferDark
+      ? isLightColor(rawNavBg)
+        ? mixColors(rawNavBg, '#000000', 0.7)
+        : rawNavBg
+      : isLightColor(rawNavBg)
+        ? rawNavBg
+        : setColorLightness(rawNavBg, 0.42)
     const navText = getReadableTextColor(navBg)
     const navTextDim = getReadableMutedColor(navBg)
     const surfaceBg = adjustForScheme(activeProfile.tokens.surfaceBg, 0.82, 0.7)

@@ -63,6 +63,14 @@
     "db:migrate:auth": {
       "cache": false,
       "outputs": []
+    },
+    "db:generate:analytics": {
+      "cache": false,
+      "outputs": ["src/microservices/analytics/prisma/generated/**"]
+    },
+    "db:migrate:analytics": {
+      "cache": false,
+      "outputs": []
     }
   }
 }

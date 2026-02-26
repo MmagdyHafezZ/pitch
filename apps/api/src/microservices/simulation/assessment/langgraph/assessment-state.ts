@@ -11,14 +11,20 @@ export interface NormalizedTurn {
   role: string;
   text: string;
   createdAt?: string;
+  iterationId?: string;
+  iterationNumber?: number;
   isEvaluated: boolean;
 }
 
 export interface RawTurn {
   id: string;
+  iterationId?: string | null;
   role?: TurnRole | null;
   text?: string | null;
   createdAt?: Date | null;
+  iteration?: {
+    iterationNumber?: number | null;
+  } | null;
   messages?: Array<{
     content?: string | null;
   }> | null;
@@ -78,6 +84,15 @@ export interface AssessmentReportPayload {
     citations?: string[];
     reasonSummary?: string;
     isFinal?: boolean;
+  }>;
+  conversationHistory?: Array<{
+    turnId: string;
+    role?: string;
+    text?: string;
+    createdAt?: string;
+    iterationId?: string;
+    iterationNumber?: number;
+    isEvaluated?: boolean;
   }>;
   chunks?: Array<{
     chunkIndex: number;

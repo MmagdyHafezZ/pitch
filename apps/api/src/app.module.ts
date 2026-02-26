@@ -9,6 +9,7 @@ import { SimulationModule } from '@microservices/simulation/simulation.module';
 import { AnalyticsModule } from '@microservices/analytics/analytics.module';
 import { CrmModule } from '@microservices/crm/crm.module';
 import { S3Module } from '@microservices/s3/s3.module';
+import { LtiModule } from '@microservices/lti/lti.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { S3Module } from '@microservices/s3/s3.module';
     AnalyticsModule,
     S3Module,
     CrmModule,
+    LtiModule,
   ],
   controllers: [AppController],
   providers: [AppService],

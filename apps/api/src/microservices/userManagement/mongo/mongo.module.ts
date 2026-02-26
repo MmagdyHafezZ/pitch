@@ -10,11 +10,27 @@ import { CoinBalance, CoinBalanceSchema } from './schemas/coin-balance.schema';
   imports: [
     MongooseModule.forRootAsync({
       inject: [ConfigService],
-      useFactory: (cfg: ConfigService) => ({
-        uri: cfg.get<string>('MONGODB_USERMANAGEMENT_URI'),
-        dbName: cfg.get<string>('MONGODB_USERMANAGEMENT_NAME') ?? undefined,
-        autoIndex: cfg.get<string>('NODE_ENV') !== 'production',
-      }),
+      useFactory: (cfg: ConfigService) => {
+        const uri =
+          cfg.get<string>('MONGODB_USERMANAGEMENT_URI') ??
+          cfg.get<string>('USER_MANAGEMENT_MONGODB_URL') ??
+          cfg.get<string>('MONGODB_URL') ??
+          process.env.MONGODB_USERMANAGEMENT_URI ??
+          process.env.USER_MANAGEMENT_MONGODB_URL ??
+          process.env.MONGODB_URL;
+
+        if (!uri) {
+          throw new Error(
+            'MongoDB URI missing. Set one of: MONGODB_USERMANAGEMENT_URI, USER_MANAGEMENT_MONGODB_URL, or MONGODB_URL.',
+          );
+        }
+
+        return {
+          uri,
+          dbName: cfg.get<string>('MONGODB_USERMANAGEMENT_NAME') ?? undefined,
+          autoIndex: cfg.get<string>('NODE_ENV') !== 'production',
+        };
+      },
     }),
     MongooseModule.forFeature([
       { name: CoinLedger.name, schema: CoinLedgerSchema },

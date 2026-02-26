@@ -78,6 +78,42 @@ export class AssessmentGatewayController {
       );
   }
 
+  @Get('assessments/runs/:runId/report')
+  @ApiOperation({ summary: 'Get assessment run report artifact' })
+  @ApiResponse({ status: 200, description: 'Assessment report retrieved' })
+  getRunReport(@Param('runId') runId: string) {
+    return this.simulationService
+      .send(SIMULATION_SERVICE_PATTERNS.ASSESSMENT_REPORT, { runId })
+      .pipe(
+        timeout(10000),
+        catchError((err: unknown) => {
+          const error = normalizeError(err);
+          const message = error.message ?? 'Failed to fetch assessment report';
+          const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
+          return throwError(() => new HttpException(message, status));
+        }),
+      );
+  }
+
+  @Get('analytics/dashboard')
+  @ApiOperation({ summary: 'Get aggregated analytics dashboard for a user' })
+  @ApiQuery({ name: 'userId', required: true, type: String })
+  @ApiResponse({ status: 200, description: 'Dashboard data returned' })
+  getDashboard(@Query('userId') userId: string) {
+    return this.simulationService
+      .send(SIMULATION_SERVICE_PATTERNS.ANALYTICS_DASHBOARD, { userId })
+      .pipe(
+        timeout(15000),
+        catchError((err: unknown) => {
+          const error = normalizeError(err);
+          const message =
+            error.message ?? 'Failed to fetch analytics dashboard';
+          const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
+          return throwError(() => new HttpException(message, status));
+        }),
+      );
+  }
+
   @Get('sessions/:id/assessments/latest')
   @ApiOperation({ summary: 'Get latest completed assessment for a session' })
   @ApiQuery({ name: 'iterationId', required: false, type: String })

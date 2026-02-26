@@ -197,6 +197,14 @@ export const mixColors = (colorA: string, colorB: string, ratio = 0.5) => {
   })
 }
 
+/** Returns the color with its HSL lightness set to exactly `targetL` (0–1), preserving hue and saturation. */
+export const setColorLightness = (color: string, targetL: number): string => {
+  const rgb = parseColorToRgb(color)
+  if (!rgb) return color
+  const { h, s } = rgbToHsl(rgb)
+  return rgbToHex(hslToRgb(h, s, clamp(targetL)))
+}
+
 export const isLightColor = (background: string) => {
   const rgb = parseColorToRgb(background)
   if (!rgb) {

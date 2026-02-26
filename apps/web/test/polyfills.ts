@@ -1,5 +1,5 @@
 import { TextDecoder, TextEncoder } from 'util'
-import { TransformStream } from 'stream/web'
+import { ReadableStream, TransformStream, WritableStream } from 'stream/web'
 
 if (typeof globalThis.Response === 'undefined') {
   // Defer to undici when running inside a Node-based Jest environment
@@ -45,4 +45,14 @@ if (!globalThis.TextDecoder) {
 if (!globalThis.TransformStream) {
   // @ts-expect-error - assigning Node TransformStream to global scope for Jest
   globalThis.TransformStream = TransformStream
+}
+
+if (!globalThis.ReadableStream) {
+  // @ts-expect-error - assigning Node ReadableStream to global scope for Jest
+  globalThis.ReadableStream = ReadableStream
+}
+
+if (!globalThis.WritableStream) {
+  // @ts-expect-error - assigning Node WritableStream to global scope for Jest
+  globalThis.WritableStream = WritableStream
 }

@@ -96,18 +96,24 @@ services:
       timeout: 5s
       retries: 5
 
-  mongo-user:
-    image: mongo:7
-    container_name: pitch-mongo-local
-    restart: unless-stopped
-    environment:
-      MONGO_INITDB_ROOT_USERNAME: root
-      MONGO_INITDB_ROOT_PASSWORD: password
-    ports:
-      - "27018:27017"
-    volumes:
-      - pitch_mongo_data:/data/db
-      - ./mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
+  # postgres-lti:
+  #   image: postgres:16-alpine
+  #   container_name: pitch-postgres-lti-local
+  #   environment:
+  #     POSTGRES_DB: pitch_lti
+  #     POSTGRES_USER: ${POSTGRES_USER:-pitch_user}
+  #     POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pitch_admin}
+  #   ports:
+  #     - "5438:5432"
+  #   volumes:
+  #     - postgres_lti_data_local:/var/lib/postgresql/data
+  #   networks:
+  #     - pitch-network
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
 
   redis:
     image: redis:7-alpine
@@ -178,8 +184,8 @@ volumes:
   postgres_support_data_local:
   postgres_analytics_data_local:
   postgres_crm_data_local:
+  postgres_lti_data_local:
   redis_data_local:
-  pitch_mongo_data:
   mongodb_data_local:
   mongodb_config_local:
   rabbitmq_data_local:

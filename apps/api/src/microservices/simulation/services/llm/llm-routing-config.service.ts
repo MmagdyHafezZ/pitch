@@ -48,13 +48,37 @@ const DEFAULT_ROUTING_CONFIG: LLMRoutingConfig = {
   },
 };
 
+/** In-memory TTL cache entry for routing configs */
+type CacheEntry = { config: LLMRoutingConfig; expiresAt: number };
+
+/** Routing config TTL — 60s is safe since config changes are admin-only */
+const CONFIG_CACHE_TTL_MS = 60_000;
+
 @Injectable()
 export class LLMRoutingConfigService {
   private readonly logger = new Logger(LLMRoutingConfigService.name);
+  private readonly configCache = new Map<string, CacheEntry>();
 
   constructor(private readonly prisma: SimulationPrismaService) {}
 
   async getActiveConfig(lookup: RoutingLookup = {}): Promise<LLMRoutingConfig> {
+    const cacheKey = `${lookup.scope ?? 'auto'}:${lookup.orgId ?? ''}:${lookup.userId ?? ''}`;
+    const cached = this.configCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.config;
+    }
+
+    const config = await this.fetchActiveConfig(lookup);
+    this.configCache.set(cacheKey, {
+      config,
+      expiresAt: Date.now() + CONFIG_CACHE_TTL_MS,
+    });
+    return config;
+  }
+
+  private async fetchActiveConfig(
+    lookup: RoutingLookup,
+  ): Promise<LLMRoutingConfig> {
     const { scope, orgId, userId } = lookup;
     const scopedUserId = scope === 'user' ? userId : undefined;
 
@@ -79,6 +103,16 @@ export class LLMRoutingConfigService {
 
     const globalConfig = await this.findByScope('global');
     return this.normalizeConfig(globalConfig?.config ?? DEFAULT_ROUTING_CONFIG);
+  }
+
+  /** Invalidate cached config for a scope — call after any upsert */
+  invalidateCache(scope?: RoutingScope, orgId?: string, userId?: string): void {
+    const prefix = `${scope ?? 'auto'}:${orgId ?? ''}:${userId ?? ''}`;
+    for (const key of this.configCache.keys()) {
+      if (key.startsWith(prefix.slice(0, prefix.length))) {
+        this.configCache.delete(key);
+      }
+    }
   }
 
   async upsertConfig(payload: RoutingUpsert): Promise<LLMRoutingConfig> {
@@ -119,6 +153,7 @@ export class LLMRoutingConfigService {
       });
     }
 
+    this.invalidateCache(scope, orgId ?? undefined, userId ?? undefined);
     return config;
   }
 

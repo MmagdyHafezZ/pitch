@@ -17,6 +17,7 @@ import {
   Divider,
   Indicator,
   Loader,
+  useMantineColorScheme,
 } from '@mantine/core'
 import { IconSearch, IconBell, IconUser } from '@tabler/icons-react'
 import dayjs from 'dayjs'
@@ -91,6 +92,9 @@ function ActionBar({
     onTabChange?.(tab)
   }
 
+  const { colorScheme } = useMantineColorScheme()
+  const isDark = colorScheme === 'dark'
+
   const tabs =
     availableTabs.length > 0 ? (
       <Box
@@ -99,14 +103,17 @@ function ActionBar({
           display: 'grid',
           gridTemplateColumns: `repeat(${availableTabs.length}, minmax(0, 1fr))`,
           alignItems: 'center',
-          maxWidth: rem(300),
+          maxWidth: rem(280),
           marginRight: 'auto',
           marginLeft: 'auto',
-          gap: rem(6),
-          padding: rem(4),
+          gap: rem(3),
+          padding: rem(3),
           borderRadius: rem(999),
-          background: 'var(--pitch-nav-accent-soft)',
-          border: '1px solid var(--pitch-nav-text-dim)',
+          background: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.08)',
+          boxShadow: isDark
+            ? '0 0 0 1px rgba(255,255,255,0.08) inset'
+            : '0 0 0 1px rgba(0,0,0,0.10) inset',
+          backdropFilter: 'blur(12px)',
           width: '100%',
         }}
       >
@@ -119,17 +126,33 @@ function ActionBar({
               aria-selected={isActive}
               onClick={() => handleTabSelect(tab)}
               style={{
-                padding: `${rem(isCompact ? 6 : 8)} ${rem(isCompact ? 10 : 14)}`,
+                padding: `${rem(isCompact ? 5 : 7)} ${rem(isCompact ? 10 : 14)}`,
                 borderRadius: rem(999),
-                background: isActive ? 'var(--pitch-accent-strong)' : 'transparent',
-                color: isActive ? 'var(--mantine-color-white)' : 'var(--pitch-nav-text-dim)',
-                fontWeight: isActive ? 700 : 600,
-                fontSize: isCompact ? rem(12) : rem(13),
+                background: isActive
+                  ? isDark
+                    ? 'rgba(255,255,255,0.14)'
+                    : 'rgba(255,255,255,0.90)'
+                  : 'transparent',
+                boxShadow: isActive
+                  ? isDark
+                    ? '0 1px 3px rgba(0,0,0,0.4)'
+                    : '0 1px 4px rgba(0,0,0,0.12), 0 0 0 0.5px rgba(0,0,0,0.06)'
+                  : 'none',
+                color: isActive
+                  ? isDark
+                    ? 'var(--mantine-color-white)'
+                    : 'var(--pitch-nav-bg, #1a1b2e)'
+                  : isDark
+                    ? 'rgba(255,255,255,0.45)'
+                    : 'rgba(0,0,0,0.45)',
+                fontWeight: isActive ? 700 : 500,
+                fontSize: isCompact ? rem(11) : rem(12.5),
                 lineHeight: 1,
+                letterSpacing: isActive ? '-0.01em' : '0',
                 whiteSpace: 'nowrap',
                 width: '100%',
                 textAlign: 'center',
-                transition: 'background 150ms ease, color 150ms ease',
+                transition: 'all 160ms cubic-bezier(0.25,0.46,0.45,0.94)',
               }}
             >
               {tab}
@@ -266,8 +289,9 @@ function ActionConfig({
     case 'Teams':
       return (
         <ActionBar
-          enableSearch={false}
+          enableSearch={true}
           searchPlaceholder="Search teams"
+          availableTabs={['All', 'My Teams']}
           selectedTab={selectedTab}
           onTabChange={onTabChange}
           value={value}
@@ -278,13 +302,10 @@ function ActionConfig({
     case 'Analytics':
       return (
         <ActionBar
-          enableSearch={true}
-          searchPlaceholder="Search analytics"
-          availableTabs={['Overview', 'Details']}
+          enableSearch={false}
+          availableTabs={['Personal', 'Team']}
           selectedTab={selectedTab}
           onTabChange={onTabChange}
-          value={value}
-          onChange={onChange}
           isCompact={isCompact}
         />
       )
@@ -495,17 +516,15 @@ export function AppTopBar({
       >
         <Group justify="space-between" align="center" w="100%" wrap="nowrap">
           <Group align="center" style={{ minWidth: 0 }}>
-            {currentPage && (
-              <Text
-                px={rem(isMobile ? 16 : 32)}
-                size={rem(isMobile ? 22 : 28)}
-                fw={700}
-                c="var(--pitch-accent-strong)"
-                style={{ whiteSpace: 'nowrap' }}
-              >
-                {currentPage}
-              </Text>
-            )}
+            <Text
+              px={rem(isMobile ? 16 : 32)}
+              size={rem(isMobile ? 22 : 28)}
+              fw={700}
+              c="var(--pitch-accent-strong)"
+              style={{ whiteSpace: 'nowrap' }}
+            >
+              P.I.T.C.H.
+            </Text>
           </Group>
 
           {showActionArea && <Box style={{ flex: 1, minWidth: 0 }}>{actionArea}</Box>}

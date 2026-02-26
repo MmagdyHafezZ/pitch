@@ -268,7 +268,7 @@ export class StreamingConversationService {
       const messages: LLMMessageDto[] = [
         {
           role: 'system',
-          content: await this.buildSystemPrompt(session),
+          content: this.buildSystemPrompt(session),
         },
         ...history,
         {
@@ -498,18 +498,21 @@ export class StreamingConversationService {
   private async getSessionCached(
     sessionId: string,
   ): Promise<SessionWithRelations | null> {
-    // Try cache first
-    const cached = await this.redis.getSessionCache(sessionId);
-
+    const cached =
+      await this.redis.getSessionFull<SessionWithRelations>(sessionId);
     if (cached) {
-      this.logger.debug(`Session cache hit: ${sessionId}`);
+      this.logger.debug(`Session full cache hit: ${sessionId}`);
+      return cached;
     }
 
-    // Fetch from database
     const session = await this.prisma.client.session.findUnique({
       where: { id: sessionId },
       include: { scenario: true, persona: true },
     });
+
+    if (session) {
+      void this.redis.setSessionFull(sessionId, session).catch(() => {});
+    }
 
     return session;
   }
@@ -518,7 +521,6 @@ export class StreamingConversationService {
     sessionId: string,
     userId: string,
   ): Promise<LLMMessageDto[]> {
-    // Fetch from database (simplified for now - can add caching later)
     const sessionMember = await this.prisma.client.sessionMember.findUnique({
       where: { sessionId_userId: { sessionId, userId } },
     });
@@ -537,10 +539,20 @@ export class StreamingConversationService {
       return [];
     }
 
+    // Try Redis cache first
+    const cached = await this.redis.getIterationHistory(iteration.id);
+    if (cached) {
+      this.logger.debug(`History cache hit: ${iteration.id}`);
+      return cached.map((m) => ({
+        role: m.role as LLMMessageDto['role'],
+        content: m.content,
+      }));
+    }
+
     const messages = await this.prisma.client.message.findMany({
       where: { iterationId: iteration.id },
       orderBy: { createdAt: 'asc' },
-      take: 20, // Last 20 messages
+      take: 20,
       select: { role: true, content: true },
     });
 
@@ -551,12 +563,12 @@ export class StreamingConversationService {
         content: msg.content!,
       }));
 
+    void this.redis.setIterationHistory(iteration.id, history).catch(() => {});
+
     return history;
   }
 
-  private async buildSystemPrompt(
-    session: SessionWithRelations,
-  ): Promise<string> {
+  private buildSystemPrompt(session: SessionWithRelations): string {
     const sessionConfig = toRecord(session.sessionConfig) as SessionConfig;
     const scenarioConfig = session.scenario?.config
       ? toRecord(session.scenario.config)

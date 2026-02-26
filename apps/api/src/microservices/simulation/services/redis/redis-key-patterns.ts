@@ -56,6 +56,15 @@ export const RedisKeys = {
   llmPricing: (provider: string) => `sim:llm:pricing:${provider}`,
   llmCatalog: (provider: string) => `sim:llm:catalog:${provider}`,
   llmAuthToken: (provider: string) => `sim:llm:auth:${provider}`,
+
+  /** Full session with relations (scenario + persona) */
+  sessionFull: (sessionId: string) => `sim:session:${sessionId}:full`,
+  /** Iteration message history */
+  iterationHistory: (iterationId: string) =>
+    `sim:iteration:${iterationId}:history`,
+  /** Maps sessionId+userId → { sessionMemberId, iterationId, lastTurnOrder } */
+  sessionMemberIteration: (sessionId: string, userId: string) =>
+    `sim:smiter:${sessionId}:${userId}`,
 } as const;
 
 /**
@@ -214,6 +223,23 @@ export interface IVADState {
 }
 
 /**
+ * Serializable conversation message for Redis history cache
+ */
+export interface IConversationMessage {
+  role: string;
+  content: string;
+}
+
+/**
+ * Maps a (sessionId, userId) pair to the current active sessionMember + iteration IDs
+ */
+export interface ISessionMemberIteration {
+  sessionMemberId: string;
+  iterationId: string;
+  lastTurnOrder: number;
+}
+
+/**
  * Redis TTL Constants (in seconds)
  */
 export const RedisTTL = {
@@ -235,4 +261,10 @@ export const RedisTTL = {
   VAD_STATE: 5 * 60,
   LLM_PRICING: 6 * 60 * 60,
   LLM_MODEL_CATALOG: 6 * 60 * 60,
+  /** Full session with persona/scenario relations — 10min; refreshed on session mutations */
+  SESSION_FULL: 10 * 60,
+  /** Iteration message history — 30min; evicted on new turn writes */
+  ITERATION_HISTORY: 30 * 60,
+  /** sessionId+userId → sessionMemberId + iterationId — 30min */
+  SESSION_MEMBER_ITER: 30 * 60,
 } as const;

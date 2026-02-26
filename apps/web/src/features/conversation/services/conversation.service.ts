@@ -7,8 +7,10 @@ import {
   ConversationStreamDeltaPayload,
   ConversationStreamCompletedPayload,
   ConversationAudioReadyPayload,
+  ConversationAudioChunkPayload,
   ConversationErrorPayload,
 } from '../types/conversation.types'
+import type { VisualState } from '../types/visual-state.types'
 
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL || 'http://localhost:8000'
 
@@ -76,6 +78,16 @@ export class ConversationService {
     return requestId
   }
 
+  /**
+   * Send a semantic VisualState snapshot to the server.
+   * The gateway stores it in memory and injects it into the next
+   * CONVERSATION_START prompt — no blocking, no extra RTT.
+   */
+  sendVisualState(sessionId: string, state: VisualState) {
+    if (!this.socket?.connected) return
+    this.socket.emit(WsMessageType.CONVERSATION_VISUAL_STATE, { sessionId, state })
+  }
+
   cancelConversation(sessionId: string, requestId?: string) {
     if (!this.socket?.connected) {
       return
@@ -116,6 +128,23 @@ export class ConversationService {
     if (!this.socket) return
 
     this.socket.on(WsMessageType.CONVERSATION_AUDIO_READY, callback)
+  }
+
+  onConversationAudioChunk(
+    callback: (data: {
+      requestId: string
+      sessionId: string
+      payload: ConversationAudioChunkPayload
+    }) => void
+  ): () => void {
+    if (!this.socket) return () => {}
+    this.socket.on(WsMessageType.CONVERSATION_AUDIO_CHUNK, callback)
+    return () => this.socket?.off(WsMessageType.CONVERSATION_AUDIO_CHUNK, callback)
+  }
+
+  offConversationAudioChunk() {
+    if (!this.socket) return
+    this.socket.off(WsMessageType.CONVERSATION_AUDIO_CHUNK)
   }
 
   onConversationError(callback: (data: WsEnvelope<ConversationErrorPayload>) => void) {

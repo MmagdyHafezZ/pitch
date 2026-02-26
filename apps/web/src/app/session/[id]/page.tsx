@@ -27,7 +27,12 @@ import {
   IconSend,
 } from '@tabler/icons-react'
 import { useRouter, useParams } from 'next/navigation'
-import { useConversation } from '@/features/conversation'
+import {
+  useConversation,
+  useVisualState,
+  VisualStateOverlay,
+  CameraEngagementIndicator,
+} from '@/features/conversation'
 import { useSpeechToText } from '@/features/stt'
 import { api } from '@/lib/client'
 import { notifications } from '@mantine/notifications'
@@ -38,7 +43,7 @@ export default function LiveSessionPage() {
   const router = useRouter()
   const params = useParams()
   const sessionId = params.id as string
-  const [time, setTime] = useState(615)
+  const [time, setTime] = useState(0)
   const [textInput, setTextInput] = useState('')
   const [hints, setHints] = useState<string[]>([])
   const [timelineStages, setTimelineStages] = useState<
@@ -55,6 +60,8 @@ export default function LiveSessionPage() {
   const [timelineError, setTimelineError] = useState<string | null>(null)
   const [sessionType, setSessionType] = useState<SessionType | null>(null)
   const [sessionStatus, setSessionStatus] = useState<string | null>(null)
+  const [sessionName, setSessionName] = useState<string>('')
+  const [personaName, setPersonaName] = useState<string | null>(null)
   const [hintsEnabled, setHintsEnabled] = useState(false)
   const [timelineEnabled, setTimelineEnabled] = useState(false)
   const [callStarted, setCallStarted] = useState(false)
@@ -77,7 +84,12 @@ export default function LiveSessionPage() {
   const assistantStartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const cameraStreamRef = useRef<MediaStream | null>(null)
-  const speechFinalizeDelayMs = sessionType === 'voice' || sessionType === 'video' ? 700 : 1500
+  // Hidden video fed to MediaPipe — for video sessions it shares the same stream;
+  // for all other session types a separate pose-only camera stream is used.
+  const poseVideoRef = useRef<HTMLVideoElement | null>(null)
+  const poseCameraStreamRef = useRef<MediaStream | null>(null)
+  const [visualEnabled, setVisualEnabled] = useState(true)
+  const speechFinalizeDelayMs = sessionType === 'voice' || sessionType === 'video' ? 250 : 1500
 
   const scheduleIdleHints = useCallback(
     (delayMs = 20000) => {
@@ -136,6 +148,15 @@ export default function LiveSessionPage() {
     resetTranscript()
   }
 
+  const handleSpeechEnd = useCallback(() => {
+    // speechend fires when the user stops speaking — accelerate commit if there's buffered content
+    if (speechFinalizeTimerRef.current && speechBufferRef.current.trim()) {
+      clearTimeout(speechFinalizeTimerRef.current)
+      speechFinalizeTimerRef.current = setTimeout(flushSpeechBuffer, 80)
+    }
+    // If no buffer yet, speechend fired before isFinal — the normal isFinal→250ms path handles it
+  }, [flushSpeechBuffer])
+
   const {
     isConnected,
     isConnecting,
@@ -171,6 +192,7 @@ export default function LiveSessionPage() {
   } = useSpeechToText({
     continuous: true,
     interimResults: true,
+    onSpeechEnd: handleSpeechEnd,
     onResult: (text, isFinal) => {
       if (sessionStatus === 'ended') return
       if (!isFinal) return
@@ -202,6 +224,18 @@ export default function LiveSessionPage() {
     },
   })
 
+  // For video sessions, reuse the already-playing visible video directly — no stream sync needed.
+  // For all other session types, use the hidden poseVideoRef which gets its own camera stream.
+  const poseActiveRef = sessionType === 'video' ? videoRef : poseVideoRef
+
+  const { isReady: poseIsReady, currentState: visualState } = useVisualState({
+    sessionId,
+    videoRef: poseActiveRef,
+    enabled: visualEnabled && isConnected,
+    sendIntervalMs: 5000,
+    onUserAbsent: () => {},
+  })
+
   useEffect(() => {
     const interval = setInterval(() => {
       setTime((prev) => prev + 1)
@@ -219,6 +253,8 @@ export default function LiveSessionPage() {
         setIsMultiTurn(Boolean(config.multiTurnEnabled))
         setSessionType(session?.type ?? null)
         setSessionStatus(session?.status ?? null)
+        setSessionName((session as any)?.name ?? (session as any)?.scenario?.name ?? '')
+        setPersonaName((session as any)?.persona?.name ?? null)
         const resolvedPhoneNumber =
           typeof config.phoneNumber === 'string'
             ? config.phoneNumber
@@ -291,6 +327,51 @@ export default function LiveSessionPage() {
       }
     }
   }, [sessionType])
+
+  // Pose-only camera for non-video session types.
+  // For video sessions, useVisualState reads the visible videoRef directly (no hidden stream needed).
+  // sessionType === null means it hasn't loaded yet — wait before requesting camera.
+  useEffect(() => {
+    if (sessionType === 'video' || sessionType === null) return
+
+    if (!visualEnabled || !isConnected) {
+      poseCameraStreamRef.current?.getTracks().forEach((t) => t.stop())
+      poseCameraStreamRef.current = null
+      if (poseVideoRef.current) poseVideoRef.current.srcObject = null
+      return
+    }
+
+    let cancelled = false
+    const startPoseCamera = async () => {
+      if (!navigator.mediaDevices?.getUserMedia) return
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' },
+          audio: false,
+        })
+        if (cancelled) {
+          stream.getTracks().forEach((t) => t.stop())
+          return
+        }
+        poseCameraStreamRef.current = stream
+        if (poseVideoRef.current) {
+          poseVideoRef.current.srcObject = stream
+          poseVideoRef.current.play().catch(() => {})
+        }
+      } catch {
+        // Camera permission denied — visual state won't be sent; conversation still works normally
+      }
+    }
+
+    void startPoseCamera()
+
+    return () => {
+      cancelled = true
+      poseCameraStreamRef.current?.getTracks().forEach((t) => t.stop())
+      poseCameraStreamRef.current = null
+      if (poseVideoRef.current) poseVideoRef.current.srcObject = null
+    }
+  }, [visualEnabled, isConnected, sessionType])
 
   const handleStartPhoneCall = async () => {
     if (!sessionId) return
@@ -494,6 +575,8 @@ export default function LiveSessionPage() {
       if (assistantStartTimerRef.current) {
         clearTimeout(assistantStartTimerRef.current)
       }
+      poseCameraStreamRef.current?.getTracks().forEach((t) => t.stop())
+      poseCameraStreamRef.current = null
     }
   }, [])
 
@@ -608,6 +691,23 @@ export default function LiveSessionPage() {
   const isTextSession = sessionType === 'text'
   const isVideoSession = sessionType === 'video'
   const sttCommitProgress = Math.min(1, Math.max(0, sttCommitRemainingMs / speechFinalizeDelayMs))
+
+  const todayStr = new Date().toLocaleDateString('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  })
+
+  // AI state label shown in the voice panel
+  const aiStateLabel = isAudioPlaying
+    ? 'Speaking'
+    : isProcessing
+      ? 'Thinking...'
+      : isListening
+        ? 'Listening'
+        : ''
+  const aiStateColor = isAudioPlaying ? 'green' : isProcessing ? 'blue' : 'dimmed'
   const assistantBubbleBackground =
     colorScheme === 'dark' ? 'var(--mantine-color-dark-6)' : 'var(--mantine-color-gray-1)'
   const assistantBubbleTextColor =
@@ -677,9 +777,16 @@ export default function LiveSessionPage() {
         }}
       >
         <Group justify="space-between">
-          <Text fw={600} size="lg" c="white">
-            Goal: Improve product pitch
-          </Text>
+          <Stack gap={2}>
+            <Text fw={600} size="lg" c="white">
+              {sessionName || 'Live Session'}
+            </Text>
+            {personaName && (
+              <Text size="xs" c="dimmed">
+                with {personaName}
+              </Text>
+            )}
+          </Stack>
           <Group gap="xl">
             <Text size="xl" fw={700} c="white">
               {formatTime(time)}
@@ -698,8 +805,7 @@ export default function LiveSessionPage() {
                 Recording
               </Text>
             </Group>
-            <Text c="dimmed">Wednesday</Text>
-            <Text c="dimmed">Oct 8, 2025</Text>
+            <Text c="dimmed">{todayStr}</Text>
             <Group gap="xs">
               {isConnecting && <Loader size="sm" color="white" />}
               {conversationError && (
@@ -717,6 +823,11 @@ export default function LiveSessionPage() {
                   }}
                 />
               )}
+              <CameraEngagementIndicator
+                isActive={visualEnabled}
+                isReady={poseIsReady}
+                onToggle={() => setVisualEnabled((v) => !v)}
+              />
               {sessionType === 'phone' && sessionStatus !== 'ended' && !callStarted && (
                 <Button
                   size="xs"
@@ -960,13 +1071,20 @@ export default function LiveSessionPage() {
                           {cameraError}
                         </Text>
                       ) : (
-                        <video
-                          ref={videoRef}
-                          autoPlay
-                          playsInline
-                          muted
-                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                        />
+                        <Box style={{ position: 'relative', width: '100%', height: '100%' }}>
+                          <video
+                            ref={videoRef}
+                            autoPlay
+                            playsInline
+                            muted
+                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                          />
+                          <VisualStateOverlay
+                            visualState={visualState}
+                            isReady={poseIsReady}
+                            visible={process.env.NODE_ENV === 'development'}
+                          />
+                        </Box>
                       )}
                     </Box>
                   ) : (
@@ -1008,6 +1126,11 @@ export default function LiveSessionPage() {
                     </Box>
                   )}
                 </Box>
+
+                {/* AI state indicator */}
+                <Text ta="center" c={aiStateColor} fw={500} size="sm" style={{ minHeight: 20 }}>
+                  {aiStateLabel}
+                </Text>
 
                 {/* Control Buttons */}
                 <Group justify="center" gap="xl">
@@ -1351,6 +1474,28 @@ export default function LiveSessionPage() {
           </Box>
         )}
       </Box>
+
+      {/* Hidden MediaPipe pose video — used for non-video sessions only.
+          Video sessions read the visible videoRef directly (no stream sync required).
+          Must stay within the viewport (opacity:0.001 not display:none) so the
+          browser scheduler doesn't throttle its frame callbacks. */}
+      <video
+        ref={poseVideoRef}
+        autoPlay
+        playsInline
+        muted
+        aria-hidden="true"
+        style={{
+          position: 'fixed',
+          bottom: 0,
+          right: 0,
+          width: 160,
+          height: 120,
+          opacity: 0.001,
+          pointerEvents: 'none',
+          zIndex: -1,
+        }}
+      />
 
       <style jsx global>{`
         @keyframes pulse {

@@ -1,0 +1,17 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "baseUrl": "./src",
+    "diagnostics": true,
+    "extendedDiagnostics": true,
+    "paths": {
+      "@pitch/shared/*": ["../../packages/shared/src/*"],
+      "@pitch/shared-backend": ["../../packages/shared-backend/src"],
+      "@pitch/shared-backend/*": ["../../packages/shared-backend/src/*"],
+      "@analytics/*": ["./*"]
+    }
+  },
+  "exclude": ["node_modules", "test", "dist", "**/*spec.ts"]
+}

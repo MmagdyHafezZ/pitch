@@ -52,6 +52,33 @@ export const AUTH_WHITELIST_ROUTES: WhitelistRoute[] = [
     path: '/api/v1/health',
     description: 'API health check endpoint',
   },
+
+  // ── LTI endpoints (authenticated by LTI/OAuth, not JWT) ───────────────────
+  {
+    method: 'POST',
+    path: '/api/v1/lti/v1.1/launch',
+    description: 'LTI 1.1 launch (OAuth HMAC-SHA1 signed)',
+  },
+  {
+    method: 'GET',
+    path: '/api/v1/lti/v1.3/oidc/login',
+    description: 'LTI 1.3 OIDC login initiation (GET)',
+  },
+  {
+    method: 'POST',
+    path: '/api/v1/lti/v1.3/oidc/login',
+    description: 'LTI 1.3 OIDC login initiation (POST)',
+  },
+  {
+    method: 'POST',
+    path: '/api/v1/lti/v1.3/launch',
+    description: 'LTI 1.3 launch (id_token form POST from LMS)',
+  },
+  {
+    method: 'GET',
+    path: '/api/v1/lti/v1.3/jwks',
+    description: "Tool's public JWKS for LMS signature verification",
+  },
 ];
 
 /**

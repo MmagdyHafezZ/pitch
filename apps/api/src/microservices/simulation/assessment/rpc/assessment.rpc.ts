@@ -33,6 +33,26 @@ export class AssessmentRpcController {
     }
   }
 
+  @MessagePattern(SIMULATION_SERVICE_PATTERNS.ASSESSMENT_REPORT)
+  async getReport(@Payload() payload: { runId: string }) {
+    try {
+      return await this.assessmentService.getReport(payload.runId);
+    } catch (error) {
+      this.logger.error('RPC assessment report failed', error);
+      throw toRpcException(error);
+    }
+  }
+
+  @MessagePattern(SIMULATION_SERVICE_PATTERNS.ANALYTICS_DASHBOARD)
+  async getDashboard(@Payload() payload: { userId: string }) {
+    try {
+      return await this.assessmentService.getDashboard(payload.userId);
+    } catch (error) {
+      this.logger.error('RPC analytics dashboard failed', error);
+      throw toRpcException(error);
+    }
+  }
+
   @MessagePattern(SIMULATION_SERVICE_PATTERNS.ASSESSMENT_LATEST)
   async getLatest(
     @Payload()

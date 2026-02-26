@@ -9,11 +9,13 @@ import { AssessmentReportRepository } from './repositories/assessment-report.rep
 import { AssessmentGraphRunner } from './langgraph/assessment-graph';
 import { AssessmentQueuePublisher } from './assessment.queue';
 import { SimulationModule } from '../simulation.module';
+import { RagModule } from '../rag/rag.module';
 import { getQueueOptions, getRabbitMQUrl } from '../config/rabbitmq.config';
 
 @Module({
   imports: [
     forwardRef(() => SimulationModule),
+    forwardRef(() => RagModule),
     ClientsModule.register([
       {
         name: 'SIMULATION_QUEUE_CLIENT',
