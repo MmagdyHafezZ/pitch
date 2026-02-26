@@ -28,6 +28,7 @@ type TeamsState = {
   addMember: (teamId: string, input: AddMemberInput) => Promise<void>
   updateMember: (teamId: string, userId: string, input: UpdateMemberInput) => Promise<void>
   deleteMember: (teamId: string, userId: string) => Promise<void>
+  leaveTeam: (teamId: string, userId: string) => Promise<void>
 
   setActiveTeamId: (id: string | null) => void
   resetStore: () => void
@@ -74,7 +75,7 @@ export const useTeamsStore = create<TeamsState>()(
       },
 
       fetchUserTeams: async () => {
-        const { loading } = get()
+        const { loading, activeTeamId: previousActiveTeamId } = get()
         if (loading) return
 
         // Always refresh from the user-scoped endpoint to avoid stale persisted team lists
@@ -88,10 +89,15 @@ export const useTeamsStore = create<TeamsState>()(
         })
         try {
           const data = await TeamService.getUserTeams()
+          const nextActiveTeam =
+            (previousActiveTeamId ? data.find((team) => team.id === previousActiveTeamId) : null) ??
+            data[0] ??
+            null
+
           set({
             teams: data,
-            activeTeamId: data[0]?.id ?? null,
-            currentTeam: data[0] ?? null,
+            activeTeamId: nextActiveTeam?.id ?? null,
+            currentTeam: nextActiveTeam,
             loading: false,
           })
         } catch (err) {
@@ -264,6 +270,36 @@ export const useTeamsStore = create<TeamsState>()(
           set({
             loading: false,
             error: err instanceof Error ? err.message : 'Failed to remove team member',
+          })
+          throw err
+        }
+      },
+
+      leaveTeam: async (teamId: string, userId: string) => {
+        set({ loading: true, error: null })
+        try {
+          await TeamService.removeMember(teamId, userId)
+
+          set((state) => {
+            const remaining = state.teams.filter((t) => t.id !== teamId)
+            const nextActiveId =
+              state.activeTeamId === teamId ? (remaining[0]?.id ?? null) : state.activeTeamId
+            const nextCurrentTeam =
+              state.currentTeam?.id === teamId
+                ? (remaining.find((t) => t.id === nextActiveId) ?? null)
+                : state.currentTeam
+
+            return {
+              loading: false,
+              teams: remaining,
+              activeTeamId: nextActiveId,
+              currentTeam: nextCurrentTeam,
+            }
+          })
+        } catch (err) {
+          set({
+            loading: false,
+            error: err instanceof Error ? err.message : 'Failed to leave team',
           })
           throw err
         }

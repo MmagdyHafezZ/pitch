@@ -413,6 +413,48 @@ describe('TeamService', () => {
     expect(repo.deleteTeamMember).not.toHaveBeenCalled();
   });
 
+  it('allows a member to leave their own team without authority check', async () => {
+    repo.findMembership.mockResolvedValue({
+      id: 'm-member',
+      teamId: 'team-1',
+      userId: 'member-1',
+      role: 'MEMBER',
+      tokenLimit: 0,
+      invitedByUserId: null,
+      isActive: true,
+    });
+    repo.deleteTeamMember.mockResolvedValue(undefined);
+
+    const result = await service.removeTeamMember(
+      'team-1',
+      'member-1',
+      'member-1',
+    );
+
+    expect(repo.confirmAuthorityOrThrow).not.toHaveBeenCalled();
+    expect(repo.deleteTeamMember).toHaveBeenCalledWith('team-1', 'member-1');
+    expect(result.message).toContain('member-1');
+  });
+
+  it('blocks an owner from leaving their own team before transferring ownership', async () => {
+    repo.findMembership.mockResolvedValue({
+      id: 'm-owner',
+      teamId: 'team-1',
+      userId: 'owner-1',
+      role: 'OWNER',
+      tokenLimit: 0,
+      invitedByUserId: null,
+      isActive: true,
+    });
+
+    await expect(
+      service.removeTeamMember('team-1', 'owner-1', 'owner-1'),
+    ).rejects.toThrow(ConflictException);
+
+    expect(repo.confirmAuthorityOrThrow).not.toHaveBeenCalled();
+    expect(repo.deleteTeamMember).not.toHaveBeenCalled();
+  });
+
   // --------------------
   // findAll / findById / findUserTeams
   // --------------------

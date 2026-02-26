@@ -266,7 +266,7 @@ export class TeamGatewayController {
         timeout(5000),
         catchError((err: unknown) => {
           const error = normalizeError(err);
-          const message = error.message ?? 'Failed to delete team';
+          const message = error.message ?? 'Failed to remove member from team';
           const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
           return throwError(() => new HttpException(message, status));
         }),

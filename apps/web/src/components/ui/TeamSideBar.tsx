@@ -1,16 +1,19 @@
 'use client'
-import { ActionIcon, Box, Stack, Tooltip, Text } from '@mantine/core'
+import { ActionIcon, Box, Menu, Stack, Tooltip, Text } from '@mantine/core'
 import { useRouter } from 'next/navigation'
+import { useRef, useState } from 'react'
 
 export type TeamInfo = {
   id: string
   name: string
+  canLeave?: boolean
 }
 
 type TeamSideBarProps = {
   teams: TeamInfo[]
   activeTeamId: string | null
   onSelectTeam: (id: string) => void
+  onLeaveTeam?: (team: TeamInfo) => void
 }
 
 function deriveInitials(name: string, max = 2): string {
@@ -29,10 +32,13 @@ function deriveInitials(name: string, max = 2): string {
   return letters.slice(0, max)
 }
 
-export function TeamSideBar({ teams, activeTeamId, onSelectTeam }: TeamSideBarProps) {
+export function TeamSideBar({ teams, activeTeamId, onSelectTeam, onLeaveTeam }: TeamSideBarProps) {
   const router = useRouter()
+  const [menuTeamId, setMenuTeamId] = useState<string | null>(null)
+  const allowContextOpenRef = useRef(false)
 
   const handleTeamClick = (id: string) => {
+    setMenuTeamId(null)
     onSelectTeam(id)
   }
 
@@ -79,34 +85,85 @@ export function TeamSideBar({ teams, activeTeamId, onSelectTeam }: TeamSideBarPr
             const isActive = team.id === activeTeamId
 
             return (
-              <Tooltip key={team.id} label={team.name} position="right" withArrow>
-                <ActionIcon
-                  radius="xl"
-                  size="lg"
-                  variant={isActive ? 'filled' : 'light'}
-                  color={isActive ? 'brand' : 'white'}
-                  onClick={() => handleTeamClick(team.id)}
-                  style={{
-                    width: 36,
-                    height: 36,
-                    border: isActive
-                      ? '2px solid var(--pitch-accent-strong)'
-                      : '1px solid var(--pitch-nav-text-dim)',
-                    background: isActive
-                      ? 'var(--pitch-accent-strong)'
-                      : 'var(--pitch-nav-accent-soft)',
-                    color: isActive ? 'var(--pitch-nav-text)' : 'var(--pitch-nav-text-dim)',
-                  }}
-                >
-                  <Text
-                    fw={700}
-                    size="sm"
-                    c={isActive ? 'var(--pitch-nav-text)' : 'var(--pitch-nav-text-dim)'}
-                  >
-                    {deriveInitials(team.name)}
-                  </Text>
-                </ActionIcon>
-              </Tooltip>
+              <Menu
+                key={team.id}
+                opened={menuTeamId === team.id}
+                onChange={(opened) => {
+                  if (!opened) {
+                    setMenuTeamId(null)
+                    allowContextOpenRef.current = false
+                    return
+                  }
+
+                  // Prevent normal left-click on the menu target from opening the team actions menu.
+                  if (!allowContextOpenRef.current) return
+
+                  setMenuTeamId(team.id)
+                  allowContextOpenRef.current = false
+                }}
+                position="right-start"
+                withinPortal
+                shadow="md"
+                closeOnItemClick
+              >
+                <Menu.Target>
+                  <span>
+                    <Tooltip
+                      label={team.canLeave ? `${team.name} (right-click for options)` : team.name}
+                      position="right"
+                      withArrow
+                    >
+                      <ActionIcon
+                        radius="xl"
+                        size="lg"
+                        variant={isActive ? 'filled' : 'light'}
+                        color={isActive ? 'brand' : 'white'}
+                        onClick={() => handleTeamClick(team.id)}
+                        onContextMenu={(event) => {
+                          if (!team.canLeave || !onLeaveTeam) return
+                          event.preventDefault()
+                          allowContextOpenRef.current = true
+                          setMenuTeamId(team.id)
+                        }}
+                        style={{
+                          width: 36,
+                          height: 36,
+                          border: isActive
+                            ? '2px solid var(--pitch-accent-strong)'
+                            : '1px solid var(--pitch-nav-text-dim)',
+                          background: isActive
+                            ? 'var(--pitch-accent-strong)'
+                            : 'var(--pitch-nav-accent-soft)',
+                          color: isActive ? 'var(--pitch-nav-text)' : 'var(--pitch-nav-text-dim)',
+                        }}
+                      >
+                        <Text
+                          fw={700}
+                          size="sm"
+                          c={isActive ? 'var(--pitch-nav-text)' : 'var(--pitch-nav-text-dim)'}
+                        >
+                          {deriveInitials(team.name)}
+                        </Text>
+                      </ActionIcon>
+                    </Tooltip>
+                  </span>
+                </Menu.Target>
+
+                {team.canLeave && onLeaveTeam ? (
+                  <Menu.Dropdown>
+                    <Menu.Label>Team actions</Menu.Label>
+                    <Menu.Item
+                      color="red"
+                      onClick={() => {
+                        setMenuTeamId(null)
+                        onLeaveTeam(team)
+                      }}
+                    >
+                      Leave team
+                    </Menu.Item>
+                  </Menu.Dropdown>
+                ) : null}
+              </Menu>
             )
           })}
 

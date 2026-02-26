@@ -6,6 +6,8 @@ import { TeamSideBar } from '@/components/ui/TeamSideBar'
 import { useAuth } from '@/features/auth'
 import { useTeams } from '@/features/teams/hooks/useTeams'
 import { Box } from '@mantine/core'
+import { notifications } from '@mantine/notifications'
+import { modals } from '@mantine/modals'
 import { useState, useEffect, useMemo, Suspense } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 
@@ -14,7 +16,7 @@ export default function ClientLayerComponent({ children }: { children: React.Rea
     'Home' | 'Sessions' | 'Teams' | 'Analytics' | 'Settings' | 'Team Config'
   >('Home')
   const [selectedDate, setSelectedDate] = useState<Date | null>(new Date())
-  const { teams, activeTeamId, setActiveTeamId, fetchUserTeams } = useTeams()
+  const { teams, activeTeamId, setActiveTeamId, fetchUserTeams, leaveTeam } = useTeams()
   const { user } = useAuth()
   const pathname = usePathname()
   const router = useRouter()
@@ -81,6 +83,46 @@ export default function ClientLayerComponent({ children }: { children: React.Rea
       setActive(pageInfo.nav)
     }
   }, [active, pageInfo.nav])
+
+  const handleLeaveTeam = (team: { id: string; name: string }) => {
+    if (!user?.id) return
+
+    modals.openConfirmModal({
+      title: 'Leave team',
+      centered: true,
+      labels: {
+        confirm: 'Leave team',
+        cancel: 'Cancel',
+      },
+      confirmProps: { color: 'red' },
+      children: (
+        <Box>
+          Leaving <strong>{team.name}</strong> will remove your access to that team. Are you sure?
+        </Box>
+      ),
+      onConfirm: async () => {
+        try {
+          await leaveTeam(team.id, user.id)
+          notifications.show({
+            title: 'Left team',
+            message: `You left ${team.name}.`,
+            color: 'teal',
+          })
+
+          if (pathname.startsWith('/studio/team-config')) {
+            router.replace('/studio/home')
+          }
+        } catch (error) {
+          notifications.show({
+            title: 'Unable to leave team',
+            message: error instanceof Error ? error.message : 'Failed to leave team',
+            color: 'red',
+          })
+        }
+      },
+    })
+  }
+
   return (
     <AppLayout
       header={
@@ -97,9 +139,17 @@ export default function ClientLayerComponent({ children }: { children: React.Rea
       navbar={
         <Box h="100%" style={{ display: 'flex', flexDirection: 'row' }}>
           <TeamSideBar
-            teams={teams.map((t) => ({ id: t.id, name: t.name }))}
+            teams={teams.map((t) => {
+              const membership = t.memberships?.find((m) => m.userId === user?.id)
+              return {
+                id: t.id,
+                name: t.name,
+                canLeave: membership?.role !== 'OWNER',
+              }
+            })}
             activeTeamId={activeTeamId}
             onSelectTeam={setActiveTeamId}
+            onLeaveTeam={handleLeaveTeam}
           />
           <AppSidebar
             active={active}

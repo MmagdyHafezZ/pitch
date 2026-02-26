@@ -209,7 +209,6 @@ export class TeamController {
     }
   }
 
-  @UseGuards(ElevatedAccessGuard)
   @MessagePattern(USER_SERVICE_PATTERNS.DELETE_TEAM_MEMBER)
   @UsePipes(
     new ValidationPipe({ transform: true, skipMissingProperties: true }),

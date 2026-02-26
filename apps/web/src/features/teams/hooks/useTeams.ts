@@ -15,6 +15,7 @@ export function useTeams() {
   const addMember = useTeamsStore((s) => s.addMember)
   const updateMember = useTeamsStore((s) => s.updateMember)
   const deleteMember = useTeamsStore((s) => s.deleteMember)
+  const leaveTeam = useTeamsStore((s) => s.leaveTeam)
   const setActiveTeamId = useTeamsStore((s) => s.setActiveTeamId)
 
   return {
@@ -32,6 +33,7 @@ export function useTeams() {
     addMember,
     updateMember,
     deleteMember,
+    leaveTeam,
     setActiveTeamId,
   }
 }

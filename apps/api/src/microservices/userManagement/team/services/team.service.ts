@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   ConflictException,
+  Logger,
 } from '@nestjs/common';
 import { Role } from '@prisma/user-client';
 import {
@@ -182,7 +183,10 @@ export class TeamService {
     userId: string,
     requesterId: string,
   ): Promise<{ message: string }> {
-    await this.teamRepository.confirmAuthorityOrThrow(requesterId, teamId);
+    const isSelfLeave = requesterId === userId;
+    if (!isSelfLeave) {
+      await this.teamRepository.confirmAuthorityOrThrow(requesterId, teamId);
+    }
     const membership = await this.teamRepository.findMembership(teamId, userId);
     if (!membership) {
       throw new NotFoundException(

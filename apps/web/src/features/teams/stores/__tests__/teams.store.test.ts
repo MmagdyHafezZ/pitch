@@ -84,4 +84,39 @@ describe('TeamsStore', () => {
     expect(state.loading).toBe(false)
     expect(state.error).toBeNull()
   })
+
+  it('preserves active team selection when refreshing user teams and the team still exists', async () => {
+    const team1 = {
+      id: 'team-1',
+      name: 'Team 1',
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-01T00:00:00.000Z',
+    } as any
+    const team2 = {
+      id: 'team-2',
+      name: 'Team 2',
+      createdAt: '2024-02-01T00:00:00.000Z',
+      updatedAt: '2024-02-01T00:00:00.000Z',
+    } as any
+
+    jest.spyOn(TeamService, 'getUserTeams').mockResolvedValue([team1, team2])
+
+    act(() => {
+      useTeamsStore.setState({
+        teams: [team1, team2],
+        activeTeamId: 'team-2',
+        currentTeam: team2,
+        loading: false,
+        error: null,
+      })
+    })
+
+    await act(async () => {
+      await useTeamsStore.getState().fetchUserTeams()
+    })
+
+    expect(useTeamsStore.getState().teams).toEqual([team1, team2])
+    expect(useTeamsStore.getState().activeTeamId).toBe('team-2')
+    expect(useTeamsStore.getState().currentTeam).toEqual(team2)
+  })
 })
