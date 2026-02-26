@@ -34,8 +34,8 @@ import {
   IconUserCheck,
 } from '@tabler/icons-react'
 import { useTeams } from '@/features/teams/hooks/useTeams'
+import { useTeamConfigStore } from '@/features/teams/stores/team-config.store'
 import type { TeamMembership } from '@/features/teams/types/teams.types'
-import { api } from '@/lib/client'
 import { notifications } from '@mantine/notifications'
 
 const ROLE_OPTIONS = [
@@ -65,6 +65,10 @@ const isMembershipPending = (membership: TeamMembership) => {
 
 export function TeamMembersPanel() {
   const { currentTeam, addMember, updateMember, deleteMember, loading } = useTeams()
+  const orgUsers = useTeamConfigStore((s) => s.orgUsers)
+  const orgUsersLoading = useTeamConfigStore((s) => s.orgUsersLoading)
+  const orgUsersError = useTeamConfigStore((s) => s.orgUsersError)
+  const fetchOrgUsers = useTeamConfigStore((s) => s.fetchOrgUsers)
 
   const [search, setSearch] = useState('')
   const [roleFilter, setRoleFilter] = useState<'ALL' | 'OWNER' | 'ADMIN' | 'MEMBER'>('ALL')
@@ -74,36 +78,11 @@ export function TeamMembersPanel() {
   const [submitting, setSubmitting] = useState(false)
   const [inviteError, setInviteError] = useState<string | null>(null)
   const [quickInvitingUserId, setQuickInvitingUserId] = useState<string | null>(null)
-  const [allUsers, setAllUsers] = useState<any[]>([])
-  const [orgUsersLoading, setOrgUsersLoading] = useState(false)
-  const [orgUsersError, setOrgUsersError] = useState<string | null>(null)
   const [membershipFilter, setMembershipFilter] = useState<'IN_TEAM' | 'NOT_IN_TEAM' | 'ALL'>('ALL')
 
   useEffect(() => {
-    let mounted = true
-
-    const loadUsers = async () => {
-      setOrgUsersLoading(true)
-      setOrgUsersError(null)
-      try {
-        const users = await api.users.getAll()
-        if (!mounted) return
-        setAllUsers(Array.isArray(users) ? users : [])
-      } catch (error) {
-        if (!mounted) return
-        setOrgUsersError(
-          error instanceof Error ? error.message : 'Failed to load organization users'
-        )
-      } finally {
-        if (mounted) setOrgUsersLoading(false)
-      }
-    }
-
-    void loadUsers()
-    return () => {
-      mounted = false
-    }
-  }, [])
+    void fetchOrgUsers()
+  }, [fetchOrgUsers])
 
   const members: TeamMembership[] = useMemo(
     () => (currentTeam?.memberships ?? []).filter((m) => m.isActive !== false),
@@ -119,7 +98,7 @@ export function TeamMembersPanel() {
 
   const peopleRows = useMemo(() => {
     const q = search.trim().toLowerCase()
-    const rows = allUsers
+    const rows = orgUsers
       .map((user) => {
         const membership = members.find((m) => m.userId === user?.id)
         const inTeam = Boolean(membership)
@@ -162,7 +141,7 @@ export function TeamMembersPanel() {
       })
 
     return rows
-  }, [allUsers, members, membershipFilter, roleFilter, search])
+  }, [orgUsers, members, membershipFilter, roleFilter, search])
 
   const inviteExistingUserToTeam = async (user: any) => {
     if (!currentTeam?.id || !user?.id) return
@@ -198,7 +177,7 @@ export function TeamMembersPanel() {
 
     setSubmitting(true)
     try {
-      const users = await api.users.getAll()
+      const users = orgUsers.length > 0 ? orgUsers : await fetchOrgUsers()
       const matchedUser = users.find(
         (candidate: any) => String(candidate?.email ?? '').toLowerCase() === email
       )
@@ -216,9 +195,6 @@ export function TeamMembersPanel() {
       })
 
       setInviteEmail('')
-      setAllUsers((prev) =>
-        prev.some((u) => u?.id === matchedUser.id) ? prev : [...prev, matchedUser]
-      )
       notifications.show({
         title: 'Member invited',
         message: `${matchedUser.name ?? matchedUser.email} was added to ${currentTeam.name}.`,

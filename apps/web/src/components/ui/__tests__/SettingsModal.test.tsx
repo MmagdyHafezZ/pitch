@@ -2,15 +2,17 @@
  * @jest-environment jsdom
  */
 import userEvent from '@testing-library/user-event'
-import { render, screen, waitFor } from '@/__tests__/utils/test-utils'
+import { act, render, screen, waitFor } from '@/__tests__/utils/test-utils'
 import { notifications } from '@mantine/notifications'
 import { SettingsModal } from '../SettingsModal'
 
 var mockPush: jest.Mock
 var mockLogout: jest.Mock
+var mockDeleteAccount: jest.Mock
 var mockAuthStoreSetUser: jest.Mock
 var mockAppearanceSetState: jest.Mock
 var mockFetchCrmStatus: jest.Mock
+var mockOpenConfirmModal: jest.Mock
 var mockApi: {
   users: {
     getMySettings: jest.Mock
@@ -37,9 +39,22 @@ jest.mock('@mantine/notifications', () => {
   }
 })
 
+jest.mock('@mantine/modals', () => {
+  const actual = jest.requireActual('@mantine/modals')
+  mockOpenConfirmModal = jest.fn()
+  return {
+    ...actual,
+    modals: {
+      ...actual.modals,
+      openConfirmModal: mockOpenConfirmModal,
+    },
+  }
+})
+
 jest.mock('@/features/auth', () => ({
   useAuth: () => {
     mockLogout ??= jest.fn()
+    mockDeleteAccount ??= jest.fn().mockResolvedValue(undefined)
     return {
       user: {
         id: 'user-1',
@@ -47,6 +62,7 @@ jest.mock('@/features/auth', () => ({
         email: 'test@example.com',
       },
       logout: mockLogout,
+      deleteAccount: mockDeleteAccount,
     }
   },
 }))
@@ -248,5 +264,42 @@ describe('SettingsModal', () => {
       })
     )
     expect(payload.crm.connections).toBeUndefined()
+  })
+
+  it('opens delete account confirmation and deletes account on confirm', async () => {
+    const onClose = jest.fn()
+    const user = userEvent.setup()
+
+    render(<SettingsModal opened onClose={onClose} />)
+
+    await waitFor(() => {
+      expect(mockApi.users.getMySettings).toHaveBeenCalled()
+    })
+
+    await user.click(screen.getByText('Delete Account'))
+
+    expect(mockOpenConfirmModal).toHaveBeenCalledTimes(1)
+    const confirmConfig = mockOpenConfirmModal.mock.calls[0]?.[0]
+    expect(confirmConfig).toEqual(
+      expect.objectContaining({
+        title: 'Delete account',
+        labels: expect.objectContaining({ confirm: 'Delete account', cancel: 'Cancel' }),
+      })
+    )
+
+    await act(async () => {
+      await confirmConfig.onConfirm()
+    })
+
+    await waitFor(() => {
+      expect(mockDeleteAccount).toHaveBeenCalledTimes(1)
+    })
+    expect(jest.mocked(notifications.show)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: 'Account deleted',
+        color: 'green',
+      })
+    )
+    expect(onClose).toHaveBeenCalled()
   })
 })

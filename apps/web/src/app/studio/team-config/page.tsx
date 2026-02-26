@@ -22,6 +22,7 @@ import {
   IconAlertCircle,
   IconBuildingSkyscraper,
   IconChevronLeft,
+  IconChevronRight,
   IconCreditCard,
   IconMapPin,
   IconSettings,
@@ -172,54 +173,47 @@ function TeamConfigInner() {
     }
   }
 
-  const handlePrimaryClick = () => {
-    if (isCreateMode) {
-      void handleCreateClick()
-      return
-    }
-    void handleSaveEditClick()
-  }
-
-  const pageTitle = isCreateMode ? 'Create a new team' : 'Team Config'
-  const pageSubtitle = isCreateMode
-    ? 'Set up your team profile and billing details. Members and subscriptions can be managed after creation.'
-    : 'A cleaner control center for team details, members, billing, and plan management.'
+  const pageTitle = 'Create a new team'
+  const pageSubtitle =
+    'Set up your team profile and billing details. Members and subscriptions can be managed after creation.'
 
   return (
     <Container size="xl" py="xl" className={classes.page}>
       <Paper className={classes.shell} p={{ base: 'md', sm: 'xl' }}>
         <Stack gap="lg">
-          <Paper className={classes.heroCard} p={{ base: 'md', sm: 'xl' }}>
-            <Group justify="space-between" align="flex-start" wrap="wrap">
-              <Stack gap="sm" maw={700}>
-                <Group gap="xs">
-                  <Badge variant="light" color="blue">
-                    Studio
-                  </Badge>
-                  <Badge variant="light" color={isCreateMode ? 'cyan' : 'teal'}>
-                    {isCreateMode ? 'New team' : 'Team settings'}
-                  </Badge>
-                </Group>
-                <Title className={`${fraunces.className} ${classes.heroTitle}`} order={1}>
-                  {pageTitle}
-                </Title>
-                <Text c="dimmed">{pageSubtitle}</Text>
-              </Stack>
+          {isCreateMode && (
+            <Paper className={classes.heroCard} p={{ base: 'md', sm: 'xl' }}>
+              <Group justify="space-between" align="flex-start" wrap="wrap">
+                <Stack gap="sm" maw={700}>
+                  <Group gap="xs">
+                    <Badge variant="light" color="blue">
+                      Studio
+                    </Badge>
+                    <Badge variant="light" color="cyan">
+                      New team
+                    </Badge>
+                  </Group>
+                  <Title className={`${fraunces.className} ${classes.heroTitle}`} order={1}>
+                    {pageTitle}
+                  </Title>
+                  <Text c="dimmed">{pageSubtitle}</Text>
+                </Stack>
 
-              <Group gap="sm">
-                <Button
-                  variant="default"
-                  leftSection={<IconChevronLeft size={16} />}
-                  onClick={() => router.back()}
-                >
-                  Cancel
-                </Button>
-                <Button onClick={handlePrimaryClick} loading={primaryLoading}>
-                  {isCreateMode ? 'Create team' : 'Save team profile'}
-                </Button>
+                <Group gap="sm">
+                  <Button
+                    variant="default"
+                    leftSection={<IconChevronLeft size={16} />}
+                    onClick={() => router.back()}
+                  >
+                    Cancel
+                  </Button>
+                  <Button onClick={() => void handleCreateClick()} loading={primaryLoading}>
+                    Create team
+                  </Button>
+                </Group>
               </Group>
-            </Group>
-          </Paper>
+            </Paper>
+          )}
 
           {bannerError && (
             <Alert variant="light" color="red" icon={<IconAlertCircle size={16} />} radius="md">
@@ -388,7 +382,7 @@ function EditModeLayout({
   classes: Record<string, string>
   fontClass: string
 }) {
-  const totalMembersLabel = canManage ? 'Manage team' : 'Read-only'
+  const maxStep = 3
   const profileIcon = <IconSettings size={16} />
   const membersIcon = <IconUsersGroup size={16} />
   const billingIcon = <IconMapPin size={16} />
@@ -396,6 +390,12 @@ function EditModeLayout({
 
   return (
     <Stack gap="lg">
+      <Stack gap={4}>
+        <Title order={2} className={fontClass}>
+          {currentTeamName}
+        </Title>
+      </Stack>
+
       <Paper className={classes.stepperWrap} p="md">
         <Stepper
           active={activeStep}
@@ -435,15 +435,6 @@ function EditModeLayout({
           />
         </Stepper>
       </Paper>
-
-      <Group gap="sm" wrap="wrap">
-        <Badge color="blue" variant="light">
-          {currentTeamName}
-        </Badge>
-        <Badge color="gray" variant="light">
-          {totalMembersLabel}
-        </Badge>
-      </Group>
 
       {activeStep === 0 && (
         <Paper className={classes.contentCard} p="lg">
@@ -552,6 +543,24 @@ function EditModeLayout({
           canManage={canManage}
         />
       )}
+
+      <Group justify="space-between" wrap="wrap">
+        <Button
+          variant="default"
+          leftSection={<IconChevronLeft size={16} />}
+          onClick={() => setActiveStep(Math.max(0, activeStep - 1))}
+          disabled={activeStep === 0}
+        >
+          Back
+        </Button>
+        <Button
+          rightSection={<IconChevronRight size={16} />}
+          onClick={() => setActiveStep(Math.min(maxStep, activeStep + 1))}
+          disabled={activeStep === maxStep}
+        >
+          Next
+        </Button>
+      </Group>
     </Stack>
   )
 }

@@ -20,6 +20,7 @@ export interface AuthActions {
   login: (email: string, password: string) => Promise<void>
   register: (email: string, password: string, name: string) => Promise<void>
   logout: () => void
+  deleteAccount: () => Promise<void>
   setUser: (user: User | null) => void
   setToken: (token: string | null) => void
   refreshAccessToken: () => Promise<boolean>

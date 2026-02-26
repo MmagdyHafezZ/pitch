@@ -109,6 +109,38 @@ export const useAuthStore = create<AuthStore>()((set, get) => ({
     }
   },
 
+  deleteAccount: async () => {
+    const currentUser = get().user
+    if (!currentUser?.id) {
+      const error = new Error('No authenticated user found')
+      set({ error: error.message })
+      throw error
+    }
+
+    try {
+      set({ isLoading: true, error: null })
+      await api.users.delete(currentUser.id)
+
+      set({
+        user: null,
+        token: null,
+        isAuthenticated: false,
+        isLoading: false,
+        error: null,
+      })
+      setAccessToken(null)
+
+      api.auth.logout().catch(() => {})
+      if (typeof window !== 'undefined' && process.env.NODE_ENV !== 'test') {
+        window.location.href = '/auth/login'
+      }
+    } catch (error) {
+      const { message, throwValue } = resolveAuthError(error, 'Failed to delete account')
+      set({ isLoading: false, error: message })
+      throw throwValue
+    }
+  },
+
   setUser: (user: User | null) => {
     set({ user: applyAvatarCacheToUser(user), isAuthenticated: !!user })
   },

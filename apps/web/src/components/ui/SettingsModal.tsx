@@ -255,7 +255,7 @@ const preprocessAvatarFile = async (file: File): Promise<File> => {
 
 export function SettingsModal({ opened, onClose }: SettingsModalProps) {
   const router = useRouter()
-  const { user, logout } = useAuth()
+  const { user, logout, deleteAccount } = useAuth()
   const [activeSection, setActiveSection] = useState<SettingsSection>('Account')
   const [name, setName] = useState(user?.name || '')
   const [email, setEmail] = useState(user?.email || '')
@@ -280,6 +280,7 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
   const [crmSessionDefaults, setCrmSessionDefaults] = useState<CrmSessionDefaults>(undefined)
   const [crmPresetNameDrafts, setCrmPresetNameDrafts] = useState<Record<string, string>>({})
   const [isSaving, setIsSaving] = useState(false)
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false)
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false)
   const [isLoadingSettings, setIsLoadingSettings] = useState(false)
   const avatarFileInputRef = useRef<HTMLInputElement | null>(null)
@@ -482,6 +483,36 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
       labels: { confirm: 'Delete', cancel: 'Cancel' },
       confirmProps: { color: 'red' },
       onConfirm: () => deleteProfile(id),
+    })
+  }
+
+  const openDeleteAccountConfirm = () => {
+    modals.openConfirmModal({
+      title: 'Delete account',
+      children:
+        'Delete your account permanently? This action cannot be undone and will remove your access.',
+      labels: { confirm: 'Delete account', cancel: 'Cancel' },
+      confirmProps: { color: 'red', loading: isDeletingAccount },
+      onConfirm: async () => {
+        try {
+          setIsDeletingAccount(true)
+          await deleteAccount()
+          notifications.show({
+            title: 'Account deleted',
+            message: 'Your account was deleted successfully.',
+            color: 'green',
+          })
+          onClose()
+        } catch (error) {
+          notifications.show({
+            title: 'Delete failed',
+            message: error instanceof Error ? error.message : 'Failed to delete account.',
+            color: 'red',
+          })
+        } finally {
+          setIsDeletingAccount(false)
+        }
+      },
     })
   }
 
@@ -955,9 +986,7 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
                     size="sm"
                     c="var(--pitch-accent-strong)"
                     style={{ cursor: 'pointer' }}
-                    onClick={() => {
-                      /* TODO: Implement delete account */
-                    }}
+                    onClick={openDeleteAccountConfirm}
                   >
                     Delete Account
                   </Text>

@@ -18,7 +18,7 @@ import {
 } from '@mantine/core'
 import { IconAlertCircle, IconBolt, IconCreditCard, IconStars } from '@tabler/icons-react'
 import { notifications } from '@mantine/notifications'
-import { api } from '@/lib/client'
+import { useTeamConfigStore } from '@/features/teams/stores/team-config.store'
 import classes from './TeamSubscriptionPanel.module.css'
 
 type BillingInterval = 'MONTH' | 'YEAR'
@@ -80,67 +80,30 @@ type Props = {
 }
 
 export function TeamSubscriptionPanel({ teamId, teamName, canManage }: Props) {
-  const [plans, setPlans] = useState<PlanLike[]>([])
-  const [subscription, setSubscription] = useState<SubscriptionLike | null>(null)
+  const plans = useTeamConfigStore((s) => s.plans) as PlanLike[]
+  const subscription = useTeamConfigStore(
+    (s) => s.subscriptionsByTeam[teamId] ?? null
+  ) as SubscriptionLike | null
+  const plansLoading = useTeamConfigStore((s) => s.plansLoading)
+  const plansError = useTeamConfigStore((s) => s.plansError)
+  const subscriptionLoading = useTeamConfigStore((s) => !!s.subscriptionLoadingByTeam[teamId])
+  const subscriptionError = useTeamConfigStore((s) => s.subscriptionErrorByTeam[teamId] ?? null)
+  const loadSubscriptionPanelData = useTeamConfigStore((s) => s.loadSubscriptionPanelData)
+  const selectTeamPlan = useTeamConfigStore((s) => s.selectTeamPlan)
   const [interval, setInterval] = useState<BillingInterval>('MONTH')
-  const [loading, setLoading] = useState(true)
   const [savingPlanId, setSavingPlanId] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const loading = plansLoading || subscriptionLoading
+  const error = subscriptionError ?? plansError
 
   useEffect(() => {
-    let mounted = true
+    void loadSubscriptionPanelData(teamId)
+  }, [loadSubscriptionPanelData, teamId])
 
-    const load = async () => {
-      setLoading(true)
-      setError(null)
-      try {
-        const [plansResponse, subscriptionResponse] = await Promise.all([
-          api.plans.getAll().catch((err) => {
-            throw err
-          }),
-          api.subscriptions.getByTeamId(teamId).catch((err) => {
-            const message = err instanceof Error ? err.message : String(err)
-            if (/not found|couldn'?t find a subscription/i.test(message)) {
-              return null
-            }
-            throw err
-          }),
-        ])
-
-        if (!mounted) return
-
-        const normalizedPlans = Array.isArray(plansResponse)
-          ? plansResponse
-          : Array.isArray((plansResponse as any)?.plans)
-            ? (plansResponse as any).plans
-            : []
-
-        setPlans(
-          normalizedPlans
-            .filter(Boolean)
-            .sort((a: PlanLike, b: PlanLike) =>
-              String(a?.name ?? '').localeCompare(String(b?.name ?? ''))
-            )
-        )
-
-        const nextSubscription = subscriptionResponse as SubscriptionLike | null
-        setSubscription(nextSubscription)
-        if (nextSubscription?.interval === 'YEAR' || nextSubscription?.interval === 'MONTH') {
-          setInterval(nextSubscription.interval)
-        }
-      } catch (err) {
-        if (!mounted) return
-        setError(err instanceof Error ? err.message : 'Failed to load subscription data')
-      } finally {
-        if (mounted) setLoading(false)
-      }
+  useEffect(() => {
+    if (subscription?.interval === 'YEAR' || subscription?.interval === 'MONTH') {
+      setInterval(subscription.interval)
     }
-
-    void load()
-    return () => {
-      mounted = false
-    }
-  }, [teamId])
+  }, [subscription?.interval])
 
   const currentPlanId = subscription?.planId ?? subscription?.plan?.id ?? null
 
@@ -149,30 +112,8 @@ export function TeamSubscriptionPanel({ teamId, teamName, canManage }: Props) {
   const handleSelectPlan = async (plan: PlanLike) => {
     if (!canManage) return
     setSavingPlanId(plan.id)
-    setError(null)
     try {
-      let nextSubscription: SubscriptionLike
-
-      if (!subscription?.id) {
-        nextSubscription = await api.subscriptions.create({
-          teamId,
-          planId: plan.id,
-          interval,
-        })
-      } else if (currentPlanId === plan.id) {
-        nextSubscription = await api.subscriptions.update(subscription.id, {
-          teamId,
-          planId: plan.id,
-          interval,
-        })
-      } else {
-        nextSubscription = await api.subscriptions.upgrade(subscription.id, {
-          planId: plan.id,
-          interval,
-        })
-      }
-
-      setSubscription(nextSubscription)
+      await selectTeamPlan(teamId, { planId: plan.id, interval })
       notifications.show({
         title: 'Subscription updated',
         message: `${teamName} is now on ${plan.name ?? 'the selected'} plan.`,
@@ -180,7 +121,6 @@ export function TeamSubscriptionPanel({ teamId, teamName, canManage }: Props) {
       })
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to update subscription'
-      setError(message)
       notifications.show({
         title: 'Subscription update failed',
         message,
