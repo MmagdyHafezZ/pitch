@@ -176,31 +176,35 @@ export class TeamRepository {
   }
 
   async transferOwnership(data: UpdateMemberDto): Promise<TeamMembership> {
-    return this.prisma.$transaction(async (tx) => {
-      await tx.teamMembership.updateMany({
-        where: {
-          teamId: data.teamId,
-          isActive: true,
-          role: Role.OWNER,
-          NOT: { userId: data.userId },
-        },
-        data: {
-          role: Role.ADMIN,
-        },
-      });
+    const membership = (await this.prisma.$transaction(
+      async (tx: Prisma.TransactionClient) => {
+        await tx.teamMembership.updateMany({
+          where: {
+            teamId: data.teamId,
+            isActive: true,
+            role: Role.OWNER,
+            NOT: { userId: data.userId },
+          },
+          data: {
+            role: Role.ADMIN,
+          },
+        });
 
-      return tx.teamMembership.update({
-        where: {
-          userId_teamId: { userId: data.userId, teamId: data.teamId },
-        },
-        data: {
-          role: Role.OWNER,
-          tokenLimit: data.tokenLimit,
-          isActive: data.isActive,
-          acceptedAt: data.acceptedAt,
-        },
-      });
-    });
+        return tx.teamMembership.update({
+          where: {
+            userId_teamId: { userId: data.userId, teamId: data.teamId },
+          },
+          data: {
+            role: Role.OWNER,
+            tokenLimit: data.tokenLimit,
+            isActive: data.isActive,
+            acceptedAt: data.acceptedAt,
+          },
+        });
+      },
+    )) as TeamMembership;
+
+    return membership;
   }
 
   async deleteTeamMember(teamId: string, userId: string): Promise<void> {

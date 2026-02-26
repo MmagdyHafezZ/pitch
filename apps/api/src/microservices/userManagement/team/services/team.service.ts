@@ -2,7 +2,6 @@ import {
   Injectable,
   NotFoundException,
   ConflictException,
-  Logger,
 } from '@nestjs/common';
 import { Role } from '@prisma/user-client';
 import {
