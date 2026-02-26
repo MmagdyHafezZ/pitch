@@ -1,14 +1,24 @@
 .panelShell {
   position: relative;
   overflow: hidden;
-  background:
-    radial-gradient(120% 140% at 100% 0%, rgba(39, 121, 255, 0.14) 0%, transparent 52%),
-    radial-gradient(90% 120% at 0% 100%, rgba(0, 208, 255, 0.08) 0%, transparent 58%),
-    linear-gradient(160deg, rgba(12, 20, 30, 0.96) 0%, rgba(11, 16, 23, 0.98) 100%);
-  border-color: color-mix(in srgb, var(--mantine-color-cyan-6) 24%, rgba(255, 255, 255, 0.05));
+  background: color-mix(in srgb, var(--mantine-color-dark-8) 96%, transparent);
+  border-color: color-mix(in srgb, var(--mantine-color-dark-4) 40%, transparent);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.04),
-    0 16px 36px rgba(1, 8, 20, 0.35);
+    0 18px 60px color-mix(in srgb, var(--mantine-color-dark-9) 65%, transparent);
+}
+
+.panelShell::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    120deg,
+    transparent 12%,
+    color-mix(in srgb, var(--mantine-color-blue-6) 12%, transparent),
+    transparent 80%
+  );
 }
 
 .panelIconWrap {
@@ -18,12 +28,12 @@
   height: 26px;
   border-radius: 8px;
   color: var(--mantine-color-blue-2);
-  background: linear-gradient(180deg, rgba(60, 132, 255, 0.2), rgba(22, 29, 41, 0.8));
-  border: 1px solid rgba(88, 152, 255, 0.26);
+  background: color-mix(in srgb, var(--mantine-color-blue-6) 18%, transparent);
+  border: 1px solid color-mix(in srgb, var(--mantine-color-blue-6) 18%, transparent);
 }
 
 .intervalControl {
-  background: rgba(255, 255, 255, 0.02);
+  background: color-mix(in srgb, var(--mantine-color-dark-8) 90%, transparent);
   border-radius: 10px;
   padding: 2px;
 }
@@ -34,9 +44,8 @@
 }
 
 .subscriptionSummary {
-  background:
-    linear-gradient(180deg, rgba(19, 23, 31, 0.96), rgba(18, 22, 30, 0.94));
-  border-color: rgba(132, 154, 191, 0.12);
+  background: color-mix(in srgb, var(--mantine-color-dark-7) 55%, transparent);
+  border-color: color-mix(in srgb, var(--mantine-color-dark-4) 40%, transparent);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
 }
 
@@ -44,10 +53,8 @@
   position: relative;
   overflow: hidden;
   min-height: 270px;
-  background:
-    radial-gradient(90% 120% at 100% 0%, rgba(36, 107, 240, 0.16) 0%, transparent 52%),
-    linear-gradient(180deg, rgba(24, 28, 35, 0.98), rgba(22, 25, 31, 0.98));
-  border-color: rgba(125, 146, 182, 0.14);
+  background: color-mix(in srgb, var(--mantine-color-dark-8) 96%, transparent);
+  border-color: color-mix(in srgb, var(--mantine-color-dark-4) 40%, transparent);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.025),
     0 12px 28px rgba(2, 7, 16, 0.26);
@@ -59,7 +66,7 @@
 
 .planCard:hover {
   transform: translateY(-1px);
-  border-color: rgba(104, 141, 210, 0.26);
+  border-color: color-mix(in srgb, var(--mantine-color-blue-6) 26%, transparent);
 }
 
 .planCard::after {
@@ -74,19 +81,24 @@
 }
 
 .planCard[data-selected='true'] {
-  border-color: rgba(76, 185, 255, 0.42);
+  border-color: var(--mantine-color-blue-6);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.04),
-    inset 0 0 0 1px rgba(76, 185, 255, 0.09),
-    0 18px 34px rgba(1, 11, 26, 0.34);
+    inset 0 0 0 1px color-mix(in srgb, var(--mantine-color-blue-6) 10%, transparent),
+    0 20px 44px color-mix(in srgb, var(--mantine-color-blue-6) 28%, transparent);
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--mantine-color-blue-6) 14%, var(--mantine-color-dark-8)),
+    var(--mantine-color-dark-8)
+  );
 }
 
 .planCard[data-tone='violet']::after {
-  background: radial-gradient(circle, rgba(158, 111, 255, 0.14) 0%, transparent 68%);
+  background: radial-gradient(circle, rgba(53, 114, 217, 0.12) 0%, transparent 68%);
 }
 
 .planCard[data-tone='cyan']::after {
-  background: radial-gradient(circle, rgba(52, 206, 255, 0.12) 0%, transparent 68%);
+  background: radial-gradient(circle, rgba(53, 114, 217, 0.12) 0%, transparent 68%);
 }
 
 .planCard[data-tone='gray']::after {
@@ -185,5 +197,5 @@
 }
 
 .planCard[data-selected='true'] .planAction {
-  border-color: rgba(82, 172, 242, 0.25);
+  border-color: color-mix(in srgb, var(--mantine-color-blue-6) 25%, transparent);
 }
