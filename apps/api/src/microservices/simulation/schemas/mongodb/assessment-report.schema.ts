@@ -10,7 +10,8 @@ import { Schema, Document } from 'mongoose';
 export interface IAssessmentReport extends Document {
   _id: string;
   runId: string;
-  sessionMemberId: string;
+  iterationId: string;
+  sessionMemberId?: string;
   sessionId?: string;
   mode: 'live' | 'final';
   configVersion: string;
@@ -68,7 +69,8 @@ const AssessmentReportSchemaDefinition = new Schema<IAssessmentReport>(
   {
     _id: { type: String, required: true },
     runId: { type: String, required: true, index: true, unique: true },
-    sessionMemberId: { type: String, required: true, index: true },
+    iterationId: { type: String, required: true, index: true },
+    sessionMemberId: { type: String, index: true },
     sessionId: { type: String, index: true },
     mode: { type: String, enum: ['live', 'final'], required: true },
     configVersion: { type: String, required: true },
@@ -83,6 +85,7 @@ const AssessmentReportSchemaDefinition = new Schema<IAssessmentReport>(
   },
 );
 
+AssessmentReportSchemaDefinition.index({ iterationId: 1, createdAt: -1 });
 AssessmentReportSchemaDefinition.index({ sessionMemberId: 1, createdAt: -1 });
 AssessmentReportSchemaDefinition.index({ sessionId: 1, createdAt: -1 });
 

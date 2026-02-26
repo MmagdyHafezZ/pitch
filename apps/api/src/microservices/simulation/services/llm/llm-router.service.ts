@@ -662,6 +662,9 @@ export class LLMRouterService {
       'llm',
       route?.provider ?? request.config.provider ?? 'router',
     ];
+    if (context?.purpose) {
+      tags.push(context.purpose);
+    }
 
     const metadata: Record<string, unknown> = {
       sessionId: request.sessionId,

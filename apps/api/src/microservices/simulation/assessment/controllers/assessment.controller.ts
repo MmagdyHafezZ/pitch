@@ -17,6 +17,7 @@ import {
   ApiBadRequestResponse,
   ApiNotFoundResponse,
   ApiInternalServerErrorResponse,
+  ApiQuery,
 } from '@nestjs/swagger';
 import { AssessmentService } from '../assessment.service';
 import {
@@ -82,6 +83,8 @@ export class AssessmentController {
 
   @Get('sessions/:id/assessments/latest')
   @ApiOperation({ summary: 'Get latest completed assessment for a session' })
+  @ApiQuery({ name: 'iterationId', required: false, type: String })
+  @ApiQuery({ name: 'sessionMemberId', required: false, type: String })
   @ApiOkResponse({ type: AssessmentLatestResponseDto })
   @ApiNotFoundResponse({
     type: HttpErrorResponseDto,
@@ -89,8 +92,13 @@ export class AssessmentController {
   })
   async getLatestForSession(
     @Param('id') sessionId: string,
+    @Query('iterationId') iterationId?: string,
     @Query('sessionMemberId') sessionMemberId?: string,
   ): Promise<AssessmentLatestResponseDto> {
-    return await this.assessmentService.getLatest(sessionId, sessionMemberId);
+    return await this.assessmentService.getLatest(
+      sessionId,
+      iterationId,
+      sessionMemberId,
+    );
   }
 }

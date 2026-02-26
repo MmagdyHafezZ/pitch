@@ -50,6 +50,8 @@ export type HeaderProps = {
   rightSlot?: ReactNode
   teamName?: string
   currentPage?: 'Home' | 'Sessions' | 'Teams' | 'Analytics' | 'Settings'
+  selectedTab?: string
+  onTabChange?: (tab: string) => void
 }
 
 type PageKey = 'Home' | 'Sessions' | 'Teams' | 'Analytics' | 'Settings'
@@ -206,25 +208,17 @@ function ActionConfig({
   value,
   onChange,
   isCompact,
+  selectedTab,
+  onTabChange,
 }: {
   currentPage: PageKey | undefined
   value?: string
   onChange?: (v: string) => void
   isCompact?: boolean
+  selectedTab?: string
+  onTabChange?: (tab: string) => void
 }) {
   const router = useRouter()
-  const [tabsByPage, setTabsByPage] = useState<Record<PageKey, string>>({
-    Home: 'All',
-    Sessions: 'Created by you',
-    Teams: 'All',
-    Analytics: 'Overview',
-    Settings: '',
-  })
-
-  const handleTabChange = (tab: string) => {
-    if (!currentPage) return
-    setTabsByPage((prev) => ({ ...prev, [currentPage]: tab }))
-  }
 
   switch (currentPage) {
     case 'Home':
@@ -233,8 +227,8 @@ function ActionConfig({
           enableSearch={false}
           searchPlaceholder="Search"
           availableTabs={['All', 'Favorites', 'Archived']}
-          selectedTab={tabsByPage.Home}
-          onTabChange={handleTabChange}
+          selectedTab={selectedTab}
+          onTabChange={onTabChange}
           value={value}
           onChange={onChange}
           isCompact={isCompact}
@@ -245,9 +239,9 @@ function ActionConfig({
         <ActionBar
           enableSearch={true}
           searchPlaceholder="Search sessions"
-          availableTabs={['Created', 'Assigned', 'All']}
-          selectedTab={tabsByPage.Sessions}
-          onTabChange={handleTabChange}
+          availableTabs={['All', 'Created', 'Shared']}
+          selectedTab={selectedTab}
+          onTabChange={onTabChange}
           value={value}
           onChange={onChange}
           isCompact={isCompact}
@@ -275,8 +269,8 @@ function ActionConfig({
           enableSearch={true}
           searchPlaceholder="Search teams"
           availableTabs={['All', 'My Teams']}
-          selectedTab={tabsByPage.Teams}
-          onTabChange={handleTabChange}
+          selectedTab={selectedTab}
+          onTabChange={onTabChange}
           value={value}
           onChange={onChange}
           isCompact={isCompact}
@@ -288,8 +282,8 @@ function ActionConfig({
           enableSearch={true}
           searchPlaceholder="Search analytics"
           availableTabs={['Overview', 'Details']}
-          selectedTab={tabsByPage.Analytics}
-          onTabChange={handleTabChange}
+          selectedTab={selectedTab}
+          onTabChange={onTabChange}
           value={value}
           onChange={onChange}
           isCompact={isCompact}
@@ -318,6 +312,8 @@ export function AppTopBar({
   searchPlaceholder = 'Search',
   teamName,
   currentPage,
+  selectedTab,
+  onTabChange,
 }: HeaderProps) {
   const weekday = useMemo(() => dayjs(date).format('dddd'), [date])
   const shortDate = useMemo(() => dayjs(date).format('MMM D, YYYY'), [date])
@@ -400,6 +396,8 @@ export function AppTopBar({
       value={effectiveValue}
       onChange={effectiveOnChange}
       isCompact={isMobile}
+      selectedTab={selectedTab}
+      onTabChange={onTabChange}
     />
   )
   const showActionArea = Boolean(rightSlot || currentPage)
@@ -498,7 +496,7 @@ export function AppTopBar({
       >
         <Group justify="space-between" align="center" w="100%" wrap="nowrap">
           <Group align="center" style={{ minWidth: 0 }}>
-            {teamName && (
+            {currentPage && (
               <Text
                 px={rem(isMobile ? 16 : 32)}
                 size={rem(isMobile ? 22 : 28)}
@@ -506,7 +504,7 @@ export function AppTopBar({
                 c="var(--pitch-accent-strong)"
                 style={{ whiteSpace: 'nowrap' }}
               >
-                P.I.T.C.H
+                {currentPage}
               </Text>
             )}
           </Group>

@@ -35,11 +35,17 @@ export class AssessmentRpcController {
 
   @MessagePattern(SIMULATION_SERVICE_PATTERNS.ASSESSMENT_LATEST)
   async getLatest(
-    @Payload() payload: { sessionId?: string; sessionMemberId?: string },
+    @Payload()
+    payload: {
+      sessionId?: string;
+      iterationId?: string;
+      sessionMemberId?: string;
+    },
   ) {
     try {
       return await this.assessmentService.getLatest(
         payload.sessionId,
+        payload.iterationId,
         payload.sessionMemberId,
       );
     } catch (error) {

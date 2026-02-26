@@ -1,7 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { SimulationPrismaService } from '../prisma/simulation-prisma.service';
-import type { SessionType } from '@prisma/simulation-client';
+import type { SessionType as PrismaSessionType } from '@prisma/simulation-client';
 import { Prisma } from '@prisma/simulation-client';
+import type { SessionType } from '../dto/session.dto';
 
 const sessionOwnerInclude = {
   scenario: true,
@@ -97,7 +98,7 @@ export class SessionRepository {
       where.orgId = filters.orgId;
     }
     if (filters?.type) {
-      where.type = filters.type;
+      where.type = filters.type as PrismaSessionType;
     }
     if (filters?.status) {
       where.status = filters.status;
@@ -164,7 +165,7 @@ export class SessionRepository {
         orgId: data.orgId,
         orgSnapshot: data.orgSnapshot,
         name: data.name,
-        type: data.type,
+        type: data.type as PrismaSessionType,
         tags: data.tags || [],
         sessionConfig: data.sessionConfig,
         scenarioId: data.scenarioId,
@@ -189,7 +190,10 @@ export class SessionRepository {
   async update(id: string, data: UpdateSessionData): Promise<SessionWithOwner> {
     return await this.prisma.client.session.update({
       where: { id },
-      data,
+      data: {
+        ...data,
+        type: data.type as PrismaSessionType | undefined,
+      },
       include: this.ownerInclude,
     });
   }

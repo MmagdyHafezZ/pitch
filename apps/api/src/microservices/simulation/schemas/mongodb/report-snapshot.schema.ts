@@ -14,7 +14,8 @@ import { Schema, Document } from 'mongoose';
 
 export interface IReportSnapshot extends Document {
   _id: string;
-  sessionMemberId: string;
+  iterationId: string;
+  sessionMemberId?: string;
   format: 'json';
   generatedAt: Date;
 
@@ -135,7 +136,8 @@ export interface IReportSnapshot extends Document {
 export const ReportSnapshotSchema = new Schema<IReportSnapshot>(
   {
     _id: { type: String, required: true },
-    sessionMemberId: { type: String, required: true },
+    iterationId: { type: String, required: true },
+    sessionMemberId: { type: String },
     format: { type: String, enum: ['json'], default: 'json' },
     generatedAt: { type: Date, required: true },
 
@@ -269,6 +271,7 @@ export const ReportSnapshotSchema = new Schema<IReportSnapshot>(
   },
 );
 
+ReportSnapshotSchema.index({ iterationId: 1 });
 ReportSnapshotSchema.index({ sessionMemberId: 1 });
 ReportSnapshotSchema.index({ generatedAt: -1 });
 ReportSnapshotSchema.index({ 'data.session.startedAt': -1 });

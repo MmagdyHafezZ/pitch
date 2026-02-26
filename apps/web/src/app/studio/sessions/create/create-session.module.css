@@ -332,6 +332,14 @@
   border-radius: 12px;
 }
 
+.scenarioPreviewSelected {
+  border-color: var(--mantine-color-blue-6);
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--mantine-color-blue-6) 14%, var(--mantine-color-dark-8)),
+    var(--mantine-color-dark-8)
+  );
+}
 .crmCard {
   background: color-mix(in srgb, var(--mantine-color-dark-8) 94%, transparent);
   border: 1px solid color-mix(in srgb, var(--mantine-color-dark-4) 40%, transparent);

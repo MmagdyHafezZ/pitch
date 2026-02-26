@@ -66,7 +66,7 @@ export interface ISessionCache {
   id: string;
   userId: string;
   orgId: string;
-  mode: 'text' | 'voice' | 'video';
+  mode: 'text' | 'voice' | 'video' | 'phone';
   scenarioId?: string;
   personaId?: string;
   status: 'active' | 'ended';

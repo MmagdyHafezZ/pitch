@@ -1,6 +1,6 @@
 'use client'
 
-import { createTheme } from '@mantine/core'
+import { createTheme, type ButtonProps, type MantineTheme } from '@mantine/core'
 import { generateColors } from '@mantine/colors-generator'
 
 export interface ThemeColors {
@@ -85,17 +85,16 @@ const baseTheme = createTheme({
       },
     },
     Button: {
-      styles: {
-        root: {
-          '&[data-variant="filled"]': {
-            backgroundColor: 'var(--pitch-accent)',
-            color: 'var(--mantine-color-white)',
-          },
-          '&[data-variant="filled"]:hover': {
-            backgroundColor: 'var(--pitch-accent-strong)',
-          },
-        },
-      },
+      vars: (_theme: MantineTheme, props: ButtonProps) => ({
+        root:
+          props.variant === 'filled'
+            ? {
+                '--button-bg': 'var(--pitch-accent)',
+                '--button-hover': 'var(--pitch-accent-strong)',
+                '--button-color': 'var(--mantine-color-white)',
+              }
+            : {},
+      }),
     },
     Progress: {
       styles: {
