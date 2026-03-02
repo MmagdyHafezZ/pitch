@@ -58,6 +58,17 @@ export interface UserSettings {
     lastSyncAt?: string | null
     autoSync?: boolean
   }
+  onboarding?: {
+    completed?: boolean
+    tutorialCompleted?: boolean
+    role?: 'MANAGER' | 'EMPLOYEE'
+    careerInfo?: {
+      jobTitle?: string
+      yearsOfExperience?: number
+      industry?: string
+      linkedIn?: string
+    }
+  }
 }
 
 export interface UserSummary {

@@ -15,7 +15,13 @@ import {
   TagsInput,
 } from '@mantine/core'
 import { ReactNode } from 'react'
-import { IconMessage, IconMicrophone, IconPhone, IconVideo } from '@tabler/icons-react'
+import {
+  IconInfoCircle,
+  IconMessage,
+  IconMicrophone,
+  IconPhone,
+  IconVideo,
+} from '@tabler/icons-react'
 import type { SessionType } from '@/features/sessions'
 import classes from '../create-session.module.css'
 
@@ -30,8 +36,6 @@ interface BasicsStepProps {
   errors: Record<string, string>
   sessionName: string
   setSessionName: (value: string) => void
-  phoneNumber: string
-  setPhoneNumber: (value: string) => void
   teamsLoading: boolean
   selectedTeamId: string | null
   setSelectedTeamId: (value: string | null) => void
@@ -85,8 +89,6 @@ export function BasicsStep({
   errors,
   sessionName,
   setSessionName,
-  phoneNumber,
-  setPhoneNumber,
   teamsLoading,
   selectedTeamId,
   setSelectedTeamId,
@@ -202,17 +204,21 @@ export function BasicsStep({
               />
             </Grid.Col>
             {sessionType === 'phone' && (
-              <Grid.Col span={{ base: 12, md: 6 }}>
-                <TextInput
-                  label="Phone Number"
-                  placeholder="+15551234567"
-                  value={phoneNumber}
-                  onChange={(event) => setPhoneNumber(event.currentTarget.value)}
-                  description="We’ll call this number when the session starts"
-                  error={errors.phoneNumber}
-                  type="tel"
-                  autoComplete="tel"
-                />
+              <Grid.Col span={12}>
+                <Paper withBorder radius="md" p="sm" className={classes.inlineInfoCard}>
+                  <Group align="flex-start" gap="sm" wrap="nowrap">
+                    <IconInfoCircle size={18} className={classes.inlineInfoIcon} />
+                    <Stack gap={2}>
+                      <Text fw={600} size="sm">
+                        Phone number is collected when the session starts
+                      </Text>
+                      <Text size="xs" c="dimmed">
+                        Setup only defines the training format. The caller enters the destination
+                        number right before the outbound phone session begins.
+                      </Text>
+                    </Stack>
+                  </Group>
+                </Paper>
               </Grid.Col>
             )}
             <Grid.Col span={{ base: 12, md: 6 }}>

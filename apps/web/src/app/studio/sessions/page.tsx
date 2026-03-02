@@ -454,6 +454,7 @@ function SessionsPageInner() {
     <Group align="start" gap="xl" wrap="nowrap">
       {/* Left side - Sessions list */}
       <motion.div
+        data-tour-id="sessions-list"
         animate={{ width: selectedSession ? '65%' : '100%' }}
         transition={{ duration: 0.5, ease: 'easeInOut' }}
         style={{
@@ -487,6 +488,7 @@ function SessionsPageInner() {
                 Try adjusting your filters or create a new session.
               </Text>
               <Button
+                data-tour-id="sessions-create-btn"
                 variant="light"
                 color="brand"
                 onClick={() => router.push('/studio/sessions/create')}

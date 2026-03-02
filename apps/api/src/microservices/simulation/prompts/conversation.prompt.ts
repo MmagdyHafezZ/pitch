@@ -1,4 +1,5 @@
 import type { Prisma } from '@prisma/simulation-client';
+import { resolveLanguageLabel } from '../utils/language';
 
 type JsonRecord = Record<string, unknown>;
 
@@ -27,6 +28,9 @@ interface SessionConfig extends JsonRecord {
   tone?: string;
   accent?: string;
   speechRate?: number | string;
+  responseLength?: string;
+  patienceLevel?: string;
+  initiativeLevel?: string;
   difficulty?: number | string;
   durationMinutes?: number;
   duration?: number;
@@ -104,7 +108,16 @@ export function buildConversationSystemPrompt(
     ? input.persona.traits
     : {};
 
-  const language = input.session.language?.trim() || 'unspecified';
+  const languageSettings = isRecord(userSnapshot?.settings)
+    ? userSnapshot.settings
+    : undefined;
+  const languagePreference = isRecord(languageSettings?.language)
+    ? languageSettings.language
+    : undefined;
+  const language = resolveLanguageLabel(
+    input.session.language,
+    pickString(languagePreference?.locale),
+  );
 
   const sections = [
     'You are running a roleplay simulation. Follow these instructions precisely.',
@@ -124,6 +137,7 @@ export function buildConversationSystemPrompt(
     buildEmotionalSection(
       personaTraits,
       pickString(effectiveSessionConfig.tone),
+      pickString(effectiveSessionConfig.patienceLevel),
     ),
     '',
     '[STYLE]',
@@ -249,7 +263,11 @@ function buildScenarioSection(
  * and behavioral directives. Every persona gets a universal emotional baseline
  * so conversations feel human regardless of trait configuration.
  */
-function buildEmotionalSection(traits: JsonRecord, tone?: string): string {
+function buildEmotionalSection(
+  traits: JsonRecord,
+  tone?: string,
+  patienceLevel?: string,
+): string {
   const lines: string[] = [];
 
   // ── Trait-based personality descriptors ──────────────────────────────────
@@ -280,6 +298,9 @@ function buildEmotionalSection(traits: JsonRecord, tone?: string): string {
 
   // ── Tone-based behavioral overrides ──────────────────────────────────────
   const normalizedTone = normalizeRole(tone);
+  const normalizedPatience = normalizeRole(
+    patienceLevel ?? (typeof patience === 'string' ? patience : undefined),
+  );
   if (normalizedTone === 'rude karen') {
     lines.push(
       'Baseline: Blunt, impatient, and hard to satisfy from the start.',
@@ -301,6 +322,16 @@ function buildEmotionalSection(traits: JsonRecord, tone?: string): string {
     lines.push(
       'Baseline: Composed and analytical. Emotions surface subtly — precision over drama.',
       'Express approval with measured language. Express frustration with pointed silence or a direct redirect.',
+    );
+  }
+
+  if (normalizedPatience?.includes('low')) {
+    lines.push(
+      'Patience setting: low. If the user rambles or dodges, tighten your tone quickly and force specificity.',
+    );
+  } else if (normalizedPatience?.includes('high')) {
+    lines.push(
+      'Patience setting: high. Stay composed, give the user room to recover, but keep standards firm.',
     );
   }
 
@@ -331,6 +362,9 @@ function buildStyleSection(sessionConfig: SessionConfig): string {
   const tone = pickString(sessionConfig.tone);
   const accent = pickString(sessionConfig.accent);
   const speechRate = formatValue(sessionConfig.speechRate);
+  const responseLength = pickString(sessionConfig.responseLength);
+  const patienceLevel = pickString(sessionConfig.patienceLevel);
+  const initiativeLevel = pickString(sessionConfig.initiativeLevel);
   const difficulty = formatValue(sessionConfig.difficulty);
   const durationMinutes =
     typeof sessionConfig.durationMinutes === 'number' &&
@@ -346,6 +380,9 @@ function buildStyleSection(sessionConfig: SessionConfig): string {
       tone ? `Tone: ${tone}` : '',
       accent ? `Accent: ${accent}` : '',
       speechRate ? `Speech rate: ${speechRate}` : '',
+      responseLength ? `Response length: ${responseLength}` : '',
+      patienceLevel ? `Patience level: ${patienceLevel}` : '',
+      initiativeLevel ? `Initiative level: ${initiativeLevel}` : '',
       difficulty ? `Difficulty: ${difficulty}` : '',
       durationMinutes ? `Target duration: ${durationMinutes}` : '',
     ],
@@ -355,6 +392,12 @@ function buildStyleSection(sessionConfig: SessionConfig): string {
 
 function buildLanguageSection(sessionConfig: SessionConfig): string {
   const isMultiTurn = sessionConfig.multiTurnEnabled === true;
+  const responseLength = normalizeRole(
+    pickString(sessionConfig.responseLength),
+  );
+  const initiativeLevel = normalizeRole(
+    pickString(sessionConfig.initiativeLevel),
+  );
   return formatSection(
     [
       'Use spoken, everyday wording — not formal writing.',
@@ -362,6 +405,16 @@ function buildLanguageSection(sessionConfig: SessionConfig): string {
       "Acknowledge one concrete point from the user's latest turn before moving on.",
       'Avoid repeating the same question verbatim. If you return to it, add new context.',
       'If the user is unclear, say what you understood and ask one short clarifying question.',
+      responseLength?.includes('concise')
+        ? 'Prefer short answers. Keep most turns to 1–2 sentences unless detail is explicitly requested.'
+        : responseLength?.includes('detailed')
+          ? 'Give richer answers when useful, but stay conversational and avoid monologues.'
+          : 'Aim for balanced answers: enough detail to be useful without taking over the conversation.',
+      initiativeLevel?.includes('reactive')
+        ? 'Let the user lead. Ask follow-ups only when needed to clarify or unblock the scenario.'
+        : initiativeLevel?.includes('proactive')
+          ? 'Drive momentum. Offer pointed follow-ups and move the scenario forward without waiting passively.'
+          : 'Balance response and initiative. Answer clearly, then use a focused follow-up when it advances the scenario.',
       isMultiTurn
         ? 'Keep most turns brief (1–3 sentences). Expand only when the user asks for detail.'
         : 'Keep your turn concise and natural — finish clearly.',

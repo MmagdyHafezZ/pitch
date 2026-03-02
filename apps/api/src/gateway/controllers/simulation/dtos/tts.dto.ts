@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsString, IsNotEmpty } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional } from 'class-validator';
 
 export class SpeakRequestDto {
   @ApiProperty({
@@ -26,6 +26,15 @@ export class SpeakRequestDto {
   @IsString()
   @IsNotEmpty()
   voice: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Optional model identifier for providers that expose multiple TTS models',
+    example: 'gpt-4o-mini-tts',
+  })
+  @IsString()
+  @IsOptional()
+  model?: string;
 }
 
 export class ProviderVoiceDto {
@@ -61,6 +70,13 @@ export class ProviderInfoDto {
     example: ['Alice - Clear, Engaging Educator', 'Rachel', 'George'],
   })
   voices: string[];
+
+  @ApiPropertyOptional({
+    description: 'Available models for this provider',
+    type: [String],
+    example: ['gpt-4o-mini-tts', 'tts-1', 'tts-1-hd'],
+  })
+  models?: string[];
 }
 
 export class VoicesResponseDto {
@@ -76,4 +92,11 @@ export class VoicesResponseDto {
     example: ['Alice - Clear, Engaging Educator', 'Rachel', 'George'],
   })
   voices: string[];
+
+  @ApiPropertyOptional({
+    description: 'Available models for the provider',
+    type: [String],
+    example: ['gpt-4o-mini-tts', 'tts-1', 'tts-1-hd'],
+  })
+  models?: string[];
 }

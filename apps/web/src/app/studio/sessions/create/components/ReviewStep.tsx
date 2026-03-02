@@ -18,7 +18,6 @@ interface ReviewStepProps {
   selectedTeamId: string | null
   teams: Team[]
   sessionType: SessionType | null
-  phoneNumber: string
   language: string
   tags: string[]
   selectedPersona: string | null
@@ -45,6 +44,9 @@ interface ReviewStepProps {
   llmProvidersData?: { providers: LLMProvider[] }
   tone: string
   speechRate: string
+  responseLength: string
+  patienceLevel: string
+  initiativeLevel: string
   difficulty: number
   multiTurnEnabled: boolean
 }
@@ -61,7 +63,6 @@ export function ReviewStep({
   selectedTeamId,
   teams,
   sessionType,
-  phoneNumber,
   language,
   tags,
   selectedPersona,
@@ -83,6 +84,9 @@ export function ReviewStep({
   llmProvidersData,
   tone,
   speechRate,
+  responseLength,
+  patienceLevel,
+  initiativeLevel,
   difficulty,
   multiTurnEnabled,
 }: ReviewStepProps) {
@@ -93,6 +97,12 @@ export function ReviewStep({
     crmSelections.opportunities.length +
     crmSelections.leads.length +
     crmSelections.contacts.length
+  const selectedModelDetail =
+    llmProvider && llmModel
+      ? llmProvidersData?.providers
+          .find((provider) => provider.name === llmProvider)
+          ?.modelDetails.find((model) => model.name === llmModel)
+      : undefined
 
   return (
     <Stack gap="lg">
@@ -133,7 +143,7 @@ export function ReviewStep({
             {sessionType === 'phone' && (
               <Group justify="apart" className={classes.reviewRow}>
                 <Text fw={600}>Phone number</Text>
-                <Text c="dimmed">{phoneNumber || 'Not set'}</Text>
+                <Text c="dimmed">Collected when the session starts</Text>
               </Group>
             )}
             <Group justify="apart" className={classes.reviewRow}>
@@ -235,12 +245,9 @@ export function ReviewStep({
               <Group justify="apart" className={classes.reviewRow}>
                 <Text fw={600}>Estimated Cost</Text>
                 <Text c="dimmed" size="sm">
-                  $
-                  {llmProvidersData.providers
-                    .find((p) => p.name === llmProvider)
-                    ?.modelDetails.find((m) => m.name === llmModel)
-                    ?.pricing.inputTokensPerMillion.toFixed(2)}
-                  /M tokens input
+                  {selectedModelDetail
+                    ? `$${selectedModelDetail.pricing.inputTokensPerMillion.toFixed(2)}/M tokens input`
+                    : 'Pricing unavailable'}
                 </Text>
               </Group>
             )}
@@ -277,6 +284,18 @@ export function ReviewStep({
             <Group justify="apart" className={classes.reviewRow}>
               <Text fw={600}>Speech Rate</Text>
               <Text c="dimmed">{speechRate}</Text>
+            </Group>
+            <Group justify="apart" className={classes.reviewRow}>
+              <Text fw={600}>Response length</Text>
+              <Text c="dimmed">{responseLength}</Text>
+            </Group>
+            <Group justify="apart" className={classes.reviewRow}>
+              <Text fw={600}>Patience level</Text>
+              <Text c="dimmed">{patienceLevel}</Text>
+            </Group>
+            <Group justify="apart" className={classes.reviewRow}>
+              <Text fw={600}>Initiative</Text>
+              <Text c="dimmed">{initiativeLevel}</Text>
             </Group>
             <Group justify="apart" className={classes.reviewRow}>
               <Text fw={600}>Difficulty</Text>

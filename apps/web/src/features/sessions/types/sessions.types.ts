@@ -120,6 +120,7 @@ export interface LLMConfig {
 export interface VoiceConfig {
   provider: string
   voice: string
+  model?: string
   speed?: number
   stability?: number
 }
@@ -135,6 +136,9 @@ export interface SessionConfigData {
   multiTurnEnabled?: boolean
   tone?: string
   speechRate?: string
+  responseLength?: string
+  patienceLevel?: string
+  initiativeLevel?: string
   accent?: string
   difficulty?: number
   aiRole?: string

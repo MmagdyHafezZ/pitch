@@ -1,0 +1,5 @@
+export { OnboardingWizard } from './components/OnboardingWizard'
+export { useOnboarding } from './hooks/useOnboarding'
+export { useTour } from './hooks/useTour'
+export { useOnboardingStore } from './stores/onboarding.store'
+export type { UserRole, OnboardingStep, OnboardingData, TourScreen } from './types'

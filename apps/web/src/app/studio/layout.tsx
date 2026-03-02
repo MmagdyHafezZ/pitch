@@ -4,6 +4,7 @@ import { AppSidebar } from '@/components/ui/AppSideBar'
 import { AppTopBar } from '@/components/ui/AppTopBar'
 import { TeamSideBar } from '@/components/ui/TeamSideBar'
 import { useTeams } from '@/features/teams/hooks/useTeams'
+import { useAuthStore } from '@/features/auth/stores/auth.store'
 import { Box } from '@mantine/core'
 import { useState, useEffect, useMemo, Suspense } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
@@ -17,6 +18,14 @@ export default function ClientLayerComponent({ children }: { children: React.Rea
   const pathname = usePathname()
   const router = useRouter()
   const searchParams = useSearchParams()
+  const user = useAuthStore((state) => state.user)
+
+  // Guard: redirect to onboarding if user is loaded but hasn't completed it
+  useEffect(() => {
+    if (user && !user.settings?.onboarding?.completed) {
+      router.replace('/onboarding')
+    }
+  }, [user, router])
 
   const [tabsByPage, setTabsByPage] = useState<
     Record<'Home' | 'Sessions' | 'Teams' | 'Analytics' | 'Settings', string>

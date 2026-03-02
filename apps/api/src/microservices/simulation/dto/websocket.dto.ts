@@ -345,6 +345,7 @@ export class ConversationStartPayload {
   ttsConfig?: {
     provider?: string;
     voice?: string;
+    model?: string;
   };
 
   /**

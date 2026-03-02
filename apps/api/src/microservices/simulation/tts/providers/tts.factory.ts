@@ -26,8 +26,10 @@ export class TtsProviderFactory {
       name: p.name,
       description: p.description,
       voices: p.voices || [],
+      models: p.models || [],
     }));
   }
+
   getVoices(providerName: string): string[] {
     const provider = this.getProvider(providerName);
 
@@ -36,5 +38,15 @@ export class TtsProviderFactory {
     }
 
     return provider.voices;
+  }
+
+  getModels(providerName: string): string[] {
+    const provider = this.getProvider(providerName);
+
+    if (!provider.models || provider.models.length === 0) {
+      return [];
+    }
+
+    return provider.models;
   }
 }

@@ -45,7 +45,9 @@ import { CrmStep } from './components/CrmStep'
 import { StyleStep } from './components/StyleStep'
 import { ReviewStep } from './components/ReviewStep'
 import { SessionConfigForm, Persona, PersonaTraits } from './lib/types'
+import { getBrainCompatibleModels, getPreferredBrainModel } from './lib/brain-models'
 import { useCrm } from '@/features/crm'
+import { useI18n } from '@/features/i18n'
 import {
   getSavedCrmConnections,
   getSavedCrmSessionConnections,
@@ -67,6 +69,7 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 export default function CreateSessionPage() {
   const router = useRouter()
   const { user } = useAuth()
+  const { locale } = useI18n()
   const { teams, activeTeamId, fetchUserTeams, loading: teamsLoading } = useTeams()
   const { createSession, loading, error } = useSessions()
   const { providers: ttsProviders, loading: ttsLoading } = useTtsProviders()
@@ -79,7 +82,6 @@ export default function CreateSessionPage() {
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null)
   const [sessionName, setSessionName] = useState('')
   const [sessionType, setSessionType] = useState<SessionType | null>(null)
-  const [phoneNumber, setPhoneNumber] = useState('')
   const [tags, setTags] = useState<string[]>([])
   const [language, setLanguage] = useState('en-US')
   const [durationMinutes, setDurationMinutes] = useState(30)
@@ -107,9 +109,13 @@ export default function CreateSessionPage() {
   const [multiTurnEnabled, setMultiTurnEnabled] = useState(true)
   const [ttsProvider, setTtsProvider] = useState('elevenlabs')
   const [ttsVoice, setTtsVoice] = useState('Rachel')
+  const [ttsModel, setTtsModel] = useState<string | null>(null)
   const [accent, setAccent] = useState('Persona-based')
   const [tone, setTone] = useState('Formal')
-  const [speechRate, setSpeechRate] = useState('Normal')
+  const [speechRate, setSpeechRate] = useState('Conversational')
+  const [responseLength, setResponseLength] = useState('Balanced')
+  const [patienceLevel, setPatienceLevel] = useState('Medium')
+  const [initiativeLevel, setInitiativeLevel] = useState('Balanced')
   const [difficulty, setDifficulty] = useState(5)
   const [modelSearch, setModelSearch] = useState('')
 
@@ -140,6 +146,13 @@ export default function CreateSessionPage() {
 
   const personaScrollRef = useRef<HTMLDivElement | null>(null)
   const modelScrollRef = useRef<HTMLDivElement | null>(null)
+  const languageTouchedRef = useRef(false)
+
+  useEffect(() => {
+    if (!languageTouchedRef.current) {
+      setLanguage(locale)
+    }
+  }, [locale])
 
   useEffect(() => {
     if (user?.id) {
@@ -197,13 +210,30 @@ export default function CreateSessionPage() {
   }, [selectedTeamId, user?.id])
 
   useEffect(() => {
-    if (!ttsLoading && ttsProviders.length > 0 && !ttsVoice) {
-      const provider = ttsProviders.find((p) => p.name === ttsProvider)
-      if (provider && provider.voices.length > 0) {
-        setTtsVoice(provider.voices[0])
-      }
+    if (ttsLoading || ttsProviders.length === 0) {
+      return
     }
-  }, [ttsLoading, ttsProviders, ttsProvider, ttsVoice])
+
+    const provider = ttsProviders.find((entry) => entry.name === ttsProvider) ?? ttsProviders[0]
+    if (provider.name !== ttsProvider) {
+      setTtsProvider(provider.name)
+    }
+
+    if (!ttsVoice || !provider.voices.includes(ttsVoice)) {
+      setTtsVoice(provider.voices[0] ?? '')
+    }
+
+    if ((provider.models?.length ?? 0) > 0) {
+      if (!ttsModel || !provider.models?.includes(ttsModel)) {
+        setTtsModel(provider.models?.[0] ?? null)
+      }
+      return
+    }
+
+    if (ttsModel) {
+      setTtsModel(null)
+    }
+  }, [ttsLoading, ttsProviders, ttsProvider, ttsVoice, ttsModel])
 
   useEffect(() => {
     if (!selectedPersonaData?.traits) {
@@ -216,6 +246,9 @@ export default function CreateSessionPage() {
     }
     if (traits.voice?.voiceName) {
       setTtsVoice(traits.voice.voiceName)
+    }
+    if (traits.voice?.model) {
+      setTtsModel(traits.voice.model)
     }
     const derivedAccent = traits.voice?.language || traits.voiceProfile || 'Persona-based'
     setAccent(derivedAccent)
@@ -300,27 +333,38 @@ export default function CreateSessionPage() {
       const firstEnabledProvider = llmProvidersData.providers.find((p) => p.enabled)
       if (firstEnabledProvider) {
         setLlmProvider(firstEnabledProvider.name)
-        if (firstEnabledProvider.modelDetails.length > 0) {
-          const preferredModel = firstEnabledProvider.modelDetails.find(
-            (m) => m.name === 'gpt-4o-mini'
-          )
-          setLlmModel(preferredModel?.name || firstEnabledProvider.modelDetails[0].name)
+        const preferredModel = getPreferredBrainModel(firstEnabledProvider)
+        if (preferredModel) {
+          setLlmModel(preferredModel.name)
         }
       }
     }
   }, [llmProvidersLoading, llmProvidersData, llmProvider])
 
   useEffect(() => {
+    if (!llmProvidersData || !llmProvider) {
+      return
+    }
+
+    const provider = llmProvidersData.providers.find((entry) => entry.name === llmProvider)
+    const compatibleModels = getBrainCompatibleModels(provider)
+    if (compatibleModels.length === 0) {
+      return
+    }
+
+    if (!llmModel || !compatibleModels.some((model) => model.name === llmModel)) {
+      const preferredModel = getPreferredBrainModel(provider)
+      if (preferredModel) {
+        setLlmModel(preferredModel.name)
+      }
+    }
+  }, [llmProvidersData, llmProvider, llmModel])
+
+  useEffect(() => {
     if (sessionType && errors.sessionType) {
       setErrors(({ sessionType: _sessionType, ...rest }) => rest)
     }
   }, [sessionType, errors.sessionType])
-
-  useEffect(() => {
-    if (phoneNumber.trim() && errors.phoneNumber) {
-      setErrors(({ phoneNumber: _phoneNumber, ...rest }) => rest)
-    }
-  }, [phoneNumber, errors.phoneNumber])
 
   useEffect(() => {
     if (selectedPersona && errors.persona) {
@@ -391,24 +435,16 @@ export default function CreateSessionPage() {
     )
   }, [crmStatus?.providerEmail])
 
-  const validateStep = (step: number): boolean => {
+  const getStepErrors = (step: number): Record<string, string> => {
     const newErrors: Record<string, string> = {}
 
     if (step === 0) {
       if (!sessionType) newErrors.sessionType = 'Session type is required'
-      if (sessionType === 'phone') {
-        const normalized = phoneNumber.trim()
-        if (!normalized) {
-          newErrors.phoneNumber = 'Phone number is required for phone calls'
-        } else if (!/^\+?[1-9]\d{7,14}$/.test(normalized)) {
-          newErrors.phoneNumber = 'Use E.164 format (e.g. +15551234567)'
-        }
-      }
     }
 
     if (step === 1) {
-      if (!durationMinutes || durationMinutes <= 0) {
-        newErrors.durationMinutes = 'Session length must be greater than 0'
+      if (!durationMinutes || durationMinutes < 5 || durationMinutes > 180) {
+        newErrors.durationMinutes = 'Session length must be between 5 and 180 minutes'
       }
     }
 
@@ -421,8 +457,47 @@ export default function CreateSessionPage() {
       if (!llmModel) newErrors.llmModel = 'LLM model is required'
     }
 
+    return newErrors
+  }
+
+  const validateStep = (step: number): boolean => {
+    const newErrors = getStepErrors(step)
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
+  }
+
+  const attemptStepChange = (targetStep: number) => {
+    if (targetStep <= active) {
+      setErrors({})
+      setActive(targetStep)
+      return
+    }
+
+    for (let step = active; step < targetStep; step += 1) {
+      const stepErrors = getStepErrors(step)
+      if (Object.keys(stepErrors).length > 0) {
+        setErrors(stepErrors)
+        setActive(step)
+        return
+      }
+    }
+
+    setErrors({})
+    setActive(targetStep)
+  }
+
+  const validateAllSteps = () => {
+    for (let step = 0; step <= 3; step += 1) {
+      const stepErrors = getStepErrors(step)
+      if (Object.keys(stepErrors).length > 0) {
+        setErrors(stepErrors)
+        setActive(step)
+        return false
+      }
+    }
+
+    setErrors({})
+    return true
   }
 
   const nextStep = () => {
@@ -447,43 +522,10 @@ export default function CreateSessionPage() {
       return
     }
 
-    if (!sessionType) {
+    if (!validateAllSteps()) {
       notifications.show({
-        title: 'Error',
-        message: 'Session type is required',
-        color: 'red',
-        icon: <IconAlertCircle />,
-      })
-      return
-    }
-
-    if (sessionType === 'phone') {
-      const normalized = phoneNumber.trim()
-      if (!normalized || !/^\+?[1-9]\d{7,14}$/.test(normalized)) {
-        notifications.show({
-          title: 'Error',
-          message: 'Enter a valid phone number in E.164 format (e.g. +15551234567)',
-          color: 'red',
-          icon: <IconAlertCircle />,
-        })
-        return
-      }
-    }
-
-    if (!selectedPersona) {
-      notifications.show({
-        title: 'Error',
-        message: 'Please select a persona before creating a session',
-        color: 'red',
-        icon: <IconAlertCircle />,
-      })
-      return
-    }
-
-    if (!llmProvider || !llmModel) {
-      notifications.show({
-        title: 'Error',
-        message: 'Please select an AI provider and model',
+        title: 'Fix highlighted fields',
+        message: 'Complete the required fields before creating the session.',
         color: 'red',
         icon: <IconAlertCircle />,
       })
@@ -542,6 +584,9 @@ export default function CreateSessionPage() {
         accent,
         tone,
         speechRate,
+        responseLength,
+        patienceLevel,
+        initiativeLevel,
         difficulty,
         durationMinutes,
         aiRole: aiRole.trim() || undefined,
@@ -579,22 +624,28 @@ export default function CreateSessionPage() {
       if (sessionType === 'voice' || sessionType === 'video' || sessionType === 'phone') {
         sessionConfig.ttsProvider = ttsProvider
         sessionConfig.ttsVoice = ttsVoice
+        sessionConfig.ttsModel = ttsModel ?? undefined
         sessionConfig.voice = {
           provider: ttsProvider,
           voice: ttsVoice,
-        }
-      }
-
-      if (sessionType === 'phone') {
-        sessionConfig.phone = {
-          number: phoneNumber.trim(),
+          ...(ttsModel ? { model: ttsModel } : {}),
         }
       }
 
       const sessionData: CreateSessionInput = {
         orgId: selectedTeamId || user.id,
+        userSnapshot: {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          settings: {
+            language: {
+              locale,
+            },
+          },
+        },
         name: sessionName.trim() || undefined,
-        type: sessionType,
+        type: sessionType as SessionType,
         tags: tags.length > 0 ? tags : undefined,
         language: language || undefined,
         personaId: selectedPersona ?? undefined,
@@ -673,7 +724,18 @@ export default function CreateSessionPage() {
         },
         personaId: selectedPersona || undefined,
         crmContextId: undefined,
-        userSnapshot: user ? { id: user.id, email: user.email, name: user.name } : undefined,
+        userSnapshot: user
+          ? {
+              id: user.id,
+              email: user.email,
+              name: user.name,
+              settings: {
+                language: {
+                  locale,
+                },
+              },
+            }
+          : undefined,
         orgSnapshot: undefined,
         objective: scenarioObjective,
         context: scenarioContext,
@@ -707,6 +769,33 @@ export default function CreateSessionPage() {
     } finally {
       setScenarioGenerating(false)
     }
+  }
+
+  const handleCreatePersona = async (input: { name: string; traits: PersonaTraits }) => {
+    const orgId = selectedTeamId || user?.id
+    if (!orgId) {
+      throw new Error('Select a team or sign in before creating a persona.')
+    }
+
+    const createdPersona = (await api.personas.create({
+      orgId,
+      name: input.name,
+      traits: input.traits as Record<string, unknown>,
+    })) as Persona
+
+    setPersonas((current) =>
+      [...current, createdPersona].sort((left, right) => left.name.localeCompare(right.name))
+    )
+    setSelectedPersona(createdPersona.id)
+    setPersonaSearch('')
+
+    notifications.show({
+      title: 'Persona created',
+      message: `${createdPersona.name} is ready to use in this session.`,
+      color: 'green',
+    })
+
+    return createdPersona
   }
 
   const handleCrmConnect = async () => {
@@ -797,14 +886,15 @@ export default function CreateSessionPage() {
           errors={errors}
           sessionName={sessionName}
           setSessionName={setSessionName}
-          phoneNumber={phoneNumber}
-          setPhoneNumber={setPhoneNumber}
           teamsLoading={teamsLoading}
           selectedTeamId={selectedTeamId}
           setSelectedTeamId={setSelectedTeamId}
           teams={teams}
           language={language}
-          setLanguage={setLanguage}
+          setLanguage={(value) => {
+            languageTouchedRef.current = true
+            setLanguage(value)
+          }}
           tags={tags}
           setTags={setTags}
         />
@@ -857,6 +947,11 @@ export default function CreateSessionPage() {
           setSelectedPersona={setSelectedPersona}
           errors={errors}
           selectedPersonaData={selectedPersonaData}
+          ttsProviders={ttsProviders}
+          onCreatePersona={handleCreatePersona}
+          createDisabledReason={
+            user?.id ? null : 'You need to be signed in before creating a persona.'
+          }
         />
       ),
     },
@@ -927,6 +1022,12 @@ export default function CreateSessionPage() {
           setTone={setTone}
           speechRate={speechRate}
           setSpeechRate={setSpeechRate}
+          responseLength={responseLength}
+          setResponseLength={setResponseLength}
+          patienceLevel={patienceLevel}
+          setPatienceLevel={setPatienceLevel}
+          initiativeLevel={initiativeLevel}
+          setInitiativeLevel={setInitiativeLevel}
           difficulty={difficulty}
           setDifficulty={setDifficulty}
           multiTurnEnabled={multiTurnEnabled}
@@ -944,7 +1045,6 @@ export default function CreateSessionPage() {
           selectedTeamId={selectedTeamId}
           teams={teams}
           sessionType={sessionType}
-          phoneNumber={phoneNumber}
           language={language}
           tags={tags}
           selectedPersona={selectedPersona}
@@ -971,6 +1071,9 @@ export default function CreateSessionPage() {
           llmProvidersData={llmProvidersData}
           tone={tone}
           speechRate={speechRate}
+          responseLength={responseLength}
+          patienceLevel={patienceLevel}
+          initiativeLevel={initiativeLevel}
           difficulty={difficulty}
           multiTurnEnabled={multiTurnEnabled}
         />
@@ -1023,7 +1126,7 @@ export default function CreateSessionPage() {
               <Paper className={classes.stepPanelCard} p="md">
                 <Stepper
                   active={active}
-                  onStepClick={setActive}
+                  onStepClick={attemptStepChange}
                   orientation={isStepperCompact ? 'horizontal' : 'vertical'}
                   size="sm"
                   color="blue"

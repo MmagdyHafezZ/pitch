@@ -1,6 +1,8 @@
 import type { Metadata } from 'next'
 import '@mantine/core/styles.css'
+import 'driver.js/dist/driver.css'
 import { ColorSchemeScript, mantineHtmlProps } from '@mantine/core'
+import { DEFAULT_LOCALE } from '@/features/i18n/constants'
 import { Providers } from '@/lib/providers'
 import { AuthGate } from './auth-gate'
 
@@ -15,7 +17,7 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en" {...mantineHtmlProps}>
+    <html lang={DEFAULT_LOCALE} {...mantineHtmlProps}>
       <head>
         <ColorSchemeScript />
       </head>

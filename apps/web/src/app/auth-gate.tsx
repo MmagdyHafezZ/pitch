@@ -10,6 +10,7 @@ const AUTH_PATH_PREFIX = '/auth'
 const AUTH_CALLBACK_PATH = '/auth/callback'
 const AUTH_REDIRECT = '/auth/login'
 const AUTHENTICATED_REDIRECT = '/studio/home'
+const ONBOARDING_PATH = '/onboarding'
 const REFRESH_CHECK_INTERVAL_MS = 60 * 1000
 const REFRESH_WINDOW_MS = 2 * 60 * 1000
 
@@ -31,6 +32,7 @@ export function AuthGate({ children }: AuthGateProps) {
   }, [pathname])
 
   const isCallbackRoute = pathname === AUTH_CALLBACK_PATH
+  const isOnboardingRoute = pathname === ONBOARDING_PATH
 
   useEffect(() => {
     if (!pathname) return
@@ -70,6 +72,8 @@ export function AuthGate({ children }: AuthGateProps) {
         return
       }
 
+      // Allow the onboarding route through without any redirect
+      // The onboarding page and studio layout handle their own redirect logic
       setChecked(true)
     }
 
@@ -85,7 +89,7 @@ export function AuthGate({ children }: AuthGateProps) {
     return () => {
       isActive = false
     }
-  }, [isAuthRoute, isCallbackRoute, pathname, refreshAccessToken, router, token])
+  }, [isAuthRoute, isCallbackRoute, isOnboardingRoute, pathname, refreshAccessToken, router, token])
 
   useEffect(() => {
     if (!token) return

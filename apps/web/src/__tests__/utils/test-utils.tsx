@@ -4,6 +4,7 @@ import { MantineProvider } from '@mantine/core'
 import { Notifications } from '@mantine/notifications'
 import { ModalsProvider } from '@mantine/modals'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { I18nProvider } from '@/features/i18n'
 
 // Import Mantine CSS for testing
 import '@mantine/core/styles.css'
@@ -32,12 +33,14 @@ function TestProviders({ children, queryClient }: TestProvidersProps) {
 
   return (
     <QueryClientProvider client={client}>
-      <MantineProvider defaultColorScheme="light">
-        <ModalsProvider>
-          <Notifications />
-          {children}
-        </ModalsProvider>
-      </MantineProvider>
+      <I18nProvider>
+        <MantineProvider defaultColorScheme="light">
+          <ModalsProvider>
+            <Notifications />
+            {children}
+          </ModalsProvider>
+        </MantineProvider>
+      </I18nProvider>
     </QueryClientProvider>
   )
 }

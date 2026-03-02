@@ -61,7 +61,7 @@ export class TtsGatewayController {
         .send<SpeakResponse>(TTS_SERVICE_PATTERNS.SPEAK, {
           text: body.text,
           provider: body.provider,
-          options: { voice: body.voice },
+          options: { voice: body.voice, model: body.model },
         })
         .pipe(
           timeout(15000),
@@ -95,7 +95,7 @@ export class TtsGatewayController {
       {
         text: body.text,
         provider: body.provider,
-        options: { voice: body.voice },
+        options: { voice: body.voice, model: body.model },
       },
     );
 

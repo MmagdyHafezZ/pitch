@@ -7,9 +7,10 @@ import { IconCheck, IconX } from '@tabler/icons-react'
 import { notifications } from '@mantine/notifications'
 import {
   parseOAuthCallback,
-  handleOAuthSuccess,
   handleOAuthError,
+  storeOAuthTokens,
 } from '@/features/auth/utils/oauth.utils'
+import { api } from '@/lib/client'
 
 export default function AuthCallbackPage() {
   return (
@@ -45,11 +46,12 @@ function AuthCallbackContent() {
           return
         }
 
-        // Handle successful OAuth
-        handleOAuthSuccess({
-          access_token: token,
-          refresh_token,
-        })
+        // Store tokens (sets access token in memory)
+        storeOAuthTokens({ access_token: token, refresh_token })
+
+        // Fetch user to determine if onboarding is needed
+        const user = await api.auth.me()
+        const destination = user?.settings?.onboarding?.completed ? '/studio/home' : '/onboarding'
 
         setStatus('success')
 
@@ -61,10 +63,10 @@ function AuthCallbackContent() {
           icon: <IconCheck size={16} />,
         })
 
-        // Redirect to home after a brief delay
+        // Redirect after a brief delay
         setTimeout(() => {
-          router.push('/studio/home')
-        }, 2000)
+          router.push(destination)
+        }, 1500)
       } catch (error) {
         console.error('Auth callback error:', error)
         const errorMsg = 'An unexpected error occurred during authentication'

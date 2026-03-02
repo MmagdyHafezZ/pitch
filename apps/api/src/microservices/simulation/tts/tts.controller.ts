@@ -10,6 +10,7 @@ type SpeakRequest = {
   provider: string;
   options?: {
     voice?: string;
+    model?: string;
     language?: string;
     format?: 'mp3' | 'wav' | 'ogg';
     sampleRate?: number;
@@ -31,7 +32,7 @@ export class TtsMicroserviceController {
   async speak(@Payload() data: SpeakRequest): Promise<SpeakResponse> {
     try {
       this.logger.log(
-        `TTS speak - provider=${data.provider}, voice=${data.options?.voice ?? 'default'}`,
+        `TTS speak - provider=${data.provider}, model=${data.options?.model ?? 'default'}, voice=${data.options?.voice ?? 'default'}`,
       );
 
       const result = await this.ttsService.synthesize(
@@ -55,7 +56,7 @@ export class TtsMicroserviceController {
   stream(@Payload() data: SpeakRequest): Observable<SpeakResponse> {
     try {
       this.logger.log(
-        `TTS stream - provider=${data.provider}, voice=${data.options?.voice ?? 'default'}`,
+        `TTS stream - provider=${data.provider}, model=${data.options?.model ?? 'default'}, voice=${data.options?.voice ?? 'default'}`,
       );
 
       return new Observable<SpeakResponse>((subscriber) => {
@@ -104,6 +105,7 @@ export class TtsMicroserviceController {
       return {
         provider: data.provider,
         voices: this.ttsService.getVoices(data.provider),
+        models: this.ttsService.getModels(data.provider),
       };
     } catch (error) {
       this.logger.error('Failed to get voices', error);

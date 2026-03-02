@@ -46,10 +46,21 @@ interface SessionConfig extends JsonRecord {
   model?: string;
   temperature?: number;
   maxTokens?: number;
+  responseLength?: string;
   systemPrompt?: string;
   customPrompt?: string;
   aiRole?: string;
   userRole?: string;
+  ttsProvider?: string;
+  ttsVoice?: string;
+  ttsModel?: string;
+  voice?: {
+    provider?: string;
+    voice?: string;
+    voiceName?: string;
+    language?: string;
+    model?: string;
+  };
 }
 
 type SessionWithRelations = Prisma.SessionGetPayload<{
@@ -433,6 +444,7 @@ export class StreamingConversationService {
         ttsResult = await this.ttsService.synthesize(text, ttsConfig.provider, {
           voice: ttsConfig.voice,
           language: ttsConfig.language,
+          model: ttsConfig.model,
         });
       } catch (error) {
         ttsError = error;
@@ -596,11 +608,20 @@ export class StreamingConversationService {
     const sessionConfig = toRecord(session.sessionConfig) as SessionConfig;
     const llmConfig: LlmConfigOverride =
       sessionConfig.llm ?? sessionConfig.llmConfig ?? {};
+    const normalizedResponseLength = sessionConfig.responseLength
+      ?.toLowerCase()
+      .trim();
+    const defaultMaxTokens = normalizedResponseLength?.includes('concise')
+      ? 220
+      : normalizedResponseLength?.includes('detailed')
+        ? 700
+        : 420;
     return {
       provider: llmConfig.provider ?? undefined,
       model: llmConfig.model ?? sessionConfig.model ?? 'gpt-4o-mini',
       temperature: llmConfig.temperature ?? sessionConfig.temperature ?? 0.7,
-      maxTokens: llmConfig.maxTokens ?? sessionConfig.maxTokens ?? 500,
+      maxTokens:
+        llmConfig.maxTokens ?? sessionConfig.maxTokens ?? defaultMaxTokens,
     };
   }
 
@@ -608,16 +629,52 @@ export class StreamingConversationService {
     provider: string;
     voice?: string;
     language?: string;
+    model?: string;
   } {
+    const sessionConfig = toRecord(session.sessionConfig);
     const persona = session.persona;
     const traits = persona?.traits ? toRecord(persona.traits) : {};
     const voice = traits.voice ? toRecord(traits.voice) : {};
+    const sessionVoice = sessionConfig.voice
+      ? toRecord(sessionConfig.voice as Prisma.JsonValue)
+      : {};
 
     return {
-      provider: (voice.provider as string) || 'elevenlabs',
-      voice: voice.voiceName as string,
-      language: (voice.language as string) || session.language || 'en',
+      provider:
+        this.pickFirstString(
+          voice.provider,
+          sessionVoice.provider,
+          sessionConfig.ttsProvider,
+        ) || 'elevenlabs',
+      voice: this.pickFirstString(
+        voice.voiceName,
+        voice.voice,
+        sessionVoice.voiceName,
+        sessionVoice.voice,
+        sessionConfig.ttsVoice,
+      ),
+      language:
+        this.pickFirstString(
+          voice.language,
+          sessionVoice.language,
+          session.language,
+        ) || 'en',
+      model: this.pickFirstString(
+        voice.model,
+        sessionVoice.model,
+        sessionConfig.ttsModel,
+      ),
     };
+  }
+
+  private pickFirstString(...values: unknown[]): string | undefined {
+    for (const value of values) {
+      if (typeof value === 'string' && value.trim().length > 0) {
+        return value.trim();
+      }
+    }
+
+    return undefined;
   }
 
   private saveTurn(streamSession: StreamingSession): void {

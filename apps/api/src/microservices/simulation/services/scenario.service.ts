@@ -62,7 +62,7 @@ export class ScenarioService {
       model: 'gpt-4o',
     };
 
-    const systemPrompt = await buildScenarioSystemPrompt();
+    const systemPrompt = await buildScenarioSystemPrompt(request.language);
 
     const userPrompt = JSON.stringify(
       {

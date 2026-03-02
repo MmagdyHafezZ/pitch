@@ -1,11 +1,19 @@
-import { Controller, Get, Param, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { PersonaService } from '../services/persona.service';
+import { CreatePersonaDto } from '../dto/persona.dto';
 
 @ApiTags('Simulation - Personas')
 @Controller('simulation/personas')
 export class PersonaHttpController {
   constructor(private readonly personaService: PersonaService) {}
+
+  @Post()
+  @ApiOperation({ summary: 'Create a new persona' })
+  @ApiResponse({ status: 201, description: 'Persona created successfully' })
+  async createPersona(@Body() createPersonaDto: CreatePersonaDto) {
+    return this.personaService.create(createPersonaDto);
+  }
 
   @Get()
   @ApiOperation({ summary: 'List all personas' })

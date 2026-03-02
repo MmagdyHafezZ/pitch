@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { useTour } from '@/features/onboarding'
 import {
   Alert,
   Badge,
@@ -221,8 +222,18 @@ const buildWeeklyTrend = (sessions: Session[], weeks = 8) => {
 
 export default function DashboardHome() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { user } = useAuth()
   const { teams, fetchUserTeams } = useTeams()
+  const { startTour } = useTour()
+
+  // Auto-start tour if redirected from onboarding with ?startTour=home
+  useEffect(() => {
+    if (searchParams.get('startTour') === 'home') {
+      const timer = setTimeout(() => void startTour('home'), 800)
+      return () => clearTimeout(timer)
+    }
+  }, [searchParams, startTour])
 
   const [userSessions, setUserSessions] = useState<Session[]>([])
   const [teamSessionMap, setTeamSessionMap] = useState<Record<string, Session[]>>({})
@@ -438,6 +449,7 @@ export default function DashboardHome() {
   return (
     <Stack gap="lg">
       <Card
+        data-tour-id="home-header"
         withBorder
         radius="lg"
         p="lg"
@@ -500,7 +512,7 @@ export default function DashboardHome() {
         </Center>
       ) : (
         <>
-          <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} spacing="md">
+          <SimpleGrid data-tour-id="home-analytics" cols={{ base: 1, sm: 2, lg: 4 }} spacing="md">
             <Card withBorder radius="lg" p="lg">
               <Group justify="space-between" mb={6}>
                 <Text size="sm" c="dimmed">
@@ -724,7 +736,7 @@ export default function DashboardHome() {
             </Grid.Col>
 
             <Grid.Col span={{ base: 12, lg: 4 }}>
-              <Card withBorder radius="lg" p="lg">
+              <Card data-tour-id="home-sessions" withBorder radius="lg" p="lg">
                 <Group justify="space-between" mb="sm">
                   <Text fw={700}>Recent sessions</Text>
                   <ThemeIcon color="grape" variant="light" radius="xl">

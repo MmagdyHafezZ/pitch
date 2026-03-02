@@ -579,6 +579,7 @@ export function TeamMembersPanel() {
                           ) : (
                             <Group justify="flex-end">
                               <Button
+                                data-tour-id="team-invite-btn"
                                 size="xs"
                                 variant="light"
                                 leftSection={<IconUserPlus size={14} />}

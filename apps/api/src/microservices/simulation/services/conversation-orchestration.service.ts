@@ -17,6 +17,7 @@ import { Prisma } from '@prisma/simulation-client';
 import { SentenceDetector } from '../utils/sentence-detector';
 import { RagService } from '../rag/rag.service';
 import { RagIndexerService } from '../rag/rag-indexer.service';
+import { resolveTtsConfig } from '../utils/tts-config';
 
 type JsonRecord = Record<string, unknown>;
 
@@ -33,6 +34,7 @@ interface SessionConfig extends JsonRecord {
   model?: string;
   temperature?: number;
   maxTokens?: number;
+  responseLength?: string;
   durationMinutes?: number;
   duration?: number;
   aiRole?: string;
@@ -41,6 +43,16 @@ interface SessionConfig extends JsonRecord {
   customPrompt?: string;
   userSnapshot?: Prisma.InputJsonValue;
   stages?: unknown;
+  ttsProvider?: string;
+  ttsVoice?: string;
+  ttsModel?: string;
+  voice?: {
+    provider?: string;
+    voice?: string;
+    voiceName?: string;
+    language?: string;
+    model?: string;
+  };
 }
 
 interface ScenarioConfig extends JsonRecord {
@@ -170,9 +182,6 @@ export class ConversationOrchestrationService {
 
     // ── 2. Resolve TTS config ─────────────────────────────────────────────────
     let personaData = session.persona;
-    let ttsProvider = 'elevenlabs';
-    let ttsVoice: string | undefined;
-    let ttsLanguage: string | undefined;
 
     const resolvedPersonaId = payload.personaId ?? session.personaId;
     if (resolvedPersonaId && resolvedPersonaId !== session.personaId) {
@@ -181,18 +190,11 @@ export class ConversationOrchestrationService {
       });
     }
 
-    if (personaData?.traits) {
-      const traits = toRecord(personaData.traits);
-      const voice = traits.voice;
-      if (isRecord(voice)) {
-        ttsProvider = (voice.provider as string) ?? ttsProvider;
-        ttsVoice = voice.voiceName as string;
-        ttsLanguage = voice.language as string;
-      }
-    }
-
-    if (payload.ttsConfig?.provider) ttsProvider = payload.ttsConfig.provider;
-    if (payload.ttsConfig?.voice) ttsVoice = payload.ttsConfig.voice;
+    const resolvedTts = resolveTtsConfig({
+      sessionConfig,
+      personaTraits: personaData?.traits ? toRecord(personaData.traits) : null,
+      override: payload.ttsConfig,
+    });
 
     // ── 3. Resolve session member + iteration (cached) ────────────────────────
     const smCache = forceNewIteration
@@ -425,9 +427,10 @@ export class ConversationOrchestrationService {
                 this.processSentenceTts(
                   idx,
                   sentenceChunk.sentence,
-                  ttsProvider,
-                  ttsVoice,
-                  ttsLanguage,
+                  resolvedTts.provider,
+                  resolvedTts.voice,
+                  resolvedTts.language,
+                  resolvedTts.model,
                   ttsSemaphore,
                   subject,
                 ),
@@ -456,9 +459,10 @@ export class ConversationOrchestrationService {
         this.processSentenceTts(
           idx,
           remaining.sentence,
-          ttsProvider,
-          ttsVoice,
-          ttsLanguage,
+          resolvedTts.provider,
+          resolvedTts.voice,
+          resolvedTts.language,
+          resolvedTts.model,
           ttsSemaphore,
           subject,
         ),
@@ -633,12 +637,13 @@ export class ConversationOrchestrationService {
     provider: string,
     voice: string | undefined,
     language: string | undefined,
+    model: string | undefined,
     semaphore: Semaphore,
     subject: Subject<ConversationStreamEvent>,
   ): Promise<void> {
     await semaphore.acquire();
     try {
-      const options = voice ? { voice, language } : { language };
+      const options = voice ? { voice, language, model } : { language, model };
       let audioBuffer: Buffer;
       let contentType: string;
 
@@ -921,7 +926,20 @@ export class ConversationOrchestrationService {
       sessionType === 'voice' ||
       sessionType === 'video' ||
       sessionType === 'phone';
-    const defaultMaxTokens = isVoiceLike ? 120 : 500;
+    const normalizedResponseLength = sessionConfig.responseLength
+      ?.toLowerCase()
+      .trim();
+    const defaultMaxTokens = normalizedResponseLength?.includes('concise')
+      ? isVoiceLike
+        ? 90
+        : 220
+      : normalizedResponseLength?.includes('detailed')
+        ? isVoiceLike
+          ? 220
+          : 700
+        : isVoiceLike
+          ? 140
+          : 420;
 
     return {
       provider: cfg.provider,

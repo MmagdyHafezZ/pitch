@@ -10,6 +10,7 @@ import {
   UnstyledButton,
   Button,
   Modal,
+  Select,
   Stack,
   Paper,
   Badge,
@@ -19,7 +20,7 @@ import {
   Loader,
   useMantineColorScheme,
 } from '@mantine/core'
-import { IconSearch, IconBell, IconUser } from '@tabler/icons-react'
+import { IconSearch, IconBell, IconUser, IconHelp } from '@tabler/icons-react'
 import dayjs from 'dayjs'
 import { ReactNode, useMemo, useState } from 'react'
 import { SettingsModal } from './SettingsModal'
@@ -28,6 +29,9 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/client'
 import { useAuthStore } from '@/features/auth'
+import { useTour } from '@/features/onboarding'
+import type { TourScreen } from '@/features/onboarding'
+import { useI18n } from '@/features/i18n'
 
 type NotificationItem = {
   id: string
@@ -67,6 +71,7 @@ type ActionBarProps = {
   value?: string
   onChange?: (v: string) => void
   isCompact?: boolean
+  translateTab?: (tab: string) => string
 }
 
 function ActionBar({
@@ -80,6 +85,7 @@ function ActionBar({
   value,
   onChange,
   isCompact = false,
+  translateTab,
 }: ActionBarProps) {
   const [localTab, setLocalTab] = useState(selectedTab ?? availableTabs[0] ?? '')
   const activeTab = selectedTab ?? localTab
@@ -155,7 +161,7 @@ function ActionBar({
                 transition: 'all 160ms cubic-bezier(0.25,0.46,0.45,0.94)',
               }}
             >
-              {tab}
+              {translateTab?.(tab) ?? tab}
             </UnstyledButton>
           )
         })}
@@ -242,32 +248,46 @@ function ActionConfig({
   onTabChange?: (tab: string) => void
 }) {
   const router = useRouter()
+  const { t } = useI18n()
+
+  const tabLabels: Record<string, string> = {
+    All: t('tabs.all'),
+    Favorites: t('tabs.favorites'),
+    Archived: t('tabs.archived'),
+    Created: t('tabs.created'),
+    Shared: t('tabs.shared'),
+    'My Teams': t('tabs.myTeams'),
+    Personal: t('tabs.personal'),
+    Team: t('tabs.team'),
+  }
 
   switch (currentPage) {
     case 'Home':
       return (
         <ActionBar
           enableSearch={false}
-          searchPlaceholder="Search"
+          searchPlaceholder={t('common.search')}
           availableTabs={['All', 'Favorites', 'Archived']}
           selectedTab={selectedTab}
           onTabChange={onTabChange}
           value={value}
           onChange={onChange}
           isCompact={isCompact}
+          translateTab={(tab) => tabLabels[tab] ?? tab}
         />
       )
     case 'Sessions':
       return (
         <ActionBar
           enableSearch={true}
-          searchPlaceholder="Search sessions"
+          searchPlaceholder={t('topbar.searchSessions')}
           availableTabs={['All', 'Created', 'Shared']}
           selectedTab={selectedTab}
           onTabChange={onTabChange}
           value={value}
           onChange={onChange}
           isCompact={isCompact}
+          translateTab={(tab) => tabLabels[tab] ?? tab}
           leadingAction={
             <Button
               size={isCompact ? 'sm' : 'md'}
@@ -281,7 +301,7 @@ function ActionConfig({
                 },
               }}
             >
-              Create Session
+              {t('topbar.createSession')}
             </Button>
           }
         />
@@ -290,13 +310,14 @@ function ActionConfig({
       return (
         <ActionBar
           enableSearch={true}
-          searchPlaceholder="Search teams"
+          searchPlaceholder={t('topbar.searchTeams')}
           availableTabs={['All', 'My Teams']}
           selectedTab={selectedTab}
           onTabChange={onTabChange}
           value={value}
           onChange={onChange}
           isCompact={isCompact}
+          translateTab={(tab) => tabLabels[tab] ?? tab}
         />
       )
     case 'Analytics':
@@ -307,13 +328,14 @@ function ActionConfig({
           selectedTab={selectedTab}
           onTabChange={onTabChange}
           isCompact={isCompact}
+          translateTab={(tab) => tabLabels[tab] ?? tab}
         />
       )
     case 'Settings':
       return (
         <ActionBar
           enableSearch={false}
-          searchPlaceholder="Search settings"
+          searchPlaceholder={t('topbar.searchSettings')}
           value={value}
           onChange={onChange}
           isCompact={isCompact}
@@ -335,11 +357,32 @@ export function AppTopBar({
   selectedTab,
   onTabChange,
 }: HeaderProps) {
-  const weekday = useMemo(() => dayjs(date).format('dddd'), [date])
-  const shortDate = useMemo(() => dayjs(date).format('MMM D, YYYY'), [date])
+  const { t, locale, setLocale, localeOptions } = useI18n()
+  const weekday = useMemo(
+    () => new Intl.DateTimeFormat(locale, { weekday: 'long' }).format(date),
+    [date, locale]
+  )
+  const shortDate = useMemo(
+    () =>
+      new Intl.DateTimeFormat(locale, {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+      }).format(date),
+    [date, locale]
+  )
   const [settingsOpened, setSettingsOpened] = useState(false)
   const [notificationsOpened, setNotificationsOpened] = useState(false)
   const router = useRouter()
+  const { startTour } = useTour()
+
+  const pageToTourScreen: Partial<Record<PageKey, TourScreen>> = {
+    Home: 'home',
+    Sessions: 'sessions',
+    Analytics: 'analytics',
+    Teams: 'team-config',
+  }
+  const tourScreen = currentPage ? pageToTourScreen[currentPage] : undefined
   const isMobile = useMediaQuery('(max-width: 768px)')
   const isNarrow = useMediaQuery('(max-width: 520px)')
   const queryClient = useQueryClient()
@@ -428,7 +471,7 @@ export function AppTopBar({
       <Modal
         opened={notificationsOpened}
         onClose={() => setNotificationsOpened(false)}
-        title="Notifications"
+        title={t('topbar.notifications')}
         centered
         size="lg"
         styles={{
@@ -438,7 +481,7 @@ export function AppTopBar({
         <Stack gap="md">
           <Group justify="space-between" align="center">
             <Text size="sm" c="dimmed">
-              {unreadCount} unread
+              {t('topbar.unreadCount', { count: unreadCount })}
             </Text>
             <Button
               size="xs"
@@ -447,7 +490,7 @@ export function AppTopBar({
               loading={markAllReadMutation.isPending}
               onClick={() => markAllReadMutation.mutate()}
             >
-              Mark all as read
+              {t('topbar.markAllRead')}
             </Button>
           </Group>
           <Divider />
@@ -457,7 +500,7 @@ export function AppTopBar({
             </Group>
           ) : notifications.length === 0 ? (
             <Text size="sm" c="dimmed">
-              No notifications yet.
+              {t('topbar.noNotifications')}
             </Text>
           ) : (
             <ScrollArea h={360}>
@@ -541,6 +584,59 @@ export function AppTopBar({
               </Box>
             )}
 
+            {tourScreen && (
+              <ActionIcon
+                aria-label={t('topbar.startTour')}
+                size={isNarrow ? 26 : 28}
+                radius="md"
+                variant="default"
+                onClick={() => startTour(tourScreen)}
+                styles={{
+                  root: {
+                    background: 'var(--pitch-nav-accent-soft)',
+                    color: 'var(--pitch-nav-text)',
+                    boxShadow: '0 0 0 1px var(--pitch-nav-text-dim)',
+                  },
+                }}
+              >
+                <IconHelp size={16} />
+              </ActionIcon>
+            )}
+
+            <Select
+              data-i18n-skip="true"
+              aria-label={t('settings.language.platformLabel')}
+              size={isNarrow ? 'xs' : 'sm'}
+              w={isNarrow ? 92 : 140}
+              value={locale}
+              onChange={(value) => {
+                if (value) {
+                  setLocale(value)
+                }
+              }}
+              allowDeselect={false}
+              data={localeOptions.map((option) => ({
+                value: option.value,
+                label: option.nativeLabel,
+              }))}
+              styles={{
+                input: {
+                  background: 'var(--pitch-nav-accent-soft)',
+                  color: 'var(--pitch-nav-text)',
+                  borderColor: 'var(--pitch-nav-text-dim)',
+                },
+                section: {
+                  color: 'var(--pitch-nav-text-dim)',
+                },
+                dropdown: {
+                  background: 'var(--pitch-surface-bg)',
+                },
+                option: {
+                  color: 'var(--pitch-surface-text)',
+                },
+              }}
+            />
+
             <Indicator
               disabled={unreadCount === 0}
               label={unreadCount > 99 ? '99+' : unreadCount}
@@ -549,7 +645,7 @@ export function AppTopBar({
               offset={6}
             >
               <ActionIcon
-                aria-label="Notifications"
+                aria-label={t('topbar.notifications')}
                 size={isNarrow ? 26 : 28}
                 radius="md"
                 variant="default"
@@ -567,7 +663,7 @@ export function AppTopBar({
             </Indicator>
 
             <ActionIcon
-              aria-label="Account"
+              aria-label={t('topbar.account')}
               size={isNarrow ? 26 : 28}
               radius="md"
               variant="default"
