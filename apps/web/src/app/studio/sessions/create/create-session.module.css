@@ -584,6 +584,40 @@
   padding-bottom: 0;
 }
 
+.uploadCard {
+  background: color-mix(in srgb, var(--mantine-color-dark-8) 94%, transparent);
+  border: 1px solid color-mix(in srgb, var(--mantine-color-dark-4) 40%, transparent);
+}
+
+.uploadDropzone {
+  border: 2px dashed color-mix(in srgb, var(--mantine-color-blue-6) 45%, transparent);
+  border-radius: 20px;
+  padding: 28px 20px;
+  min-height: 180px;
+  background: color-mix(in srgb, var(--mantine-color-dark-9) 70%, transparent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    border-color 180ms ease,
+    transform 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.uploadDropzone:hover {
+  border-color: color-mix(in srgb, var(--mantine-color-blue-6) 65%, transparent);
+  box-shadow: 0 18px 32px color-mix(in srgb, var(--mantine-color-dark-9) 50%, transparent);
+}
+
+.uploadEmptyState {
+  background: color-mix(in srgb, var(--mantine-color-dark-9) 55%, transparent);
+  border: 1px dashed color-mix(in srgb, var(--mantine-color-dark-4) 45%, transparent);
+}
+
+.uploadFileName {
+  word-break: break-word;
+}
+
 @keyframes brainFloat {
   0%,
   100% {
