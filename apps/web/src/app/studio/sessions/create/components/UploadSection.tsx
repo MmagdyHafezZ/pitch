@@ -216,39 +216,36 @@ export function UploadSection({
 
   const handleFilesAdded = async (files: File[]) => {
     const validFilesToUpload: File[] = []
+    const acceptedCount = pendingFiles.filter((item) => item.status !== 'error').length
+    let remainingSlots = Math.max(0, MAX_FILES_PER_SESSION - acceptedCount)
 
-    setPendingFiles((current) => {
-      const acceptedCount = current.filter((item) => item.status !== 'error').length
-      let remainingSlots = Math.max(0, MAX_FILES_PER_SESSION - acceptedCount)
-
-      const nextFiles = files.map<PendingFile>((file) => {
-        if (remainingSlots <= 0) {
-          return {
-            file,
-            status: 'error',
-            error: `You can add up to ${MAX_FILES_PER_SESSION} files per session.`,
-          }
-        }
-
-        const validationError = validateFile(file)
-        if (validationError) {
-          return {
-            file,
-            status: 'error',
-            error: validationError,
-          }
-        }
-
-        remainingSlots -= 1
-        validFilesToUpload.push(file)
+    const nextFiles = files.map<PendingFile>((file) => {
+      if (remainingSlots <= 0) {
         return {
           file,
-          status: 'idle',
+          status: 'error',
+          error: `You can add up to ${MAX_FILES_PER_SESSION} files per session.`,
         }
-      })
+      }
 
-      return [...current, ...nextFiles]
+      const validationError = validateFile(file)
+      if (validationError) {
+        return {
+          file,
+          status: 'error',
+          error: validationError,
+        }
+      }
+
+      remainingSlots -= 1
+      validFilesToUpload.push(file)
+      return {
+        file,
+        status: 'idle',
+      }
     })
+
+    setPendingFiles((current) => [...current, ...nextFiles])
 
     for (const file of validFilesToUpload) {
       await uploadFile(file)
