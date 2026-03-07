@@ -114,6 +114,84 @@
   box-shadow: 0 4px 14px color-mix(in srgb, var(--pitch-surface-bg, #000) 10%, transparent);
 }
 
+.editToolbar {
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--pitch-surface-bg, var(--mantine-color-body)) 90%, transparent);
+  border: 1px solid color-mix(in srgb, var(--pitch-border, var(--mantine-color-default-border)) 75%, transparent);
+}
+
+.listControls {
+  gap: 10px;
+}
+
+.searchControl {
+  flex: 1 1 260px;
+  min-width: 220px;
+}
+
+.filterControl {
+  flex: 0 0 190px;
+}
+
+.backToListButton {
+  color: var(--pitch-surface-text, var(--mantine-color-text));
+  border-radius: 10px;
+  font-weight: 600;
+  transition:
+    background-color 140ms ease,
+    color 140ms ease;
+}
+
+.backToListButton:hover {
+  background: color-mix(in srgb, var(--pitch-accent-strong) 14%, transparent);
+  color: var(--pitch-accent-strong);
+}
+
+.teamList {
+  border-top: 1px solid color-mix(in srgb, var(--pitch-border, var(--mantine-color-default-border)) 65%, transparent);
+}
+
+.teamListItem {
+  position: relative;
+  overflow: hidden;
+  border-bottom: 1px solid color-mix(in srgb, var(--pitch-border, var(--mantine-color-default-border)) 65%, transparent);
+  padding: 12px 10px 12px 14px;
+  border-radius: 0;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--team-row-accent, var(--pitch-accent-strong)) 9%, var(--pitch-surface-bg, transparent)) 0%,
+    transparent 55%
+  );
+  transition:
+    background-color 160ms ease,
+    transform 160ms ease;
+}
+
+.teamListItem:last-child {
+  border-bottom: none;
+}
+
+.teamListItem::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 10px;
+  bottom: 10px;
+  width: 3px;
+  border-radius: 999px;
+  background: var(--team-row-accent, var(--pitch-accent-strong));
+}
+
+.teamListItem:hover {
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--team-row-accent, var(--pitch-accent-strong)) 16%, var(--pitch-surface-bg, transparent)) 0%,
+    transparent 60%
+  );
+  transform: translateX(2px);
+}
+
 .subtleCard {
   background: color-mix(in srgb, var(--pitch-surface-bg, var(--mantine-color-body)) 88%, transparent);
   border: 1px solid color-mix(in srgb, var(--pitch-border, var(--mantine-color-default-border)) 80%, transparent);

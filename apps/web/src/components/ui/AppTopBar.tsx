@@ -289,8 +289,7 @@ function ActionConfig({
     case 'Teams':
       return (
         <ActionBar
-          enableSearch={true}
-          searchPlaceholder="Search teams"
+          enableSearch={false}
           availableTabs={['All', 'My Teams']}
           selectedTab={selectedTab}
           onTabChange={onTabChange}
