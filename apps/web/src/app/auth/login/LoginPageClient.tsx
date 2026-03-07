@@ -16,7 +16,9 @@ export function LoginPageClient() {
           'linear-gradient(135deg, #0b1a52 0%, #112374 45%, #1c3a9a 100%), radial-gradient(380px 380px at 15% 20%, rgba(255, 255, 255, 0.50) 0%, rgba(255, 255, 255, 0) 70%), radial-gradient(420px 420px at 85% 75%, rgba(255, 255, 255, 0.5) 0%, rgba(255, 255, 255, 0) 72%)',
       }}
     >
-      <Box className={styles.brand}>P.IT.C.H.</Box>
+      <Box className={styles.brand} component="div">
+        <Text className={styles.brandLogo}>PITCH</Text>
+      </Box>
       <Box className={`${styles.column} ${styles.columnLeft}`}>
         <Box className={styles.hero}>
           <Box className={styles.mascotWrap}>
