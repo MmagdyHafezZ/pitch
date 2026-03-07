@@ -28,16 +28,12 @@ import {
   IconSettings,
   IconUsersGroup,
 } from '@tabler/icons-react'
-import { Space_Grotesk, Fraunces } from 'next/font/google'
 import { useTeams } from '@/features/teams/hooks/useTeams'
 import { useAuth } from '@/features/auth'
 import { useCreateTeamForm } from '@/features/teams/hooks/useTeamForm'
 import { TeamMembersPanel } from '@/components/ui/TeamMembersPanel'
 import { TeamSubscriptionPanel } from '@/components/ui/TeamSubscriptionPanel'
 import classes from './team-config.module.css'
-
-const spaceGrotesk = Space_Grotesk({ subsets: ['latin'], display: 'swap' })
-const fraunces = Fraunces({ subsets: ['latin'], display: 'swap' })
 
 type TeamEditValues = {
   name: string
@@ -193,7 +189,7 @@ function TeamConfigInner() {
                       New team
                     </Badge>
                   </Group>
-                  <Title className={`${fraunces.className} ${classes.heroTitle}`} order={1}>
+                  <Title className={classes.heroTitle} order={1}>
                     {pageTitle}
                   </Title>
                   <Text c="dimmed">{pageSubtitle}</Text>
@@ -227,7 +223,6 @@ function TeamConfigInner() {
               formErrors={formErrors}
               setField={setField}
               classes={classes}
-              fontClass={spaceGrotesk.className}
             />
           ) : (
             <EditModeLayout
@@ -242,7 +237,6 @@ function TeamConfigInner() {
               onSaveProfile={() => void handleSaveEditClick()}
               savingEdit={savingEdit}
               classes={classes}
-              fontClass={spaceGrotesk.className}
             />
           )}
         </Stack>
@@ -256,13 +250,11 @@ function CreateModeLayout({
   formErrors,
   setField,
   classes,
-  fontClass,
 }: {
   formValues: any
   formErrors: any
   setField: (field: any, value: string) => void
   classes: Record<string, string>
-  fontClass: string
 }) {
   return (
     <SimpleGrid cols={{ base: 1, lg: 2 }} spacing="lg">
@@ -270,7 +262,7 @@ function CreateModeLayout({
         <Stack gap="md">
           <Group gap="xs">
             <IconBuildingSkyscraper size={18} />
-            <Title order={3} className={fontClass}>
+            <Title order={3} className={classes.sectionTitle}>
               Team details
             </Title>
           </Group>
@@ -302,7 +294,7 @@ function CreateModeLayout({
         <Stack gap="md">
           <Group gap="xs">
             <IconMapPin size={18} />
-            <Title order={3} className={fontClass}>
+            <Title order={3} className={classes.sectionTitle}>
               Billing address
             </Title>
             <Badge variant="light" color="gray">
@@ -367,7 +359,6 @@ function EditModeLayout({
   onSaveProfile,
   savingEdit,
   classes,
-  fontClass,
 }: {
   activeStep: number
   setActiveStep: (value: number) => void
@@ -380,7 +371,6 @@ function EditModeLayout({
   onSaveProfile: () => void
   savingEdit: boolean
   classes: Record<string, string>
-  fontClass: string
 }) {
   const maxStep = 3
   const profileIcon = <IconSettings size={16} />
@@ -391,7 +381,7 @@ function EditModeLayout({
   return (
     <Stack gap="lg">
       <Stack gap={4}>
-        <Title order={2} className={fontClass}>
+        <Title order={2} className={classes.pageHeading}>
           {currentTeamName}
         </Title>
       </Stack>
@@ -439,7 +429,7 @@ function EditModeLayout({
       {activeStep === 0 && (
         <Paper className={classes.contentCard} p="lg">
           <Stack gap="md">
-            <Title order={3} className={fontClass}>
+            <Title order={3} className={classes.sectionTitle}>
               Team profile
             </Title>
             <Text c="dimmed" size="sm">
@@ -485,7 +475,7 @@ function EditModeLayout({
             <Group justify="space-between" align="center" wrap="wrap">
               <Group gap="xs">
                 <IconMapPin size={18} />
-                <Title order={3} className={fontClass}>
+                <Title order={3} className={classes.sectionTitle}>
                   Billing address
                 </Title>
               </Group>

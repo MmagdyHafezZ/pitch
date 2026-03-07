@@ -1,12 +1,12 @@
 .page {
   position: relative;
   min-height: 100%;
-  color: var(--mantine-color-gray-0);
-  --mantine-color-dimmed: var(--mantine-color-gray-3);
+  color: var(--pitch-surface-text, var(--mantine-color-text));
+  --mantine-color-dimmed: var(--pitch-surface-text-dim, var(--mantine-color-dimmed));
 }
 
 .page :global(.mantine-Title-root) {
-  color: var(--mantine-color-gray-0);
+  color: var(--pitch-surface-text, var(--mantine-color-text));
 }
 
 .page :global(.mantine-Text-root) {
@@ -14,156 +14,117 @@
 }
 
 .page :global(.mantine-InputWrapper-label) {
-  color: var(--mantine-color-gray-0);
+  color: var(--pitch-surface-text, var(--mantine-color-text));
 }
 
 .page :global(.mantine-InputWrapper-description) {
-  color: var(--mantine-color-gray-3);
+  color: var(--pitch-surface-text-dim, var(--mantine-color-dimmed));
 }
 
 .page :global(.mantine-Input-input),
 .page :global(.mantine-Select-input),
 .page :global(.mantine-NumberInput-input) {
-  color: var(--mantine-color-gray-0);
-  background: color-mix(in srgb, var(--mantine-color-dark-7) 55%, transparent);
-  border-color: color-mix(in srgb, var(--mantine-color-dark-4) 40%, transparent);
-  box-shadow: inset 0 1px 0 color-mix(in srgb, white 4%, transparent);
+  color: var(--pitch-input-text, var(--mantine-color-text));
+  background: var(--pitch-input-bg, var(--mantine-color-default));
+  border-color: color-mix(in srgb, var(--pitch-border, var(--mantine-color-default-border)) 88%, transparent);
+  box-shadow: none;
   transition:
     border-color 140ms ease,
-    box-shadow 140ms ease,
     background-color 140ms ease;
 }
 
 .page :global(.mantine-Input-input:hover),
 .page :global(.mantine-Select-input:hover),
 .page :global(.mantine-NumberInput-input:hover) {
-  border-color: color-mix(in srgb, var(--mantine-color-blue-6) 28%, transparent);
+  border-color: color-mix(in srgb, var(--pitch-accent-strong) 44%, transparent);
 }
 
 .page :global(.mantine-Input-input:focus),
 .page :global(.mantine-Select-input:focus),
 .page :global(.mantine-NumberInput-input:focus) {
-  border-color: var(--mantine-color-blue-6);
-  box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--mantine-color-blue-6) 40%, transparent),
-    0 0 0 4px color-mix(in srgb, var(--mantine-color-blue-6) 14%, transparent);
+  border-color: var(--pitch-accent-strong, var(--mantine-color-blue-6));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--pitch-accent-strong) 20%, transparent);
 }
 
 .page :global(.mantine-Input-input::placeholder),
 .page :global(.mantine-Select-input::placeholder),
 .page :global(.mantine-NumberInput-input::placeholder) {
-  color: var(--mantine-color-gray-4);
+  color: var(--pitch-input-placeholder, var(--mantine-color-placeholder));
 }
 
 .page :global(.mantine-Combobox-dropdown),
 .page :global(.mantine-Select-dropdown) {
-  background: color-mix(in srgb, var(--mantine-color-dark-8) 96%, transparent);
-  border: 1px solid color-mix(in srgb, var(--mantine-color-dark-4) 40%, transparent);
-  box-shadow: 0 18px 32px color-mix(in srgb, var(--mantine-color-dark-9) 60%, transparent);
+  background: color-mix(in srgb, var(--pitch-surface-bg, var(--mantine-color-body)) 96%, transparent);
+  border: 1px solid color-mix(in srgb, var(--pitch-border, var(--mantine-color-default-border)) 90%, transparent);
+  box-shadow: 0 8px 18px color-mix(in srgb, var(--pitch-surface-bg, #000) 18%, transparent);
 }
 
 .page :global(.mantine-Combobox-option),
 .page :global(.mantine-Select-option) {
-  color: var(--mantine-color-gray-0);
+  color: var(--pitch-surface-text, var(--mantine-color-text));
   border-radius: 8px;
   margin: 2px 4px;
 }
 
 .page :global(.mantine-Combobox-option:hover),
 .page :global(.mantine-Select-option:hover) {
-  background: color-mix(in srgb, var(--mantine-color-blue-6) 18%, var(--mantine-color-dark-8));
+  background: color-mix(in srgb, var(--pitch-accent-strong) 14%, var(--pitch-surface-bg, transparent));
 }
 
 .page :global(.mantine-Combobox-option[data-combobox-selected]),
 .page :global(.mantine-Select-option[data-checked]) {
-  background: color-mix(in srgb, var(--mantine-color-blue-6) 24%, var(--mantine-color-dark-8));
+  background: color-mix(in srgb, var(--pitch-accent-strong) 20%, var(--pitch-surface-bg, transparent));
 }
 
 .page :global(.mantine-NumberInput-control:hover) {
-  background: color-mix(in srgb, var(--mantine-color-blue-6) 10%, var(--mantine-color-dark-7));
+  background: color-mix(in srgb, var(--pitch-accent-strong) 10%, var(--pitch-surface-bg, transparent));
 }
 
 .page :global(.mantine-Stepper-separator) {
-  background: color-mix(in srgb, var(--mantine-color-blue-6) 25%, transparent);
+  background: color-mix(in srgb, var(--pitch-accent-strong) 28%, transparent);
 }
 
 .shell {
   position: relative;
-  background: color-mix(in srgb, var(--mantine-color-dark-8) 96%, transparent);
-  border: 1px solid color-mix(in srgb, var(--mantine-color-dark-4) 40%, transparent);
+  background: color-mix(in srgb, var(--pitch-surface-bg, var(--mantine-color-body)) 96%, transparent);
+  border: 1px solid color-mix(in srgb, var(--pitch-border, var(--mantine-color-default-border)) 88%, transparent);
   border-radius: 24px;
-  box-shadow: 0 18px 60px color-mix(in srgb, var(--mantine-color-dark-9) 65%, transparent);
+  box-shadow: 0 8px 20px color-mix(in srgb, var(--pitch-surface-bg, #000) 14%, transparent);
   overflow: hidden;
-}
-
-.shell::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background:
-    radial-gradient(
-      85% 55% at 12% 0%,
-      color-mix(in srgb, var(--mantine-color-blue-6) 18%, transparent) 0%,
-      transparent 72%
-    ),
-    radial-gradient(
-      70% 55% at 92% 6%,
-      color-mix(in srgb, var(--mantine-color-blue-6) 14%, transparent) 0%,
-      transparent 74%
-    );
-  opacity: 0.95;
-}
-
-.shell::after {
-  content: '';
-  position: absolute;
-  inset: auto 0 0 0;
-  height: 26%;
-  pointer-events: none;
-  background:
-    linear-gradient(
-      180deg,
-      transparent 0%,
-      color-mix(in srgb, var(--mantine-color-blue-6) 7%, transparent) 58%,
-      color-mix(in srgb, var(--mantine-color-blue-6) 11%, transparent) 100%
-    );
-  opacity: 0.9;
 }
 
 .heroCard {
   border-radius: 20px;
-  background: linear-gradient(
-    135deg,
-    color-mix(in srgb, var(--mantine-color-blue-6) 14%, var(--mantine-color-dark-8)),
-    var(--mantine-color-dark-8)
-  );
-  border: 1px solid color-mix(in srgb, var(--mantine-color-blue-6) 28%, transparent);
+  background: color-mix(in srgb, var(--pitch-surface-bg, var(--mantine-color-body)) 98%, var(--pitch-accent) 2%);
+  border: 1px solid color-mix(in srgb, var(--pitch-accent-strong) 22%, var(--pitch-border, transparent));
+  box-shadow: none;
 }
 
 .heroTitle {
-  letter-spacing: -0.03em;
-  font-size: clamp(28px, 3vw, 42px);
-  line-height: 1.02;
+  letter-spacing: -0.015em;
+  font-size: clamp(28px, 2.4vw, 36px);
+  line-height: 1.08;
+  font-weight: 800;
 }
 
 .contentCard {
-  background: color-mix(in srgb, var(--mantine-color-dark-8) 95%, transparent);
-  border: 1px solid color-mix(in srgb, var(--mantine-color-dark-4) 40%, transparent);
+  background: color-mix(in srgb, var(--pitch-surface-bg, var(--mantine-color-body)) 96%, transparent);
+  border: 1px solid color-mix(in srgb, var(--pitch-border, var(--mantine-color-default-border)) 85%, transparent);
   border-radius: 20px;
-  box-shadow: 0 18px 50px color-mix(in srgb, var(--mantine-color-dark-9) 60%, transparent);
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--pitch-surface-bg, #000) 10%, transparent);
 }
 
 .subtleCard {
-  background: color-mix(in srgb, var(--mantine-color-dark-7) 55%, transparent);
-  border: 1px solid color-mix(in srgb, var(--mantine-color-dark-4) 32%, transparent);
+  background: color-mix(in srgb, var(--pitch-surface-bg, var(--mantine-color-body)) 88%, transparent);
+  border: 1px solid color-mix(in srgb, var(--pitch-border, var(--mantine-color-default-border)) 80%, transparent);
   border-radius: 16px;
 }
 
 .stepperWrap {
-  background: color-mix(in srgb, var(--mantine-color-dark-8) 96%, transparent);
-  border: 1px solid color-mix(in srgb, var(--mantine-color-dark-4) 40%, transparent);
+  background: color-mix(in srgb, var(--pitch-surface-bg, var(--mantine-color-body)) 96%, transparent);
+  border: 1px solid color-mix(in srgb, var(--pitch-border, var(--mantine-color-default-border)) 85%, transparent);
   border-radius: 18px;
+  box-shadow: none;
 }
 
 .stepItem {
@@ -171,8 +132,8 @@
 }
 
 .stepper :global(.mantine-Stepper-stepIcon) {
-  background: color-mix(in srgb, var(--mantine-color-dark-7) 92%, transparent);
-  border: 1px solid color-mix(in srgb, var(--mantine-color-gray-5) 45%, transparent);
+  background: color-mix(in srgb, var(--pitch-surface-bg, var(--mantine-color-body)) 90%, transparent);
+  border: 1px solid color-mix(in srgb, var(--pitch-border, var(--mantine-color-default-border)) 85%, transparent);
   transition:
     background-color 180ms ease,
     border-color 180ms ease,
@@ -181,17 +142,17 @@
 }
 
 .stepper :global(.mantine-Stepper-stepIcon svg) {
-  color: color-mix(in srgb, var(--mantine-color-gray-2) 80%, white);
+  color: color-mix(in srgb, var(--pitch-surface-text-dim, var(--mantine-color-dimmed)) 85%, white);
 }
 
 .stepper :global(.mantine-Stepper-stepLabel) {
-  color: var(--mantine-color-gray-0);
+  color: var(--pitch-surface-text, var(--mantine-color-text));
   font-weight: 600;
   transition: color 180ms ease;
 }
 
 .stepper :global(.mantine-Stepper-stepDescription) {
-  color: var(--mantine-color-gray-3);
+  color: var(--pitch-surface-text-dim, var(--mantine-color-dimmed));
   transition: color 180ms ease;
 }
 
@@ -200,12 +161,12 @@
 }
 
 .stepCurrent :global(.mantine-Stepper-stepLabel) {
-  color: white;
-  text-shadow: 0 0 10px color-mix(in srgb, var(--mantine-color-blue-4) 22%, transparent);
+  color: var(--pitch-surface-text, var(--mantine-color-text));
+  text-shadow: none;
 }
 
 .stepCurrent :global(.mantine-Stepper-stepDescription) {
-  color: color-mix(in srgb, var(--mantine-color-blue-1) 30%, white);
+  color: color-mix(in srgb, var(--pitch-accent-strong) 42%, var(--pitch-surface-text-dim));
 }
 
 .stepper :global(.mantine-Stepper-content) {
@@ -214,42 +175,32 @@
 
 .stepper :global(.mantine-Stepper-step[data-progress] .mantine-Stepper-stepIcon),
 .stepper :global(.mantine-Stepper-stepIcon[data-progress]) {
-  background: linear-gradient(
-    135deg,
-    color-mix(in srgb, var(--mantine-color-blue-6) 24%, var(--mantine-color-dark-8)),
-    color-mix(in srgb, var(--mantine-color-blue-6) 12%, var(--mantine-color-dark-8))
-  );
-  border-color: color-mix(in srgb, var(--mantine-color-blue-5) 70%, transparent);
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--mantine-color-blue-6) 22%, transparent);
-  transform: translateY(-1px);
+  background: color-mix(in srgb, var(--pitch-accent-strong) 16%, var(--pitch-surface-bg, transparent));
+  border-color: color-mix(in srgb, var(--pitch-accent-strong) 45%, transparent);
+  box-shadow: none;
+  transform: none;
 }
 
 .stepCurrent :global(.mantine-Stepper-stepIcon) {
-  background: linear-gradient(
-    135deg,
-    color-mix(in srgb, var(--mantine-color-blue-5) 82%, white),
-    color-mix(in srgb, var(--mantine-color-blue-4) 78%, white)
-  );
-  border-color: color-mix(in srgb, var(--mantine-color-blue-3) 85%, white);
-  box-shadow:
-    0 0 0 5px color-mix(in srgb, var(--mantine-color-blue-6) 18%, transparent),
-    0 0 22px color-mix(in srgb, var(--mantine-color-blue-5) 34%, transparent);
-  transform: scale(1.06);
+  background: color-mix(in srgb, var(--pitch-accent-strong) 24%, var(--pitch-surface-bg, transparent));
+  border-color: color-mix(in srgb, var(--pitch-accent-strong) 56%, transparent);
+  box-shadow: none;
+  transform: none;
 }
 
 .stepCurrent :global(.mantine-Stepper-stepIcon svg) {
-  color: white;
-  stroke-width: 2.1;
+  color: var(--pitch-accent-strong, var(--mantine-color-blue-6));
+  stroke-width: 2;
 }
 
 .stepper :global(.mantine-Stepper-step[data-progress] .mantine-Stepper-stepLabel),
 .stepper :global(.mantine-Stepper-stepLabel[data-progress]) {
-  color: color-mix(in srgb, white 92%, var(--mantine-color-blue-2));
+  color: color-mix(in srgb, var(--pitch-accent-strong) 75%, var(--pitch-surface-text));
 }
 
 .stepper :global(.mantine-Stepper-step[data-progress] .mantine-Stepper-stepDescription),
 .stepper :global(.mantine-Stepper-stepDescription[data-progress]) {
-  color: color-mix(in srgb, var(--mantine-color-blue-2) 70%, white);
+  color: color-mix(in srgb, var(--pitch-accent-strong) 56%, var(--pitch-surface-text-dim));
 }
 
 .stepper :global(.mantine-Stepper-step[data-completed] .mantine-Stepper-stepIcon),
@@ -260,14 +211,24 @@
 
 .stepper :global(.mantine-Stepper-step[data-completed]:not([data-progress]) .mantine-Stepper-stepIcon),
 .stepper :global(.mantine-Stepper-stepIcon[data-completed]:not([data-progress])) {
-  background: color-mix(in srgb, var(--mantine-color-dark-7) 92%, transparent);
-  border-color: color-mix(in srgb, var(--mantine-color-gray-5) 45%, transparent);
+  background: color-mix(in srgb, var(--pitch-surface-bg, var(--mantine-color-body)) 90%, transparent);
+  border-color: color-mix(in srgb, var(--pitch-border, var(--mantine-color-default-border)) 85%, transparent);
 }
 
 .stepper :global(.mantine-Stepper-step:not([data-progress]) .mantine-Stepper-stepLabel) {
-  color: color-mix(in srgb, white 88%, var(--mantine-color-gray-4));
+  color: color-mix(in srgb, var(--pitch-surface-text) 82%, var(--pitch-surface-text-dim));
 }
 
 .stepper :global(.mantine-Stepper-step:not([data-progress]) .mantine-Stepper-stepDescription) {
-  color: color-mix(in srgb, var(--mantine-color-gray-3) 92%, white);
+  color: color-mix(in srgb, var(--pitch-surface-text-dim) 92%, var(--pitch-surface-text));
+}
+
+.pageHeading {
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.sectionTitle {
+  font-weight: 650;
+  letter-spacing: -0.005em;
 }
