@@ -71,7 +71,7 @@ describe('TeamMembersPanel', () => {
             userId: 'u2',
             role: 'MEMBER',
             tokenLimit: 5,
-            isActive: true,
+            isActive: false,
             acceptedAt: null,
             invitedByUserId: 'u1',
             user: {
@@ -101,10 +101,13 @@ describe('TeamMembersPanel', () => {
     expect(screen.getByText('Outside User')).toBeInTheDocument()
 
     const table = screen.getByRole('table')
-    expect(within(table).getByText('In team')).toBeInTheDocument()
+    expect(within(table).getAllByText('In team').length).toBeGreaterThan(0)
     expect(within(table).getByText('Pending')).toBeInTheDocument()
     expect(within(table).getByText('Not in team')).toBeInTheDocument()
-    expect(within(table).getByRole('button', { name: /invite to team/i })).toBeInTheDocument()
+    const outsideRow = within(table).getByRole('row', {
+      name: /Outside User outside@example.com Not in team/i,
+    })
+    expect(within(outsideRow).getByRole('button')).toBeInTheDocument()
 
     const rows = within(table).getAllByRole('row')
     const dataRows = rows.slice(1)
@@ -142,7 +145,10 @@ describe('TeamMembersPanel', () => {
     await user.click(screen.getByRole('button', { name: /^Invite$/ }))
 
     await waitFor(() => {
-      expect(sendSignupInvite).toHaveBeenCalledWith('team-1', { email: 'new@example.com' })
+      expect(sendSignupInvite).toHaveBeenCalledWith('team-1', {
+        email: 'new@example.com',
+        role: 'MEMBER',
+      })
     })
     expect(notifications.show).toHaveBeenCalledWith(
       expect.objectContaining({

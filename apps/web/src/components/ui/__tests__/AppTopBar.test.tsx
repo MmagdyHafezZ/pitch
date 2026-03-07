@@ -126,4 +126,19 @@ describe('AppTopBar', () => {
       })
     )
   })
+
+  it('clears an individual notification from the modal', async () => {
+    const user = userEvent.setup()
+    render(<AppTopBar currentPage="Teams" />)
+
+    await user.click(await screen.findByLabelText('Notifications'))
+    await user.click(await screen.findByLabelText('Clear notification'))
+
+    await waitFor(() => {
+      expect(mockApi.notifications.markRead).toHaveBeenCalledWith({
+        notificationIds: ['notification-1'],
+        recipientUserId: 'user-1',
+      })
+    })
+  })
 })
