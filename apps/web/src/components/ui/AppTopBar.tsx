@@ -20,7 +20,7 @@ import {
   Loader,
   useMantineColorScheme,
 } from '@mantine/core'
-import { IconSearch, IconBell, IconUser, IconHelp } from '@tabler/icons-react'
+import { IconSearch, IconBell, IconUser, IconHelp, IconX } from '@tabler/icons-react'
 import dayjs from 'dayjs'
 import { ReactNode, useMemo, useState } from 'react'
 import { SettingsModal } from './SettingsModal'
@@ -375,6 +375,8 @@ export function AppTopBar({
   )
   const [settingsOpened, setSettingsOpened] = useState(false)
   const [notificationsOpened, setNotificationsOpened] = useState(false)
+  const [acceptingInviteIds, setAcceptingInviteIds] = useState<string[]>([])
+  const [acceptedInviteIds, setAcceptedInviteIds] = useState<string[]>([])
   const router = useRouter()
   const { startTour } = useTour()
 
@@ -389,6 +391,7 @@ export function AppTopBar({
   const isNarrow = useMediaQuery('(max-width: 520px)')
   const queryClient = useQueryClient()
   const currentUser = useAuthStore((state) => state.user)
+  const teams = useTeamsStore((state) => state.teams) ?? []
   const refreshUserTeams = useTeamsStore((state) => state.fetchUserTeams)
   const searchParams = useSearchParams()
   const pathname = usePathname()
@@ -419,6 +422,7 @@ export function AppTopBar({
     queryFn: () =>
       api.notifications.list({
         recipientUserId: currentUser!.id,
+        unreadOnly: true,
         skip: 0,
         limit: 20,
       }),
@@ -431,7 +435,24 @@ export function AppTopBar({
         notificationIds,
         recipientUserId: currentUser?.id,
       }),
-    onSuccess: () => {
+    onSuccess: (_result, notificationIds) => {
+      const unreadCountKey = ['notifications', 'unread-count', currentUser?.id]
+      const notificationsListKey = ['notifications', 'list', currentUser?.id]
+
+      queryClient.setQueryData<{ count: number } | undefined>(unreadCountKey, (previous) => {
+        if (!previous) return previous
+        return { ...previous, count: Math.max(0, previous.count - notificationIds.length) }
+      })
+      queryClient.setQueryData<{ data: NotificationItem[] } | undefined>(
+        notificationsListKey,
+        (previous) => {
+          if (!previous?.data) return previous
+          return {
+            ...previous,
+            data: previous.data.filter((item) => !notificationIds.includes(item.id)),
+          }
+        }
+      )
       queryClient.invalidateQueries({ queryKey: ['notifications'] })
     },
   })
@@ -476,7 +497,6 @@ export function AppTopBar({
     onSuccess: () => {
       const unreadCountKey = ['notifications', 'unread-count', currentUser?.id]
       const notificationsListKey = ['notifications', 'list', currentUser?.id]
-      const nowIso = new Date().toISOString()
 
       queryClient.setQueryData<{ count: number } | undefined>(unreadCountKey, (previous) => {
         if (!previous) return { count: 0 }
@@ -488,10 +508,7 @@ export function AppTopBar({
           if (!previous?.data) return previous
           return {
             ...previous,
-            data: previous.data.map((item) => ({
-              ...item,
-              readAt: item.readAt ?? nowIso,
-            })),
+            data: [],
           }
         }
       )
@@ -510,6 +527,10 @@ export function AppTopBar({
     mutationFn: (payload: { teamId: string; notificationId: string }) =>
       api.teams.acceptInvite(payload.teamId),
     onSuccess: async (_result, payload) => {
+      setAcceptedInviteIds((previous) =>
+        previous.includes(payload.notificationId) ? previous : [...previous, payload.notificationId]
+      )
+
       const unreadCountKey = ['notifications', 'unread-count', currentUser?.id]
       const notificationsListKey = ['notifications', 'list', currentUser?.id]
 
@@ -523,11 +544,7 @@ export function AppTopBar({
           if (!previous?.data) return previous
           return {
             ...previous,
-            data: previous.data.map((item) =>
-              item.id === payload.notificationId
-                ? { ...item, readAt: new Date().toISOString() }
-                : item
-            ),
+            data: previous.data.filter((item) => item.id !== payload.notificationId),
           }
         }
       )
@@ -552,6 +569,11 @@ export function AppTopBar({
           )
 
         if (hasJoined) {
+          setAcceptedInviteIds((previous) =>
+            previous.includes(payload.notificationId)
+              ? previous
+              : [...previous, payload.notificationId]
+          )
           markReadMutation.mutate([payload.notificationId])
           queryClient.invalidateQueries({ queryKey: ['notifications'] })
           notifications.show({
@@ -640,11 +662,26 @@ export function AppTopBar({
               <Stack gap="sm">
                 {notificationItems.map((notification) => {
                   const isUnread = !notification.readAt
+                  const isClearingNotification =
+                    markReadMutation.isPending &&
+                    (markReadMutation.variables?.includes(notification.id) ?? false)
                   const teamId =
                     notification.type === 'TEAM_INVITE' &&
                     typeof notification.metadata?.teamId === 'string'
                       ? notification.metadata.teamId
                       : null
+                  const isAccepting = acceptingInviteIds.includes(notification.id)
+                  const isAccepted = acceptedInviteIds.includes(notification.id)
+                  const isAlreadyTeamMember =
+                    !!teamId &&
+                    !!currentUser?.id &&
+                    !!teams
+                      .find((team) => team.id === teamId)
+                      ?.memberships?.some(
+                        (membership) =>
+                          membership.userId === currentUser.id && membership.isActive !== false
+                      )
+                  const disableAcceptButton = isAccepting || isAccepted || isAlreadyTeamMember
                   return (
                     <Paper
                       key={notification.id}
@@ -665,9 +702,24 @@ export function AppTopBar({
                         <Text fw={600} size="sm">
                           {notification.title}
                         </Text>
-                        <Badge color={severityColor(notification.severity)} variant="light">
-                          {notification.severity}
-                        </Badge>
+                        <Group gap={6} align="center">
+                          <Badge color={severityColor(notification.severity)} variant="light">
+                            {notification.severity}
+                          </Badge>
+                          <ActionIcon
+                            size="sm"
+                            variant="subtle"
+                            color="gray"
+                            aria-label="Clear notification"
+                            disabled={isClearingNotification}
+                            onClick={(event) => {
+                              event.stopPropagation()
+                              markReadMutation.mutate([notification.id])
+                            }}
+                          >
+                            <IconX size={14} />
+                          </ActionIcon>
+                        </Group>
                       </Group>
                       <Text size="sm" c="dimmed" mt={4}>
                         {notification.message}
@@ -680,19 +732,32 @@ export function AppTopBar({
                           <Button
                             size="xs"
                             variant="light"
-                            loading={
-                              acceptTeamInviteMutation.isPending &&
-                              acceptTeamInviteMutation.variables?.notificationId === notification.id
-                            }
+                            loading={isAccepting}
+                            disabled={disableAcceptButton}
                             onClick={(event) => {
                               event.stopPropagation()
-                              acceptTeamInviteMutation.mutate({
-                                teamId,
-                                notificationId: notification.id,
-                              })
+                              if (disableAcceptButton) return
+                              setAcceptingInviteIds((previous) =>
+                                previous.includes(notification.id)
+                                  ? previous
+                                  : [...previous, notification.id]
+                              )
+                              acceptTeamInviteMutation.mutate(
+                                {
+                                  teamId,
+                                  notificationId: notification.id,
+                                },
+                                {
+                                  onSettled: () => {
+                                    setAcceptingInviteIds((previous) =>
+                                      previous.filter((id) => id !== notification.id)
+                                    )
+                                  },
+                                }
+                              )
                             }}
                           >
-                            Accept invitation
+                            {isAccepted || isAlreadyTeamMember ? 'Accepted' : 'Accept invitation'}
                           </Button>
                         </Group>
                       ) : null}

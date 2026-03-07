@@ -13,6 +13,7 @@ import styles from '../auth-layout.module.css'
 export function RegisterPageClient() {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const inviteEmail = searchParams.get('email')?.trim() || undefined
 
   useEffect(() => {
     const inviteContext = readTeamInviteContextFromSearch(
@@ -66,6 +67,7 @@ export function RegisterPageClient() {
       <Box className={`${styles.column} ${styles.columnRight}`}>
         <Container size={440} w="100%" className={`${styles.formShift} ${styles.formPanel}`}>
           <RegisterForm
+            inviteEmail={inviteEmail}
             onSwitchToLogin={() => {
               const query = searchParams.toString()
               router.push(query ? `/auth/login?${query}` : '/auth/login')

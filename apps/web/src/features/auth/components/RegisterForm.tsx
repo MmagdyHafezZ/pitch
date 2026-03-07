@@ -24,6 +24,7 @@ interface OAuthProvider {
 interface RegisterFormProps {
   onSwitchToLogin?: () => void
   onSuccess?: () => void
+  inviteEmail?: string
 }
 
 const getProviderIcon = (name: string) => {
@@ -74,7 +75,7 @@ const getProviderProps = (name: string) => {
   }
 }
 
-export function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
+export function RegisterForm({ onSwitchToLogin, inviteEmail }: RegisterFormProps) {
   const [showError, setShowError] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
 
@@ -108,7 +109,7 @@ export function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
       })
 
       // Use utility function to redirect to OAuth provider (same flow for signup and login)
-      redirectToOAuthProvider(baseUrl, provider.name)
+      redirectToOAuthProvider(baseUrl, provider.name, inviteEmail)
     } catch (error) {
       console.error('OAuth signup error:', error)
       setErrorMessage(`Failed to initiate ${provider.displayName} signup`)
