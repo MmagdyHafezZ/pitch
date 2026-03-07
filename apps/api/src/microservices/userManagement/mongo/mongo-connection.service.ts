@@ -17,9 +17,11 @@ export class MongoConnectionService implements OnModuleInit, OnModuleDestroy {
   constructor(private readonly configService: ConfigService) {}
 
   async onModuleInit() {
-    this.mongoUrl =
-      this.configService.get<string>('USER_MANAGEMENT_MONGODB_URL') ||
-      process.env.USER_MANAGEMENT_MONGODB_URL;
+    const configuredMongoUrl =
+      this.configService.get<string>('USER_MANAGEMENT_MONGODB_URL') ??
+      process.env.USER_MANAGEMENT_MONGODB_URL ??
+      null;
+    this.mongoUrl = configuredMongoUrl;
 
     if (!this.mongoUrl) {
       this.logger.warn(
