@@ -304,13 +304,28 @@ export class LLMTestController {
     ]);
 
     const openaiFallback = [
+      'gpt-5.2-pro',
+      'gpt-5.2',
+      'gpt-5.2-chat-latest',
+      'gpt-5.2-mini',
+      'gpt-5.2-nano',
+      'gpt-5',
+      'gpt-5-chat-latest',
+      'gpt-5-mini',
+      'gpt-5-nano',
+      'o3-pro',
+      'o3',
+      'o4-mini',
+      'gpt-4.1',
+      'gpt-4.1-mini',
+      'gpt-4.1-nano',
       'gpt-4o',
       'gpt-4o-mini',
       'gpt-4-turbo',
+      'o1',
+      'o1-mini',
       'gpt-4',
       'gpt-3.5-turbo',
-      'o1-preview',
-      'o1-mini',
     ];
     const watsonxFallback = [
       'ibm/granite-13b-chat-v2',
@@ -359,10 +374,58 @@ export class LLMTestController {
 
     try {
       const provider = this.providerRegistry.getProvider(providerNameLower);
-      return effectiveModels.filter((model) => provider.supportsModel(model));
+      const filtered = effectiveModels.filter((model) =>
+        provider.supportsModel(model),
+      );
+      return this.sortProviderModels(providerNameLower, filtered);
     } catch {
-      return effectiveModels;
+      return this.sortProviderModels(providerNameLower, effectiveModels);
     }
+  }
+
+  private sortProviderModels(providerName: string, models: string[]): string[] {
+    if (providerName !== 'openai') {
+      return [...new Set(models)];
+    }
+
+    const preferredOrder = [
+      'gpt-5.2-pro',
+      'gpt-5.2',
+      'gpt-5.2-chat-latest',
+      'gpt-5.2-mini',
+      'gpt-5.2-nano',
+      'gpt-5',
+      'gpt-5-chat-latest',
+      'gpt-5-mini',
+      'gpt-5-nano',
+      'o3-pro',
+      'o3',
+      'o4-mini',
+      'gpt-4.1',
+      'gpt-4.1-mini',
+      'gpt-4.1-nano',
+      'gpt-4o',
+      'gpt-4o-mini',
+      'o1',
+      'o1-mini',
+      'gpt-4-turbo',
+      'gpt-4',
+      'gpt-3.5-turbo',
+    ];
+
+    const uniqueModels = [...new Set(models)];
+    return uniqueModels.sort((left, right) => {
+      const leftIndex = preferredOrder.indexOf(left);
+      const rightIndex = preferredOrder.indexOf(right);
+
+      if (leftIndex !== -1 || rightIndex !== -1) {
+        if (leftIndex === -1) return 1;
+        if (rightIndex === -1) return -1;
+        return leftIndex - rightIndex;
+      }
+
+      return left.localeCompare(right);
+    });
   }
 
   private buildModelDetails(models: string[], providerName: string) {

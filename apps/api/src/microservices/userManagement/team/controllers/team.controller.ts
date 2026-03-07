@@ -13,6 +13,8 @@ import { toRpcException } from '@pitch/shared-backend/helpers/exceptions';
 import {
   AddMemberRequestDTO,
   CreateTeamRequestDto,
+  InviteMemberRequestDTO,
+  SendTeamSignupInviteRequestDto,
   UpdateMemberRequestDto,
   UpdateTeamRequestDto,
 } from '../dto/team.dto';
@@ -226,6 +228,99 @@ export class TeamController {
       return await this.teamService.removeTeamMember(
         data.teamId,
         data.userId,
+        data.userClaims.id,
+      );
+    } catch (error) {
+      throw toRpcException(error);
+    }
+  }
+
+  @UseGuards(ElevatedAccessGuard)
+  @MessagePattern(USER_SERVICE_PATTERNS.SEND_TEAM_SIGNUP_INVITE)
+  @UsePipes(new ValidationPipe({ transform: true }))
+  async sendTeamSignupInvite(
+    @Payload()
+    data: SendTeamSignupInviteRequestDto &
+      userClaimsInterface.MessageWithUserClaims & { teamId: string },
+  ) {
+    try {
+      this.logger.log(
+        `Sending team signup invite - Requested by: ${data.userClaims.email} (${data.userClaims.id})`,
+      );
+      return await this.teamService.sendSignupInvite({
+        teamId: data.teamId,
+        email: data.email,
+        requesterId: data.userClaims.id,
+        inviterName: data.userClaims.name,
+        signupUrl: data.signupUrl,
+        role: data.role,
+      });
+    } catch (error) {
+      throw toRpcException(error);
+    }
+  }
+
+  @UseGuards(ElevatedAccessGuard)
+  @MessagePattern(USER_SERVICE_PATTERNS.INVITE_TEAM_MEMBER)
+  @UsePipes(new ValidationPipe({ transform: true }))
+  async inviteTeamMember(
+    @Payload()
+    data: InviteMemberRequestDTO &
+      userClaimsInterface.MessageWithUserClaims & { teamId: string },
+  ) {
+    try {
+      this.logger.log(
+        `Inviting team member - Requested by: ${data.userClaims.email} (${data.userClaims.id})`,
+      );
+      const { userClaims: _userClaims, teamId, ...inviteMemberDto } = data;
+      const dto: AddMemberDto = {
+        teamId,
+        userId: inviteMemberDto.userId,
+        role: inviteMemberDto.role,
+        tokenLimit: inviteMemberDto.tokenLimit,
+        invitedByUserId: _userClaims.id,
+      };
+
+      return await this.teamService.inviteMember(dto, {
+        id: _userClaims.id,
+        name: _userClaims.name,
+      });
+    } catch (error) {
+      throw toRpcException(error);
+    }
+  }
+
+  @MessagePattern(USER_SERVICE_PATTERNS.ACCEPT_TEAM_INVITE)
+  @UsePipes(new ValidationPipe({ transform: true }))
+  async acceptTeamInvite(
+    @Payload()
+    data: userClaimsInterface.MessageWithUserClaims & { teamId: string },
+  ) {
+    try {
+      this.logger.log(
+        `Accepting team invite - Requested by: ${data.userClaims.email} (${data.userClaims.id})`,
+      );
+      return await this.teamService.acceptInvite(
+        data.teamId,
+        data.userClaims.id,
+      );
+    } catch (error) {
+      throw toRpcException(error);
+    }
+  }
+
+  @MessagePattern(USER_SERVICE_PATTERNS.CLAIM_TEAM_SIGNUP_INVITE)
+  @UsePipes(new ValidationPipe({ transform: true }))
+  async claimTeamSignupInvite(
+    @Payload()
+    data: userClaimsInterface.MessageWithUserClaims & { teamId: string },
+  ) {
+    try {
+      this.logger.log(
+        `Claiming team signup invite - Requested by: ${data.userClaims.email} (${data.userClaims.id})`,
+      );
+      return await this.teamService.claimSignupInvite(
+        data.teamId,
         data.userClaims.id,
       );
     } catch (error) {

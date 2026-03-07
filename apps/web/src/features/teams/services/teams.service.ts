@@ -5,6 +5,8 @@ import type {
   CreateTeamInput,
   UpdateTeamInput,
   AddMemberInput,
+  InviteMemberInput,
+  SendSignupInviteInput,
   UpdateMemberInput,
 } from '../types/teams.types'
 
@@ -42,6 +44,32 @@ export const TeamService = {
   // POST /v1/teams/:teamId/members
   addMember(teamId: string, payload: AddMemberInput): Promise<TeamMembership> {
     return api.teams.addMember(teamId, payload)
+  },
+
+  // POST /v1/teams/:teamId/invitations
+  inviteMember(teamId: string, payload: InviteMemberInput): Promise<TeamMembership> {
+    return api.teams.inviteMember(teamId, payload)
+  },
+
+  // POST /v1/teams/:teamId/invitations/signup
+  sendSignupInvite(teamId: string, payload: SendSignupInviteInput): Promise<{ message: string }> {
+    return api.teams.sendSignupInvite(teamId, payload)
+  },
+
+  // POST /v1/teams/:teamId/invitations/accept
+  acceptInvite(teamId: string): Promise<{
+    message: string
+    membership: TeamMembership
+  }> {
+    return api.teams.acceptInvite(teamId)
+  },
+
+  // POST /v1/teams/:teamId/invitations/claim
+  claimInvite(teamId: string): Promise<{
+    message: string
+    membership: TeamMembership
+  }> {
+    return api.teams.claimInvite(teamId)
   },
 
   // PUT /v1/teams/:teamId/members/:userId

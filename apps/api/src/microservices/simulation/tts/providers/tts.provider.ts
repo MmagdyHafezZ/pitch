@@ -1,5 +1,6 @@
 export interface TtsOptions {
   voice?: string;
+  model?: string;
   language?: string;
   format?: 'mp3' | 'wav' | 'ogg';
   sampleRate?: number;
@@ -20,6 +21,7 @@ export interface TtsProvider {
   readonly name: string;
   readonly description?: string;
   readonly voices?: string[];
+  readonly models?: string[];
   synthesize(text: string, options?: TtsOptions): Promise<TtsResult>;
   synthesizeStream?: (
     text: string,

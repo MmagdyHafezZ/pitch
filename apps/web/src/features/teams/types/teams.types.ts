@@ -18,6 +18,7 @@ export interface TeamMembership {
   role: TeamRole
   tokenLimit: number
   isActive?: boolean
+  invitedAt?: string
   acceptedAt?: string | null
   invitedByUserId: string | null
   user?: UserSummary
@@ -30,10 +31,22 @@ export interface Team {
   isActive: boolean
   billingEmail?: string | null
   billingAddress?: Address | undefined
+  metadata?: TeamMetadata | null
   createdAt: string
   updatedAt: string
   deletedAt?: string | null
   memberships?: TeamMembership[]
+}
+
+export interface TeamMetadata {
+  pendingSignupInvites?: TeamPendingSignupInvite[]
+}
+
+export interface TeamPendingSignupInvite {
+  email: string
+  role?: TeamRole
+  invitedAt: string
+  invitedByUserId?: string
 }
 
 export interface CreateTeamInput {
@@ -57,6 +70,18 @@ export interface AddMemberInput {
   role?: TeamRole
   tokenLimit?: number
   isActive?: boolean
+}
+
+export interface InviteMemberInput {
+  userId: string
+  role?: TeamRole
+  tokenLimit?: number
+}
+
+export interface SendSignupInviteInput {
+  email: string
+  signupUrl?: string
+  role?: TeamRole
 }
 
 export interface UpdateMemberInput {

@@ -42,6 +42,7 @@ import { modals } from '@mantine/modals'
 import { useAuth } from '@/features/auth'
 import { useRouter } from 'next/navigation'
 import { useAppearanceStore } from '@/lib/stores/appearance.store'
+import { useI18n } from '@/features/i18n'
 import type { ThemeTokens } from '@/lib/stores/appearance.store'
 import { getReadableMutedColor, getReadableTextColor, mixColors } from '@/lib/colors/contrast'
 import classes from './SettingsModal.module.css'
@@ -57,11 +58,12 @@ interface SettingsModalProps {
 export function SettingsModal({ opened, onClose }: SettingsModalProps) {
   const router = useRouter()
   const { user, logout } = useAuth()
+  const { locale, setLocale, localeOptions, t, isSavingLocale, localeSaveError } = useI18n()
   const computedColorScheme = useComputedColorScheme('light')
   const isDark = computedColorScheme === 'dark'
   const [activeSection, setActiveSection] = useState<SettingsSection>('Account')
-  const [name, setName] = useState(user?.name || 'John Doe')
-  const [email, setEmail] = useState(user?.email || 'john.doe@ibm.com')
+  const [name, setName] = useState(user?.name ?? '')
+  const [email, setEmail] = useState(user?.email ?? '')
   const [timezone, setTimezone] = useState('(GMT-5:00) Eastern Time')
   const {
     colorMode,
@@ -130,6 +132,11 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
       setProfileName(activeProfile.name)
     }
   }, [activeProfile])
+
+  useEffect(() => {
+    setName(user?.name ?? '')
+    setEmail(user?.email ?? '')
+  }, [user?.name, user?.email])
 
   useEffect(() => {
     const handlePointerUp = () => setDraggingPicker(false)
@@ -229,7 +236,15 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
                   <Group gap="sm">
                     <Icon size={20} color={navText} />
                     <Text c={navText} size="sm" fw={500}>
-                      {section.label}
+                      {section.label === 'Account'
+                        ? t('topbar.account')
+                        : section.label === 'Notifications'
+                          ? t('topbar.notifications')
+                          : section.label === 'Voice & Video'
+                            ? 'Voice & Video'
+                            : section.label === 'Appearance'
+                              ? 'Appearance'
+                              : t('settings.language.title')}
                     </Text>
                   </Group>
                 </Box>
@@ -255,7 +270,7 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
             <Group gap="sm">
               <IconX size={20} color={navText} />
               <Text c={navText} size="sm" fw={500}>
-                Logout
+                {t('common.logout')}
               </Text>
             </Group>
           </Box>
@@ -286,7 +301,7 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
                     </Avatar>
                     <Box>
                       <Text size="xl" fw={600} mb="xs" c="var(--pitch-surface-text)">
-                        Account
+                        {t('topbar.account')}
                       </Text>
                       <Button leftSection={<IconUpload size={16} />} variant="light" size="xs">
                         Upload
@@ -346,7 +361,7 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
                     Delete Account
                   </Text>
                   <Button onClick={handleSave} size="md">
-                    Save
+                    {t('common.save')}
                   </Button>
                 </Group>
               </Stack>
@@ -355,7 +370,7 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
             {activeSection === 'Notifications' && (
               <Stack gap="md">
                 <Text size="xl" fw={600} mb="md" c="var(--pitch-surface-text)">
-                  Notifications
+                  {t('topbar.notifications')}
                 </Text>
                 <Text c="var(--pitch-surface-text-dim)">Notification settings coming soon...</Text>
               </Stack>
@@ -662,9 +677,32 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
             {activeSection === 'Language' && (
               <Stack gap="md">
                 <Text size="xl" fw={600} mb="md" c="var(--pitch-surface-text)">
-                  Language
+                  {t('settings.language.title')}
                 </Text>
-                <Text c="var(--pitch-surface-text-dim)">Language settings coming soon...</Text>
+                <Text c="var(--pitch-surface-text-dim)">{t('settings.language.description')}</Text>
+                <Select
+                  data-i18n-skip="true"
+                  label={t('settings.language.platformLabel')}
+                  value={locale}
+                  onChange={(value) => {
+                    if (value) {
+                      setLocale(value)
+                    }
+                  }}
+                  data={localeOptions.map((option) => ({
+                    value: option.value,
+                    label: `${option.nativeLabel} (${option.value})`,
+                  }))}
+                  allowDeselect={false}
+                  classNames={settingsInputClassNames}
+                />
+                <Text size="sm" c="var(--pitch-surface-text-dim)">
+                  {t('settings.language.defaultSessionDescription')}
+                </Text>
+                <Text size="sm" c={localeSaveError ? 'red' : 'var(--pitch-surface-text-dim)'}>
+                  {localeSaveError ??
+                    (isSavingLocale ? t('settings.language.saving') : t('settings.language.saved'))}
+                </Text>
               </Stack>
             )}
           </Box>

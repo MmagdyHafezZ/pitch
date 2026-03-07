@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { usePathname, useRouter } from 'next/navigation'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useAuthStore } from '@/features/auth/stores/auth.store'
 import { isTokenExpiringSoon } from '@/features/auth/utils/token.utils'
 import { LoadingScreen } from '@/components/ui/LoadingScreen'
@@ -10,6 +10,7 @@ const AUTH_PATH_PREFIX = '/auth'
 const AUTH_CALLBACK_PATH = '/auth/callback'
 const AUTH_REDIRECT = '/auth/login'
 const AUTHENTICATED_REDIRECT = '/studio/home'
+const ONBOARDING_PATH = '/onboarding'
 const REFRESH_CHECK_INTERVAL_MS = 60 * 1000
 const REFRESH_WINDOW_MS = 2 * 60 * 1000
 
@@ -20,6 +21,7 @@ type AuthGateProps = {
 export function AuthGate({ children }: AuthGateProps) {
   const router = useRouter()
   const pathname = usePathname()
+  const searchParams = useSearchParams()
   const token = useAuthStore((state) => state.token)
   const refreshAccessToken = useAuthStore((state) => state.refreshAccessToken)
   const [checked, setChecked] = useState(false)
@@ -31,6 +33,11 @@ export function AuthGate({ children }: AuthGateProps) {
   }, [pathname])
 
   const isCallbackRoute = pathname === AUTH_CALLBACK_PATH
+  const isOnboardingRoute = pathname === ONBOARDING_PATH
+  const hasTeamInviteParams = useMemo(() => {
+    if (!isAuthRoute) return false
+    return !!searchParams.get('teamId')
+  }, [isAuthRoute, searchParams])
 
   useEffect(() => {
     if (!pathname) return
@@ -57,7 +64,7 @@ export function AuthGate({ children }: AuthGateProps) {
       const hasToken = Boolean(useAuthStore.getState().token)
 
       if (isAuthRoute) {
-        if (hasToken && !isCallbackRoute) {
+        if (hasToken && !isCallbackRoute && !hasTeamInviteParams) {
           router.replace(AUTHENTICATED_REDIRECT)
           return
         }
@@ -70,6 +77,8 @@ export function AuthGate({ children }: AuthGateProps) {
         return
       }
 
+      // Allow the onboarding route through without any redirect
+      // The onboarding page and studio layout handle their own redirect logic
       setChecked(true)
     }
 
@@ -85,7 +94,16 @@ export function AuthGate({ children }: AuthGateProps) {
     return () => {
       isActive = false
     }
-  }, [isAuthRoute, isCallbackRoute, pathname, refreshAccessToken, router, token])
+  }, [
+    hasTeamInviteParams,
+    isAuthRoute,
+    isCallbackRoute,
+    isOnboardingRoute,
+    pathname,
+    refreshAccessToken,
+    router,
+    token,
+  ])
 
   useEffect(() => {
     if (!token) return

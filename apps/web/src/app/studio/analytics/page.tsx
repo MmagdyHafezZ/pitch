@@ -552,9 +552,13 @@ export default function AnalyticsPage() {
                   </Stack>
                 </Card>
               ) : (
-                <Stack gap="lg">
+                <Stack data-tour-id="analytics-dashboard" gap="lg">
                   {/* KPI cards */}
-                  <SimpleGrid cols={{ base: 2, sm: 4 }} spacing="md">
+                  <SimpleGrid
+                    data-tour-id="analytics-charts"
+                    cols={{ base: 2, sm: 4 }}
+                    spacing="md"
+                  >
                     {kpiItems.map((item, i) => (
                       <Card
                         key={item.label}

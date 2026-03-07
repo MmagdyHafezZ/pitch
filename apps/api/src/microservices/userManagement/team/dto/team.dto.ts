@@ -9,6 +9,7 @@ import {
   IsObject,
   IsOptional,
   IsString,
+  IsUrl,
   Length,
   Matches,
   Min,
@@ -149,6 +150,27 @@ export class AddMemberRequestDTO {
   isActive?: boolean;
 }
 
+export class InviteMemberRequestDTO {
+  @ApiProperty({ description: 'Existing user ID to invite to the team' })
+  @IsString()
+  @Length(2, 64)
+  userId!: string;
+
+  @ApiProperty({
+    description: 'Membership role for the invitation. Defaults to MEMBER',
+    enum: Role,
+    example: Role.MEMBER,
+  })
+  @IsEnum(Role)
+  role!: Role;
+
+  @ApiProperty({ description: 'Per-member token limit', example: 0 })
+  @Min(0)
+  @IsNumber()
+  @IsOptional()
+  tokenLimit?: number;
+}
+
 export class UpdateMemberRequestDto {
   @ApiProperty({
     description: 'Membership role. Defaults to MEMBER',
@@ -176,4 +198,33 @@ export class UpdateMemberRequestDto {
   @IsDate()
   @IsOptional()
   acceptedAt?: Date;
+}
+
+export class SendTeamSignupInviteRequestDto {
+  @ApiProperty({
+    description: 'Email address that should receive the signup invitation',
+    example: 'new-member@example.com',
+  })
+  @IsEmail()
+  email!: string;
+
+  @ApiProperty({
+    description:
+      'Optional absolute signup URL. If omitted, support service will use configured WEB_APP_URL.',
+    example: 'https://app.pitch.ai/signup?invite=abc123',
+    required: false,
+  })
+  @IsOptional()
+  @IsUrl({ require_tld: false })
+  signupUrl?: string;
+
+  @ApiProperty({
+    description: 'Role to assign when the invited user completes signup',
+    enum: Role,
+    example: Role.MEMBER,
+    required: false,
+  })
+  @IsEnum(Role)
+  @IsOptional()
+  role?: Role;
 }

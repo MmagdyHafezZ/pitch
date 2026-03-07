@@ -14,6 +14,7 @@ import { useRouter } from 'next/navigation'
 import { WeekCalendar } from '@/components/ui/WeekCalendar'
 import { SettingsModal } from './SettingsModal'
 import classes from './AppSideBar.module.css'
+import { useI18n } from '@/features/i18n'
 
 export type SidebarLink = {
   icon: React.ComponentType<{ size?: number }>
@@ -48,6 +49,7 @@ export function AppSidebar({
   mainLinks = DEFAULT_MAIN,
 }: Props) {
   const router = useRouter()
+  const { t } = useI18n()
   const [settingsOpened, setSettingsOpened] = useState(false)
   const resolvedMainLinks = showTeamConfig
     ? mainLinks
@@ -90,7 +92,15 @@ export function AppSidebar({
                 leftSection={<Icon size={18} />}
                 label={
                   <Text size="sm" className={classes.navLabel}>
-                    {label}
+                    {label === 'Home'
+                      ? t('nav.home')
+                      : label === 'Sessions'
+                        ? t('nav.sessions')
+                        : label === 'Analytics'
+                          ? t('nav.analytics')
+                          : label === 'Team Config'
+                            ? t('nav.teamConfig')
+                            : label}
                   </Text>
                 }
                 variant="subtle"

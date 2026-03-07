@@ -60,7 +60,11 @@ describe('OpenAIProvider', () => {
   it('supports common OpenAI model names', () => {
     const provider = createProvider();
     expect(provider.supportsModel('gpt-4o')).toBe(true);
+    expect(provider.supportsModel('gpt-5.2')).toBe(true);
+    expect(provider.supportsModel('o3')).toBe(true);
     expect(provider.supportsModel('gpt-3.5-turbo')).toBe(true);
+    expect(provider.supportsModel('gpt-4o-mini-tts')).toBe(false);
+    expect(provider.supportsModel('gpt-4o-realtime-preview')).toBe(false);
     expect(provider.supportsModel('claude-3')).toBe(false);
   });
 
@@ -91,8 +95,9 @@ describe('OpenAIProvider', () => {
     expect(provider.getModelCapabilities('gpt-3.5-turbo').maxTokens).toBe(
       16384,
     );
+    expect(provider.getModelCapabilities('gpt-5.2').supportsVision).toBe(true);
     expect(provider.getModelCapabilities('o1-mini').supportsStreaming).toBe(
-      false,
+      true,
     );
     expect(
       provider.getModelCapabilities('custom-model').pricing
@@ -219,6 +224,108 @@ describe('OpenAIProvider', () => {
     expect(response.usage.costUsd).toBeGreaterThan(0);
   });
 
+  it('uses max_completion_tokens for gpt-5 completion requests', async () => {
+    const provider = createProvider();
+    const client = (provider as any).client;
+
+    client.chat.completions.create.mockResolvedValue({
+      id: 'req-5',
+      model: 'gpt-5-mini',
+      choices: [
+        {
+          message: {
+            content: 'Done',
+          },
+          finish_reason: 'stop',
+        },
+      ],
+      usage: { prompt_tokens: 8, completion_tokens: 4, total_tokens: 12 },
+    });
+
+    await provider.complete(messages, {
+      model: 'gpt-5-mini',
+      maxTokens: 321,
+    } as any);
+
+    expect(client.chat.completions.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        model: 'gpt-5-mini',
+        max_completion_tokens: 321,
+      }),
+    );
+    expect(
+      client.chat.completions.create.mock.calls[0][0].max_tokens,
+    ).toBeUndefined();
+  });
+
+  it('omits temperature and top_p for legacy gpt-5 family requests', async () => {
+    const provider = createProvider();
+    const client = (provider as any).client;
+
+    client.chat.completions.create.mockResolvedValue({
+      id: 'req-legacy-gpt5',
+      model: 'gpt-5-mini',
+      choices: [
+        {
+          message: {
+            content: 'Done',
+          },
+          finish_reason: 'stop',
+        },
+      ],
+      usage: { prompt_tokens: 8, completion_tokens: 4, total_tokens: 12 },
+    });
+
+    await provider.complete(messages, {
+      model: 'gpt-5-mini',
+      temperature: 0.7,
+      topP: 0.8,
+    } as any);
+
+    expect(
+      client.chat.completions.create.mock.calls[0][0].temperature,
+    ).toBeUndefined();
+    expect(
+      client.chat.completions.create.mock.calls[0][0].top_p,
+    ).toBeUndefined();
+  });
+
+  it('allows temperature and top_p for gpt-5.1 when reasoning effort is none', async () => {
+    const provider = createProvider();
+    const client = (provider as any).client;
+
+    client.chat.completions.create.mockResolvedValue({
+      id: 'req-gpt51',
+      model: 'gpt-5.1',
+      choices: [
+        {
+          message: {
+            content: 'Done',
+          },
+          finish_reason: 'stop',
+        },
+      ],
+      usage: { prompt_tokens: 8, completion_tokens: 4, total_tokens: 12 },
+    });
+
+    await provider.complete(messages, {
+      model: 'gpt-5.1',
+      temperature: 0.7,
+      topP: 0.8,
+      providerOptions: {
+        reasoning_effort: 'none',
+      },
+    } as any);
+
+    expect(client.chat.completions.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        model: 'gpt-5.1',
+        temperature: 0.7,
+        top_p: 0.8,
+      }),
+    );
+  });
+
   it('streams deltas and emits final usage', async () => {
     const provider = createProvider();
     const client = (provider as any).client;
@@ -249,6 +356,76 @@ describe('OpenAIProvider', () => {
     expect(chunks.some((chunk) => chunk.done)).toBe(true);
     const final = chunks.find((chunk) => chunk.done);
     expect(final?.usage?.totalTokens).toBe(6);
+  });
+
+  it('uses max_completion_tokens for gpt-5 streaming requests', async () => {
+    const provider = createProvider();
+    const client = (provider as any).client;
+
+    async function* streamGenerator() {
+      await Promise.resolve();
+      yield {
+        choices: [{ delta: { content: 'Hi' }, finish_reason: 'stop' }],
+        usage: { prompt_tokens: 4, completion_tokens: 1, total_tokens: 5 },
+      };
+    }
+
+    client.chat.completions.create.mockResolvedValue(streamGenerator());
+
+    await new Promise<void>((resolve, reject) => {
+      provider
+        .stream(messages, { model: 'gpt-5-mini', maxTokens: 222 } as any)
+        .subscribe({
+          error: reject,
+          complete: () => resolve(),
+        });
+    });
+
+    expect(client.chat.completions.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        model: 'gpt-5-mini',
+        stream: true,
+        max_completion_tokens: 222,
+      }),
+    );
+    expect(
+      client.chat.completions.create.mock.calls[0][0].max_tokens,
+    ).toBeUndefined();
+  });
+
+  it('omits temperature and top_p for legacy gpt-5 family streaming requests', async () => {
+    const provider = createProvider();
+    const client = (provider as any).client;
+
+    async function* streamGenerator() {
+      await Promise.resolve();
+      yield {
+        choices: [{ delta: { content: 'Hi' }, finish_reason: 'stop' }],
+        usage: { prompt_tokens: 4, completion_tokens: 1, total_tokens: 5 },
+      };
+    }
+
+    client.chat.completions.create.mockResolvedValue(streamGenerator());
+
+    await new Promise<void>((resolve, reject) => {
+      provider
+        .stream(messages, {
+          model: 'gpt-5-mini',
+          temperature: 0.7,
+          topP: 0.8,
+        } as any)
+        .subscribe({
+          error: reject,
+          complete: () => resolve(),
+        });
+    });
+
+    expect(
+      client.chat.completions.create.mock.calls[0][0].temperature,
+    ).toBeUndefined();
+    expect(
+      client.chat.completions.create.mock.calls[0][0].top_p,
+    ).toBeUndefined();
   });
 
   it('estimates usage when stream usage is missing', async () => {

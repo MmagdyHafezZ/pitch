@@ -83,6 +83,7 @@ jest.mock('@/features/tts', () => ({
         name: 'elevenlabs',
         description: 'ElevenLabs',
         voices: ['Rachel', 'Adam'],
+        models: [],
       },
     ],
     loading: false,
@@ -151,6 +152,40 @@ describe('CreateSessionWizard - Navigation', () => {
 
     // Should still be on Basic Info step
     expect(screen.getByText('Session Name')).toBeInTheDocument()
+  })
+
+  it('does not show a phone number field during phone-call setup', async () => {
+    renderWizard()
+    const user = userEvent.setup()
+
+    await waitFor(() => {
+      expect(screen.getByText('Pick a session type')).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByText('Phone calls'))
+
+    expect(screen.queryByText('Phone Number')).not.toBeInTheDocument()
+    expect(
+      screen.getByText(/phone number is collected when the session starts/i)
+    ).toBeInTheDocument()
+  })
+
+  it('prevents jumping ahead with the stepper when basics is invalid', async () => {
+    renderWizard()
+    const user = userEvent.setup()
+
+    await waitFor(() => {
+      expect(screen.getByText('Pick a session type')).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByRole('button', { name: /scenario/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText(/session type is required/i)).toBeInTheDocument()
+    })
+
+    expect(screen.getByText('Pick a session type')).toBeInTheDocument()
+    expect(screen.queryByText('Scenario & Topic')).not.toBeInTheDocument()
   })
 
   it('advances to step 1 (LLM Config) when session type is selected', async () => {

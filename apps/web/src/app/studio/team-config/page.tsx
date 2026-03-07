@@ -474,7 +474,7 @@ function EditModeLayout({
       )}
 
       {activeStep === 1 && (
-        <Box>
+        <Box data-tour-id="team-members">
           <TeamMembersPanel />
         </Box>
       )}

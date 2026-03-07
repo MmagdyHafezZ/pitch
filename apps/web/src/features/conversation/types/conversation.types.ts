@@ -56,6 +56,7 @@ export interface ConversationStartPayload {
   ttsConfig?: {
     provider?: string
     voice?: string
+    model?: string
   }
 }
 

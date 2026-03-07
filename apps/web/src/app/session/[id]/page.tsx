@@ -255,13 +255,7 @@ export default function LiveSessionPage() {
         setSessionStatus(session?.status ?? null)
         setSessionName((session as any)?.name ?? (session as any)?.scenario?.name ?? '')
         setPersonaName((session as any)?.persona?.name ?? null)
-        const resolvedPhoneNumber =
-          typeof config.phoneNumber === 'string'
-            ? config.phoneNumber
-            : typeof config.phone?.number === 'string'
-              ? config.phone.number
-              : ''
-        setPhoneNumber(resolvedPhoneNumber)
+        setPhoneNumber('')
         const resolvedProvider =
           typeof config.phoneProvider === 'string'
             ? config.phoneProvider
@@ -731,7 +725,7 @@ export default function LiveSessionPage() {
       >
         <Stack gap="md">
           <Text size="sm" c="dimmed">
-            We’ll call this number to start your phone session.
+            Enter the destination number now. Phone-call sessions no longer store this during setup.
           </Text>
           <TextInput
             label="Phone number"

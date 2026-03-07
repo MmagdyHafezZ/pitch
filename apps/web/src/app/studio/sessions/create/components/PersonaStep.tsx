@@ -7,6 +7,7 @@ import {
   Title,
   Text,
   Badge,
+  Button,
   Loader,
   Alert,
   TextInput,
@@ -32,7 +33,9 @@ import { motion, AnimatePresence, LayoutGroup } from 'framer-motion'
 import { Persona, PersonaTraits } from '../lib/types'
 import { normalizeMetrics, getVoiceProfile, getRarityColor } from '../lib/helpers'
 import classes from '../create-session.module.css'
-import { ReactNode, RefObject } from 'react'
+import { ReactNode, RefObject, useState } from 'react'
+import type { TtsProvider } from '@/features/tts'
+import { CreatePersonaModal } from './CreatePersonaModal'
 
 export const metricIconMap: Record<string, ReactNode> = {
   empathy: <IconHeart size={12} />,
@@ -79,6 +82,9 @@ interface PersonaStepProps {
   setSelectedPersona: (id: string | null) => void
   errors: Record<string, string>
   selectedPersonaData: Persona | null
+  ttsProviders: TtsProvider[]
+  onCreatePersona: (input: { name: string; traits: PersonaTraits }) => Promise<Persona>
+  createDisabledReason?: string | null
 }
 
 export function PersonaStep({
@@ -93,7 +99,13 @@ export function PersonaStep({
   setSelectedPersona,
   errors,
   selectedPersonaData,
+  ttsProviders,
+  onCreatePersona,
+  createDisabledReason,
 }: PersonaStepProps) {
+  const [createModalOpen, setCreateModalOpen] = useState(false)
+  const visiblePersonas = filteredPersonas.filter((persona) => persona.id !== selectedPersona)
+
   if (personasLoading) {
     return (
       <Group justify="center" p="xl">
@@ -105,9 +117,25 @@ export function PersonaStep({
 
   if (personas.length === 0) {
     return (
-      <Alert color="yellow" title="No personas available">
-        No personas found. Please contact support or try again later.
-      </Alert>
+      <Stack gap="md">
+        <Alert color="yellow" title="No personas available">
+          No personas found yet. Create one to continue.
+        </Alert>
+        <Button
+          variant="light"
+          onClick={() => setCreateModalOpen(true)}
+          disabled={Boolean(createDisabledReason)}
+        >
+          Create Persona Here
+        </Button>
+        <CreatePersonaModal
+          opened={createModalOpen}
+          onClose={() => setCreateModalOpen(false)}
+          onCreatePersona={onCreatePersona}
+          ttsProviders={ttsProviders}
+          createDisabledReason={createDisabledReason}
+        />
+      </Stack>
     )
   }
 
@@ -121,11 +149,16 @@ export function PersonaStep({
               Match the persona to your training scenario.
             </Text>
           </Box>
-          {selectedPersona && (
-            <Badge size="lg" variant="light">
-              Persona selected
-            </Badge>
-          )}
+          <Group gap="sm">
+            {selectedPersona && (
+              <Badge size="lg" variant="light">
+                Persona selected
+              </Badge>
+            )}
+            <Button variant="light" onClick={() => setCreateModalOpen(true)}>
+              Create Persona Here
+            </Button>
+          </Group>
         </Group>
 
         <Stack gap="lg">
@@ -155,16 +188,17 @@ export function PersonaStep({
               <IconChevronRight size={18} />
             </ActionIcon>
             <div ref={personaScrollRef} className={classes.personaTrack}>
-              <AnimatePresence>
-                {filteredPersonas.length === 0 ? (
+              <AnimatePresence mode="popLayout">
+                {visiblePersonas.length === 0 ? (
                   <Box className={classes.personaEmptyInline}>
                     <Text size="sm" c="dimmed">
-                      No personas match your search.
+                      {selectedPersonaData
+                        ? 'Your selected persona is shown below. Adjust the search or create another persona to compare more options.'
+                        : 'No personas match your search.'}
                     </Text>
                   </Box>
                 ) : (
-                  filteredPersonas.map((persona) => {
-                    const isSelected = selectedPersona === persona.id
+                  visiblePersonas.map((persona) => {
                     const traits = persona.traits ?? {}
                     const metrics = normalizeMetrics(traits)
                     const signatureTraits = resolveSignatureTraits(traits)
@@ -177,25 +211,18 @@ export function PersonaStep({
                     return (
                       <motion.div
                         key={persona.id}
-                        layoutId={persona.id}
-                        initial={{ opacity: 1 }}
-                        animate={{
-                          opacity: 1,
-                          width: isSelected ? 0 : 300,
-                          marginRight: isSelected ? 0 : 16,
-                        }}
-                        exit={{ opacity: 1 }}
-                        transition={{ duration: 0.35, ease: 'easeInOut' }}
-                        style={{
-                          flexShrink: 0,
-                          pointerEvents: isSelected ? 'none' : 'auto',
-                        }}
+                        layout
+                        initial={{ opacity: 0, y: 16, scale: 0.98 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: 12, scale: 0.96 }}
+                        transition={{ duration: 0.24, ease: 'easeOut' }}
+                        style={{ flexShrink: 0 }}
                       >
                         <Card
                           withBorder
                           padding="md"
                           radius="xl"
-                          data-selected={isSelected ? 'true' : 'false'}
+                          data-selected="false"
                           className={`${classes.selectionCard} ${classes.personaCard}`}
                           onClick={() => {
                             setSelectedPersona(persona.id)
@@ -435,6 +462,13 @@ export function PersonaStep({
             </Text>
           )}
         </Stack>
+        <CreatePersonaModal
+          opened={createModalOpen}
+          onClose={() => setCreateModalOpen(false)}
+          onCreatePersona={onCreatePersona}
+          ttsProviders={ttsProviders}
+          createDisabledReason={createDisabledReason}
+        />
       </Stack>
     </LayoutGroup>
   )

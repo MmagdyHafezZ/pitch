@@ -430,6 +430,24 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(data),
       }),
+    inviteMember: (id: string, data: any) =>
+      apiRequest<any>(`/teams/${id}/invitations`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    sendSignupInvite: (id: string, data: { email: string; signupUrl?: string; role?: string }) =>
+      apiRequest<any>(`/teams/${id}/invitations/signup`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    claimInvite: (id: string) =>
+      apiRequest<any>(`/teams/${id}/invitations/claim`, {
+        method: 'POST',
+      }),
+    acceptInvite: (id: string) =>
+      apiRequest<any>(`/teams/${id}/invitations/accept`, {
+        method: 'POST',
+      }),
     updateMember: (id: string, userId: string, data: any) =>
       apiRequest<any>(`/teams/${id}/members/${userId}`, {
         method: 'PUT',
@@ -683,10 +701,20 @@ export const api = {
   },
 
   tts: {
-    listProviders: () => apiRequest<any[]>('/tts/providers'),
+    listProviders: () =>
+      apiRequest<
+        Array<{ name: string; description?: string; voices: string[]; models?: string[] }>
+      >('/tts/providers'),
     getVoices: (provider: string) =>
-      apiRequest<{ provider: string; voices: string[] }>(`/tts/voices?provider=${provider}`),
-    speak: async (data: { text: string; provider: string; voice: string }): Promise<Blob> => {
+      apiRequest<{ provider: string; voices: string[]; models?: string[] }>(
+        `/tts/voices?provider=${provider}`
+      ),
+    speak: async (data: {
+      text: string
+      provider: string
+      voice: string
+      model?: string
+    }): Promise<Blob> => {
       const url = `${API_CONFIG.baseURL}/tts/speak`
       const token = getAccessToken()
 
@@ -718,6 +746,11 @@ export const api = {
         `/simulation/personas${queryString ? `?${queryString}` : ''}`
       )
     },
+    create: (data: { orgId: string; name: string; traits?: Record<string, unknown> }) =>
+      apiRequest<any>('/simulation/personas', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
     getById: (id: string) => apiRequest<any>(`/simulation/personas/${id}`),
   },
 
