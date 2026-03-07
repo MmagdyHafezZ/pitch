@@ -1,11 +1,11 @@
 import { ServiceUnavailableException } from '@nestjs/common';
 import { Types } from 'mongoose';
-import { MongoConnectionService } from '../../../services/mongo/mongo-connection.service';
+import { MongoConnectionService } from '../../../mongo/mongo-connection.service';
 import { NotificationService } from '../../../notifications/service/notification.service';
 import {
   NotificationSeverity,
   NotificationSourceType,
-} from '../../../notifications/schema/notification.schema';
+} from '../../../mongo/schemas/notification.schema';
 
 describe('NotificationService', () => {
   let service: NotificationService;

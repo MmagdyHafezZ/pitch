@@ -15,6 +15,12 @@ import {
 } from '@pitch/shared-backend/interfaces/user.interface';
 import { Role, TeamMembership } from '@prisma/user-client/client';
 
+export interface TeamInviteTargetUser {
+  id: string;
+  email: string;
+  name: string;
+}
+
 @Injectable()
 export class TeamRepository {
   constructor(private readonly prisma: UserPrismaService) {}
@@ -38,6 +44,7 @@ export class TeamRepository {
             role: Role.OWNER,
             tokenLimit: 0,
             isActive: true,
+            acceptedAt: new Date(),
           },
         },
       },
@@ -58,6 +65,16 @@ export class TeamRepository {
         },
       },
     }) as unknown as Promise<Team>;
+  }
+
+  async updateTeamMetadata(
+    teamId: string,
+    metadata: Prisma.InputJsonValue | null,
+  ): Promise<void> {
+    await this.prisma.team.update({
+      where: { id: teamId },
+      data: { metadata: metadata === null ? Prisma.JsonNull : metadata },
+    });
   }
 
   updateTeam(id: string, data: Partial<UpdateTeamDto>): Promise<Team> {
@@ -124,6 +141,73 @@ export class TeamRepository {
     }
   }
 
+  async createAcceptedMember(data: AddMemberDto): Promise<TeamMembership> {
+    try {
+      return await this.prisma.teamMembership.create({
+        data: {
+          userId: data.userId,
+          teamId: data.teamId,
+          role: data.role,
+          tokenLimit: data.tokenLimit,
+          isActive: true,
+          invitedByUserId: data.invitedByUserId,
+          acceptedAt: new Date(),
+        },
+      });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        throw new ConflictException('User is already a member of this team');
+      }
+      throw error;
+    }
+  }
+
+  async inviteMember(data: AddMemberDto): Promise<TeamMembership> {
+    return this.prisma.teamMembership.create({
+      data: {
+        userId: data.userId,
+        teamId: data.teamId,
+        role: data.role,
+        tokenLimit: data.tokenLimit,
+        isActive: false,
+        invitedByUserId: data.invitedByUserId,
+        invitedAt: new Date(),
+        acceptedAt: null,
+      },
+    });
+  }
+
+  async reinviteMember(data: AddMemberDto): Promise<TeamMembership> {
+    return this.prisma.teamMembership.update({
+      where: {
+        userId_teamId: { userId: data.userId, teamId: data.teamId },
+      },
+      data: {
+        role: data.role,
+        tokenLimit: data.tokenLimit,
+        isActive: false,
+        invitedByUserId: data.invitedByUserId,
+        acceptedAt: null,
+        invitedAt: new Date(),
+      },
+    });
+  }
+
+  async acceptInvite(teamId: string, userId: string): Promise<TeamMembership> {
+    return this.prisma.teamMembership.update({
+      where: {
+        userId_teamId: { userId, teamId },
+      },
+      data: {
+        isActive: true,
+        acceptedAt: new Date(),
+      },
+    });
+  }
+
   async reactivateMember(data: AddMemberDto): Promise<TeamMembership> {
     return this.prisma.teamMembership.update({
       where: {
@@ -163,6 +247,17 @@ export class TeamRepository {
         userId_teamId: { userId, teamId },
       },
     });
+  }
+
+  async findUserById(userId: string): Promise<TeamInviteTargetUser | null> {
+    return this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+      },
+    }) as Promise<TeamInviteTargetUser | null>;
   }
 
   async findActiveOwners(teamId: string): Promise<TeamMembership[]> {
@@ -212,8 +307,45 @@ export class TeamRepository {
       where: {
         userId_teamId: { userId: userId, teamId: teamId },
       },
-      data: { isActive: false },
+      data: {
+        isActive: false,
+        acceptedAt: null,
+        invitedByUserId: null,
+      },
     });
+  }
+
+  async hardDeleteMembership(teamId: string, userId: string): Promise<void> {
+    await this.prisma.teamMembership.delete({
+      where: {
+        userId_teamId: { userId, teamId },
+      },
+    });
+  }
+
+  async deleteExpiredPendingInvites(cutoff: Date): Promise<number> {
+    const result = await this.prisma.teamMembership.deleteMany({
+      where: {
+        isActive: false,
+        acceptedAt: null,
+        invitedByUserId: { not: null },
+        invitedAt: { lt: cutoff },
+      },
+    });
+
+    return result.count;
+  }
+
+  async listActiveTeamMetadata(): Promise<
+    Array<{ id: string; metadata: Prisma.JsonValue | null }>
+  > {
+    return this.prisma.team.findMany({
+      where: { deletedAt: null },
+      select: {
+        id: true,
+        metadata: true,
+      },
+    }) as unknown as Array<{ id: string; metadata: Prisma.JsonValue | null }>;
   }
 
   findMany(): Promise<Team[]> {

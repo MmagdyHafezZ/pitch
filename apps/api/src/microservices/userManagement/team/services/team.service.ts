@@ -1,9 +1,11 @@
 import {
+  BadRequestException,
   Injectable,
   NotFoundException,
   ConflictException,
+  Logger,
 } from '@nestjs/common';
-import { Role } from '@prisma/user-client';
+import { Prisma, Role } from '@prisma/user-client';
 import {
   Team,
   TeamMembership,
@@ -12,12 +14,26 @@ import {
   AddMemberDto,
   UpdateMemberDto,
   TeamMetadata,
+  TeamPendingSignupInvite,
 } from '@pitch/shared-backend/interfaces/user.interface';
 import { TeamRepository } from '../repositories/team.repository';
+import { TeamInviteEmailService } from './team-invite-email.service';
+import { NotificationService } from '../../notifications/service/notification.service';
+import {
+  NotificationSeverity,
+  NotificationSourceType,
+} from '../../mongo/schemas/notification.schema';
 
 @Injectable()
 export class TeamService {
-  constructor(private readonly teamRepository: TeamRepository) {}
+  private readonly logger = new Logger(TeamService.name);
+  private static readonly DEFAULT_INVITE_EXPIRY_DAYS = 15;
+
+  constructor(
+    private readonly teamRepository: TeamRepository,
+    private readonly teamInviteEmailService: TeamInviteEmailService,
+    private readonly notificationService: NotificationService,
+  ) {}
 
   async createTeam(
     createTeamDto: CreateTeamDto,
@@ -203,6 +219,274 @@ export class TeamService {
     };
   }
 
+  async sendSignupInvite(input: {
+    teamId: string;
+    email: string;
+    requesterId: string;
+    inviterName?: string;
+    signupUrl?: string;
+    role?: Role;
+  }): Promise<{ message: string }> {
+    if (input.role === Role.OWNER) {
+      throw new BadRequestException(
+        'Owner role cannot be assigned through signup invites',
+      );
+    }
+
+    await this.teamRepository.confirmAuthorityOrThrow(
+      input.requesterId,
+      input.teamId,
+    );
+
+    const team = await this.teamRepository.findById(input.teamId);
+    if (!team) {
+      throw new NotFoundException(`Team with ID ${input.teamId} not found`);
+    }
+
+    const normalizedEmail = this.normalizeEmail(input.email);
+    const metadataWithoutExpired = this.removeExpiredPendingSignupInvites(
+      team.metadata ?? null,
+    );
+    const metadataWithInvite = this.addPendingSignupInvite(
+      metadataWithoutExpired,
+      {
+        email: normalizedEmail,
+        role: input.role ?? Role.MEMBER,
+        invitedAt: new Date().toISOString(),
+        invitedByUserId: input.requesterId,
+      },
+    );
+    await this.teamRepository.updateTeamMetadata(
+      input.teamId,
+      metadataWithInvite as unknown as Prisma.InputJsonValue,
+    );
+
+    const signupUrl =
+      input.signupUrl ??
+      this.buildTeamSignupUrl({
+        teamId: input.teamId,
+        email: normalizedEmail,
+      });
+
+    await this.teamInviteEmailService.sendSignupInvite({
+      email: normalizedEmail,
+      signupUrl,
+      invitedByName: input.inviterName,
+      teamName: team.name,
+    });
+
+    return {
+      message: `Signup invite sent to ${normalizedEmail}`,
+    };
+  }
+
+  async inviteMember(
+    addMemberDto: AddMemberDto,
+    requester: { id: string; name?: string | null },
+  ): Promise<TeamMembership> {
+    await this.teamRepository.confirmAuthorityOrThrow(
+      requester.id,
+      addMemberDto.teamId,
+    );
+
+    if (addMemberDto.userId === requester.id) {
+      throw new BadRequestException('You are already a member of this team');
+    }
+
+    if (addMemberDto.role === Role.OWNER) {
+      const activeOwners = await this.teamRepository.findActiveOwners(
+        addMemberDto.teamId,
+      );
+      if (activeOwners.length > 0) {
+        throw new ConflictException(
+          'This team already has an owner. Transfer ownership from an existing member instead.',
+        );
+      }
+    }
+
+    const team = await this.teamRepository.findById(addMemberDto.teamId);
+    if (!team) {
+      throw new NotFoundException(
+        `Team with ID ${addMemberDto.teamId} not found`,
+      );
+    }
+
+    const invitedUser = await this.teamRepository.findUserById(
+      addMemberDto.userId,
+    );
+    if (!invitedUser) {
+      throw new NotFoundException(
+        `User with ID ${addMemberDto.userId} not found`,
+      );
+    }
+
+    const existingMembership = await this.teamRepository.findMembership(
+      addMemberDto.teamId,
+      addMemberDto.userId,
+    );
+
+    let membership: TeamMembership;
+    if (existingMembership) {
+      if (
+        existingMembership.isActive !== false &&
+        existingMembership.acceptedAt
+      ) {
+        throw new ConflictException('User is already a member of this team');
+      }
+
+      membership = await this.teamRepository.reinviteMember({
+        ...addMemberDto,
+        invitedByUserId: requester.id,
+      });
+    } else {
+      membership = await this.teamRepository.inviteMember({
+        ...addMemberDto,
+        invitedByUserId: requester.id,
+      });
+    }
+
+    await this.notificationService.createOne({
+      recipientUserId: invitedUser.id,
+      title: `Team invitation: ${team.name}`,
+      message: `${requester.name ?? 'A team admin'} invited you to join ${team.name}.`,
+      type: 'TEAM_INVITE',
+      severity: NotificationSeverity.INFO,
+      sourceType: NotificationSourceType.USER,
+      sourceUserId: requester.id,
+      metadata: {
+        teamId: team.id,
+        teamName: team.name,
+        role: membership.role,
+      },
+    });
+
+    await this.teamInviteEmailService.sendSignupInvite({
+      email: invitedUser.email,
+      invitedByName: requester.name ?? undefined,
+      teamName: team.name,
+    });
+
+    return membership;
+  }
+
+  async acceptInvite(
+    teamId: string,
+    userId: string,
+  ): Promise<{ message: string; membership: TeamMembership }> {
+    const membership = await this.teamRepository.findMembership(teamId, userId);
+    if (!membership) {
+      throw new BadRequestException('This invitation has expired');
+    }
+
+    if (membership.isActive !== false && membership.acceptedAt) {
+      throw new ConflictException('Invitation has already been accepted');
+    }
+
+    if (membership.isActive !== false || !membership.invitedByUserId) {
+      throw new BadRequestException('This invitation is no longer valid');
+    }
+
+    if (this.isInviteExpired(membership.invitedAt)) {
+      await this.teamRepository.hardDeleteMembership(teamId, userId);
+      throw new BadRequestException('This invitation has expired');
+    }
+
+    const updated = await this.teamRepository.acceptInvite(teamId, userId);
+    return {
+      message: 'Invitation accepted',
+      membership: updated,
+    };
+  }
+
+  async claimSignupInvite(
+    teamId: string,
+    userId: string,
+  ): Promise<{ message: string; membership: TeamMembership }> {
+    const team = await this.teamRepository.findById(teamId);
+    if (!team) {
+      throw new NotFoundException(`Team with ID ${teamId} not found`);
+    }
+
+    const user = await this.teamRepository.findUserById(userId);
+    if (!user) {
+      throw new NotFoundException(`User with ID ${userId} not found`);
+    }
+
+    const normalizedEmail = this.normalizeEmail(user.email);
+    const pendingInvites = this.readPendingSignupInvites(team.metadata ?? null);
+    const pendingInvite = pendingInvites.find(
+      (invite) => this.normalizeEmail(invite.email) === normalizedEmail,
+    );
+
+    const expiredPendingInvite = pendingInvite
+      ? this.isInviteExpired(new Date(pendingInvite.invitedAt))
+      : false;
+
+    if (expiredPendingInvite) {
+      const remainingInvites = pendingInvites.filter(
+        (invite) => this.normalizeEmail(invite.email) !== normalizedEmail,
+      );
+      const nextMetadata = this.writePendingSignupInvites(
+        team.metadata ?? null,
+        remainingInvites,
+      );
+      await this.teamRepository.updateTeamMetadata(
+        teamId,
+        nextMetadata as unknown as Prisma.InputJsonValue,
+      );
+      throw new BadRequestException('This invitation has expired');
+    }
+
+    if (!pendingInvite) {
+      throw new NotFoundException(
+        'No pending signup invite found for this user',
+      );
+    }
+
+    const existingMembership = await this.teamRepository.findMembership(
+      teamId,
+      userId,
+    );
+
+    let membership: TeamMembership;
+    if (existingMembership) {
+      if (
+        existingMembership.isActive !== false &&
+        existingMembership.acceptedAt
+      ) {
+        throw new ConflictException('Invitation has already been accepted');
+      } else {
+        membership = await this.teamRepository.acceptInvite(teamId, userId);
+      }
+    } else {
+      membership = await this.teamRepository.createAcceptedMember({
+        teamId,
+        userId,
+        role: pendingInvite.role ?? Role.MEMBER,
+        tokenLimit: 0,
+        isActive: true,
+        invitedByUserId: pendingInvite.invitedByUserId ?? null,
+      });
+    }
+
+    const remainingInvites = pendingInvites.filter(
+      (invite) => this.normalizeEmail(invite.email) !== normalizedEmail,
+    );
+    const nextMetadata = this.writePendingSignupInvites(
+      team.metadata ?? null,
+      remainingInvites,
+    );
+    await this.teamRepository.updateTeamMetadata(
+      teamId,
+      nextMetadata as unknown as Prisma.InputJsonValue,
+    );
+
+    return {
+      message: 'Signup invite claimed',
+      membership,
+    };
+  }
+
   async findAll(): Promise<Team[]> {
     return this.teamRepository.findMany();
   }
@@ -219,6 +503,51 @@ export class TeamService {
 
   async findByName(name: string): Promise<Team | null> {
     return this.teamRepository.findByName(name);
+  }
+
+  async cleanupExpiredInvitations(): Promise<{
+    deletedMembershipInvites: number;
+    deletedSignupInvites: number;
+  }> {
+    const cutoff = this.getInviteExpiryCutoffDate();
+    const deletedMembershipInvites =
+      await this.teamRepository.deleteExpiredPendingInvites(cutoff);
+
+    let deletedSignupInvites = 0;
+    const teams = await this.teamRepository.listActiveTeamMetadata();
+    for (const team of teams) {
+      const pendingInvites = this.readPendingSignupInvites(
+        team.metadata as TeamMetadata | null | undefined,
+      );
+      if (pendingInvites.length === 0) {
+        continue;
+      }
+
+      const nextPending = pendingInvites.filter(
+        (invite) => !this.isInviteExpired(new Date(invite.invitedAt)),
+      );
+      if (nextPending.length === pendingInvites.length) {
+        continue;
+      }
+
+      deletedSignupInvites += pendingInvites.length - nextPending.length;
+      const nextMetadata = this.writePendingSignupInvites(
+        team.metadata as TeamMetadata | null | undefined,
+        nextPending,
+      );
+      await this.teamRepository.updateTeamMetadata(
+        team.id,
+        nextMetadata as unknown as Prisma.InputJsonValue,
+      );
+    }
+
+    if (deletedMembershipInvites > 0 || deletedSignupInvites > 0) {
+      this.logger.log(
+        `Expired invites cleanup: deleted ${deletedMembershipInvites} team memberships and ${deletedSignupInvites} signup invites`,
+      );
+    }
+
+    return { deletedMembershipInvites, deletedSignupInvites };
   }
 
   private async createSlug(input: {
@@ -246,6 +575,100 @@ export class TeamService {
       return {};
     }
     return value as TeamMetadata;
+  }
+
+  private normalizeEmail(email: string): string {
+    return email.trim().toLowerCase();
+  }
+
+  private getInviteExpiryDays(): number {
+    const raw = process.env.TEAM_INVITE_EXPIRY_DAYS;
+    const parsed = Number(raw);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      return TeamService.DEFAULT_INVITE_EXPIRY_DAYS;
+    }
+    return Math.floor(parsed);
+  }
+
+  private getInviteExpiryCutoffDate(now = new Date()): Date {
+    const days = this.getInviteExpiryDays();
+    const ttlMs = days * 24 * 60 * 60 * 1000;
+    return new Date(now.getTime() - ttlMs);
+  }
+
+  private isInviteExpired(invitedAt: Date | null | undefined): boolean {
+    if (!invitedAt) return true;
+    if (Number.isNaN(invitedAt.getTime())) return true;
+    return invitedAt.getTime() < this.getInviteExpiryCutoffDate().getTime();
+  }
+
+  private buildTeamSignupUrl(input: { teamId: string; email: string }): string {
+    const baseUrl =
+      process.env.NEXT_PUBLIC_FRONTEND_URL ||
+      process.env.FRONTEND_URL ||
+      'http://localhost:3000';
+    const query = new URLSearchParams({
+      teamId: input.teamId,
+      email: input.email,
+    });
+    return `${baseUrl.replace(/\/+$/, '')}/auth/register?${query.toString()}`;
+  }
+
+  private readPendingSignupInvites(
+    metadata: TeamMetadata | null | undefined,
+  ): TeamPendingSignupInvite[] {
+    const raw = metadata?.pendingSignupInvites;
+    if (!Array.isArray(raw)) {
+      return [];
+    }
+    return raw
+      .filter((invite) => invite && typeof invite.email === 'string')
+      .map((invite) => ({
+        email: this.normalizeEmail(invite.email),
+        role: invite.role,
+        invitedAt: invite.invitedAt ?? new Date().toISOString(),
+        invitedByUserId: invite.invitedByUserId,
+      }));
+  }
+
+  private writePendingSignupInvites(
+    metadata: TeamMetadata | null | undefined,
+    pendingSignupInvites: TeamPendingSignupInvite[],
+  ): TeamMetadata {
+    const base = this.toMetadataObject(metadata);
+    return {
+      ...base,
+      pendingSignupInvites,
+    };
+  }
+
+  private addPendingSignupInvite(
+    metadata: TeamMetadata | null | undefined,
+    invite: TeamPendingSignupInvite,
+  ): TeamMetadata {
+    const pendingInvites = this.readPendingSignupInvites(metadata);
+    const normalizedEmail = this.normalizeEmail(invite.email);
+    const withoutExisting = pendingInvites.filter(
+      (item) => this.normalizeEmail(item.email) !== normalizedEmail,
+    );
+    return this.writePendingSignupInvites(metadata, [
+      ...withoutExisting,
+      invite,
+    ]);
+  }
+
+  private removeExpiredPendingSignupInvites(
+    metadata: TeamMetadata | null | undefined,
+  ): TeamMetadata {
+    const pendingInvites = this.readPendingSignupInvites(metadata);
+    if (pendingInvites.length === 0) {
+      return this.toMetadataObject(metadata);
+    }
+
+    const validInvites = pendingInvites.filter(
+      (invite) => !this.isInviteExpired(new Date(invite.invitedAt)),
+    );
+    return this.writePendingSignupInvites(metadata, validInvites);
   }
 
   private buildMetadataOnCreate(

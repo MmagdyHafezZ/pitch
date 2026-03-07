@@ -18,6 +18,9 @@ describe('TeamService', () => {
     updateTeam: jest.fn(),
     deleteTeam: jest.fn(),
     addMember: jest.fn(),
+    inviteMember: jest.fn(),
+    reinviteMember: jest.fn(),
+    acceptInvite: jest.fn(),
     reactivateMember: jest.fn(),
     updateMember: jest.fn(),
     transferOwnership: jest.fn(),
@@ -28,13 +31,26 @@ describe('TeamService', () => {
     findMany: jest.fn(),
     findUserTeams: jest.fn(),
     findById: jest.fn(),
+    findUserById: jest.fn(),
     ensureUniqueSlug: jest.fn(),
     confirmAuthorityOrThrow: jest.fn(),
   };
 
+  const teamInviteEmailService = {
+    sendSignupInvite: jest.fn(),
+  };
+
+  const notificationService = {
+    createOne: jest.fn(),
+  };
+
   beforeEach(() => {
     jest.clearAllMocks();
-    service = new TeamService(repo as any);
+    service = new TeamService(
+      repo as any,
+      teamInviteEmailService as any,
+      notificationService as any,
+    );
   });
 
   const baseTeam: Team = {
@@ -166,6 +182,115 @@ describe('TeamService', () => {
     );
     expect(repo.deleteTeam).toHaveBeenCalledWith('team-1');
     expect(result.message).toContain('team-1');
+  });
+
+  it('sends signup invite email after authority and team checks', async () => {
+    repo.confirmAuthorityOrThrow.mockResolvedValue(Role.ADMIN);
+    repo.findById.mockResolvedValue(baseTeam);
+    teamInviteEmailService.sendSignupInvite.mockResolvedValue(undefined);
+
+    const result = await service.sendSignupInvite({
+      teamId: 'team-1',
+      email: 'new-user@example.com',
+      requesterId: 'admin-1',
+      inviterName: 'Admin User',
+      signupUrl: 'https://app.pitch.ai/signup?invite=abc123',
+    });
+
+    expect(repo.confirmAuthorityOrThrow).toHaveBeenCalledWith(
+      'admin-1',
+      'team-1',
+    );
+    expect(repo.findById).toHaveBeenCalledWith('team-1');
+    expect(teamInviteEmailService.sendSignupInvite).toHaveBeenCalledWith({
+      email: 'new-user@example.com',
+      signupUrl: 'https://app.pitch.ai/signup?invite=abc123',
+      invitedByName: 'Admin User',
+      teamName: 'Engineering',
+    });
+    expect(result).toEqual({
+      message: 'Signup invite sent to new-user@example.com',
+    });
+  });
+
+  it('invites a user as pending and sends notification/email', async () => {
+    repo.confirmAuthorityOrThrow.mockResolvedValue(Role.ADMIN);
+    repo.findById.mockResolvedValue(baseTeam);
+    repo.findUserById.mockResolvedValue({
+      id: 'user-2',
+      email: 'user2@example.com',
+      name: 'User Two',
+    });
+    repo.findMembership.mockResolvedValue(null);
+    repo.inviteMember.mockResolvedValue({
+      id: 'm2',
+      userId: 'user-2',
+      teamId: 'team-1',
+      role: 'MEMBER',
+      tokenLimit: 0,
+      isActive: false,
+      invitedByUserId: 'admin-1',
+      acceptedAt: null,
+    });
+
+    const result = await service.inviteMember(
+      { teamId: 'team-1', userId: 'user-2', role: 'MEMBER' },
+      { id: 'admin-1', name: 'Admin User' },
+    );
+
+    expect(repo.inviteMember).toHaveBeenCalledWith(
+      expect.objectContaining({
+        teamId: 'team-1',
+        userId: 'user-2',
+        invitedByUserId: 'admin-1',
+      }),
+    );
+    expect(notificationService.createOne).toHaveBeenCalledWith(
+      expect.objectContaining({
+        recipientUserId: 'user-2',
+        type: 'TEAM_INVITE',
+      }),
+    );
+    expect(teamInviteEmailService.sendSignupInvite).toHaveBeenCalledWith({
+      email: 'user2@example.com',
+      invitedByName: 'Admin User',
+      teamName: 'Engineering',
+    });
+    expect(result).toEqual(
+      expect.objectContaining({
+        userId: 'user-2',
+        isActive: false,
+      }),
+    );
+  });
+
+  it('accepts a pending invite and activates membership', async () => {
+    repo.findMembership.mockResolvedValue({
+      id: 'm2',
+      userId: 'user-2',
+      teamId: 'team-1',
+      role: 'MEMBER',
+      tokenLimit: 0,
+      isActive: false,
+      invitedByUserId: 'admin-1',
+      acceptedAt: null,
+    });
+    repo.acceptInvite.mockResolvedValue({
+      id: 'm2',
+      userId: 'user-2',
+      teamId: 'team-1',
+      role: 'MEMBER',
+      tokenLimit: 0,
+      isActive: true,
+      invitedByUserId: 'admin-1',
+      acceptedAt: new Date(),
+    });
+
+    const result = await service.acceptInvite('team-1', 'user-2');
+
+    expect(repo.acceptInvite).toHaveBeenCalledWith('team-1', 'user-2');
+    expect(result.message).toBe('Invitation accepted');
+    expect(result.membership.isActive).toBe(true);
   });
 
   // --------------------

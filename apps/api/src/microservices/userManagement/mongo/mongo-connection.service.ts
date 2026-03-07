@@ -17,9 +17,7 @@ export class MongoConnectionService implements OnModuleInit, OnModuleDestroy {
   async onModuleInit() {
     const mongoUrl =
       this.configService.get<string>('USER_MANAGEMENT_MONGODB_URL') ||
-      this.configService.get<string>('MONGODB_URL') ||
-      process.env.USER_MANAGEMENT_MONGODB_URL ||
-      process.env.MONGODB_URL;
+      process.env.USER_MANAGEMENT_MONGODB_URL;
 
     if (!mongoUrl) {
       this.logger.warn(
