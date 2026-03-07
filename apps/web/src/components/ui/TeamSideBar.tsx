@@ -2,6 +2,7 @@
 import { ActionIcon, Box, Menu, Stack, Tooltip, Text } from '@mantine/core'
 import { useRouter } from 'next/navigation'
 import { useRef, useState } from 'react'
+import classes from './TeamSideBar.module.css'
 
 export type TeamInfo = {
   id: string
@@ -47,40 +48,10 @@ export function TeamSideBar({ teams, activeTeamId, onSelectTeam, onLeaveTeam }: 
   }
 
   return (
-    <Box
-      style={{
-        width: 60,
-        height: '100%',
-        background: 'var(--pitch-nav-bg, var(--mantine-color-nav-9))',
-        borderTopRightRadius: 24,
-        borderBottomRightRadius: 24,
-        border: '1px solid var(--pitch-nav-text-dim)',
-        display: 'flex',
-        flexDirection: 'column',
-        padding: '8px 4px',
-      }}
-    >
+    <Box className={classes.shell}>
       {/* Scrollable content area (teams + plus) */}
-      <Box
-        style={{
-          flex: 1,
-          width: '100%',
-          overflowY: 'auto',
-          overflowX: 'hidden',
-          paddingTop: 11,
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-        }}
-      >
-        <Stack
-          gap={6}
-          style={{
-            width: '100%',
-            alignItems: 'center',
-            justifyContent: 'flex-start',
-          }}
-        >
+      <Box className={classes.scrollArea}>
+        <Stack gap={6} className={classes.stack}>
           {teams.map((team) => {
             const isActive = team.id === activeTeamId
 
@@ -116,8 +87,8 @@ export function TeamSideBar({ teams, activeTeamId, onSelectTeam, onLeaveTeam }: 
                       <ActionIcon
                         radius="xl"
                         size="lg"
-                        variant={isActive ? 'filled' : 'light'}
-                        color={isActive ? 'brand' : 'white'}
+                        variant="subtle"
+                        className={`${classes.teamButton} ${isActive ? classes.teamButtonActive : ''}`}
                         onClick={() => handleTeamClick(team.id)}
                         onContextMenu={(event) => {
                           if (!team.canLeave || !onLeaveTeam) return
@@ -128,19 +99,12 @@ export function TeamSideBar({ teams, activeTeamId, onSelectTeam, onLeaveTeam }: 
                         style={{
                           width: 36,
                           height: 36,
-                          border: isActive
-                            ? '2px solid var(--pitch-accent-strong)'
-                            : '1px solid var(--pitch-nav-text-dim)',
-                          background: isActive
-                            ? 'var(--pitch-accent-strong)'
-                            : 'var(--pitch-nav-accent-soft)',
-                          color: isActive ? 'var(--pitch-nav-text)' : 'var(--pitch-nav-text-dim)',
                         }}
                       >
                         <Text
                           fw={700}
                           size="sm"
-                          c={isActive ? 'var(--pitch-nav-text)' : 'var(--pitch-nav-text-dim)'}
+                          className={`${classes.teamLabel} ${isActive ? classes.teamLabelActive : ''}`}
                         >
                           {deriveInitials(team.name)}
                         </Text>
@@ -170,18 +134,15 @@ export function TeamSideBar({ teams, activeTeamId, onSelectTeam, onLeaveTeam }: 
           <ActionIcon
             radius="xl"
             size="lg"
-            variant="light"
-            color="dark"
+            variant="subtle"
+            className={`${classes.teamButton} ${classes.createButton}`}
             style={{
               width: 36,
               height: 36,
-              border: '1px solid var(--pitch-nav-text-dim)',
-              background: 'var(--pitch-nav-accent-soft)',
-              marginTop: 8,
             }}
             onClick={handleCreateTeam}
           >
-            <Text fw={700} size="sm" c="var(--pitch-nav-text)">
+            <Text fw={700} size="sm" className={classes.createLabel}>
               +
             </Text>
           </ActionIcon>
