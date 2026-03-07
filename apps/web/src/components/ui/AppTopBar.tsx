@@ -20,15 +20,17 @@ import {
   Loader,
   useMantineColorScheme,
 } from '@mantine/core'
-import { IconSearch, IconBell, IconUser, IconHelp } from '@tabler/icons-react'
+import { IconSearch, IconBell, IconUser, IconHelp, IconX } from '@tabler/icons-react'
 import dayjs from 'dayjs'
-import { ReactNode, useMemo, useState } from 'react'
+import { ReactNode, useEffect, useMemo, useState } from 'react'
 import { SettingsModal } from './SettingsModal'
 import { useMediaQuery } from '@mantine/hooks'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/client'
 import { useAuthStore } from '@/features/auth'
+import { useTeamsStore } from '@/features/teams/stores/teams.store'
+import { notifications } from '@mantine/notifications'
 import { useTour } from '@/features/onboarding'
 import type { TourScreen } from '@/features/onboarding'
 import { useI18n } from '@/features/i18n'
@@ -88,8 +90,17 @@ function ActionBar({
   translateTab,
 }: ActionBarProps) {
   const [localTab, setLocalTab] = useState(selectedTab ?? availableTabs[0] ?? '')
+  const [uncontrolledSearchValue, setUncontrolledSearchValue] = useState(value ?? '')
   const activeTab = selectedTab ?? localTab
   const leftAction = leadingAction ?? actionButtons
+  const isSearchValueControlled = value !== undefined
+  const searchValue = isSearchValueControlled ? value : uncontrolledSearchValue
+
+  useEffect(() => {
+    if (value !== undefined) {
+      setUncontrolledSearchValue(value)
+    }
+  }, [value])
 
   const handleTabSelect = (tab: string) => {
     if (!selectedTab) {
@@ -174,13 +185,18 @@ function ActionBar({
     </Group>
   ) : null
 
-  const inputProps = value !== undefined ? { value } : {}
   const searchWidth = isCompact ? rem(180) : rem(320)
   const searchInput = enableSearch ? (
     <Box style={{ width: searchWidth, flexShrink: 0 }}>
       <TextInput
-        {...inputProps}
-        onChange={(event) => onChange?.(event.currentTarget.value)}
+        value={searchValue}
+        onChange={(event) => {
+          const nextValue = event.currentTarget.value
+          if (!isSearchValueControlled) {
+            setUncontrolledSearchValue(nextValue)
+          }
+          onChange?.(nextValue)
+        }}
         placeholder={searchPlaceholder}
         leftSection={<IconSearch size={16} />}
         w="100%"
@@ -373,6 +389,8 @@ export function AppTopBar({
   )
   const [settingsOpened, setSettingsOpened] = useState(false)
   const [notificationsOpened, setNotificationsOpened] = useState(false)
+  const [acceptingInviteIds, setAcceptingInviteIds] = useState<string[]>([])
+  const [acceptedInviteIds, setAcceptedInviteIds] = useState<string[]>([])
   const router = useRouter()
   const { startTour } = useTour()
 
@@ -387,6 +405,8 @@ export function AppTopBar({
   const isNarrow = useMediaQuery('(max-width: 520px)')
   const queryClient = useQueryClient()
   const currentUser = useAuthStore((state) => state.user)
+  const teams = useTeamsStore((state) => state.teams) ?? []
+  const refreshUserTeams = useTeamsStore((state) => state.fetchUserTeams)
   const searchParams = useSearchParams()
   const pathname = usePathname()
   const sessionQuery = useMemo(() => searchParams.get('q') ?? '', [searchParams])
@@ -416,6 +436,7 @@ export function AppTopBar({
     queryFn: () =>
       api.notifications.list({
         recipientUserId: currentUser!.id,
+        unreadOnly: true,
         skip: 0,
         limit: 20,
       }),
@@ -428,20 +449,168 @@ export function AppTopBar({
         notificationIds,
         recipientUserId: currentUser?.id,
       }),
-    onSuccess: () => {
+    onSuccess: (_result, notificationIds) => {
+      const unreadCountKey = ['notifications', 'unread-count', currentUser?.id]
+      const notificationsListKey = ['notifications', 'list', currentUser?.id]
+
+      queryClient.setQueryData<{ count: number } | undefined>(unreadCountKey, (previous) => {
+        if (!previous) return previous
+        return { ...previous, count: Math.max(0, previous.count - notificationIds.length) }
+      })
+      queryClient.setQueryData<{ data: NotificationItem[] } | undefined>(
+        notificationsListKey,
+        (previous) => {
+          if (!previous?.data) return previous
+          return {
+            ...previous,
+            data: previous.data.filter((item) => !notificationIds.includes(item.id)),
+          }
+        }
+      )
       queryClient.invalidateQueries({ queryKey: ['notifications'] })
     },
   })
 
   const markAllReadMutation = useMutation({
-    mutationFn: () => api.notifications.markAllRead(currentUser!.id),
+    mutationFn: async () => {
+      if (!currentUser?.id) {
+        throw new Error('No authenticated user found')
+      }
+
+      const pageSize = 100
+      let skip = 0
+      const unreadIds: string[] = []
+
+      while (true) {
+        const unread = await api.notifications.list({
+          recipientUserId: currentUser.id,
+          unreadOnly: true,
+          skip,
+          limit: pageSize,
+        })
+
+        const pageIds = (unread?.data ?? [])
+          .map((item: NotificationItem) => item.id)
+          .filter((id: string | undefined): id is string => Boolean(id))
+
+        if (pageIds.length === 0) break
+        unreadIds.push(...pageIds)
+        if (pageIds.length < pageSize) break
+        skip += pageSize
+      }
+
+      if (unreadIds.length > 0) {
+        await api.notifications.markRead({
+          notificationIds: unreadIds,
+          recipientUserId: currentUser.id,
+        })
+      }
+
+      return api.notifications.markAllRead(currentUser.id)
+    },
     onSuccess: () => {
+      const unreadCountKey = ['notifications', 'unread-count', currentUser?.id]
+      const notificationsListKey = ['notifications', 'list', currentUser?.id]
+
+      queryClient.setQueryData<{ count: number } | undefined>(unreadCountKey, (previous) => {
+        if (!previous) return { count: 0 }
+        return { ...previous, count: 0 }
+      })
+      queryClient.setQueryData<{ data: NotificationItem[] } | undefined>(
+        notificationsListKey,
+        (previous) => {
+          if (!previous?.data) return previous
+          return {
+            ...previous,
+            data: [],
+          }
+        }
+      )
       queryClient.invalidateQueries({ queryKey: ['notifications'] })
+    },
+    onError: (error) => {
+      notifications.show({
+        title: 'Failed to mark notifications as read',
+        message: error instanceof Error ? error.message : 'Please try again.',
+        color: 'red',
+      })
+    },
+  })
+
+  const acceptTeamInviteMutation = useMutation({
+    mutationFn: (payload: { teamId: string; notificationId: string }) =>
+      api.teams.acceptInvite(payload.teamId),
+    onSuccess: async (_result, payload) => {
+      setAcceptedInviteIds((previous) =>
+        previous.includes(payload.notificationId) ? previous : [...previous, payload.notificationId]
+      )
+
+      const unreadCountKey = ['notifications', 'unread-count', currentUser?.id]
+      const notificationsListKey = ['notifications', 'list', currentUser?.id]
+
+      queryClient.setQueryData<{ count: number } | undefined>(unreadCountKey, (previous) => {
+        if (!previous) return previous
+        return { ...previous, count: Math.max(0, previous.count - 1) }
+      })
+      queryClient.setQueryData<{ data: NotificationItem[] } | undefined>(
+        notificationsListKey,
+        (previous) => {
+          if (!previous?.data) return previous
+          return {
+            ...previous,
+            data: previous.data.filter((item) => item.id !== payload.notificationId),
+          }
+        }
+      )
+
+      await markReadMutation.mutateAsync([payload.notificationId])
+      queryClient.invalidateQueries({ queryKey: ['notifications'] })
+      await refreshUserTeams()
+      notifications.show({
+        title: 'Invitation accepted',
+        message: 'You are now a member of the team.',
+        color: 'teal',
+      })
+    },
+    onError: async (error, payload) => {
+      try {
+        await refreshUserTeams()
+        const joinedTeam = useTeamsStore.getState().teams.find((team) => team.id === payload.teamId)
+        const hasJoined =
+          !!currentUser?.id &&
+          !!joinedTeam?.memberships?.some(
+            (membership) => membership.userId === currentUser.id && membership.isActive !== false
+          )
+
+        if (hasJoined) {
+          setAcceptedInviteIds((previous) =>
+            previous.includes(payload.notificationId)
+              ? previous
+              : [...previous, payload.notificationId]
+          )
+          markReadMutation.mutate([payload.notificationId])
+          queryClient.invalidateQueries({ queryKey: ['notifications'] })
+          notifications.show({
+            title: 'Invitation accepted',
+            message: 'You are now a member of the team.',
+            color: 'teal',
+          })
+          return
+        }
+      } catch {
+        // Fall through to the original error toast.
+      }
+
+      notifications.show({
+        title: 'Failed to accept invitation',
+        message: error instanceof Error ? error.message : 'Please try again.',
+        color: 'red',
+      })
     },
   })
 
   const unreadCount = unreadCountQuery.data?.count ?? 0
-  const notifications = (notificationsQuery.data?.data ?? []) as NotificationItem[]
+  const notificationItems = (notificationsQuery.data?.data ?? []) as NotificationItem[]
   const severityColor = (severity: NotificationItem['severity']) => {
     switch (severity) {
       case 'CRITICAL':
@@ -498,15 +667,35 @@ export function AppTopBar({
             <Group justify="center" py="md">
               <Loader size="sm" />
             </Group>
-          ) : notifications.length === 0 ? (
+          ) : notificationItems.length === 0 ? (
             <Text size="sm" c="dimmed">
               {t('topbar.noNotifications')}
             </Text>
           ) : (
             <ScrollArea h={360}>
               <Stack gap="sm">
-                {notifications.map((notification) => {
+                {notificationItems.map((notification) => {
                   const isUnread = !notification.readAt
+                  const isClearingNotification =
+                    markReadMutation.isPending &&
+                    (markReadMutation.variables?.includes(notification.id) ?? false)
+                  const teamId =
+                    notification.type === 'TEAM_INVITE' &&
+                    typeof notification.metadata?.teamId === 'string'
+                      ? notification.metadata.teamId
+                      : null
+                  const isAccepting = acceptingInviteIds.includes(notification.id)
+                  const isAccepted = acceptedInviteIds.includes(notification.id)
+                  const isAlreadyTeamMember =
+                    !!teamId &&
+                    !!currentUser?.id &&
+                    !!teams
+                      .find((team) => team.id === teamId)
+                      ?.memberships?.some(
+                        (membership) =>
+                          membership.userId === currentUser.id && membership.isActive !== false
+                      )
+                  const disableAcceptButton = isAccepting || isAccepted || isAlreadyTeamMember
                   return (
                     <Paper
                       key={notification.id}
@@ -527,9 +716,24 @@ export function AppTopBar({
                         <Text fw={600} size="sm">
                           {notification.title}
                         </Text>
-                        <Badge color={severityColor(notification.severity)} variant="light">
-                          {notification.severity}
-                        </Badge>
+                        <Group gap={6} align="center">
+                          <Badge color={severityColor(notification.severity)} variant="light">
+                            {notification.severity}
+                          </Badge>
+                          <ActionIcon
+                            size="sm"
+                            variant="subtle"
+                            color="gray"
+                            aria-label="Clear notification"
+                            disabled={isClearingNotification}
+                            onClick={(event) => {
+                              event.stopPropagation()
+                              markReadMutation.mutate([notification.id])
+                            }}
+                          >
+                            <IconX size={14} />
+                          </ActionIcon>
+                        </Group>
                       </Group>
                       <Text size="sm" c="dimmed" mt={4}>
                         {notification.message}
@@ -537,6 +741,40 @@ export function AppTopBar({
                       <Text size="xs" c="gray.5" mt={6}>
                         {dayjs(notification.createdAt).format('MMM D, YYYY HH:mm')}
                       </Text>
+                      {teamId ? (
+                        <Group mt="xs" justify="flex-end">
+                          <Button
+                            size="xs"
+                            variant="light"
+                            loading={isAccepting}
+                            disabled={disableAcceptButton}
+                            onClick={(event) => {
+                              event.stopPropagation()
+                              if (disableAcceptButton) return
+                              setAcceptingInviteIds((previous) =>
+                                previous.includes(notification.id)
+                                  ? previous
+                                  : [...previous, notification.id]
+                              )
+                              acceptTeamInviteMutation.mutate(
+                                {
+                                  teamId,
+                                  notificationId: notification.id,
+                                },
+                                {
+                                  onSettled: () => {
+                                    setAcceptingInviteIds((previous) =>
+                                      previous.filter((id) => id !== notification.id)
+                                    )
+                                  },
+                                }
+                              )
+                            }}
+                          >
+                            {isAccepted || isAlreadyTeamMember ? 'Accepted' : 'Accept invitation'}
+                          </Button>
+                        </Group>
+                      ) : null}
                     </Paper>
                   )
                 })}

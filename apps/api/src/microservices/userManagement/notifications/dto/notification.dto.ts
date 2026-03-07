@@ -18,7 +18,7 @@ import { Transform, Type } from 'class-transformer';
 import {
   NotificationSeverity,
   NotificationSourceType,
-} from '../schema/notification.schema';
+} from '../../mongo/schemas/notification.schema';
 
 export class NotificationDto {
   @ApiProperty({ example: '66c8f0f88c2a0f6a6f0a1234' })

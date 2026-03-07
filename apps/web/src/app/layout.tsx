@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { Suspense } from 'react'
 import '@mantine/core/styles.css'
 import 'driver.js/dist/driver.css'
 import { ColorSchemeScript, mantineHtmlProps } from '@mantine/core'
@@ -23,7 +24,9 @@ export default function RootLayout({
       </head>
       <body>
         <Providers>
-          <AuthGate>{children}</AuthGate>
+          <Suspense fallback={null}>
+            <AuthGate>{children}</AuthGate>
+          </Suspense>
         </Providers>
       </body>
     </html>

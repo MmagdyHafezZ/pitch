@@ -35,7 +35,7 @@ export class PersonaService {
   async create(
     createPersonaDto: CreatePersonaDto,
   ): Promise<PersonaResponseDto> {
-    const payload = await this.validateAndNormalizeCreateDto(createPersonaDto);
+    const payload = this.validateAndNormalizeCreateDto(createPersonaDto);
     this.logger.log(`Creating persona: ${payload.name}`);
 
     const persona = await this.personaRepository.create(payload);
@@ -89,9 +89,9 @@ export class PersonaService {
     };
   };
 
-  private async validateAndNormalizeCreateDto(
+  private validateAndNormalizeCreateDto(
     createPersonaDto: CreatePersonaDto,
-  ): Promise<CreatePersonaDto> {
+  ): CreatePersonaDto {
     const name = this.normalizeText(
       createPersonaDto.name,
       'Persona name',
@@ -111,9 +111,9 @@ export class PersonaService {
         throw new BadRequestException('Persona traits must be an object');
       }
 
-      traits = (await this.validateTraits(
+      traits = this.validateTraits(
         createPersonaDto.traits as Record<string, unknown>,
-      )) as Prisma.InputJsonValue;
+      ) as Prisma.InputJsonValue;
     }
 
     return {
@@ -124,9 +124,9 @@ export class PersonaService {
     };
   }
 
-  private async validateTraits(
+  private validateTraits(
     traits: Record<string, unknown>,
-  ): Promise<Record<string, unknown>> {
+  ): Record<string, unknown> {
     const nextTraits: Record<string, unknown> = { ...traits };
 
     const boundedTextFields = [
@@ -184,19 +184,21 @@ export class PersonaService {
     }
 
     if (traits.voice !== undefined) {
-      nextTraits.voice = await this.validateVoiceConfig(traits.voice);
+      nextTraits.voice = this.validateVoiceConfig(traits.voice);
       const voice = nextTraits.voice as Record<string, unknown>;
-      if (!nextTraits.voiceProfile && voice.provider && voice.voiceName) {
-        nextTraits.voiceProfile = `${voice.provider} / ${voice.voiceName}`;
+      const providerName =
+        typeof voice.provider === 'string' ? voice.provider : null;
+      const voiceName =
+        typeof voice.voiceName === 'string' ? voice.voiceName : null;
+      if (!nextTraits.voiceProfile && providerName && voiceName) {
+        nextTraits.voiceProfile = `${providerName} / ${voiceName}`;
       }
     }
 
     return nextTraits;
   }
 
-  private async validateVoiceConfig(
-    value: unknown,
-  ): Promise<Record<string, unknown>> {
+  private validateVoiceConfig(value: unknown): Record<string, unknown> {
     if (!this.isRecord(value)) {
       throw new BadRequestException('traits.voice must be an object');
     }

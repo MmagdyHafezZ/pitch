@@ -3,6 +3,7 @@ import { Type } from 'class-transformer';
 import {
   IsArray,
   IsEmail,
+  IsEnum,
   IsIn,
   IsObject,
   IsOptional,
@@ -14,6 +15,7 @@ import {
   ApiPropertyOptional,
   getSchemaPath,
 } from '@nestjs/swagger';
+import { SupportEmailTemplate } from '@pitch/shared-backend/interfaces/support-email.interface';
 
 export class EmailFromDto {
   @ApiPropertyOptional({ example: 'PITCH' })
@@ -107,4 +109,30 @@ export class SendVerificationCodeDto {
   @IsOptional()
   @IsString()
   purpose?: string;
+}
+
+export class SendTemplatedEmailDto {
+  @ApiProperty({ example: 'person@example.com' })
+  @IsEmail()
+  to!: string;
+
+  @ApiProperty({
+    enum: SupportEmailTemplate,
+    example: SupportEmailTemplate.USER_SIGNUP_INVITE,
+  })
+  @IsEnum(SupportEmailTemplate)
+  template!: SupportEmailTemplate;
+
+  @ApiPropertyOptional({
+    description:
+      'Template payload. For USER_SIGNUP_INVITE use signupUrl/teamName/invitedByName.',
+    example: {
+      signupUrl: 'https://app.pitch.ai/signup?invite=abc123',
+      teamName: 'Engineering',
+      invitedByName: 'Admin User',
+    },
+  })
+  @IsOptional()
+  @IsObject()
+  data?: Record<string, unknown>;
 }

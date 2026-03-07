@@ -430,6 +430,24 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(data),
       }),
+    inviteMember: (id: string, data: any) =>
+      apiRequest<any>(`/teams/${id}/invitations`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    sendSignupInvite: (id: string, data: { email: string; signupUrl?: string; role?: string }) =>
+      apiRequest<any>(`/teams/${id}/invitations/signup`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    claimInvite: (id: string) =>
+      apiRequest<any>(`/teams/${id}/invitations/claim`, {
+        method: 'POST',
+      }),
+    acceptInvite: (id: string) =>
+      apiRequest<any>(`/teams/${id}/invitations/accept`, {
+        method: 'POST',
+      }),
     updateMember: (id: string, userId: string, data: any) =>
       apiRequest<any>(`/teams/${id}/members/${userId}`, {
         method: 'PUT',

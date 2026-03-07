@@ -1,12 +1,12 @@
 import { Injectable, ServiceUnavailableException } from '@nestjs/common';
 import { Model, Types } from 'mongoose';
-import { MongoConnectionService } from '../../services/mongo/mongo-connection.service';
+import { MongoConnectionService } from '../../mongo/mongo-connection.service';
 import {
-  NotificationDocument,
+  Notification,
   NotificationSchema,
   NotificationSeverity,
   NotificationSourceType,
-} from '../schema/notification.schema';
+} from '../../mongo/schemas/notification.schema';
 import {
   CreateNotificationDto,
   CreateNotificationBatchDto,
@@ -18,7 +18,7 @@ import {
   MarkReadResponseDto,
 } from '../dto/notification.dto';
 
-const NOTIFICATION_MODEL = 'Notification';
+const NOTIFICATION_MODEL = Notification.name;
 
 type NotificationRecord = {
   _id: unknown;
@@ -31,21 +31,22 @@ type NotificationRecord = {
   sourceUserId?: string | null;
   metadata?: Record<string, unknown>;
   readAt?: Date | null;
-  createdAt: Date;
-  updatedAt: Date;
+  createdAt?: Date;
+  updatedAt?: Date;
 };
 
 @Injectable()
 export class NotificationService {
   constructor(private readonly mongo: MongoConnectionService) {}
 
-  private getModel(): Model<NotificationDocument> {
-    if (!this.mongo.isConnected()) {
+  private async getModel(): Promise<Model<Notification>> {
+    const connected = await this.mongo.waitUntilConnected(10000);
+    if (!connected) {
       throw new ServiceUnavailableException(
         'Notifications storage is not available',
       );
     }
-    return this.mongo.getModel<NotificationDocument>(
+    return this.mongo.getModel<Notification>(
       NOTIFICATION_MODEL,
       NotificationSchema,
     );
@@ -77,24 +78,24 @@ export class NotificationService {
       sourceUserId: doc.sourceUserId ?? undefined,
       metadata: doc.metadata ?? undefined,
       readAt: doc.readAt ?? null,
-      createdAt: doc.createdAt,
-      updatedAt: doc.updatedAt,
+      createdAt: doc.createdAt ?? new Date(),
+      updatedAt: doc.updatedAt ?? new Date(),
     };
   }
 
   async createOne(dto: CreateNotificationDto): Promise<NotificationDto> {
-    const model = this.getModel();
+    const model = await this.getModel();
     const created = await model.create({
       ...dto,
       readAt: null,
     });
-    return this.toDto(created);
+    return this.toDto(created.toObject() as NotificationRecord);
   }
 
   async createBatch(
     dto: CreateNotificationBatchDto,
   ): Promise<BatchCreateResponseDto> {
-    const model = this.getModel();
+    const model = await this.getModel();
     const payload = dto.recipientUserIds.map((recipientUserId) => ({
       recipientUserId,
       title: dto.title,
@@ -109,14 +110,16 @@ export class NotificationService {
     const inserted = await model.insertMany(payload);
     return {
       insertedCount: inserted.length,
-      notifications: inserted.map((doc) => this.toDto(doc)),
+      notifications: inserted.map((doc) =>
+        this.toDto(doc.toObject() as NotificationRecord),
+      ),
     };
   }
 
   async list(
     query: ListNotificationsQueryDto,
   ): Promise<ListNotificationsResponseDto> {
-    const model = this.getModel();
+    const model = await this.getModel();
     const filter: Record<string, unknown> = {};
 
     if (query.recipientUserId) {
@@ -135,12 +138,18 @@ export class NotificationService {
     const limit = query.limit ?? 20;
 
     const [data, total] = await Promise.all([
-      model.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).exec(),
+      model
+        .find(filter)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean()
+        .exec(),
       model.countDocuments(filter),
     ]);
 
     return {
-      data: data.map((doc) => this.toDto(doc)),
+      data: data.map((doc) => this.toDto(doc as NotificationRecord)),
       total,
       skip,
       limit,
@@ -148,12 +157,12 @@ export class NotificationService {
   }
 
   async unreadCount(recipientUserId: string): Promise<number> {
-    const model = this.getModel();
+    const model = await this.getModel();
     return model.countDocuments({ recipientUserId, readAt: null });
   }
 
   async markRead(dto: MarkReadDto): Promise<MarkReadResponseDto> {
-    const model = this.getModel();
+    const model = await this.getModel();
     const ids = dto.notificationIds.map((id) => new Types.ObjectId(id));
     const filter: Record<string, unknown> = { _id: { $in: ids } };
 
@@ -172,7 +181,7 @@ export class NotificationService {
   }
 
   async markAllRead(recipientUserId: string): Promise<MarkReadResponseDto> {
-    const model = this.getModel();
+    const model = await this.getModel();
     const result = await model.updateMany(
       { recipientUserId, readAt: null },
       { $set: { readAt: new Date() } },
