@@ -8,12 +8,13 @@ import { Persona, Prisma } from '@prisma/simulation-client';
 import { PersonaRepository } from '../repositories/persona.repository';
 import { CreatePersonaDto } from '../dto/persona.dto';
 import { TtsService } from '../tts/tts.service';
+import { PersonaMediaService } from './persona-media.service';
 
 export interface PersonaResponseDto {
   id: string;
   orgId: string;
   name: string;
-  traits?: Prisma.JsonValue | null;
+  traits?: Record<string, unknown> | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -23,6 +24,11 @@ export interface PersonaListResponseDto {
   total: number;
 }
 
+export interface PersonaPreviewAudioDto {
+  audioBuffer: Buffer;
+  contentType: string;
+}
+
 @Injectable()
 export class PersonaService {
   private readonly logger = new Logger(PersonaService.name);
@@ -30,15 +36,21 @@ export class PersonaService {
   constructor(
     private readonly personaRepository: PersonaRepository,
     private readonly ttsService: TtsService,
+    private readonly personaMediaService: PersonaMediaService,
   ) {}
 
   async create(
     createPersonaDto: CreatePersonaDto,
   ): Promise<PersonaResponseDto> {
-    const payload = await this.validateAndNormalizeCreateDto(createPersonaDto);
+    const payload = this.validateAndNormalizeCreateDto(createPersonaDto);
     this.logger.log(`Creating persona: ${payload.name}`);
 
     const persona = await this.personaRepository.create(payload);
+    void this.personaMediaService.warmPreviewAudio({
+      personaId: persona.id,
+      name: persona.name,
+      traits: persona.traits,
+    });
     return this.mapToResponseDto(persona);
   }
 
@@ -76,6 +88,28 @@ export class PersonaService {
     };
   }
 
+  async getPreviewAudio(id: string): Promise<PersonaPreviewAudioDto | null> {
+    const persona = await this.personaRepository.findById(id);
+    if (!persona) {
+      throw new NotFoundException(`Persona with ID ${id} not found`);
+    }
+
+    const audio = await this.personaMediaService.getOrCreatePreviewAudio({
+      personaId: persona.id,
+      name: persona.name,
+      traits: persona.traits,
+    });
+
+    if (!audio) {
+      return null;
+    }
+
+    return {
+      audioBuffer: audio.audioBuffer,
+      contentType: audio.contentType,
+    };
+  }
+
   private readonly mapToResponseDto = (
     persona: Persona,
   ): PersonaResponseDto => {
@@ -83,15 +117,19 @@ export class PersonaService {
       id: persona.id,
       orgId: persona.orgId,
       name: persona.name,
-      traits: persona.traits,
+      traits: this.personaMediaService.enrichTraits({
+        personaId: persona.id,
+        name: persona.name,
+        traits: persona.traits,
+      }),
       createdAt: persona.createdAt,
       updatedAt: persona.updatedAt,
     };
   };
 
-  private async validateAndNormalizeCreateDto(
+  private validateAndNormalizeCreateDto(
     createPersonaDto: CreatePersonaDto,
-  ): Promise<CreatePersonaDto> {
+  ): CreatePersonaDto {
     const name = this.normalizeText(
       createPersonaDto.name,
       'Persona name',
@@ -111,9 +149,14 @@ export class PersonaService {
         throw new BadRequestException('Persona traits must be an object');
       }
 
-      traits = (await this.validateTraits(
+      traits = this.validateTraits(
         createPersonaDto.traits as Record<string, unknown>,
-      )) as Prisma.InputJsonValue;
+      ) as Prisma.InputJsonValue;
+
+      traits = this.personaMediaService.enrichTraits({
+        name,
+        traits,
+      }) as Prisma.InputJsonValue;
     }
 
     return {
@@ -124,9 +167,9 @@ export class PersonaService {
     };
   }
 
-  private async validateTraits(
+  private validateTraits(
     traits: Record<string, unknown>,
-  ): Promise<Record<string, unknown>> {
+  ): Record<string, unknown> {
     const nextTraits: Record<string, unknown> = { ...traits };
 
     const boundedTextFields = [
@@ -184,19 +227,21 @@ export class PersonaService {
     }
 
     if (traits.voice !== undefined) {
-      nextTraits.voice = await this.validateVoiceConfig(traits.voice);
+      nextTraits.voice = this.validateVoiceConfig(traits.voice);
       const voice = nextTraits.voice as Record<string, unknown>;
-      if (!nextTraits.voiceProfile && voice.provider && voice.voiceName) {
-        nextTraits.voiceProfile = `${voice.provider} / ${voice.voiceName}`;
+      const providerName =
+        typeof voice.provider === 'string' ? voice.provider : undefined;
+      const voiceName =
+        typeof voice.voiceName === 'string' ? voice.voiceName : undefined;
+      if (!nextTraits.voiceProfile && providerName && voiceName) {
+        nextTraits.voiceProfile = `${providerName} / ${voiceName}`;
       }
     }
 
     return nextTraits;
   }
 
-  private async validateVoiceConfig(
-    value: unknown,
-  ): Promise<Record<string, unknown>> {
+  private validateVoiceConfig(value: unknown): Record<string, unknown> {
     if (!this.isRecord(value)) {
       throw new BadRequestException('traits.voice must be an object');
     }

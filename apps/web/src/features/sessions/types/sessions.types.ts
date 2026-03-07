@@ -13,6 +13,23 @@ export interface Session {
   sessionConfig?: Record<string, unknown> | null
   scenarioId?: string | null
   personaId?: string | null
+  scenario?: {
+    id: string
+    orgId?: string
+    name?: string | null
+    description?: string | null
+    config?: Record<string, unknown> | null
+    createdAt?: string
+    updatedAt?: string
+  } | null
+  persona?: {
+    id: string
+    orgId?: string
+    name?: string | null
+    traits?: Record<string, unknown> | null
+    createdAt?: string
+    updatedAt?: string
+  } | null
   language?: string | null
   crmContextId?: string | null
   status: SessionStatus
@@ -129,10 +146,48 @@ export interface PhoneConfig {
   number: string
 }
 
+export interface VideoRuntimeConfig {
+  status?: 'idle' | 'queued' | 'rendering' | 'ready' | 'failed' | string
+  provider?: 'heygen' | 'azure-avatar' | string
+  fallbackProvider?: 'azure-avatar' | string
+  activeJobId?: string
+  playbackToken?: string
+  requestId?: string
+  providerJobId?: string
+  assetUrl?: string
+  lastError?: string
+  submittedAt?: string
+  completedAt?: string
+  updatedAt?: string
+  textPreview?: string
+  fallbackUsed?: boolean
+}
+
+export interface VideoConfig {
+  mode?: 'rendered' | 'realtime' | string
+  provider?: 'heygen' | 'azure-avatar' | string
+  fallbackProvider?: 'azure-avatar' | string
+  heygenAvatarId?: string
+  heygenAvatarStyle?: string
+  heygenBackgroundColor?: string
+  heygenWidth?: number
+  heygenHeight?: number
+  liveAvatarId?: string
+  liveAvatarName?: string
+  liveAvatarQuality?: 'very_high' | 'high' | 'medium' | 'low' | string
+  liveAvatarEncoding?: 'VP8' | 'H264' | string
+  azureAvatarCharacter?: string
+  azureAvatarStyle?: string
+  azureVoice?: string
+  azureBackgroundColor?: string
+  runtime?: VideoRuntimeConfig
+}
+
 export interface SessionConfigData {
   llm?: LLMConfig
   voice?: VoiceConfig
   phone?: PhoneConfig
+  video?: VideoConfig
   multiTurnEnabled?: boolean
   tone?: string
   speechRate?: string

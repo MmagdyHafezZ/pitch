@@ -46,11 +46,49 @@ describe('PersonaService', () => {
         models: [],
       },
     ]),
+    getVoices: jest.fn((providerName: string) => {
+      if (providerName === 'elevenlabs') {
+        return [
+          'Bella - Professional, Bright, Warm',
+          'Daniel - Steady Broadcaster',
+          'Eric - Smooth, Trustworthy',
+        ];
+      }
+
+      return [];
+    }),
   };
+  const personaMediaService = {
+    enrichTraits: jest.fn(),
+    warmPreviewAudio: jest.fn(),
+    getOrCreatePreviewAudio: jest.fn(),
+  };
+
+  personaMediaService.enrichTraits.mockImplementation(
+    ({ traits }: { traits: Record<string, unknown> }) => ({
+      ...traits,
+      voiceProfile: 'ElevenLabs / Bella - Professional, Bright, Warm',
+      voice: {
+        provider: 'elevenlabs',
+        voiceName: 'Bella - Professional, Bright, Warm',
+        language: 'en-US',
+      },
+      avatar: {
+        imageUrl: 'https://files2.heygen.ai/avatar/example.webp',
+        heygenAvatarId: 'Sabine_standing_office_front',
+      },
+      audioPreview: {
+        provider: 'elevenlabs',
+        voiceName: 'Bella - Professional, Bright, Warm',
+        text: "Hello, I'm Arden, your Chief Technology Officer.",
+      },
+    }),
+  );
 
   const service = new PersonaService(
     personaRepository as never,
     ttsService as never,
+    personaMediaService as never,
   );
 
   beforeEach(() => {
@@ -78,17 +116,22 @@ describe('PersonaService', () => {
       traits: expect.objectContaining({
         role: 'Chief Technology Officer',
         signatureTraits: ['Asks for proof', 'Needs implementation detail'],
-        voiceProfile: 'openai / alloy',
+        voiceProfile: 'ElevenLabs / Bella - Professional, Bright, Warm',
         metrics: {
           pacing: 61,
           empathy: 38,
         },
         voice: {
-          provider: 'openai',
-          voiceName: 'alloy',
+          provider: 'elevenlabs',
+          voiceName: 'Bella - Professional, Bright, Warm',
           language: 'en-US',
-          model: 'gpt-4o-mini-tts',
         },
+        avatar: expect.objectContaining({
+          heygenAvatarId: 'Sabine_standing_office_front',
+        }),
+        audioPreview: expect.objectContaining({
+          provider: 'elevenlabs',
+        }),
       }),
     });
   });

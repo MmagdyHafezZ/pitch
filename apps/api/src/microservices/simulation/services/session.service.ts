@@ -23,6 +23,7 @@ import { AssessmentService } from '../assessment/assessment.service';
 import { AssessmentModeDto } from '../assessment/dto/assessment.dto';
 import type { SessionWithOwner } from '../repositories/session.repository';
 import { SimulationPrismaService } from '../prisma/simulation-prisma.service';
+import { PersonaMediaService } from './persona-media.service';
 
 /**
  * Session Service
@@ -38,6 +39,7 @@ export class SessionService {
     private readonly sessionMemberRepository: SessionMemberRepository,
     private readonly assessmentService: AssessmentService,
     private readonly prisma: SimulationPrismaService,
+    private readonly personaMediaService: PersonaMediaService,
   ) {}
 
   /**
@@ -420,6 +422,32 @@ export class SessionService {
     session: SessionWithOwner,
   ): SessionResponseDto => {
     const ownerMember = this.getOwnerMember(session);
+    const persona = session.persona
+      ? {
+          id: session.persona.id,
+          orgId: session.persona.orgId,
+          name: session.persona.name,
+          traits: this.personaMediaService.enrichTraits({
+            personaId: session.persona.id,
+            name: session.persona.name,
+            traits: session.persona.traits,
+          }),
+          createdAt: session.persona.createdAt,
+          updatedAt: session.persona.updatedAt,
+        }
+      : undefined;
+    const scenario = session.scenario
+      ? {
+          id: session.scenario.id,
+          orgId: session.scenario.orgId,
+          name: session.scenario.name,
+          description: session.scenario.description,
+          config: session.scenario.config as Record<string, any> | undefined,
+          createdAt: session.scenario.createdAt,
+          updatedAt: session.scenario.updatedAt,
+        }
+      : undefined;
+
     return {
       id: session.id,
       name: session.name ?? undefined,
@@ -434,6 +462,8 @@ export class SessionService {
       sessionConfig: session.sessionConfig as Record<string, any> | undefined,
       scenarioId: session.scenarioId || undefined,
       personaId: session.personaId || undefined,
+      scenario,
+      persona,
       language: session.language || undefined,
       crmContextId: session.crmContextId || undefined,
       status: session.status,

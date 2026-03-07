@@ -20,7 +20,7 @@ describe('CreatePersonaModal', () => {
     const onClose = jest.fn()
     const onCreatePersona = jest.fn().mockResolvedValue({
       id: 'persona_1',
-      name: 'Arden - Skeptical CTO',
+      name: 'Arden',
       orgId: 'org_123',
       traits: null,
     })
@@ -34,27 +34,18 @@ describe('CreatePersonaModal', () => {
       />
     )
 
-    await user.type(screen.getByPlaceholderText('Arden - Skeptical CTO'), 'Arden - Skeptical CTO')
-    await user.type(
-      screen.getByPlaceholderText('Chief Technology Officer'),
-      'Chief Technology Officer'
-    )
-    await user.type(
-      screen.getByLabelText(/personality/i),
-      'Detail-heavy, skeptical, and focused on architecture integrity.'
-    )
-    await user.type(
-      screen.getByLabelText(/background/i),
-      'Owns platform decisions and expects implementation depth before agreeing.'
-    )
+    await user.type(screen.getByPlaceholderText('Arden - Skeptical CTO'), 'Arden')
+    await user.type(screen.getByPlaceholderText('Chief Technology Officer'), 'CTO')
+    await user.type(screen.getByLabelText(/personality/i), 'Detail-heavy.')
+    await user.type(screen.getByLabelText(/background/i), 'Owns platform.')
 
     await user.click(screen.getByRole('button', { name: /create persona$/i }))
 
     await waitFor(() => {
       expect(onCreatePersona).toHaveBeenCalledWith({
-        name: 'Arden - Skeptical CTO',
+        name: 'Arden',
         traits: expect.objectContaining({
-          role: 'Chief Technology Officer',
+          role: 'CTO',
           voiceProfile: 'OpenAI / alloy',
           voice: {
             provider: 'openai',
@@ -82,19 +73,10 @@ describe('CreatePersonaModal', () => {
       />
     )
 
-    await user.type(screen.getByPlaceholderText('Arden - Skeptical CTO'), 'Arden - Skeptical CTO')
-    await user.type(
-      screen.getByPlaceholderText('Chief Technology Officer'),
-      'Chief Technology Officer'
-    )
-    await user.type(
-      screen.getByLabelText(/personality/i),
-      'Detail-heavy, skeptical, and focused on architecture integrity.'
-    )
-    await user.type(
-      screen.getByLabelText(/background/i),
-      'Owns platform decisions and expects implementation depth before agreeing.'
-    )
+    await user.type(screen.getByPlaceholderText('Arden - Skeptical CTO'), 'Arden')
+    await user.type(screen.getByPlaceholderText('Chief Technology Officer'), 'CTO')
+    await user.type(screen.getByLabelText(/personality/i), 'Detail-heavy.')
+    await user.type(screen.getByLabelText(/background/i), 'Owns platform.')
 
     await user.click(screen.getByRole('button', { name: /create persona$/i }))
 

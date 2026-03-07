@@ -26,14 +26,34 @@ interface ConversationMessage {
   }
 }
 
+interface QueuedAudioChunk {
+  audio: ArrayBuffer
+  contentType: string
+}
+
 interface UseConversationOptions {
   sessionId: string
   autoConnect?: boolean
+  audioOutput?: 'browser' | 'external'
+  onExternalAudioChunk?: (chunk: {
+    requestId: string
+    sentenceIndex: number
+    audio: ArrayBuffer
+    contentType: string
+  }) => Promise<void> | void
+  onExternalAudioStop?: () => void
   onError?: (error: string) => void
 }
 
 export function useConversation(options: UseConversationOptions) {
-  const { sessionId, autoConnect = true, onError } = options
+  const {
+    sessionId,
+    autoConnect = true,
+    audioOutput = 'browser',
+    onExternalAudioChunk,
+    onExternalAudioStop,
+    onError,
+  } = options
 
   const [isConnected, setIsConnected] = useState(false)
   const [isConnecting, setIsConnecting] = useState(false)
@@ -47,19 +67,30 @@ export function useConversation(options: UseConversationOptions) {
   const currentAudioRef = useRef<HTMLAudioElement | null>(null)
   const pendingAudioUrlRef = useRef<string | null>(null)
   const onErrorRef = useRef(onError)
+  const onExternalAudioChunkRef = useRef(onExternalAudioChunk)
+  const onExternalAudioStopRef = useRef(onExternalAudioStop)
   const messagesRef = useRef<ConversationMessage[]>([])
   const isHungUpRef = useRef(false)
 
   // Sentence audio queue — keyed by sentenceIndex for ordered playback
-  const audioQueueRef = useRef<Map<number, string>>(new Map())
+  const audioQueueRef = useRef<Map<number, QueuedAudioChunk>>(new Map())
   const nextPlayIndexRef = useRef(0)
   const isPlayingChunkRef = useRef(false)
+  const audioQueueVersionRef = useRef(0)
   // Set once the 'completed' event arrives so gap detection can skip failed sentences
   const totalSentencesRef = useRef<number | null>(null)
 
   useEffect(() => {
     onErrorRef.current = onError
   }, [onError])
+
+  useEffect(() => {
+    onExternalAudioChunkRef.current = onExternalAudioChunk
+  }, [onExternalAudioChunk])
+
+  useEffect(() => {
+    onExternalAudioStopRef.current = onExternalAudioStop
+  }, [onExternalAudioStop])
 
   useEffect(() => {
     messagesRef.current = messages
@@ -139,10 +170,11 @@ export function useConversation(options: UseConversationOptions) {
       setIsAudioPlaying(false)
     }
     pendingAudioUrlRef.current = null
+    onExternalAudioStopRef.current?.()
   }, [])
 
   const clearAudioQueue = useCallback(() => {
-    audioQueueRef.current.forEach((url) => URL.revokeObjectURL(url))
+    audioQueueVersionRef.current += 1
     audioQueueRef.current.clear()
     nextPlayIndexRef.current = 0
     totalSentencesRef.current = null
@@ -163,9 +195,9 @@ export function useConversation(options: UseConversationOptions) {
       return
     }
 
-    const url = audioQueueRef.current.get(idx)
+    const queuedChunk = audioQueueRef.current.get(idx)
 
-    if (!url) {
+    if (!queuedChunk) {
       // Gap: TTS failed for this sentence; skip it once totalSentences is known
       if (total !== null && idx < total) {
         nextPlayIndexRef.current++
@@ -176,15 +208,57 @@ export function useConversation(options: UseConversationOptions) {
     }
 
     isPlayingChunkRef.current = true
-    setCurrentAudioUrl(url) // expose URL so the replay button always reflects current sentence
-    void playAudio(url, () => {
-      URL.revokeObjectURL(url)
+    const playbackVersion = audioQueueVersionRef.current
+    if (audioOutput === 'external') {
+      setCurrentAudioUrl(null)
+      setIsAudioPlaying(true)
+
+      Promise.resolve(
+        onExternalAudioChunkRef.current?.({
+          requestId: currentRequestIdRef.current ?? '',
+          sentenceIndex: idx,
+          audio: queuedChunk.audio,
+          contentType: queuedChunk.contentType,
+        })
+      )
+        .catch((err) => {
+          const errorMsg = err instanceof Error ? err.message : 'Failed to play assistant audio'
+          setError(errorMsg)
+          onErrorRef.current?.(errorMsg)
+        })
+        .finally(() => {
+          if (audioQueueVersionRef.current !== playbackVersion) {
+            isPlayingChunkRef.current = false
+            setIsAudioPlaying(false)
+            return
+          }
+          audioQueueRef.current.delete(nextPlayIndexRef.current)
+          nextPlayIndexRef.current++
+          isPlayingChunkRef.current = false
+          setIsAudioPlaying(false)
+          tryPlayNext()
+        })
+      return
+    }
+
+    const audioBlob = new Blob([queuedChunk.audio], { type: queuedChunk.contentType })
+    const audioUrl = URL.createObjectURL(audioBlob)
+    setCurrentAudioUrl(audioUrl) // expose URL so the replay button always reflects current sentence
+    void playAudio(audioUrl, () => {
+      if (audioQueueVersionRef.current !== playbackVersion) {
+        isPlayingChunkRef.current = false
+        setCurrentAudioUrl(null)
+        setIsAudioPlaying(false)
+        URL.revokeObjectURL(audioUrl)
+        return
+      }
+      URL.revokeObjectURL(audioUrl)
       audioQueueRef.current.delete(nextPlayIndexRef.current)
       nextPlayIndexRef.current++
       isPlayingChunkRef.current = false
       tryPlayNext()
     })
-  }, [playAudio])
+  }, [audioOutput, playAudio])
 
   const disconnect = useCallback(() => {
     conversationService.offConversationText()
@@ -326,9 +400,10 @@ export function useConversation(options: UseConversationOptions) {
         if (envelope.requestId !== currentRequestIdRef.current) return
 
         const { sentenceIndex, audio, contentType } = envelope.payload
-        const blob = new Blob([audio], { type: contentType })
-        const url = URL.createObjectURL(blob)
-        audioQueueRef.current.set(sentenceIndex, url)
+        audioQueueRef.current.set(sentenceIndex, {
+          audio: normalizeAudioChunk(audio),
+          contentType,
+        })
         tryPlayNext()
       }
     )
@@ -502,9 +577,10 @@ export function useConversation(options: UseConversationOptions) {
   }, [])
 
   const replayAudio = useCallback(() => {
+    if (audioOutput !== 'browser') return
     if (!currentAudioUrl) return
     void playAudio(currentAudioUrl)
-  }, [currentAudioUrl, playAudio])
+  }, [audioOutput, currentAudioUrl, playAudio])
 
   useEffect(() => {
     const replayPendingAudio = () => {
@@ -578,4 +654,18 @@ function normalizeBase64(value: string): string {
     return cleaned
   }
   return `${cleaned}${'='.repeat(4 - remainder)}`
+}
+
+function normalizeAudioChunk(value: ArrayBuffer | Uint8Array): ArrayBuffer {
+  if (value instanceof ArrayBuffer) {
+    return value
+  }
+
+  if (value instanceof Uint8Array) {
+    const normalized = new Uint8Array(value.byteLength)
+    normalized.set(value)
+    return normalized.buffer
+  }
+
+  return new Uint8Array(value as never).buffer
 }

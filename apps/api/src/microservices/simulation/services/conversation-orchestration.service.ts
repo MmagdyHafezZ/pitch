@@ -18,6 +18,7 @@ import { SentenceDetector } from '../utils/sentence-detector';
 import { RagService } from '../rag/rag.service';
 import { RagIndexerService } from '../rag/rag-indexer.service';
 import { resolveTtsConfig } from '../utils/tts-config';
+import { VideoGenerationService } from './video-generation.service';
 
 type JsonRecord = Record<string, unknown>;
 
@@ -143,6 +144,7 @@ export class ConversationOrchestrationService {
     private readonly redis: SimulationRedisService,
     private readonly ragService: RagService,
     private readonly ragIndexer: RagIndexerService,
+    private readonly videoGeneration: VideoGenerationService,
   ) {}
 
   stream(
@@ -195,6 +197,15 @@ export class ConversationOrchestrationService {
       personaTraits: personaData?.traits ? toRecord(personaData.traits) : null,
       override: payload.ttsConfig,
     });
+    const videoConfig =
+      session.type === 'video'
+        ? this.videoGeneration.resolveVideoConfig(
+            sessionConfig,
+            personaData?.traits ? toRecord(personaData.traits) : null,
+          )
+        : null;
+    const useRealtimeAvatar =
+      session.type === 'video' && videoConfig?.mode === 'realtime';
 
     // ── 3. Resolve session member + iteration (cached) ────────────────────────
     const smCache = forceNewIteration
@@ -431,6 +442,8 @@ export class ConversationOrchestrationService {
                   resolvedTts.voice,
                   resolvedTts.language,
                   resolvedTts.model,
+                  useRealtimeAvatar ? 'pcm' : undefined,
+                  useRealtimeAvatar ? 24000 : undefined,
                   ttsSemaphore,
                   subject,
                 ),
@@ -463,6 +476,8 @@ export class ConversationOrchestrationService {
           resolvedTts.voice,
           resolvedTts.language,
           resolvedTts.model,
+          useRealtimeAvatar ? 'pcm' : undefined,
+          useRealtimeAvatar ? 24000 : undefined,
           ttsSemaphore,
           subject,
         ),
@@ -565,6 +580,26 @@ export class ConversationOrchestrationService {
       },
     });
 
+    if (videoConfig?.mode === 'rendered') {
+      void this.videoGeneration
+        .queueAssistantVideo({
+          sessionId,
+          requestId: envelope.requestId,
+          text: fullText,
+          language: resolvedTts.language ?? session.language ?? undefined,
+          ttsProvider: resolvedTts.provider,
+          ttsVoice: resolvedTts.voice,
+          ttsModel: resolvedTts.model,
+        })
+        .catch((error) => {
+          this.logger.warn(
+            `Video generation enqueue failed for session ${sessionId}: ${
+              (error as Error)?.message ?? error
+            }`,
+          );
+        });
+    }
+
     // Log simulation start event (first turn only)
     if (isFirstTurn) {
       void this.prisma.client.event
@@ -638,12 +673,20 @@ export class ConversationOrchestrationService {
     voice: string | undefined,
     language: string | undefined,
     model: string | undefined,
+    format: 'mp3' | 'wav' | 'ogg' | 'pcm' | undefined,
+    sampleRate: number | undefined,
     semaphore: Semaphore,
     subject: Subject<ConversationStreamEvent>,
   ): Promise<void> {
     await semaphore.acquire();
     try {
-      const options = voice ? { voice, language, model } : { language, model };
+      const options = {
+        ...(voice ? { voice } : {}),
+        ...(language ? { language } : {}),
+        ...(model ? { model } : {}),
+        ...(format ? { format } : {}),
+        ...(sampleRate ? { sampleRate } : {}),
+      };
       let audioBuffer: Buffer;
       let contentType: string;
 
@@ -674,6 +717,22 @@ export class ConversationOrchestrationService {
         } else {
           throw streamErr;
         }
+      }
+
+      if (format === 'pcm' && !contentType.startsWith('audio/pcm')) {
+        const pcmFallback = await this.ttsService.synthesize(
+          text,
+          'elevenlabs',
+          {
+            ...(voice ? { voice } : {}),
+            ...(language ? { language } : {}),
+            ...(model ? { model } : {}),
+            format: 'pcm',
+            sampleRate: sampleRate ?? 24000,
+          },
+        );
+        audioBuffer = pcmFallback.audioBuffer;
+        contentType = pcmFallback.contentType;
       }
 
       subject.next({

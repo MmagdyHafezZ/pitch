@@ -9,6 +9,8 @@ import { TtsProvider, TtsOptions, TtsResult } from './tts.provider';
 
 type ElevenVoice = { voice_id: string; name: string };
 
+const DEFAULT_PCM_SAMPLE_RATE = 24000;
+
 @Injectable()
 export class ElevenLabsTtsProvider implements TtsProvider {
   readonly name = 'elevenlabs';
@@ -62,7 +64,8 @@ export class ElevenLabsTtsProvider implements TtsProvider {
       }
       const voiceId = this.resolveVoiceId(requested.trim());
 
-      const outputFormat = this.outputFormat as unknown as Parameters<
+      const resolvedOutputFormat = this.resolveOutputFormat(options);
+      const outputFormat = resolvedOutputFormat as Parameters<
         ElevenLabsClient['textToSpeech']['convert']
       >[1]['outputFormat'];
 
@@ -76,9 +79,7 @@ export class ElevenLabsTtsProvider implements TtsProvider {
 
       return {
         audioBuffer,
-        contentType: this.outputFormat.startsWith('mp3')
-          ? 'audio/mpeg'
-          : 'application/octet-stream',
+        contentType: this.resolveContentType(resolvedOutputFormat),
       };
     } catch (err) {
       if (err instanceof BadRequestException) throw err;
@@ -107,16 +108,19 @@ export class ElevenLabsTtsProvider implements TtsProvider {
       const voiceId = this.resolveVoiceId(requested.trim());
 
       // ElevenLabs streaming call
+      const resolvedOutputFormat = this.resolveOutputFormat(options);
+
       const audioSource = await this.client.textToSpeech.stream(voiceId, {
         text,
         modelId: this.modelId,
+        outputFormat: resolvedOutputFormat as Parameters<
+          ElevenLabsClient['textToSpeech']['stream']
+        >[1]['outputFormat'],
       });
 
       const audioStream = this.normalizeToAsyncIterable(audioSource);
 
-      const contentType = this.outputFormat.startsWith('mp3')
-        ? 'audio/mpeg'
-        : 'application/octet-stream';
+      const contentType = this.resolveContentType(resolvedOutputFormat);
 
       return { audioStream, contentType };
     } catch (err) {
@@ -236,6 +240,51 @@ export class ElevenLabsTtsProvider implements TtsProvider {
     throw new BadRequestException(
       `Unknown ElevenLabs voice "${input}". Call /tts/voices?provider=elevenlabs to see valid voices.`,
     );
+  }
+
+  private resolveOutputFormat(options?: TtsOptions): string {
+    if (options?.format === 'pcm') {
+      const sampleRate = options.sampleRate ?? DEFAULT_PCM_SAMPLE_RATE;
+      return `pcm_${sampleRate}`;
+    }
+
+    if (options?.format === 'wav') {
+      const sampleRate = options.sampleRate ?? 44100;
+      return `wav_${sampleRate}`;
+    }
+
+    if (options?.format === 'mp3') {
+      const sampleRate = options.sampleRate;
+      if (sampleRate === 22050) return 'mp3_22050_32';
+      if (sampleRate === 24000) return 'mp3_24000_48';
+      if (sampleRate === 44100) return 'mp3_44100_128';
+      return 'mp3_44100_128';
+    }
+
+    return this.outputFormat;
+  }
+
+  private resolveContentType(outputFormat: string): string {
+    if (outputFormat.startsWith('mp3')) {
+      return 'audio/mpeg';
+    }
+
+    if (outputFormat.startsWith('wav')) {
+      return 'audio/wav';
+    }
+
+    if (outputFormat.startsWith('pcm')) {
+      const sampleRate = Number(
+        outputFormat.split('_')[1] ?? DEFAULT_PCM_SAMPLE_RATE,
+      );
+      return `audio/pcm;rate=${sampleRate};channels=1`;
+    }
+
+    if (outputFormat.startsWith('opus')) {
+      return 'audio/ogg';
+    }
+
+    return 'application/octet-stream';
   }
 
   private async ensureVoicesLoaded(): Promise<void> {

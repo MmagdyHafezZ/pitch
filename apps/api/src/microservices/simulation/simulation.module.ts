@@ -41,6 +41,8 @@ import { StageDetectorService } from './services/stage-detector.service';
 import { StreamingConversationService } from './services/streaming-conversation.service';
 import { ConversationOrchestrationService } from './services/conversation-orchestration.service';
 import { SimulationRedisService } from './services/redis/redis.service';
+import { VideoGenerationService } from './services/video-generation.service';
+import { PersonaMediaService } from './services/persona-media.service';
 import { RedisModule } from '@pitch/shared-backend/redis/index';
 import { TtsModule } from './tts/tts.module';
 import { AssessmentModule } from './assessment/assessment.module';
@@ -111,12 +113,14 @@ import { RagModule } from './rag/rag.module';
     InvitationService,
     PersonaRepository,
     PersonaService,
+    PersonaMediaService,
     ScenarioRepository,
     ScenarioService,
     HintsRepository,
     HintsService,
     StageDetectorService,
     SimulationRedisService,
+    VideoGenerationService,
     StreamingConversationService,
     ConversationOrchestrationService,
   ],
@@ -128,9 +132,11 @@ import { RagModule } from './rag/rag.module';
     SessionMemberService,
     InvitationService,
     PersonaService,
+    PersonaMediaService,
     HintsService,
     SimulationPrismaService,
     MongoConnectionService,
+    VideoGenerationService,
     RagModule,
   ],
 })

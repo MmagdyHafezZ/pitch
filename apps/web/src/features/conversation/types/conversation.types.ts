@@ -95,7 +95,7 @@ export interface ConversationStreamCompletedPayload {
 
 export interface ConversationAudioChunkPayload {
   sentenceIndex: number
-  audio: ArrayBuffer
+  audio: ArrayBuffer | Uint8Array
   contentType: string
 }
 

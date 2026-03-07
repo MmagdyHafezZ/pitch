@@ -65,6 +65,13 @@ export const RedisKeys = {
   /** Maps sessionId+userId → { sessionMemberId, iterationId, lastTurnOrder } */
   sessionMemberIteration: (sessionId: string, userId: string) =>
     `sim:smiter:${sessionId}:${userId}`,
+  /** Temporary audio asset used for external avatar generation */
+  videoAudioAsset: (jobId: string) => `sim:video:${jobId}:audio`,
+  /** Pending avatar-generation job metadata */
+  videoJob: (jobId: string) => `sim:video:${jobId}:job`,
+  /** Cached persona preview audio */
+  personaPreviewAudio: (personaId: string) =>
+    `sim:persona:${personaId}:preview-audio`,
 } as const;
 
 /**
@@ -239,6 +246,34 @@ export interface ISessionMemberIteration {
   lastTurnOrder: number;
 }
 
+export interface IVideoAudioAsset {
+  sessionId: string;
+  token: string;
+  contentType: string;
+  audioBase64: string;
+  createdAt: string;
+}
+
+export interface IVideoJob {
+  jobId: string;
+  sessionId: string;
+  requestId: string;
+  provider: 'heygen' | 'azure-avatar';
+  text: string;
+  language?: string;
+  fallbackAttempted: boolean;
+  createdAt: string;
+}
+
+export interface IPersonaPreviewAudioAsset {
+  personaId: string;
+  voiceName: string;
+  text: string;
+  contentType: string;
+  audioBase64: string;
+  createdAt: string;
+}
+
 /**
  * Redis TTL Constants (in seconds)
  */
@@ -267,4 +302,10 @@ export const RedisTTL = {
   ITERATION_HISTORY: 30 * 60,
   /** sessionId+userId → sessionMemberId + iterationId — 30min */
   SESSION_MEMBER_ITER: 30 * 60,
+  /** Temporary public audio for avatar generation — 30min */
+  VIDEO_AUDIO_ASSET: 30 * 60,
+  /** Avatar job metadata — 24h */
+  VIDEO_JOB: 24 * 60 * 60,
+  /** Persona preview audio cache — 30 days */
+  PERSONA_PREVIEW_AUDIO: 30 * 24 * 60 * 60,
 } as const;

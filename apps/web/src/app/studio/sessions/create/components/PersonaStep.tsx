@@ -28,14 +28,18 @@ import {
   IconBolt,
   IconSparkles,
   IconStar,
+  IconPlayerPlay,
+  IconPlayerPause,
 } from '@tabler/icons-react'
 import { motion, AnimatePresence, LayoutGroup } from 'framer-motion'
 import { Persona, PersonaTraits } from '../lib/types'
 import { normalizeMetrics, getVoiceProfile, getRarityColor } from '../lib/helpers'
 import classes from '../create-session.module.css'
-import { ReactNode, RefObject, useState } from 'react'
+import { ReactNode, RefObject, useEffect, useRef, useState } from 'react'
 import type { TtsProvider } from '@/features/tts'
 import { CreatePersonaModal } from './CreatePersonaModal'
+import { notifications } from '@mantine/notifications'
+import { api } from '@/lib/client'
 
 export const metricIconMap: Record<string, ReactNode> = {
   empathy: <IconHeart size={12} />,
@@ -68,6 +72,16 @@ const resolveSignatureTraits = (traits: PersonaTraits | Record<string, unknown>)
   }
 
   return []
+}
+
+const resolvePersonaAvatarUrl = (
+  traits: PersonaTraits | Record<string, unknown>
+): string | undefined => {
+  const personaTraits = traits as Partial<PersonaTraits>
+  const avatar = personaTraits.avatar
+  return typeof avatar?.imageUrl === 'string' && avatar.imageUrl.trim().length > 0
+    ? avatar.imageUrl
+    : undefined
 }
 
 interface PersonaStepProps {
@@ -104,7 +118,80 @@ export function PersonaStep({
   createDisabledReason,
 }: PersonaStepProps) {
   const [createModalOpen, setCreateModalOpen] = useState(false)
+  const [previewLoadingPersonaId, setPreviewLoadingPersonaId] = useState<string | null>(null)
+  const [playingPersonaId, setPlayingPersonaId] = useState<string | null>(null)
+  const previewAudioRef = useRef<HTMLAudioElement | null>(null)
+  const previewUrlRef = useRef<string | null>(null)
   const visiblePersonas = filteredPersonas.filter((persona) => persona.id !== selectedPersona)
+
+  const clearPreviewUrl = () => {
+    if (previewUrlRef.current) {
+      URL.revokeObjectURL(previewUrlRef.current)
+      previewUrlRef.current = null
+    }
+  }
+
+  const stopPreviewAudio = () => {
+    if (previewAudioRef.current) {
+      previewAudioRef.current.pause()
+      previewAudioRef.current.src = ''
+      previewAudioRef.current = null
+    }
+    clearPreviewUrl()
+    setPlayingPersonaId(null)
+  }
+
+  useEffect(() => {
+    return () => {
+      if (previewAudioRef.current) {
+        previewAudioRef.current.pause()
+        previewAudioRef.current.src = ''
+        previewAudioRef.current = null
+      }
+      if (previewUrlRef.current) {
+        URL.revokeObjectURL(previewUrlRef.current)
+        previewUrlRef.current = null
+      }
+    }
+  }, [])
+
+  const handlePreviewAudio = async (persona: Persona) => {
+    if (playingPersonaId === persona.id) {
+      stopPreviewAudio()
+      return
+    }
+
+    setPreviewLoadingPersonaId(persona.id)
+    stopPreviewAudio()
+
+    try {
+      const audioBlob = await api.personas.getPreviewAudio(persona.id)
+      const objectUrl = URL.createObjectURL(audioBlob)
+      previewUrlRef.current = objectUrl
+
+      const audio = new Audio(objectUrl)
+      previewAudioRef.current = audio
+      audio.onended = () => {
+        setPlayingPersonaId(null)
+        clearPreviewUrl()
+      }
+      audio.onerror = () => {
+        setPlayingPersonaId(null)
+        clearPreviewUrl()
+      }
+
+      await audio.play()
+      setPlayingPersonaId(persona.id)
+    } catch (error) {
+      notifications.show({
+        title: 'Preview unavailable',
+        message: error instanceof Error ? error.message : 'Unable to load persona preview audio.',
+        color: 'red',
+      })
+    } finally {
+      setPreviewLoadingPersonaId((current) => (current === persona.id ? null : current))
+    }
+  }
 
   if (personasLoading) {
     return (
@@ -207,6 +294,9 @@ export function PersonaStep({
                     const rarity = traits.rarity ?? 'Standard'
                     const rarityColor = getRarityColor(rarity, traits.rarityColor)
                     const miniMetrics = metrics.slice(0, 2)
+                    const avatarUrl = resolvePersonaAvatarUrl(traits)
+                    const isPreviewLoading = previewLoadingPersonaId === persona.id
+                    const isPreviewPlaying = playingPersonaId === persona.id
 
                     return (
                       <motion.div
@@ -237,7 +327,7 @@ export function PersonaStep({
                             >
                               <Group gap="sm">
                                 <Box pos="relative">
-                                  <Avatar size={64} radius="md">
+                                  <Avatar size={64} radius="md" src={avatarUrl}>
                                     <IconUser size={30} />
                                   </Avatar>
                                 </Box>
@@ -251,6 +341,27 @@ export function PersonaStep({
                                 </Stack>
                               </Group>
                               <Stack gap={4} align="flex-end">
+                                <ActionIcon
+                                  size="sm"
+                                  variant="light"
+                                  color={isPreviewPlaying ? 'red' : 'brand'}
+                                  loading={isPreviewLoading}
+                                  onClick={(event) => {
+                                    event.stopPropagation()
+                                    void handlePreviewAudio(persona)
+                                  }}
+                                  title={
+                                    isPreviewPlaying
+                                      ? 'Pause persona preview audio'
+                                      : 'Play persona preview audio'
+                                  }
+                                >
+                                  {isPreviewPlaying ? (
+                                    <IconPlayerPause size={14} />
+                                  ) : (
+                                    <IconPlayerPlay size={14} />
+                                  )}
+                                </ActionIcon>
                                 <Badge size="xs" variant="light">
                                   {archetype}
                                 </Badge>
@@ -330,6 +441,9 @@ export function PersonaStep({
                   const archetype = traits.archetype ?? traits.role ?? 'Persona'
                   const rarity = traits.rarity ?? 'Standard'
                   const rarityColor = getRarityColor(rarity, traits.rarityColor)
+                  const avatarUrl = resolvePersonaAvatarUrl(traits)
+                  const isPreviewLoading = previewLoadingPersonaId === selectedPersonaData.id
+                  const isPreviewPlaying = playingPersonaId === selectedPersonaData.id
 
                   return (
                     <Paper
@@ -341,7 +455,7 @@ export function PersonaStep({
                     >
                       <Stack gap="md">
                         <Group align="center" className={classes.personaPreviewHeader}>
-                          <Avatar size={72} radius="lg">
+                          <Avatar size={72} radius="lg" src={avatarUrl}>
                             <IconUser size={34} />
                           </Avatar>
                           <Stack gap={2}>
@@ -356,6 +470,25 @@ export function PersonaStep({
                               <Badge size="xs" variant="outline" color={rarityColor}>
                                 {rarity}
                               </Badge>
+                              <Button
+                                size="xs"
+                                variant={isPreviewPlaying ? 'filled' : 'light'}
+                                color={isPreviewPlaying ? 'red' : 'brand'}
+                                loading={isPreviewLoading}
+                                leftSection={
+                                  isPreviewPlaying ? (
+                                    <IconPlayerPause size={14} />
+                                  ) : (
+                                    <IconPlayerPlay size={14} />
+                                  )
+                                }
+                                onClick={(event) => {
+                                  event.stopPropagation()
+                                  void handlePreviewAudio(selectedPersonaData)
+                                }}
+                              >
+                                {isPreviewPlaying ? 'Stop voice' : 'Play voice'}
+                              </Button>
                             </Group>
                           </Stack>
                         </Group>

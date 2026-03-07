@@ -548,6 +548,23 @@ export const api = {
       }),
   },
 
+  video: {
+    createLiveAvatarSession: (sessionId: string) =>
+      apiRequest<{
+        sessionId: string
+        sessionToken: string
+        avatarId: string
+        avatarName?: string | null
+        previewUrl?: string | null
+        mode: 'LITE'
+        quality: 'very_high' | 'high' | 'medium' | 'low'
+        encoding: 'VP8' | 'H264'
+      }>('/simulation/video/live-avatar/session', {
+        method: 'POST',
+        body: JSON.stringify({ sessionId }),
+      }),
+  },
+
   assessments: {
     run: (data: {
       sessionId?: string
@@ -718,6 +735,23 @@ export const api = {
         body: JSON.stringify(data),
       }),
     getById: (id: string) => apiRequest<any>(`/simulation/personas/${id}`),
+    getPreviewAudio: async (id: string): Promise<Blob> => {
+      const url = `${API_CONFIG.baseURL}/simulation/personas/${id}/preview-audio`
+      const token = getAccessToken()
+
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        credentials: 'include',
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.message || `HTTP ${response.status}: ${response.statusText}`)
+      }
+
+      return await response.blob()
+    },
   },
 
   analytics: {

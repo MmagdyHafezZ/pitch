@@ -17,6 +17,9 @@ import {
   IVADState,
   IConversationMessage,
   ISessionMemberIteration,
+  IVideoAudioAsset,
+  IVideoJob,
+  IPersonaPreviewAudioAsset,
 } from './redis-key-patterns';
 
 /**
@@ -479,6 +482,72 @@ export class SimulationRedisService {
     userId: string,
   ): Promise<void> {
     await this.redis.del(RedisKeys.sessionMemberIteration(sessionId, userId));
+  }
+
+  // ── Avatar-generation cache ────────────────────────────────────────────────
+
+  async setVideoAudioAsset(
+    jobId: string,
+    asset: IVideoAudioAsset,
+  ): Promise<void> {
+    const key = RedisKeys.videoAudioAsset(jobId);
+    await this.redis.setex(
+      key,
+      RedisTTL.VIDEO_AUDIO_ASSET,
+      JSON.stringify(asset),
+    );
+  }
+
+  async getVideoAudioAsset(jobId: string): Promise<IVideoAudioAsset | null> {
+    const key = RedisKeys.videoAudioAsset(jobId);
+    const data = await this.redis.get(key);
+    if (!data) return null;
+    return JSON.parse(data) as IVideoAudioAsset;
+  }
+
+  async deleteVideoAudioAsset(jobId: string): Promise<void> {
+    await this.redis.del(RedisKeys.videoAudioAsset(jobId));
+  }
+
+  async setVideoJob(jobId: string, job: IVideoJob): Promise<void> {
+    const key = RedisKeys.videoJob(jobId);
+    await this.redis.setex(key, RedisTTL.VIDEO_JOB, JSON.stringify(job));
+  }
+
+  async getVideoJob(jobId: string): Promise<IVideoJob | null> {
+    const key = RedisKeys.videoJob(jobId);
+    const data = await this.redis.get(key);
+    if (!data) return null;
+    return JSON.parse(data) as IVideoJob;
+  }
+
+  async deleteVideoJob(jobId: string): Promise<void> {
+    await this.redis.del(RedisKeys.videoJob(jobId));
+  }
+
+  async setPersonaPreviewAudio(
+    personaId: string,
+    asset: IPersonaPreviewAudioAsset,
+  ): Promise<void> {
+    const key = RedisKeys.personaPreviewAudio(personaId);
+    await this.redis.setex(
+      key,
+      RedisTTL.PERSONA_PREVIEW_AUDIO,
+      JSON.stringify(asset),
+    );
+  }
+
+  async getPersonaPreviewAudio(
+    personaId: string,
+  ): Promise<IPersonaPreviewAudioAsset | null> {
+    const key = RedisKeys.personaPreviewAudio(personaId);
+    const data = await this.redis.get(key);
+    if (!data) return null;
+    return JSON.parse(data) as IPersonaPreviewAudioAsset;
+  }
+
+  async deletePersonaPreviewAudio(personaId: string): Promise<void> {
+    await this.redis.del(RedisKeys.personaPreviewAudio(personaId));
   }
 
   /**

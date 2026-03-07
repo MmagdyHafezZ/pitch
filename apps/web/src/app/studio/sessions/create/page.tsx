@@ -632,6 +632,32 @@ export default function CreateSessionPage() {
         }
       }
 
+      if (sessionType === 'video') {
+        const personaAvatar = selectedPersonaData?.traits?.avatar
+        sessionConfig.video = {
+          mode: 'realtime',
+          provider: 'heygen',
+          fallbackProvider: 'azure-avatar',
+          ...(personaAvatar?.liveAvatarId ? { liveAvatarId: personaAvatar.liveAvatarId } : {}),
+          ...(personaAvatar?.liveAvatarName
+            ? { liveAvatarName: personaAvatar.liveAvatarName }
+            : personaAvatar?.label
+              ? { liveAvatarName: personaAvatar.label }
+              : {}),
+          ...(personaAvatar?.heygenAvatarId
+            ? {
+                heygenAvatarId: personaAvatar.heygenAvatarId,
+                ...(personaAvatar.avatarStyle
+                  ? { heygenAvatarStyle: personaAvatar.avatarStyle }
+                  : {}),
+                ...(personaAvatar.backgroundColor
+                  ? { heygenBackgroundColor: personaAvatar.backgroundColor }
+                  : {}),
+              }
+            : {}),
+        }
+      }
+
       const sessionData: CreateSessionInput = {
         orgId: selectedTeamId || user.id,
         userSnapshot: {

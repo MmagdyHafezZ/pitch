@@ -29,14 +29,103 @@ import {
 import { useRouter, useParams } from 'next/navigation'
 import {
   useConversation,
+  useLiveAvatar,
   useVisualState,
   VisualStateOverlay,
   CameraEngagementIndicator,
 } from '@/features/conversation'
 import { useSpeechToText } from '@/features/stt'
-import { api } from '@/lib/client'
+import { API_CONFIG, api } from '@/lib/client'
 import { notifications } from '@mantine/notifications'
 import type { SessionType } from '@/features/sessions'
+
+type AvatarVideoStatus = 'idle' | 'queued' | 'rendering' | 'ready' | 'failed'
+
+interface AvatarVideoState {
+  status: AvatarVideoStatus
+  provider: string | null
+  url: string | null
+  error: string | null
+  jobId: string | null
+  playbackToken: string | null
+}
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+
+const readAvatarVideoState = (session: unknown): AvatarVideoState => {
+  if (!isRecord(session)) {
+    return {
+      status: 'idle',
+      provider: null,
+      url: null,
+      error: null,
+      jobId: null,
+      playbackToken: null,
+    }
+  }
+
+  const sessionConfig = isRecord(session.sessionConfig) ? session.sessionConfig : {}
+  const videoConfig = isRecord(sessionConfig.video) ? sessionConfig.video : {}
+  const runtime = isRecord(videoConfig.runtime) ? videoConfig.runtime : {}
+  const rawStatus = typeof runtime.status === 'string' ? runtime.status.trim().toLowerCase() : ''
+
+  const status: AvatarVideoStatus =
+    rawStatus === 'queued' ||
+    rawStatus === 'rendering' ||
+    rawStatus === 'ready' ||
+    rawStatus === 'failed'
+      ? rawStatus
+      : 'idle'
+
+  return {
+    status,
+    provider:
+      typeof runtime.provider === 'string'
+        ? runtime.provider
+        : typeof videoConfig.provider === 'string'
+          ? videoConfig.provider
+          : null,
+    url: typeof runtime.assetUrl === 'string' ? runtime.assetUrl : null,
+    error: typeof runtime.lastError === 'string' ? runtime.lastError : null,
+    jobId: typeof runtime.activeJobId === 'string' ? runtime.activeJobId : null,
+    playbackToken: typeof runtime.playbackToken === 'string' ? runtime.playbackToken : null,
+  }
+}
+
+const readPersonaImageUrl = (session: unknown): string | null => {
+  if (!isRecord(session) || !isRecord(session.persona) || !isRecord(session.persona.traits)) {
+    return null
+  }
+
+  const avatar = isRecord(session.persona.traits.avatar) ? session.persona.traits.avatar : {}
+  return typeof avatar.imageUrl === 'string' && avatar.imageUrl.trim().length > 0
+    ? avatar.imageUrl
+    : null
+}
+
+const readVideoMode = (session: unknown): 'rendered' | 'realtime' => {
+  if (!isRecord(session)) {
+    return 'rendered'
+  }
+
+  const sessionConfig = isRecord(session.sessionConfig) ? session.sessionConfig : {}
+  const videoConfig = isRecord(sessionConfig.video) ? sessionConfig.video : {}
+  const rawMode = typeof videoConfig.mode === 'string' ? videoConfig.mode.trim().toLowerCase() : ''
+
+  return rawMode === 'realtime' || rawMode === 'liveavatar' || rawMode === 'live-avatar'
+    ? 'realtime'
+    : 'rendered'
+}
+
+const buildSessionVideoStreamUrl = (sessionId: string, token: string, jobId?: string | null) => {
+  const url = new URL(`${API_CONFIG.baseURL}/simulation/video/stream/${sessionId}`)
+  url.searchParams.set('token', token)
+  if (jobId) {
+    url.searchParams.set('job', jobId)
+  }
+  return url.toString()
+}
 
 export default function LiveSessionPage() {
   const { colorScheme } = useMantineColorScheme()
@@ -62,15 +151,21 @@ export default function LiveSessionPage() {
   const [sessionStatus, setSessionStatus] = useState<string | null>(null)
   const [sessionName, setSessionName] = useState<string>('')
   const [personaName, setPersonaName] = useState<string | null>(null)
+  const [personaImageUrl, setPersonaImageUrl] = useState<string | null>(null)
   const [hintsEnabled, setHintsEnabled] = useState(false)
   const [timelineEnabled, setTimelineEnabled] = useState(false)
   const [callStarted, setCallStarted] = useState(false)
-  const [cameraError, setCameraError] = useState<string | null>(null)
   const [phoneNumber, setPhoneNumber] = useState('')
   const [callProvider, setCallProvider] = useState('twilio')
   const [callModalOpen, setCallModalOpen] = useState(false)
   const [callLoading, setCallLoading] = useState(false)
   const [callError, setCallError] = useState<string | null>(null)
+  const [avatarVideoUrl, setAvatarVideoUrl] = useState<string | null>(null)
+  const [avatarVideoStatus, setAvatarVideoStatus] = useState<AvatarVideoStatus>('idle')
+  const [avatarVideoProvider, setAvatarVideoProvider] = useState<string | null>(null)
+  const [avatarVideoError, setAvatarVideoError] = useState<string | null>(null)
+  const [avatarVideoJobId, setAvatarVideoJobId] = useState<string | null>(null)
+  const [videoMode, setVideoMode] = useState<'rendered' | 'realtime'>('rendered')
   const [sttCommitRemainingMs, setSttCommitRemainingMs] = useState(0)
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const latestMessagesRef = useRef<Array<{ role: 'user' | 'assistant'; text: string }>>([])
@@ -83,13 +178,30 @@ export default function LiveSessionPage() {
   const [isMultiTurn, setIsMultiTurn] = useState(false)
   const assistantStartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
-  const cameraStreamRef = useRef<MediaStream | null>(null)
-  // Hidden video fed to MediaPipe — for video sessions it shares the same stream;
-  // for all other session types a separate pose-only camera stream is used.
+  const lastAssistantMessageIdRef = useRef<string | null>(null)
+  // Hidden pose camera feed used by MediaPipe across session types.
   const poseVideoRef = useRef<HTMLVideoElement | null>(null)
   const poseCameraStreamRef = useRef<MediaStream | null>(null)
   const [visualEnabled, setVisualEnabled] = useState(true)
   const speechFinalizeDelayMs = sessionType === 'voice' || sessionType === 'video' ? 250 : 1500
+  const isRealtimeVideoSession = sessionType === 'video' && videoMode === 'realtime'
+
+  const {
+    status: liveAvatarStatus,
+    error: liveAvatarError,
+    isReady: isLiveAvatarReady,
+    isSpeaking: isLiveAvatarSpeaking,
+    avatarName: liveAvatarName,
+    autoplayBlocked: isLiveAvatarAutoplayBlocked,
+    stop: stopLiveAvatar,
+    interrupt: interruptLiveAvatar,
+    speakAudio: speakAvatarAudio,
+  } = useLiveAvatar({
+    sessionId,
+    enabled: isRealtimeVideoSession && sessionStatus !== 'ended',
+    videoRef,
+    onError: () => {},
+  })
 
   const scheduleIdleHints = useCallback(
     (delayMs = 20000) => {
@@ -174,8 +286,12 @@ export default function LiveSessionPage() {
   } = useConversation({
     sessionId,
     autoConnect: true,
+    audioOutput: isRealtimeVideoSession ? 'external' : 'browser',
+    onExternalAudioChunk: ({ audio, contentType }) => speakAvatarAudio({ audio, contentType }),
+    onExternalAudioStop: interruptLiveAvatar,
     onError: () => {},
   })
+  const assistantSpeaking = isRealtimeVideoSession ? isLiveAvatarSpeaking : isAudioPlaying
 
   const {
     isListening,
@@ -224,17 +340,48 @@ export default function LiveSessionPage() {
     },
   })
 
-  // For video sessions, reuse the already-playing visible video directly — no stream sync needed.
-  // For all other session types, use the hidden poseVideoRef which gets its own camera stream.
-  const poseActiveRef = sessionType === 'video' ? videoRef : poseVideoRef
-
   const { isReady: poseIsReady, currentState: visualState } = useVisualState({
     sessionId,
-    videoRef: poseActiveRef,
+    videoRef: poseVideoRef,
     enabled: visualEnabled && isConnected,
     sendIntervalMs: 5000,
     onUserAbsent: () => {},
   })
+
+  const syncSessionState = useCallback((session: any) => {
+    const config = (session?.sessionConfig as Record<string, any>) ?? {}
+    const avatarState = readAvatarVideoState(session)
+    const nextAvatarVideoUrl =
+      session?.id && avatarState.status === 'ready' && avatarState.playbackToken
+        ? buildSessionVideoStreamUrl(session.id, avatarState.playbackToken, avatarState.jobId)
+        : avatarState.url
+
+    setIsMultiTurn(Boolean(config.multiTurnEnabled))
+    setSessionType(session?.type ?? null)
+    setSessionStatus(session?.status ?? null)
+    setSessionName((session as any)?.name ?? (session as any)?.scenario?.name ?? '')
+    setPersonaName((session as any)?.persona?.name ?? null)
+    setPersonaImageUrl(readPersonaImageUrl(session))
+    setVideoMode(readVideoMode(session))
+    setPhoneNumber('')
+    setAvatarVideoStatus(avatarState.status)
+    setAvatarVideoProvider(avatarState.provider)
+    setAvatarVideoError(avatarState.error)
+    setAvatarVideoJobId(avatarState.jobId)
+    setAvatarVideoUrl(nextAvatarVideoUrl)
+
+    const resolvedProvider =
+      typeof config.phoneProvider === 'string'
+        ? config.phoneProvider
+        : typeof config.phone?.provider === 'string'
+          ? config.phone.provider
+          : 'twilio'
+
+    setCallProvider(
+      resolvedProvider === 'vapi' || resolvedProvider === 'twilio' ? resolvedProvider : 'twilio'
+    )
+    setCallModalOpen(session?.type === 'phone' && session?.status !== 'ended')
+  }, [])
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -249,84 +396,19 @@ export default function LiveSessionPage() {
     const loadSession = async () => {
       try {
         const session = await api.sessions.getById(sessionId)
-        const config = (session?.sessionConfig as Record<string, any>) ?? {}
-        setIsMultiTurn(Boolean(config.multiTurnEnabled))
-        setSessionType(session?.type ?? null)
-        setSessionStatus(session?.status ?? null)
-        setSessionName((session as any)?.name ?? (session as any)?.scenario?.name ?? '')
-        setPersonaName((session as any)?.persona?.name ?? null)
-        setPhoneNumber('')
-        const resolvedProvider =
-          typeof config.phoneProvider === 'string'
-            ? config.phoneProvider
-            : typeof config.phone?.provider === 'string'
-              ? config.phone.provider
-              : 'twilio'
-        setCallProvider(
-          resolvedProvider === 'vapi' || resolvedProvider === 'twilio' ? resolvedProvider : 'twilio'
-        )
-        setCallModalOpen(session?.type === 'phone' && session?.status !== 'ended')
+        syncSessionState(session)
       } catch {
         setIsMultiTurn(false)
       }
     }
 
     void loadSession()
-  }, [sessionId])
+  }, [sessionId, syncSessionState])
 
+  // Hidden pose camera for MediaPipe across session types.
+  // The visible video area is reserved for the AI avatar on video sessions.
   useEffect(() => {
-    if (sessionType !== 'video') {
-      if (cameraStreamRef.current) {
-        cameraStreamRef.current.getTracks().forEach((track) => track.stop())
-        cameraStreamRef.current = null
-      }
-      setCameraError(null)
-      return
-    }
-
-    let cancelled = false
-    const requestCamera = async () => {
-      if (!navigator.mediaDevices?.getUserMedia) {
-        setCameraError('Camera access is not supported in this browser.')
-        return
-      }
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: true,
-          audio: false,
-        })
-        if (cancelled) {
-          stream.getTracks().forEach((track) => track.stop())
-          return
-        }
-        cameraStreamRef.current = stream
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream
-        }
-        setCameraError(null)
-      } catch {
-        if (!cancelled) {
-          setCameraError('Camera access denied. Please allow access to continue.')
-        }
-      }
-    }
-
-    void requestCamera()
-
-    return () => {
-      cancelled = true
-      if (cameraStreamRef.current) {
-        cameraStreamRef.current.getTracks().forEach((track) => track.stop())
-        cameraStreamRef.current = null
-      }
-    }
-  }, [sessionType])
-
-  // Pose-only camera for non-video session types.
-  // For video sessions, useVisualState reads the visible videoRef directly (no hidden stream needed).
-  // sessionType === null means it hasn't loaded yet — wait before requesting camera.
-  useEffect(() => {
-    if (sessionType === 'video' || sessionType === null) return
+    if (sessionType === null) return
 
     if (!visualEnabled || !isConnected) {
       poseCameraStreamRef.current?.getTracks().forEach((t) => t.stop())
@@ -336,6 +418,7 @@ export default function LiveSessionPage() {
     }
 
     let cancelled = false
+    const poseVideoElement = poseVideoRef.current
     const startPoseCamera = async () => {
       if (!navigator.mediaDevices?.getUserMedia) return
       try {
@@ -348,9 +431,9 @@ export default function LiveSessionPage() {
           return
         }
         poseCameraStreamRef.current = stream
-        if (poseVideoRef.current) {
-          poseVideoRef.current.srcObject = stream
-          poseVideoRef.current.play().catch(() => {})
+        if (poseVideoElement) {
+          poseVideoElement.srcObject = stream
+          poseVideoElement.play().catch(() => {})
         }
       } catch {
         // Camera permission denied — visual state won't be sent; conversation still works normally
@@ -363,7 +446,7 @@ export default function LiveSessionPage() {
       cancelled = true
       poseCameraStreamRef.current?.getTracks().forEach((t) => t.stop())
       poseCameraStreamRef.current = null
-      if (poseVideoRef.current) poseVideoRef.current.srcObject = null
+      if (poseVideoElement) poseVideoElement.srcObject = null
     }
   }, [visualEnabled, isConnected, sessionType])
 
@@ -445,7 +528,7 @@ export default function LiveSessionPage() {
       return
     }
 
-    if (isAudioPlaying || isProcessing) {
+    if (assistantSpeaking || isProcessing) {
       interrupt()
       stopAudio()
     }
@@ -588,17 +671,17 @@ export default function LiveSessionPage() {
   }, [isMultiTurn, isConnected, messages.length, startAssistantTurn, sessionStatus])
 
   useEffect(() => {
-    if (isAudioPlaying && isListening) {
+    if (assistantSpeaking && isListening) {
       stopListening()
     }
-  }, [isAudioPlaying, isListening, stopListening])
+  }, [assistantSpeaking, isListening, stopListening])
 
   useEffect(() => {
     const isVoiceOrVideo = sessionType === 'voice' || sessionType === 'video'
     const canAutoResumeMic = hasUserEnabledMicRef.current || microphonePermission === 'granted'
     if (
       previousAudioPlayingRef.current &&
-      !isAudioPlaying &&
+      !assistantSpeaking &&
       isVoiceOrVideo &&
       canAutoResumeMic &&
       isSttSupported &&
@@ -609,9 +692,9 @@ export default function LiveSessionPage() {
     ) {
       void startListening()
     }
-    previousAudioPlayingRef.current = isAudioPlaying
+    previousAudioPlayingRef.current = assistantSpeaking
   }, [
-    isAudioPlaying,
+    assistantSpeaking,
     sessionType,
     microphonePermission,
     isSttSupported,
@@ -621,6 +704,54 @@ export default function LiveSessionPage() {
     isListening,
     startListening,
   ])
+
+  useEffect(() => {
+    if (sessionType !== 'video' || isRealtimeVideoSession) return
+
+    const lastMessage = messages[messages.length - 1]
+    if (!lastMessage || lastMessage.role !== 'assistant') return
+    if (lastAssistantMessageIdRef.current === lastMessage.id) return
+
+    lastAssistantMessageIdRef.current = lastMessage.id
+    setAvatarVideoStatus('rendering')
+    setAvatarVideoError(null)
+  }, [isRealtimeVideoSession, messages, sessionType])
+
+  useEffect(() => {
+    if (sessionType !== 'video' || isRealtimeVideoSession) return
+    if (avatarVideoStatus !== 'queued' && avatarVideoStatus !== 'rendering') return
+    if (!sessionId) return
+
+    let cancelled = false
+    const refreshVideoState = async () => {
+      try {
+        const session = await api.sessions.getById(sessionId)
+        const nextAvatarState = readAvatarVideoState(session)
+        if (!cancelled && (nextAvatarState.status !== 'idle' || session?.status === 'ended')) {
+          syncSessionState(session)
+        }
+      } catch {
+        // Keep the current rendering state and try again on the next tick.
+      }
+    }
+
+    void refreshVideoState()
+    const interval = setInterval(() => {
+      void refreshVideoState()
+    }, 3000)
+
+    return () => {
+      cancelled = true
+      clearInterval(interval)
+    }
+  }, [avatarVideoStatus, isRealtimeVideoSession, sessionId, sessionType, syncSessionState])
+
+  useEffect(() => {
+    if (sessionType !== 'video' || isRealtimeVideoSession || !avatarVideoUrl || !videoRef.current)
+      return
+    videoRef.current.currentTime = 0
+    videoRef.current.play().catch(() => {})
+  }, [avatarVideoUrl, isRealtimeVideoSession, sessionType])
 
   // Refresh timeline when messages change (conversation progresses)
   useEffect(() => {
@@ -672,6 +803,7 @@ export default function LiveSessionPage() {
       console.warn('Failed to end session', err)
     }
 
+    await stopLiveAvatar()
     hangUp()
     router.push(`/session/${sessionId}/performance`)
   }
@@ -694,14 +826,16 @@ export default function LiveSessionPage() {
   })
 
   // AI state label shown in the voice panel
-  const aiStateLabel = isAudioPlaying
+  const aiStateLabel = assistantSpeaking
     ? 'Speaking'
-    : isProcessing
-      ? 'Thinking...'
-      : isListening
-        ? 'Listening'
-        : ''
-  const aiStateColor = isAudioPlaying ? 'green' : isProcessing ? 'blue' : 'dimmed'
+    : isRealtimeVideoSession && liveAvatarStatus === 'starting'
+      ? 'Connecting avatar...'
+      : isProcessing
+        ? 'Thinking...'
+        : isListening
+          ? 'Listening'
+          : ''
+  const aiStateColor = assistantSpeaking ? 'green' : isProcessing ? 'blue' : 'dimmed'
   const assistantBubbleBackground =
     colorScheme === 'dark' ? 'var(--mantine-color-dark-6)' : 'var(--mantine-color-gray-1)'
   const assistantBubbleTextColor =
@@ -771,16 +905,19 @@ export default function LiveSessionPage() {
         }}
       >
         <Group justify="space-between">
-          <Stack gap={2}>
-            <Text fw={600} size="lg" c="white">
-              {sessionName || 'Live Session'}
-            </Text>
-            {personaName && (
-              <Text size="xs" c="dimmed">
-                with {personaName}
+          <Group gap="sm" align="center">
+            <Avatar size={44} radius="xl" src={personaImageUrl ?? undefined} />
+            <Stack gap={2}>
+              <Text fw={600} size="lg" c="white">
+                {sessionName || 'Live Session'}
               </Text>
-            )}
-          </Stack>
+              {personaName && (
+                <Text size="xs" c="dimmed">
+                  with {personaName}
+                </Text>
+              )}
+            </Stack>
+          </Group>
           <Group gap="xl">
             <Text size="xl" fw={700} c="white">
               {formatTime(time)}
@@ -842,7 +979,7 @@ export default function LiveSessionPage() {
                 <IconPhone size={20} />
               </ActionIcon>
               <ActionIcon size="lg" variant="subtle" color="white">
-                <Avatar size="sm" />
+                <Avatar size="sm" src={personaImageUrl ?? undefined} />
               </ActionIcon>
             </Group>
           </Group>
@@ -1036,7 +1173,7 @@ export default function LiveSessionPage() {
                 }}
               >
                 <Box style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                  <Avatar size={120} radius="md" />
+                  <Avatar size={120} radius="md" src={personaImageUrl ?? undefined} />
                 </Box>
 
                 <Box
@@ -1060,26 +1197,207 @@ export default function LiveSessionPage() {
                         justifyContent: 'center',
                       }}
                     >
-                      {cameraError ? (
-                        <Text c="red" size="sm" ta="center" px="lg">
-                          {cameraError}
-                        </Text>
-                      ) : (
-                        <Box style={{ position: 'relative', width: '100%', height: '100%' }}>
+                      <Box style={{ position: 'relative', width: '100%', height: '100%' }}>
+                        {isRealtimeVideoSession ? (
+                          <>
+                            <video
+                              ref={videoRef}
+                              poster={personaImageUrl ?? undefined}
+                              autoPlay
+                              playsInline
+                              style={{
+                                width: '100%',
+                                height: '100%',
+                                objectFit: 'cover',
+                                background:
+                                  'radial-gradient(circle at top, rgba(255,255,255,0.18), transparent 50%), #050505',
+                              }}
+                            />
+                            {(!isLiveAvatarReady ||
+                              liveAvatarError ||
+                              isLiveAvatarAutoplayBlocked) && (
+                              <Stack
+                                gap="xs"
+                                align="center"
+                                justify="center"
+                                style={{
+                                  position: 'absolute',
+                                  inset: 0,
+                                  padding: 24,
+                                  background:
+                                    'radial-gradient(circle at top, rgba(255,255,255,0.18), transparent 50%), rgba(5,5,5,0.82)',
+                                }}
+                              >
+                                {personaImageUrl && (
+                                  <Avatar
+                                    size={144}
+                                    radius="xl"
+                                    src={personaImageUrl}
+                                    style={{
+                                      border: '2px solid rgba(255,255,255,0.12)',
+                                      boxShadow: '0 18px 48px rgba(0,0,0,0.35)',
+                                    }}
+                                  />
+                                )}
+                                <Badge
+                                  color={
+                                    liveAvatarError ? 'red' : isLiveAvatarReady ? 'green' : 'blue'
+                                  }
+                                  variant="light"
+                                  tt="uppercase"
+                                >
+                                  HeyGen LiveAvatar
+                                </Badge>
+                                <Text c="white" fw={600} ta="center">
+                                  {liveAvatarError
+                                    ? 'Realtime avatar unavailable'
+                                    : isLiveAvatarAutoplayBlocked
+                                      ? 'Tap once to enable avatar audio'
+                                      : liveAvatarStatus === 'starting'
+                                        ? 'Connecting realtime avatar'
+                                        : 'Preparing avatar stream'}
+                                </Text>
+                                <Text c="dimmed" size="sm" ta="center">
+                                  {liveAvatarError
+                                    ? liveAvatarError
+                                    : isLiveAvatarAutoplayBlocked
+                                      ? 'Your browser blocked autoplay for the LiveAvatar stream. A click or keypress will resume it.'
+                                      : 'The avatar stream stays open for the full conversation and speaks each assistant turn as soon as PCM audio is ready.'}
+                                </Text>
+                              </Stack>
+                            )}
+                          </>
+                        ) : avatarVideoUrl ? (
                           <video
+                            key={`${avatarVideoUrl}:${avatarVideoJobId ?? 'no-job'}`}
                             ref={videoRef}
+                            src={avatarVideoUrl}
+                            poster={personaImageUrl ?? undefined}
                             autoPlay
                             playsInline
                             muted
                             style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                           />
-                          <VisualStateOverlay
-                            visualState={visualState}
-                            isReady={poseIsReady}
-                            visible={process.env.NODE_ENV === 'development'}
-                          />
-                        </Box>
-                      )}
+                        ) : (
+                          <Stack
+                            gap="xs"
+                            align="center"
+                            justify="center"
+                            style={{
+                              width: '100%',
+                              height: '100%',
+                              padding: 24,
+                              background:
+                                'radial-gradient(circle at top, rgba(255,255,255,0.18), transparent 50%), #050505',
+                            }}
+                          >
+                            {personaImageUrl && (
+                              <Avatar
+                                size={144}
+                                radius="xl"
+                                src={personaImageUrl}
+                                style={{
+                                  border: '2px solid rgba(255,255,255,0.12)',
+                                  boxShadow: '0 18px 48px rgba(0,0,0,0.35)',
+                                }}
+                              />
+                            )}
+                            <Badge
+                              color={avatarVideoStatus === 'failed' ? 'red' : 'blue'}
+                              variant="light"
+                              tt="uppercase"
+                            >
+                              {avatarVideoProvider === 'azure-avatar'
+                                ? 'Azure Avatar'
+                                : avatarVideoProvider === 'heygen'
+                                  ? 'HeyGen'
+                                  : 'Avatar'}
+                            </Badge>
+                            <Text c="white" fw={600} ta="center">
+                              {avatarVideoStatus === 'failed'
+                                ? 'Avatar video unavailable'
+                                : avatarVideoStatus === 'ready'
+                                  ? 'Latest avatar clip ready'
+                                  : avatarVideoStatus === 'idle'
+                                    ? 'Avatar video will appear after the first reply'
+                                    : 'Rendering avatar response'}
+                            </Text>
+                            <Text c="dimmed" size="sm" ta="center">
+                              {avatarVideoStatus === 'failed'
+                                ? (avatarVideoError ??
+                                  'The assistant will continue with audio only.')
+                                : avatarVideoStatus === 'idle'
+                                  ? 'The conversation starts with low-latency audio, then each AI reply is rendered as a matching avatar clip.'
+                                  : avatarVideoProvider === 'azure-avatar'
+                                    ? 'HeyGen failed, so Azure avatar is rendering this turn.'
+                                    : 'Audio plays immediately while the avatar video renders in the background.'}
+                            </Text>
+                          </Stack>
+                        )}
+                        <Group
+                          gap="xs"
+                          style={{
+                            position: 'absolute',
+                            top: 14,
+                            left: 14,
+                            zIndex: 2,
+                          }}
+                        >
+                          <Badge
+                            color={
+                              isRealtimeVideoSession
+                                ? liveAvatarError
+                                  ? 'red'
+                                  : isLiveAvatarReady
+                                    ? 'green'
+                                    : 'blue'
+                                : avatarVideoStatus === 'failed'
+                                  ? 'red'
+                                  : avatarVideoStatus === 'ready'
+                                    ? 'green'
+                                    : 'blue'
+                            }
+                            variant="filled"
+                          >
+                            {isRealtimeVideoSession
+                              ? liveAvatarError
+                                ? 'Error'
+                                : isLiveAvatarReady
+                                  ? 'Live'
+                                  : liveAvatarStatus === 'starting'
+                                    ? 'Connecting'
+                                    : 'Waiting'
+                              : avatarVideoStatus === 'ready'
+                                ? 'Ready'
+                                : avatarVideoStatus === 'failed'
+                                  ? 'Fallback failed'
+                                  : avatarVideoStatus === 'idle'
+                                    ? 'Waiting'
+                                    : 'Rendering'}
+                          </Badge>
+                          {isRealtimeVideoSession ? (
+                            <Badge variant="light" color="gray">
+                              {liveAvatarName ?? 'HeyGen LiveAvatar'}
+                            </Badge>
+                          ) : (
+                            avatarVideoProvider && (
+                              <Badge variant="light" color="gray">
+                                {avatarVideoProvider === 'azure-avatar' ? 'Azure' : 'HeyGen'}
+                              </Badge>
+                            )
+                          )}
+                          {isRealtimeVideoSession && (
+                            <Badge variant="light" color="gray">
+                              PCM / Live
+                            </Badge>
+                          )}
+                        </Group>
+                        <VisualStateOverlay
+                          visualState={visualState}
+                          isReady={poseIsReady}
+                          visible={process.env.NODE_ENV === 'development'}
+                        />
+                      </Box>
                     </Box>
                   ) : (
                     <Box
@@ -1147,23 +1465,27 @@ export default function LiveSessionPage() {
                     size={80}
                     radius="xl"
                     variant="filled"
-                    color={isAudioPlaying ? 'orange' : 'dark'}
+                    color={assistantSpeaking ? 'orange' : 'dark'}
                     style={{
                       border: '4px solid white',
                       boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-                      cursor: isAudioPlaying ? 'pointer' : 'default',
+                      cursor: assistantSpeaking ? 'pointer' : 'default',
                     }}
                     onClick={() => {
-                      if (isAudioPlaying) {
+                      if (assistantSpeaking) {
                         stopAudio()
                       } else if (currentAudioUrl) {
+                        if (isVideoSession && videoRef.current && avatarVideoUrl) {
+                          videoRef.current.currentTime = 0
+                          videoRef.current.play().catch(() => {})
+                        }
                         replayAudio()
                       } else if (isProcessing) {
                         interrupt()
                       }
                     }}
                     title={
-                      isAudioPlaying
+                      assistantSpeaking
                         ? 'Stop audio'
                         : currentAudioUrl
                           ? 'Play latest audio'
@@ -1469,8 +1791,7 @@ export default function LiveSessionPage() {
         )}
       </Box>
 
-      {/* Hidden MediaPipe pose video — used for non-video sessions only.
-          Video sessions read the visible videoRef directly (no stream sync required).
+      {/* Hidden MediaPipe pose video.
           Must stay within the viewport (opacity:0.001 not display:none) so the
           browser scheduler doesn't throttle its frame callbacks. */}
       <video
