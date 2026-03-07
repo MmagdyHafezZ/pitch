@@ -39,8 +39,9 @@ type NotificationRecord = {
 export class NotificationService {
   constructor(private readonly mongo: MongoConnectionService) {}
 
-  private getModel(): Model<Notification> {
-    if (!this.mongo.isConnected()) {
+  private async getModel(): Promise<Model<Notification>> {
+    const connected = await this.mongo.waitUntilConnected(10000);
+    if (!connected) {
       throw new ServiceUnavailableException(
         'Notifications storage is not available',
       );
@@ -83,7 +84,7 @@ export class NotificationService {
   }
 
   async createOne(dto: CreateNotificationDto): Promise<NotificationDto> {
-    const model = this.getModel();
+    const model = await this.getModel();
     const created = await model.create({
       ...dto,
       readAt: null,
@@ -94,7 +95,7 @@ export class NotificationService {
   async createBatch(
     dto: CreateNotificationBatchDto,
   ): Promise<BatchCreateResponseDto> {
-    const model = this.getModel();
+    const model = await this.getModel();
     const payload = dto.recipientUserIds.map((recipientUserId) => ({
       recipientUserId,
       title: dto.title,
@@ -118,7 +119,7 @@ export class NotificationService {
   async list(
     query: ListNotificationsQueryDto,
   ): Promise<ListNotificationsResponseDto> {
-    const model = this.getModel();
+    const model = await this.getModel();
     const filter: Record<string, unknown> = {};
 
     if (query.recipientUserId) {
@@ -156,12 +157,12 @@ export class NotificationService {
   }
 
   async unreadCount(recipientUserId: string): Promise<number> {
-    const model = this.getModel();
+    const model = await this.getModel();
     return model.countDocuments({ recipientUserId, readAt: null });
   }
 
   async markRead(dto: MarkReadDto): Promise<MarkReadResponseDto> {
-    const model = this.getModel();
+    const model = await this.getModel();
     const ids = dto.notificationIds.map((id) => new Types.ObjectId(id));
     const filter: Record<string, unknown> = { _id: { $in: ids } };
 
@@ -180,7 +181,7 @@ export class NotificationService {
   }
 
   async markAllRead(recipientUserId: string): Promise<MarkReadResponseDto> {
-    const model = this.getModel();
+    const model = await this.getModel();
     const result = await model.updateMany(
       { recipientUserId, readAt: null },
       { $set: { readAt: new Date() } },

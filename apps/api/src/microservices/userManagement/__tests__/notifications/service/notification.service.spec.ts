@@ -23,6 +23,7 @@ describe('NotificationService', () => {
 
     mongo = {
       isConnected: jest.fn().mockReturnValue(true),
+      waitUntilConnected: jest.fn().mockResolvedValue(true),
       getModel: jest.fn().mockReturnValue(model),
     } as unknown as jest.Mocked<MongoConnectionService>;
 
@@ -30,7 +31,7 @@ describe('NotificationService', () => {
   });
 
   it('throws service unavailable when mongo is disconnected', async () => {
-    mongo.isConnected.mockReturnValue(false);
+    mongo.waitUntilConnected.mockResolvedValue(false);
 
     await expect(
       service.createOne({
@@ -45,7 +46,7 @@ describe('NotificationService', () => {
 
   it('creates a notification and maps defaults/objectId to dto', async () => {
     const id = new Types.ObjectId();
-    model.create.mockResolvedValue({
+    const createdDoc = {
       _id: id,
       recipientUserId: 'u1',
       title: 'Title',
@@ -55,9 +56,9 @@ describe('NotificationService', () => {
       createdAt: new Date('2024-01-01T00:00:00.000Z'),
       updatedAt: new Date('2024-01-01T00:00:00.000Z'),
       readAt: null,
-      toObject() {
-        return this;
-      },
+    };
+    model.create.mockResolvedValue({
+      toObject: jest.fn().mockReturnValue(createdDoc),
     });
 
     const result = await service.createOne({
@@ -82,22 +83,22 @@ describe('NotificationService', () => {
   });
 
   it('creates notifications in batch with defaults', async () => {
+    const insertedDoc = {
+      _id: new Types.ObjectId(),
+      recipientUserId: 'u1',
+      title: 'System maintenance',
+      message: 'Planned',
+      type: 'SYSTEM',
+      sourceType: NotificationSourceType.SYSTEM,
+      severity: NotificationSeverity.WARNING,
+      metadata: { window: '02:00' },
+      readAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
     model.insertMany.mockResolvedValue([
       {
-        _id: new Types.ObjectId(),
-        recipientUserId: 'u1',
-        title: 'System maintenance',
-        message: 'Planned',
-        type: 'SYSTEM',
-        sourceType: NotificationSourceType.SYSTEM,
-        severity: NotificationSeverity.WARNING,
-        metadata: { window: '02:00' },
-        readAt: null,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        toObject() {
-          return this;
-        },
+        toObject: jest.fn().mockReturnValue(insertedDoc),
       },
     ]);
 

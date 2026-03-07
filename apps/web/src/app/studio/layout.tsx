@@ -137,6 +137,20 @@ export default function ClientLayerComponent({ children }: { children: React.Rea
     })
   }
 
+  const handleSelectTeam = (teamId: string) => {
+    if (teamId === activeTeamId) return
+
+    setActiveTeamId(teamId)
+    const nextTeam = teamsForSidebar.find((team) => team.id === teamId)
+    if (!nextTeam) return
+
+    notifications.show({
+      title: 'Team switched',
+      message: `Switched to ${nextTeam.name}.`,
+      color: 'teal',
+    })
+  }
+
   useEffect(() => {
     fetchUserTeams()
   }, [fetchUserTeams])
@@ -163,7 +177,7 @@ export default function ClientLayerComponent({ children }: { children: React.Rea
           <TeamSideBar
             teams={teamsForSidebar}
             activeTeamId={activeTeamId}
-            onSelectTeam={setActiveTeamId}
+            onSelectTeam={handleSelectTeam}
             onLeaveTeam={handleLeaveTeam}
           />
           <AppSidebar
