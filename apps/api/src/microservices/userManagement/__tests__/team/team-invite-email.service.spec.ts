@@ -28,6 +28,7 @@ describe('TeamInviteEmailService', () => {
         signupUrl: 'https://app.pitch.ai/signup?invite=abc123',
         invitedByName: 'Admin User',
         teamName: 'Engineering',
+        expiresMinutes: 15,
       }),
     ).resolves.toBeUndefined();
 
@@ -40,6 +41,7 @@ describe('TeamInviteEmailService', () => {
           signupUrl: 'https://app.pitch.ai/signup?invite=abc123',
           invitedByName: 'Admin User',
           teamName: 'Engineering',
+          expiresMinutes: 15,
         },
       },
     );

@@ -46,6 +46,11 @@ export const userSignupInviteTemplate: EmailTemplateRenderer = (
   const teamName = data.teamName?.trim();
   const invitedByName = data.invitedByName?.trim();
   const signupUrl = resolveSignupUrl(data, context);
+  const expiresMinutes =
+    typeof data.expiresMinutes === 'number' &&
+    Number.isFinite(data.expiresMinutes)
+      ? Math.max(1, Math.floor(data.expiresMinutes))
+      : 15;
 
   const escapedTeamName = teamName ? escapeHtml(teamName) : undefined;
   const escapedInvitedBy = invitedByName
@@ -95,9 +100,10 @@ export const userSignupInviteTemplate: EmailTemplateRenderer = (
       ${invitedByLine}
 
       <div class="ctaWrap">
-        <a class="cta" href="${escapedSignupUrl}" target="_blank" rel="noopener noreferrer">Create your account</a>
+        <a class="cta" href="${escapedSignupUrl}" target="_blank" rel="noopener noreferrer">Join team</a>
       </div>
 
+      <p class="desc">This invitation expires in <strong>${expiresMinutes} minutes</strong>.</p>
       <p class="muted">If the button does not work, copy and paste this link into your browser:</p>
       <p class="muted">${escapedSignupUrl}</p>
     </div>
@@ -112,6 +118,7 @@ ${subject}
 
 You have been invited to ${teamName ? `join ${teamName}` : `sign up for ${appName}`}.
 ${invitedByName ? `${invitedByName} sent you this invitation.` : ''}
+This invitation expires in ${expiresMinutes} minutes.
 
 Create your account here:
 ${signupUrl}

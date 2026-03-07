@@ -216,6 +216,7 @@ describe('TeamService', () => {
       signupUrl: 'https://app.pitch.ai/signup?invite=abc123',
       invitedByName: 'Admin User',
       teamName: 'Engineering',
+      expiresMinutes: 15,
     });
     expect(result).toEqual({
       message: 'Signup invite sent to new-user@example.com',
@@ -258,12 +259,15 @@ describe('TeamService', () => {
       expect.objectContaining({
         recipientUserId: 'user-2',
         type: 'TEAM_INVITE',
+        message:
+          'Admin User invited you to join Engineering. This invitation expires in 15 minutes.',
       }),
     );
     expect(teamInviteEmailService.sendSignupInvite).toHaveBeenCalledWith({
       email: 'user2@example.com',
       invitedByName: 'Admin User',
       teamName: 'Engineering',
+      expiresMinutes: 15,
     });
     expect(result).toEqual(
       expect.objectContaining({

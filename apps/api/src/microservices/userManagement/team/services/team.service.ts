@@ -28,6 +28,7 @@ import {
 export class TeamService {
   private readonly logger = new Logger(TeamService.name);
   private static readonly DEFAULT_INVITE_EXPIRY_DAYS = 15;
+  private static readonly INVITE_EXPIRY_NOTICE_MINUTES = 15;
 
   constructor(
     private readonly teamRepository: TeamRepository,
@@ -273,6 +274,7 @@ export class TeamService {
       signupUrl,
       invitedByName: input.inviterName,
       teamName: team.name,
+      expiresMinutes: TeamService.INVITE_EXPIRY_NOTICE_MINUTES,
     });
 
     return {
@@ -348,7 +350,7 @@ export class TeamService {
     await this.notificationService.createOne({
       recipientUserId: invitedUser.id,
       title: `Team invitation: ${team.name}`,
-      message: `${requester.name ?? 'A team admin'} invited you to join ${team.name}.`,
+      message: `${requester.name ?? 'A team admin'} invited you to join ${team.name}. This invitation expires in ${TeamService.INVITE_EXPIRY_NOTICE_MINUTES} minutes.`,
       type: 'TEAM_INVITE',
       severity: NotificationSeverity.INFO,
       sourceType: NotificationSourceType.USER,
@@ -364,6 +366,7 @@ export class TeamService {
       email: invitedUser.email,
       invitedByName: requester.name ?? undefined,
       teamName: team.name,
+      expiresMinutes: TeamService.INVITE_EXPIRY_NOTICE_MINUTES,
     });
 
     return membership;

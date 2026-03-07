@@ -22,7 +22,7 @@ import {
 } from '@mantine/core'
 import { IconSearch, IconBell, IconUser, IconHelp, IconX } from '@tabler/icons-react'
 import dayjs from 'dayjs'
-import { ReactNode, useMemo, useState } from 'react'
+import { ReactNode, useEffect, useMemo, useState } from 'react'
 import { SettingsModal } from './SettingsModal'
 import { useMediaQuery } from '@mantine/hooks'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
@@ -90,8 +90,17 @@ function ActionBar({
   translateTab,
 }: ActionBarProps) {
   const [localTab, setLocalTab] = useState(selectedTab ?? availableTabs[0] ?? '')
+  const [uncontrolledSearchValue, setUncontrolledSearchValue] = useState(value ?? '')
   const activeTab = selectedTab ?? localTab
   const leftAction = leadingAction ?? actionButtons
+  const isSearchValueControlled = value !== undefined
+  const searchValue = isSearchValueControlled ? value : uncontrolledSearchValue
+
+  useEffect(() => {
+    if (value !== undefined) {
+      setUncontrolledSearchValue(value)
+    }
+  }, [value])
 
   const handleTabSelect = (tab: string) => {
     if (!selectedTab) {
@@ -176,13 +185,18 @@ function ActionBar({
     </Group>
   ) : null
 
-  const inputProps = value !== undefined ? { value } : {}
   const searchWidth = isCompact ? rem(180) : rem(320)
   const searchInput = enableSearch ? (
     <Box style={{ width: searchWidth, flexShrink: 0 }}>
       <TextInput
-        {...inputProps}
-        onChange={(event) => onChange?.(event.currentTarget.value)}
+        value={searchValue}
+        onChange={(event) => {
+          const nextValue = event.currentTarget.value
+          if (!isSearchValueControlled) {
+            setUncontrolledSearchValue(nextValue)
+          }
+          onChange?.(nextValue)
+        }}
         placeholder={searchPlaceholder}
         leftSection={<IconSearch size={16} />}
         w="100%"

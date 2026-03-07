@@ -13,6 +13,7 @@ export interface SupportUserSignupInviteTemplateData {
   signupUrl?: string
   invitedByName?: string
   teamName?: string
+  expiresMinutes?: number
 }
 
 export type SupportEmailTemplateData =

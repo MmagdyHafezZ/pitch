@@ -7,6 +7,7 @@ describe('userSignupInviteTemplate', () => {
         signupUrl: 'https://app.pitch.ai/signup?invite=abc123',
         teamName: 'Engineering',
         invitedByName: 'Admin User',
+        expiresMinutes: 15,
       },
       {
         appName: 'PITCH',
@@ -18,6 +19,7 @@ describe('userSignupInviteTemplate', () => {
     expect(result.html).toContain('https://app.pitch.ai/signup?invite=abc123');
     expect(result.text).toContain('https://app.pitch.ai/signup?invite=abc123');
     expect(result.text).toContain('Admin User sent you this invitation.');
+    expect(result.text).toContain('This invitation expires in 15 minutes.');
   });
 
   it('falls back to WEB_APP_URL/signup when signupUrl is not provided', () => {
@@ -31,8 +33,9 @@ describe('userSignupInviteTemplate', () => {
       },
     );
 
-    expect(result.html).toContain('https://app.pitch.ai/signup');
-    expect(result.text).toContain('https://app.pitch.ai/signup');
+    expect(result.html).toContain('https://app.pitch.ai/auth/register');
+    expect(result.text).toContain('https://app.pitch.ai/auth/register');
+    expect(result.text).toContain('This invitation expires in 15 minutes.');
   });
 
   it('escapes dynamic HTML fields to prevent HTML injection', () => {

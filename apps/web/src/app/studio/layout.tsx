@@ -16,7 +16,14 @@ export default function ClientLayerComponent({ children }: { children: React.Rea
     'Home' | 'Sessions' | 'Teams' | 'Analytics' | 'Settings' | 'Team Config'
   >('Home')
   const [selectedDate, setSelectedDate] = useState<Date | null>(new Date())
-  const { teams, activeTeamId, setActiveTeamId, fetchUserTeams, leaveTeam } = useTeams()
+  const {
+    teams,
+    activeTeamId,
+    setActiveTeamId,
+    fetchUserTeams,
+    leaveTeam,
+    loading: teamsLoading,
+  } = useTeams()
   const pathname = usePathname()
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -159,6 +166,16 @@ export default function ClientLayerComponent({ children }: { children: React.Rea
       setActive(pageInfo.nav)
     }
   }, [active, pageInfo.nav])
+
+  useEffect(() => {
+    if (!pathname?.startsWith('/studio/team-config')) return
+    if (teamsLoading) return
+
+    if (!activeTeam || !canAccessTeamConfig) {
+      router.replace('/studio/home')
+    }
+  }, [activeTeam, canAccessTeamConfig, pathname, router, teamsLoading])
+
   return (
     <AppLayout
       header={

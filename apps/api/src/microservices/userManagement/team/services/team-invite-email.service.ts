@@ -18,6 +18,7 @@ export interface TeamSignupInviteEmailInput {
   signupUrl?: string;
   invitedByName?: string;
   teamName?: string;
+  expiresMinutes?: number;
 }
 
 @Injectable()
@@ -37,6 +38,9 @@ export class TeamInviteEmailService {
         signupUrl: input.signupUrl,
         invitedByName: input.invitedByName,
         teamName: input.teamName,
+        ...(typeof input.expiresMinutes === 'number'
+          ? { expiresMinutes: input.expiresMinutes }
+          : {}),
       },
     };
 
