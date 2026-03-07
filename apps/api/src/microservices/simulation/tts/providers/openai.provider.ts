@@ -74,7 +74,7 @@ export class OpenAITtsProvider implements TtsProvider {
         model,
         voice,
         input: text,
-        format: responseFormat,
+        response_format: responseFormat,
       };
       const response = await this.client.audio.speech.create(request);
 

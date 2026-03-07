@@ -345,7 +345,7 @@ export class TeamRepository {
         id: true,
         metadata: true,
       },
-    }) as unknown as Array<{ id: string; metadata: Prisma.JsonValue | null }>;
+    }) as Promise<Array<{ id: string; metadata: Prisma.JsonValue | null }>>;
   }
 
   findMany(): Promise<Team[]> {
