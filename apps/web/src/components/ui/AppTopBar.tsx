@@ -29,6 +29,8 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/client'
 import { useAuthStore } from '@/features/auth'
+import { useTeamsStore } from '@/features/teams/stores/teams.store'
+import { notifications } from '@mantine/notifications'
 import { useTour } from '@/features/onboarding'
 import type { TourScreen } from '@/features/onboarding'
 import { useI18n } from '@/features/i18n'
@@ -387,6 +389,7 @@ export function AppTopBar({
   const isNarrow = useMediaQuery('(max-width: 520px)')
   const queryClient = useQueryClient()
   const currentUser = useAuthStore((state) => state.user)
+  const refreshUserTeams = useTeamsStore((state) => state.fetchUserTeams)
   const searchParams = useSearchParams()
   const pathname = usePathname()
   const sessionQuery = useMemo(() => searchParams.get('q') ?? '', [searchParams])
@@ -434,14 +437,144 @@ export function AppTopBar({
   })
 
   const markAllReadMutation = useMutation({
-    mutationFn: () => api.notifications.markAllRead(currentUser!.id),
+    mutationFn: async () => {
+      if (!currentUser?.id) {
+        throw new Error('No authenticated user found')
+      }
+
+      const pageSize = 100
+      let skip = 0
+      const unreadIds: string[] = []
+
+      while (true) {
+        const unread = await api.notifications.list({
+          recipientUserId: currentUser.id,
+          unreadOnly: true,
+          skip,
+          limit: pageSize,
+        })
+
+        const pageIds = (unread?.data ?? [])
+          .map((item: NotificationItem) => item.id)
+          .filter((id: string | undefined): id is string => Boolean(id))
+
+        if (pageIds.length === 0) break
+        unreadIds.push(...pageIds)
+        if (pageIds.length < pageSize) break
+        skip += pageSize
+      }
+
+      if (unreadIds.length > 0) {
+        await api.notifications.markRead({
+          notificationIds: unreadIds,
+          recipientUserId: currentUser.id,
+        })
+      }
+
+      return api.notifications.markAllRead(currentUser.id)
+    },
     onSuccess: () => {
+      const unreadCountKey = ['notifications', 'unread-count', currentUser?.id]
+      const notificationsListKey = ['notifications', 'list', currentUser?.id]
+      const nowIso = new Date().toISOString()
+
+      queryClient.setQueryData<{ count: number } | undefined>(unreadCountKey, (previous) => {
+        if (!previous) return { count: 0 }
+        return { ...previous, count: 0 }
+      })
+      queryClient.setQueryData<{ data: NotificationItem[] } | undefined>(
+        notificationsListKey,
+        (previous) => {
+          if (!previous?.data) return previous
+          return {
+            ...previous,
+            data: previous.data.map((item) => ({
+              ...item,
+              readAt: item.readAt ?? nowIso,
+            })),
+          }
+        }
+      )
       queryClient.invalidateQueries({ queryKey: ['notifications'] })
+    },
+    onError: (error) => {
+      notifications.show({
+        title: 'Failed to mark notifications as read',
+        message: error instanceof Error ? error.message : 'Please try again.',
+        color: 'red',
+      })
+    },
+  })
+
+  const acceptTeamInviteMutation = useMutation({
+    mutationFn: (payload: { teamId: string; notificationId: string }) =>
+      api.teams.acceptInvite(payload.teamId),
+    onSuccess: async (_result, payload) => {
+      const unreadCountKey = ['notifications', 'unread-count', currentUser?.id]
+      const notificationsListKey = ['notifications', 'list', currentUser?.id]
+
+      queryClient.setQueryData<{ count: number } | undefined>(unreadCountKey, (previous) => {
+        if (!previous) return previous
+        return { ...previous, count: Math.max(0, previous.count - 1) }
+      })
+      queryClient.setQueryData<{ data: NotificationItem[] } | undefined>(
+        notificationsListKey,
+        (previous) => {
+          if (!previous?.data) return previous
+          return {
+            ...previous,
+            data: previous.data.map((item) =>
+              item.id === payload.notificationId
+                ? { ...item, readAt: new Date().toISOString() }
+                : item
+            ),
+          }
+        }
+      )
+
+      await markReadMutation.mutateAsync([payload.notificationId])
+      queryClient.invalidateQueries({ queryKey: ['notifications'] })
+      await refreshUserTeams()
+      notifications.show({
+        title: 'Invitation accepted',
+        message: 'You are now a member of the team.',
+        color: 'teal',
+      })
+    },
+    onError: async (error, payload) => {
+      try {
+        await refreshUserTeams()
+        const joinedTeam = useTeamsStore.getState().teams.find((team) => team.id === payload.teamId)
+        const hasJoined =
+          !!currentUser?.id &&
+          !!joinedTeam?.memberships?.some(
+            (membership) => membership.userId === currentUser.id && membership.isActive !== false
+          )
+
+        if (hasJoined) {
+          markReadMutation.mutate([payload.notificationId])
+          queryClient.invalidateQueries({ queryKey: ['notifications'] })
+          notifications.show({
+            title: 'Invitation accepted',
+            message: 'You are now a member of the team.',
+            color: 'teal',
+          })
+          return
+        }
+      } catch {
+        // Fall through to the original error toast.
+      }
+
+      notifications.show({
+        title: 'Failed to accept invitation',
+        message: error instanceof Error ? error.message : 'Please try again.',
+        color: 'red',
+      })
     },
   })
 
   const unreadCount = unreadCountQuery.data?.count ?? 0
-  const notifications = (notificationsQuery.data?.data ?? []) as NotificationItem[]
+  const notificationItems = (notificationsQuery.data?.data ?? []) as NotificationItem[]
   const severityColor = (severity: NotificationItem['severity']) => {
     switch (severity) {
       case 'CRITICAL':
@@ -498,15 +631,20 @@ export function AppTopBar({
             <Group justify="center" py="md">
               <Loader size="sm" />
             </Group>
-          ) : notifications.length === 0 ? (
+          ) : notificationItems.length === 0 ? (
             <Text size="sm" c="dimmed">
               {t('topbar.noNotifications')}
             </Text>
           ) : (
             <ScrollArea h={360}>
               <Stack gap="sm">
-                {notifications.map((notification) => {
+                {notificationItems.map((notification) => {
                   const isUnread = !notification.readAt
+                  const teamId =
+                    notification.type === 'TEAM_INVITE' &&
+                    typeof notification.metadata?.teamId === 'string'
+                      ? notification.metadata.teamId
+                      : null
                   return (
                     <Paper
                       key={notification.id}
@@ -537,6 +675,27 @@ export function AppTopBar({
                       <Text size="xs" c="gray.5" mt={6}>
                         {dayjs(notification.createdAt).format('MMM D, YYYY HH:mm')}
                       </Text>
+                      {teamId ? (
+                        <Group mt="xs" justify="flex-end">
+                          <Button
+                            size="xs"
+                            variant="light"
+                            loading={
+                              acceptTeamInviteMutation.isPending &&
+                              acceptTeamInviteMutation.variables?.notificationId === notification.id
+                            }
+                            onClick={(event) => {
+                              event.stopPropagation()
+                              acceptTeamInviteMutation.mutate({
+                                teamId,
+                                notificationId: notification.id,
+                              })
+                            }}
+                          >
+                            Accept invitation
+                          </Button>
+                        </Group>
+                      ) : null}
                     </Paper>
                   )
                 })}

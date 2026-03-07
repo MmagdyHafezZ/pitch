@@ -83,6 +83,9 @@ export function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
     isLoading: loading,
     error: providersError,
   } = useOAuthProvidersQuery()
+  const signupProviders = oauthProviders.filter(
+    (provider) => provider.name.toLowerCase() === 'google'
+  )
 
   // Show error if providers query fails
   React.useEffect(() => {
@@ -154,8 +157,8 @@ export function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
           <Text ta="center" c="dimmed">
             Loading authentication providers...
           </Text>
-        ) : oauthProviders.length > 0 ? (
-          oauthProviders.map((provider) => (
+        ) : signupProviders.length > 0 ? (
+          signupProviders.map((provider) => (
             <Button
               key={provider.name}
               {...getProviderProps(provider.name)}

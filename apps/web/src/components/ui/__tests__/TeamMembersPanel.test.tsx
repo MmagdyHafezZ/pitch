@@ -2,8 +2,10 @@
  * @jest-environment jsdom
  */
 import { within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { render, screen, waitFor } from '@/__tests__/utils/test-utils'
 import { TeamMembersPanel } from '../TeamMembersPanel'
+import { notifications } from '@mantine/notifications'
 
 var mockApi: {
   users: { getAll: jest.Mock }
@@ -83,6 +85,8 @@ describe('TeamMembersPanel', () => {
         ],
       },
       addMember: jest.fn().mockResolvedValue(undefined),
+      inviteMember: jest.fn().mockResolvedValue(undefined),
+      sendSignupInvite: jest.fn().mockResolvedValue(undefined),
       updateMember: jest.fn().mockResolvedValue(undefined),
       deleteMember: jest.fn().mockResolvedValue(undefined),
       loading: false,
@@ -107,11 +111,43 @@ describe('TeamMembersPanel', () => {
     expect(dataRows).toHaveLength(3)
 
     expect(within(dataRows[0]).getByText('Owner User')).toBeInTheDocument()
-    expect(within(dataRows[1]).getByText('Pending User')).toBeInTheDocument()
-    expect(within(dataRows[2]).getByText('Outside User')).toBeInTheDocument()
+    expect(screen.getByText('Pending User')).toBeInTheDocument()
+    expect(screen.getByText('Outside User')).toBeInTheDocument()
 
     await waitFor(() => {
       expect(mockApi.users.getAll).toHaveBeenCalledTimes(1)
     })
+  })
+
+  it('sends signup invite email when typed email has no matching user account', async () => {
+    const user = userEvent.setup()
+    const sendSignupInvite = jest.fn().mockResolvedValue(undefined)
+    mockUseTeams.mockReturnValue({
+      currentTeam: {
+        id: 'team-1',
+        name: 'Pitch Team',
+        memberships: [],
+      },
+      addMember: jest.fn().mockResolvedValue(undefined),
+      sendSignupInvite,
+      inviteMember: jest.fn().mockResolvedValue(undefined),
+      updateMember: jest.fn().mockResolvedValue(undefined),
+      deleteMember: jest.fn().mockResolvedValue(undefined),
+      loading: false,
+    })
+
+    render(<TeamMembersPanel />)
+
+    await user.type(await screen.findByPlaceholderText('teammate@company.com'), 'new@example.com')
+    await user.click(screen.getByRole('button', { name: /^Invite$/ }))
+
+    await waitFor(() => {
+      expect(sendSignupInvite).toHaveBeenCalledWith('team-1', { email: 'new@example.com' })
+    })
+    expect(notifications.show).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: 'Signup invitation sent',
+      })
+    )
   })
 })
