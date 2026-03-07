@@ -141,10 +141,6 @@ function TeamConfigInner() {
     }
   }, [isCreateMode, selectedTeamView])
 
-  if (!isCreateMode && isEditingMode && loading && !currentTeam) {
-    return <div>Loading team configuration…</div>
-  }
-
   const formValues = isCreateMode ? values : editValues
   const formErrors = isCreateMode ? errors : ({} as typeof errors)
   const bannerError = isCreateMode ? apiError : editError
@@ -246,6 +242,11 @@ function TeamConfigInner() {
   const pageTitle = 'Create a new team'
   const pageSubtitle =
     'Set up your team profile and billing details. Members and subscriptions can be managed after creation.'
+  const isEditLoading = !isCreateMode && isEditingMode && loading && !currentTeam
+
+  if (isEditLoading) {
+    return <div>Loading team configuration…</div>
+  }
 
   return (
     <Container size="xl" py="xl" className={classes.page}>
