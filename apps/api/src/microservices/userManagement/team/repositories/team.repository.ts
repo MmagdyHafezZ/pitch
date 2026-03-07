@@ -336,7 +336,7 @@ export class TeamRepository {
     return result.count;
   }
 
-  async listActiveTeamMetadata(): Promise<
+  listActiveTeamMetadata(): Promise<
     Array<{ id: string; metadata: Prisma.JsonValue | null }>
   > {
     return this.prisma.team.findMany({

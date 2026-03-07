@@ -1,18 +1,32 @@
 import { EmailRpcController } from '../../email/controllers/email.controller';
+import { EmailService } from '../../email/services/email.service';
 import { toRpcException } from '@pitch/shared-backend/helpers/exceptions';
 import { RpcException } from '@nestjs/microservices';
 import { SupportEmailTemplate } from '@pitch/shared-backend/interfaces/support-email.interface';
 
 jest.mock('@pitch/shared-backend/helpers/exceptions', () => ({
-  toRpcException: jest.fn((error: unknown) => error),
+  toRpcException: jest.fn(
+    (error: unknown) =>
+      new RpcException(error instanceof Error ? error.message : 'rpc-error'),
+  ),
 }));
 
 describe('EmailRpcController', () => {
-  const createEmailServiceMock = () =>
-    ({
-      sendVerificationCode: jest.fn(),
-      sendTemplate: jest.fn(),
-    }) as any;
+  type EmailServiceMock = {
+    sendVerificationCode: jest.MockedFunction<
+      EmailService['sendVerificationCode']
+    >;
+    sendTemplate: jest.MockedFunction<EmailService['sendTemplate']>;
+  };
+
+  const createEmailServiceMock = (): EmailServiceMock => ({
+    sendVerificationCode: jest.fn() as jest.MockedFunction<
+      EmailService['sendVerificationCode']
+    >,
+    sendTemplate: jest.fn() as jest.MockedFunction<
+      EmailService['sendTemplate']
+    >,
+  });
 
   const toRpcExceptionMock = jest.mocked(toRpcException);
 
@@ -27,7 +41,9 @@ describe('EmailRpcController', () => {
       ok: true,
       provider: 'none',
     });
-    const controller = new EmailRpcController(emailService);
+    const controller = new EmailRpcController(
+      emailService as unknown as EmailService,
+    );
 
     await expect(
       controller.sendVerificationCode({
@@ -54,7 +70,9 @@ describe('EmailRpcController', () => {
       provider: 'google',
       messageId: 'message-1',
     });
-    const controller = new EmailRpcController(emailService);
+    const controller = new EmailRpcController(
+      emailService as unknown as EmailService,
+    );
 
     await expect(
       controller.sendTemplate({
@@ -85,7 +103,9 @@ describe('EmailRpcController', () => {
 
   it('wraps verification code errors via toRpcException', async () => {
     const emailService = createEmailServiceMock();
-    const controller = new EmailRpcController(emailService);
+    const controller = new EmailRpcController(
+      emailService as unknown as EmailService,
+    );
     const error = new Error('failed');
     const rpcError = new RpcException('rpc-failed');
 
@@ -103,7 +123,9 @@ describe('EmailRpcController', () => {
 
   it('wraps template errors via toRpcException', async () => {
     const emailService = createEmailServiceMock();
-    const controller = new EmailRpcController(emailService);
+    const controller = new EmailRpcController(
+      emailService as unknown as EmailService,
+    );
     const error = new Error('failed');
     const rpcError = new RpcException('rpc-failed');
 

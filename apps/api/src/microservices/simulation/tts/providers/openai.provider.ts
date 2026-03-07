@@ -70,12 +70,13 @@ export class OpenAITtsProvider implements TtsProvider {
     const responseFormat = this.resolveFormat(options?.format);
 
     try {
-      const response = await this.client.audio.speech.create({
+      const request: Parameters<typeof this.client.audio.speech.create>[0] = {
         model,
         voice,
         input: text,
         format: responseFormat,
-      } as any);
+      };
+      const response = await this.client.audio.speech.create(request);
 
       const audioBuffer = Buffer.from(await response.arrayBuffer());
 
