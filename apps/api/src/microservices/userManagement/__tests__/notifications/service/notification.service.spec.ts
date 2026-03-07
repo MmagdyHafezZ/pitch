@@ -55,6 +55,9 @@ describe('NotificationService', () => {
       createdAt: new Date('2024-01-01T00:00:00.000Z'),
       updatedAt: new Date('2024-01-01T00:00:00.000Z'),
       readAt: null,
+      toObject() {
+        return this;
+      },
     });
 
     const result = await service.createOne({
@@ -92,6 +95,9 @@ describe('NotificationService', () => {
         readAt: null,
         createdAt: new Date(),
         updatedAt: new Date(),
+        toObject() {
+          return this;
+        },
       },
     ]);
 
@@ -128,7 +134,8 @@ describe('NotificationService', () => {
         updatedAt: new Date(),
       },
     ]);
-    const limit = jest.fn().mockReturnValue({ exec });
+    const lean = jest.fn().mockReturnValue({ exec });
+    const limit = jest.fn().mockReturnValue({ lean });
     const skip = jest.fn().mockReturnValue({ limit });
     const sort = jest.fn().mockReturnValue({ skip });
     model.find.mockReturnValue({ sort });

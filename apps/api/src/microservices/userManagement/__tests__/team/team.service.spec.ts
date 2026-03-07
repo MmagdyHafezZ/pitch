@@ -1,5 +1,9 @@
 import { TeamService } from '../../team/services/team.service';
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import { Role } from '@prisma/user-client';
 import type {
   Team,
@@ -16,6 +20,7 @@ describe('TeamService', () => {
   const repo = {
     createTeam: jest.fn(),
     updateTeam: jest.fn(),
+    updateTeamMetadata: jest.fn(),
     deleteTeam: jest.fn(),
     addMember: jest.fn(),
     inviteMember: jest.fn(),
@@ -25,6 +30,9 @@ describe('TeamService', () => {
     updateMember: jest.fn(),
     transferOwnership: jest.fn(),
     deleteTeamMember: jest.fn(),
+    hardDeleteMembership: jest.fn(),
+    deleteExpiredPendingInvites: jest.fn(),
+    listActiveTeamMetadata: jest.fn(),
     findMembership: jest.fn(),
     findActiveOwners: jest.fn(),
     findByName: jest.fn(),
@@ -187,6 +195,7 @@ describe('TeamService', () => {
   it('sends signup invite email after authority and team checks', async () => {
     repo.confirmAuthorityOrThrow.mockResolvedValue(Role.ADMIN);
     repo.findById.mockResolvedValue(baseTeam);
+    repo.updateTeamMetadata.mockResolvedValue(undefined);
     teamInviteEmailService.sendSignupInvite.mockResolvedValue(undefined);
 
     const result = await service.sendSignupInvite({
@@ -274,6 +283,7 @@ describe('TeamService', () => {
       isActive: false,
       invitedByUserId: 'admin-1',
       acceptedAt: null,
+      invitedAt: new Date(),
     });
     repo.acceptInvite.mockResolvedValue({
       id: 'm2',
@@ -291,6 +301,114 @@ describe('TeamService', () => {
     expect(repo.acceptInvite).toHaveBeenCalledWith('team-1', 'user-2');
     expect(result.message).toBe('Invitation accepted');
     expect(result.membership.isActive).toBe(true);
+  });
+
+  it('rejects accepting an invitation that was already accepted', async () => {
+    repo.findMembership.mockResolvedValue({
+      id: 'm2',
+      userId: 'user-2',
+      teamId: 'team-1',
+      role: 'MEMBER',
+      tokenLimit: 0,
+      isActive: true,
+      invitedByUserId: 'admin-1',
+      acceptedAt: new Date(),
+      invitedAt: new Date(),
+    });
+
+    await expect(service.acceptInvite('team-1', 'user-2')).rejects.toThrow(
+      ConflictException,
+    );
+    expect(repo.acceptInvite).not.toHaveBeenCalled();
+  });
+
+  it('rejects expired invitation acceptance and deletes stale membership invite', async () => {
+    repo.findMembership.mockResolvedValue({
+      id: 'm2',
+      userId: 'user-2',
+      teamId: 'team-1',
+      role: 'MEMBER',
+      tokenLimit: 0,
+      isActive: false,
+      invitedByUserId: 'admin-1',
+      acceptedAt: null,
+      invitedAt: new Date('2024-01-01T00:00:00.000Z'),
+    });
+
+    await expect(service.acceptInvite('team-1', 'user-2')).rejects.toThrow(
+      BadRequestException,
+    );
+    expect(repo.hardDeleteMembership).toHaveBeenCalledWith('team-1', 'user-2');
+    expect(repo.acceptInvite).not.toHaveBeenCalled();
+  });
+
+  it('claimSignupInvite rejects expired signup invite and removes it from team metadata', async () => {
+    repo.findById.mockResolvedValue({
+      ...baseTeam,
+      metadata: {
+        pendingSignupInvites: [
+          {
+            email: 'expired@example.com',
+            role: 'MEMBER',
+            invitedAt: '2024-01-01T00:00:00.000Z',
+            invitedByUserId: 'admin-1',
+          },
+        ],
+      },
+    });
+    repo.findUserById.mockResolvedValue({
+      id: 'user-3',
+      email: 'expired@example.com',
+      name: 'Expired User',
+    });
+    repo.updateTeamMetadata.mockResolvedValue(undefined);
+
+    await expect(service.claimSignupInvite('team-1', 'user-3')).rejects.toThrow(
+      BadRequestException,
+    );
+    expect(repo.updateTeamMetadata).toHaveBeenCalled();
+  });
+
+  it('cleanupExpiredInvitations removes stale memberships and signup invites', async () => {
+    repo.deleteExpiredPendingInvites.mockResolvedValue(2);
+    repo.listActiveTeamMetadata.mockResolvedValue([
+      {
+        id: 'team-1',
+        metadata: {
+          pendingSignupInvites: [
+            {
+              email: 'expired@example.com',
+              role: 'MEMBER',
+              invitedAt: '2024-01-01T00:00:00.000Z',
+            },
+            {
+              email: 'fresh@example.com',
+              role: 'MEMBER',
+              invitedAt: new Date().toISOString(),
+            },
+          ],
+        },
+      },
+    ]);
+    repo.updateTeamMetadata.mockResolvedValue(undefined);
+
+    const result = await service.cleanupExpiredInvitations();
+
+    expect(repo.deleteExpiredPendingInvites).toHaveBeenCalledWith(
+      expect.any(Date),
+    );
+    expect(repo.updateTeamMetadata).toHaveBeenCalledWith(
+      'team-1',
+      expect.objectContaining({
+        pendingSignupInvites: [
+          expect.objectContaining({ email: 'fresh@example.com' }),
+        ],
+      }),
+    );
+    expect(result).toEqual({
+      deletedMembershipInvites: 2,
+      deletedSignupInvites: 1,
+    });
   });
 
   // --------------------
