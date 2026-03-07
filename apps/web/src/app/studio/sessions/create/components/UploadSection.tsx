@@ -40,11 +40,13 @@ interface UploadSectionProps {
   sessionDraftId?: string
   onAttachmentsChange: (attachments: SessionAttachment[]) => void
   onUploadingChange?: (isUploading: boolean) => void
+  onHasErrorsChange?: (hasErrors: boolean) => void
 }
 
 const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024
 const PRESIGN_UPLOAD_EXPIRY_SECONDS = 300
 const DEFAULT_BUCKET = process.env.NEXT_PUBLIC_STORAGE_BUCKET?.trim() ?? ''
+const BLOCKED_EXTENSIONS_TEXT = BLOCKED_EXTENSIONS.join(', ')
 
 const formatFileSize = (size: number) => {
   if (size < 1024) {
@@ -125,6 +127,7 @@ export function UploadSection({
   sessionDraftId,
   onAttachmentsChange,
   onUploadingChange,
+  onHasErrorsChange,
 }: UploadSectionProps) {
   const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([])
   const tempDraftIdRef = useRef(createTempDraftId())
@@ -133,6 +136,7 @@ export function UploadSection({
     [sessionDraftId]
   )
   const isUploading = pendingFiles.some((item) => item.status === 'uploading')
+  const hasErrors = pendingFiles.some((item) => item.status === 'error')
 
   useEffect(() => {
     const uploadedAttachments = pendingFiles.flatMap((item) =>
@@ -144,6 +148,10 @@ export function UploadSection({
   useEffect(() => {
     onUploadingChange?.(isUploading)
   }, [isUploading, onUploadingChange])
+
+  useEffect(() => {
+    onHasErrorsChange?.(hasErrors)
+  }, [hasErrors, onHasErrorsChange])
 
   const updatePendingFile = (file: File, patch: Partial<PendingFile>) => {
     setPendingFiles((current) =>
@@ -293,7 +301,7 @@ export function UploadSection({
               </ThemeIcon>
               <Text fw={600}>Drop files here or click to browse</Text>
               <Text size="sm" c="dimmed" ta="center">
-                Blocked extensions are rejected. Empty files and oversized files are also blocked.
+                Max {MAX_FILE_SIZE_MB} MB per file.
               </Text>
             </Stack>
           </Dropzone>

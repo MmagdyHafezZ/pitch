@@ -25,6 +25,7 @@ import {
   IconAdjustments,
   IconChecklist,
   IconDatabase,
+  IconUpload,
 } from '@tabler/icons-react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/features/auth'
@@ -43,8 +44,10 @@ import { PersonaStep } from './components/PersonaStep'
 import { AIBrainStep } from './components/AIBrainStep'
 import { CrmStep } from './components/CrmStep'
 import { StyleStep } from './components/StyleStep'
+import { UploadSection } from './components/UploadSection'
 import { ReviewStep } from './components/ReviewStep'
 import { SessionConfigForm, Persona, PersonaTraits } from './lib/types'
+import type { SessionAttachment } from '@/features/sessions/types/sessions.types'
 import { useCrm } from '@/features/crm'
 import {
   getSavedCrmConnections,
@@ -135,6 +138,9 @@ export default function CreateSessionPage() {
   const [savedCrmConnections, setSavedCrmConnections] = useState<SavedCrmSessionConnection[]>([])
   const [savedCrmAccounts, setSavedCrmAccounts] = useState<SavedCrmConnection[]>([])
   const [selectedSavedCrmAccountId, setSelectedSavedCrmAccountId] = useState<string | null>(null)
+  const [attachments, setAttachments] = useState<SessionAttachment[]>([])
+  const [attachmentsUploading, setAttachmentsUploading] = useState(false)
+  const [attachmentErrors, setAttachmentErrors] = useState(false)
 
   const [errors, setErrors] = useState<Record<string, string>>({})
 
@@ -490,6 +496,26 @@ export default function CreateSessionPage() {
       return
     }
 
+    if (attachmentsUploading) {
+      notifications.show({
+        title: 'Uploads in progress',
+        message: 'Please wait for file uploads to finish before creating the session.',
+        color: 'yellow',
+        icon: <IconAlertCircle />,
+      })
+      return
+    }
+
+    if (attachmentErrors) {
+      notifications.show({
+        title: 'Upload errors detected',
+        message: 'Remove or fix files with upload errors before creating the session.',
+        color: 'red',
+        icon: <IconAlertCircle />,
+      })
+      return
+    }
+
     setIsSubmitting(true)
 
     try {
@@ -590,6 +616,8 @@ export default function CreateSessionPage() {
           number: phoneNumber.trim(),
         }
       }
+
+      sessionConfig.attachments = attachments.length > 0 ? attachments : undefined
 
       const sessionData: CreateSessionInput = {
         orgId: selectedTeamId || user.id,
@@ -935,6 +963,18 @@ export default function CreateSessionPage() {
       ),
     },
     {
+      label: 'Files',
+      description: 'Upload context',
+      icon: <IconUpload size={18} />,
+      content: (
+        <UploadSection
+          onAttachmentsChange={setAttachments}
+          onUploadingChange={setAttachmentsUploading}
+          onHasErrorsChange={setAttachmentErrors}
+        />
+      ),
+    },
+    {
       label: 'Review',
       description: 'Finalize',
       icon: <IconChecklist size={18} />,
@@ -1058,6 +1098,7 @@ export default function CreateSessionPage() {
                 <Button
                   onClick={handleSubmit}
                   loading={isSubmitting || loading}
+                  disabled={attachmentsUploading || attachmentErrors}
                   leftSection={<IconCheck size={16} />}
                 >
                   Create Session
