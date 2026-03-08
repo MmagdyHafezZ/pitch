@@ -166,6 +166,27 @@ export type BusinessServicePattern =
 export type CrmServicePattern = (typeof CRM_SERVICE_PATTERNS)[keyof typeof CRM_SERVICE_PATTERNS]
 export type SimulationServicePattern =
   (typeof SIMULATION_SERVICE_PATTERNS)[keyof typeof SIMULATION_SERVICE_PATTERNS]
+export const ANALYTICS_SERVICE_PATTERNS = {
+  METRICS_RECORD: 'analytics.metrics.record',
+  METRICS_QUERY: 'analytics.metrics.query',
+  METRICS_AGGREGATE: 'analytics.metrics.aggregate',
+  DASHBOARD_CREATE: 'analytics.dashboard.create',
+  DASHBOARD_GET: 'analytics.dashboard.get',
+  DASHBOARD_LIST: 'analytics.dashboard.list',
+  DASHBOARD_UPDATE: 'analytics.dashboard.update',
+  DASHBOARD_DELETE: 'analytics.dashboard.delete',
+  REPORT_GENERATE: 'analytics.report.generate',
+  REPORT_SCHEDULE: 'analytics.report.schedule',
+  REPORT_GET: 'analytics.report.get',
+  REPORT_LIST: 'analytics.report.list',
+  STATS_GET: 'analytics.stats.get',
+  EVENT_TRACK: 'analytics.event.track',
+  EVENT_LIST: 'analytics.events.list',
+  PERFORMANCE_LOG: 'analytics.performance.log',
+} as const
+export type AnalyticsServicePattern =
+  (typeof ANALYTICS_SERVICE_PATTERNS)[keyof typeof ANALYTICS_SERVICE_PATTERNS]
+
 export const SUPPORT_SERVICE_PATTERNS = {
   EMAIL_SEND_VERIFICATION_CODE: 'support.email.sendVerificationCode',
   EMAIL_SEND_TEMPLATE: 'support.email.sendTemplate',

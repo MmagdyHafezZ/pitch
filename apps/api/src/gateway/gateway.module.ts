@@ -7,6 +7,7 @@ import { TeamGatewayController } from './controllers/userManagement/team-gateway
 import { PlanGatewayController } from './controllers/userManagement/plans.controller';
 import { SubscriptionGatewayController } from './controllers/userManagement/subscription.controller';
 import { SalesforceGatewayController } from './controllers/crm/salesforce-gateway.controller';
+import { AnalyticsGatewayController } from './controllers/analytics/analytics-gateway.controller';
 import { SessionGatewayController } from './controllers/simulation/session-gateway.controller';
 import { InvitationGatewayController } from './controllers/simulation/invitation-gateway.controller';
 import { HintsGatewayController } from './controllers/simulation/hints-gateway.controller';
@@ -62,6 +63,7 @@ import { RagController } from '@microservices/simulation/rag/rag.controller';
     PlanGatewayController,
     SubscriptionGatewayController,
     SalesforceGatewayController,
+    AnalyticsGatewayController,
     TtsGatewayController,
     SessionGatewayController,
     InvitationGatewayController,

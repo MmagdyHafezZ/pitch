@@ -35,4 +35,17 @@ export class AnalyticsService {
   }) {
     return this.repository.getEvents(data);
   }
+
+  async logPerformance(data: {
+    service: string;
+    endpoint: string;
+    method: string;
+    statusCode: number;
+    duration: number;
+    userId?: string;
+    orgId?: string;
+    metadata?: Record<string, any>;
+  }) {
+    return this.repository.createPerformanceLog(data);
+  }
 }
