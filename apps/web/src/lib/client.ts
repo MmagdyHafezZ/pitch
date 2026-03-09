@@ -754,6 +754,52 @@ export const api = {
     },
   },
 
+  challenges: {
+    list: (params?: { period?: string; difficulty?: string; limit?: number; offset?: number }) => {
+      const query = new URLSearchParams()
+      if (params?.period) query.set('period', params.period)
+      if (params?.difficulty) query.set('difficulty', params.difficulty)
+      if (params?.limit) query.set('limit', params.limit.toString())
+      if (params?.offset) query.set('offset', params.offset.toString())
+      const qs = query.toString()
+      return apiRequest<any>(`/challenges${qs ? `?${qs}` : ''}`)
+    },
+    get: (id: string) => apiRequest<any>(`/challenges/${id}`),
+    participate: (challengeId: string) =>
+      apiRequest<any>(`/challenges/${challengeId}/participate`, { method: 'POST' }),
+    submitScore: (challengeId: string, sessionId: string, score: number) =>
+      apiRequest<any>(`/challenges/${challengeId}/score`, {
+        method: 'PUT',
+        body: JSON.stringify({ sessionId, score }),
+      }),
+    challengeLeaderboard: (challengeId: string, limit?: number) =>
+      apiRequest<any>(`/challenges/${challengeId}/leaderboard${limit ? `?limit=${limit}` : ''}`),
+    globalLeaderboard: (limit?: number) =>
+      apiRequest<any>(`/challenges/leaderboard${limit ? `?limit=${limit}` : ''}`),
+    adminGenerate: (period: 'DAILY' | 'WEEKLY' | 'MONTHLY') =>
+      apiRequest<any>('/challenges/admin/generate', {
+        method: 'POST',
+        body: JSON.stringify({ period }),
+        timeoutMs: 60000,
+      }),
+  },
+
+  support: {
+    chat: (req: {
+      messages: Array<{ role: 'user' | 'assistant'; content: string }>
+      context?: {
+        page?: string
+        sessionId?: string
+        recentTurns?: Array<{ role: string; text: string }>
+      }
+    }) =>
+      apiRequest<{ reply: string }>('/support/chat', {
+        method: 'POST',
+        body: JSON.stringify(req),
+        timeoutMs: 30000,
+      }),
+  },
+
   analytics: {
     getDashboard: (userId: string) =>
       apiRequest<{

@@ -44,7 +44,7 @@ export function RoleStep({ onNext, onSkip }: RoleStepProps) {
           <Text c="dimmed">This helps us tailor your experience.</Text>
         </Box>
 
-        <SimpleGrid cols={2} spacing="md">
+        <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
           {roles.map((role) => (
             <Card
               key={role.value}
@@ -83,7 +83,7 @@ export function RoleStep({ onNext, onSkip }: RoleStepProps) {
           ))}
         </SimpleGrid>
 
-        <Group justify="space-between" mt="md">
+        <Group justify="space-between" mt="md" wrap="wrap">
           <Button variant="subtle" color="gray" onClick={onSkip}>
             Skip
           </Button>

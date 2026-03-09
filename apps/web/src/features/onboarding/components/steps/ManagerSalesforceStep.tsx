@@ -117,7 +117,7 @@ export function ManagerSalesforceStep({ onNext, onSkip }: ManagerSalesforceStepP
           </Alert>
         )}
 
-        <Group justify="space-between">
+        <Group justify="space-between" wrap="wrap">
           <Button variant="subtle" color="gray" onClick={onSkip}>
             Skip for now
           </Button>

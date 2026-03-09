@@ -24,6 +24,43 @@ interface PendingSpeak {
 const KEEP_ALIVE_INTERVAL_MS = 45_000
 const PCM_SAMPLE_RATE = 24_000
 const PCM_BYTES_PER_SAMPLE = 2
+const LIVE_AVATAR_CONCURRENCY_RETRY_DELAYS_MS = [1500, 3000] as const
+const LIVE_AVATAR_CONCURRENCY_BLOCK_KEY = 'liveavatar:concurrency:block-until-ms'
+const LIVE_AVATAR_CONCURRENCY_BLOCK_MS = 2 * 60_000
+const LIVE_AVATAR_CONCURRENCY_MESSAGE =
+  'Session concurrency limit reached. Close other active realtime avatar tabs/sessions, then retry.'
+
+const isLiveAvatarConcurrencyError = (message: string): boolean =>
+  /session concurrency limit reached|concurrency limit/i.test(message)
+
+const isIgnorableLiveAvatarSdkError = (message: string): boolean =>
+  /session not found|session is not connected/i.test(message)
+
+const normalizeLiveAvatarErrorMessage = (message: string): string =>
+  isLiveAvatarConcurrencyError(message) ? LIVE_AVATAR_CONCURRENCY_MESSAGE : message
+
+const wait = (ms: number): Promise<void> =>
+  new Promise((resolve) => {
+    setTimeout(resolve, ms)
+  })
+
+const readConcurrencyBlockUntil = (): number => {
+  if (typeof window === 'undefined') return 0
+  const raw = window.localStorage.getItem(LIVE_AVATAR_CONCURRENCY_BLOCK_KEY)
+  if (!raw) return 0
+  const parsed = Number.parseInt(raw, 10)
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
+const writeConcurrencyBlockUntil = (timestampMs: number): void => {
+  if (typeof window === 'undefined') return
+  window.localStorage.setItem(LIVE_AVATAR_CONCURRENCY_BLOCK_KEY, String(timestampMs))
+}
+
+const clearConcurrencyBlockUntil = (): void => {
+  if (typeof window === 'undefined') return
+  window.localStorage.removeItem(LIVE_AVATAR_CONCURRENCY_BLOCK_KEY)
+}
 
 export function useLiveAvatar(options: UseLiveAvatarOptions) {
   const { sessionId, enabled, videoRef, onError } = options
@@ -110,7 +147,9 @@ export function useLiveAvatar(options: UseLiveAvatarOptions) {
 
     if (session) {
       try {
-        await session.stop()
+        if (session.state === 'CONNECTED') {
+          await session.stop()
+        }
       } catch {
         // Ignore cleanup failures during shutdown.
       }
@@ -138,10 +177,40 @@ export function useLiveAvatar(options: UseLiveAvatarOptions) {
         setStatus('starting')
         setError(null)
 
-        const [sdk, tokenResponse] = await Promise.all([
-          import('@heygen/liveavatar-web-sdk'),
-          api.video.createLiveAvatarSession(sessionId),
-        ])
+        const blockedUntil = readConcurrencyBlockUntil()
+        if (blockedUntil > Date.now()) {
+          throw new Error(LIVE_AVATAR_CONCURRENCY_MESSAGE)
+        }
+
+        const sdk = await import('@heygen/liveavatar-web-sdk')
+        const tokenResponse = await (async () => {
+          for (
+            let attempt = 0;
+            attempt <= LIVE_AVATAR_CONCURRENCY_RETRY_DELAYS_MS.length;
+            attempt += 1
+          ) {
+            try {
+              return await api.video.createLiveAvatarSession(sessionId)
+            } catch (err) {
+              const rawMessage =
+                err instanceof Error ? err.message : 'Failed to create realtime avatar session'
+              const shouldRetry =
+                isLiveAvatarConcurrencyError(rawMessage) &&
+                attempt < LIVE_AVATAR_CONCURRENCY_RETRY_DELAYS_MS.length
+
+              if (!shouldRetry) {
+                if (isLiveAvatarConcurrencyError(rawMessage)) {
+                  writeConcurrencyBlockUntil(Date.now() + LIVE_AVATAR_CONCURRENCY_BLOCK_MS)
+                }
+                throw new Error(normalizeLiveAvatarErrorMessage(rawMessage))
+              }
+
+              await wait(LIVE_AVATAR_CONCURRENCY_RETRY_DELAYS_MS[attempt]!)
+            }
+          }
+
+          throw new Error('Failed to create realtime avatar session')
+        })()
 
         setAvatarName(tokenResponse.avatarName ?? null)
 
@@ -176,6 +245,7 @@ export function useLiveAvatar(options: UseLiveAvatarOptions) {
           session
             .start()
             .then(() => {
+              clearConcurrencyBlockUntil()
               clearKeepAlive()
               keepAliveTimerRef.current = setInterval(() => {
                 void session.keepAlive().catch(() => {})
@@ -191,7 +261,12 @@ export function useLiveAvatar(options: UseLiveAvatarOptions) {
         await streamReadyPromise
         return sessionRef.current as LiveAvatarSessionInstance
       } catch (err) {
-        const message = err instanceof Error ? err.message : 'Failed to start realtime avatar'
+        const message = normalizeLiveAvatarErrorMessage(
+          err instanceof Error ? err.message : 'Failed to start realtime avatar'
+        )
+        if (isLiveAvatarConcurrencyError(message)) {
+          writeConcurrencyBlockUntil(Date.now() + LIVE_AVATAR_CONCURRENCY_BLOCK_MS)
+        }
         setError(message)
         setStatus('error')
         setIsReady(false)
@@ -261,6 +336,46 @@ export function useLiveAvatar(options: UseLiveAvatarOptions) {
     },
     [attachMedia, enabled, rejectPendingSpeak, resolvePendingSpeak, start]
   )
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+      const reason = event.reason
+      const reasonMessage =
+        reason instanceof Error
+          ? reason.message
+          : typeof reason === 'string'
+            ? reason
+            : reason && typeof reason === 'object' && 'message' in reason
+              ? String((reason as { message?: unknown }).message ?? '')
+              : ''
+      const reasonName =
+        reason && typeof reason === 'object' && 'name' in reason
+          ? String((reason as { name?: unknown }).name ?? '')
+          : ''
+
+      if (isIgnorableLiveAvatarSdkError(reasonMessage)) {
+        event.preventDefault()
+        return
+      }
+
+      if (isLiveAvatarConcurrencyError(reasonMessage)) {
+        writeConcurrencyBlockUntil(Date.now() + LIVE_AVATAR_CONCURRENCY_BLOCK_MS)
+        event.preventDefault()
+        return
+      }
+
+      if (/SessionApiError/i.test(reasonName) && /session/i.test(reasonMessage)) {
+        event.preventDefault()
+      }
+    }
+
+    window.addEventListener('unhandledrejection', handleUnhandledRejection)
+    return () => {
+      window.removeEventListener('unhandledrejection', handleUnhandledRejection)
+    }
+  }, [])
 
   useEffect(() => {
     if (!enabled) {

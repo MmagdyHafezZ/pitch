@@ -17,7 +17,6 @@ import {
   Loader,
   Modal,
   Button,
-  useMantineColorScheme,
 } from '@mantine/core'
 import {
   IconPhone,
@@ -34,10 +33,11 @@ import {
   VisualStateOverlay,
   CameraEngagementIndicator,
 } from '@/features/conversation'
+import { CoachChatWidget } from '@/components/ui/CoachChatWidget'
 import { useSpeechToText } from '@/features/stt'
 import { API_CONFIG, api } from '@/lib/client'
 import { notifications } from '@mantine/notifications'
-import type { SessionType } from '@/features/sessions'
+import type { CreateSessionInput, SessionType } from '@/features/sessions'
 
 type AvatarVideoStatus = 'idle' | 'queued' | 'rendering' | 'ready' | 'failed'
 
@@ -127,8 +127,39 @@ const buildSessionVideoStreamUrl = (sessionId: string, token: string, jobId?: st
   return url.toString()
 }
 
+const isLiveAvatarConcurrencyLimitError = (message: string | null | undefined): boolean =>
+  typeof message === 'string' &&
+  /session concurrency limit reached|concurrency limit/i.test(message)
+
+const buildCreateSessionPayload = (session: Record<string, unknown>): CreateSessionInput => {
+  const orgId = typeof session.orgId === 'string' ? session.orgId : ''
+  const type = typeof session.type === 'string' ? session.type : ''
+
+  if (!orgId) {
+    throw new Error('Unable to start over: session org is missing.')
+  }
+  if (!type) {
+    throw new Error('Unable to start over: session type is missing.')
+  }
+
+  return {
+    orgId,
+    orgSnapshot: isRecord(session.orgSnapshot) ? session.orgSnapshot : undefined,
+    userSnapshot: isRecord(session.userSnapshot) ? session.userSnapshot : undefined,
+    name: typeof session.name === 'string' ? session.name : undefined,
+    type,
+    tags: Array.isArray(session.tags)
+      ? session.tags.filter((tag): tag is string => typeof tag === 'string')
+      : [],
+    sessionConfig: isRecord(session.sessionConfig) ? session.sessionConfig : undefined,
+    scenarioId: typeof session.scenarioId === 'string' ? session.scenarioId : undefined,
+    personaId: typeof session.personaId === 'string' ? session.personaId : undefined,
+    language: typeof session.language === 'string' ? session.language : undefined,
+    crmContextId: typeof session.crmContextId === 'string' ? session.crmContextId : undefined,
+  }
+}
+
 export default function LiveSessionPage() {
-  const { colorScheme } = useMantineColorScheme()
   const router = useRouter()
   const params = useParams()
   const sessionId = params.id as string
@@ -166,6 +197,14 @@ export default function LiveSessionPage() {
   const [avatarVideoError, setAvatarVideoError] = useState<string | null>(null)
   const [avatarVideoJobId, setAvatarVideoJobId] = useState<string | null>(null)
   const [videoMode, setVideoMode] = useState<'rendered' | 'realtime'>('rendered')
+  const [isRealtimeAvatarBlocked, setIsRealtimeAvatarBlocked] = useState(false)
+  const [autoConnectConversation, setAutoConnectConversation] = useState(false)
+  const [resumePromptOpen, setResumePromptOpen] = useState(false)
+  const [entryDecisionLoading, setEntryDecisionLoading] = useState(true)
+  const [startOverLoading, setStartOverLoading] = useState(false)
+  const [loadedSessionRecord, setLoadedSessionRecord] = useState<Record<string, unknown> | null>(
+    null
+  )
   const [sttCommitRemainingMs, setSttCommitRemainingMs] = useState(0)
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const latestMessagesRef = useRef<Array<{ role: 'user' | 'assistant'; text: string }>>([])
@@ -184,7 +223,14 @@ export default function LiveSessionPage() {
   const poseCameraStreamRef = useRef<MediaStream | null>(null)
   const [visualEnabled, setVisualEnabled] = useState(true)
   const speechFinalizeDelayMs = sessionType === 'voice' || sessionType === 'video' ? 250 : 1500
+  const isVideoSession = sessionType === 'video'
   const isRealtimeVideoSession = sessionType === 'video' && videoMode === 'realtime'
+  const useRealtimeAvatar = isRealtimeVideoSession && !isRealtimeAvatarBlocked
+  const handleLiveAvatarError = useCallback((errorMessage: string) => {
+    if (isLiveAvatarConcurrencyLimitError(errorMessage)) {
+      setIsRealtimeAvatarBlocked(true)
+    }
+  }, [])
 
   const {
     status: liveAvatarStatus,
@@ -198,10 +244,15 @@ export default function LiveSessionPage() {
     speakAudio: speakAvatarAudio,
   } = useLiveAvatar({
     sessionId,
-    enabled: isRealtimeVideoSession && sessionStatus !== 'ended',
+    enabled: useRealtimeAvatar && sessionStatus !== 'ended',
     videoRef,
-    onError: () => {},
+    onError: handleLiveAvatarError,
   })
+  const useExternalAudioOutput = useRealtimeAvatar && !liveAvatarError
+
+  useEffect(() => {
+    setIsRealtimeAvatarBlocked(false)
+  }, [sessionId, videoMode])
 
   const scheduleIdleHints = useCallback(
     (delayMs = 20000) => {
@@ -279,19 +330,22 @@ export default function LiveSessionPage() {
     startAssistantTurn,
     currentAudioUrl,
     isAudioPlaying,
+    hangupRequest,
     hangUp,
     interrupt,
     stopAudio,
     replayAudio,
+    clearHangupRequest,
+    toolEvents,
   } = useConversation({
     sessionId,
-    autoConnect: true,
-    audioOutput: isRealtimeVideoSession ? 'external' : 'browser',
+    autoConnect: autoConnectConversation,
+    audioOutput: useExternalAudioOutput ? 'external' : 'browser',
     onExternalAudioChunk: ({ audio, contentType }) => speakAvatarAudio({ audio, contentType }),
     onExternalAudioStop: interruptLiveAvatar,
     onError: () => {},
   })
-  const assistantSpeaking = isRealtimeVideoSession ? isLiveAvatarSpeaking : isAudioPlaying
+  const assistantSpeaking = useExternalAudioOutput ? isLiveAvatarSpeaking : isAudioPlaying
 
   const {
     isListening,
@@ -343,7 +397,7 @@ export default function LiveSessionPage() {
   const { isReady: poseIsReady, currentState: visualState } = useVisualState({
     sessionId,
     videoRef: poseVideoRef,
-    enabled: visualEnabled && isConnected,
+    enabled: isVideoSession && visualEnabled && isConnected,
     sendIntervalMs: 5000,
     onUserAbsent: () => {},
   })
@@ -393,24 +447,125 @@ export default function LiveSessionPage() {
   useEffect(() => {
     if (!sessionId) return
 
+    let cancelled = false
+    setAutoConnectConversation(false)
+    setResumePromptOpen(false)
+    setEntryDecisionLoading(true)
+    setStartOverLoading(false)
+    setLoadedSessionRecord(null)
+
     const loadSession = async () => {
       try {
         const session = await api.sessions.getById(sessionId)
+        if (cancelled) return
+
+        const sessionRecord = isRecord(session) ? session : {}
+        setLoadedSessionRecord(sessionRecord)
         syncSessionState(session)
+
+        const status =
+          typeof sessionRecord.status === 'string' ? sessionRecord.status.toLowerCase() : ''
+
+        if (status === 'ended') {
+          setAutoConnectConversation(true)
+          return
+        }
+
+        let hasExistingProgress = false
+        try {
+          const timeline = await api.sessions.timeline(sessionId, 1)
+          if (cancelled) return
+          const totalTurns = typeof timeline?.total === 'number' ? timeline.total : 0
+          const history = Array.isArray(timeline?.conversationHistory)
+            ? timeline.conversationHistory
+            : []
+          hasExistingProgress = totalTurns > 0 || history.length > 0
+        } catch {
+          hasExistingProgress = false
+        }
+
+        if (cancelled) return
+
+        if (hasExistingProgress) {
+          setResumePromptOpen(true)
+          setAutoConnectConversation(false)
+        } else {
+          setAutoConnectConversation(true)
+        }
       } catch {
+        if (cancelled) return
         setIsMultiTurn(false)
+        setAutoConnectConversation(true)
+      } finally {
+        if (!cancelled) {
+          setEntryDecisionLoading(false)
+        }
       }
     }
 
     void loadSession()
+
+    return () => {
+      cancelled = true
+    }
   }, [sessionId, syncSessionState])
+
+  const handleResumeSession = useCallback(() => {
+    setResumePromptOpen(false)
+    setAutoConnectConversation(true)
+  }, [])
+
+  const handleStartOver = useCallback(async () => {
+    if (!loadedSessionRecord || startOverLoading) return
+
+    setStartOverLoading(true)
+    try {
+      const currentStatus =
+        typeof loadedSessionRecord.status === 'string'
+          ? loadedSessionRecord.status.toLowerCase()
+          : ''
+      if (currentStatus !== 'ended') {
+        try {
+          await api.sessions.end(sessionId, { reason: 'restart_from_scratch' })
+        } catch {
+          // Best effort: if ending fails, still attempt creating a fresh iteration.
+        }
+      }
+
+      const payload = buildCreateSessionPayload(loadedSessionRecord)
+      const freshSession = await api.sessions.create(payload)
+      const nextSessionId = typeof freshSession?.id === 'string' ? freshSession.id : ''
+      if (!nextSessionId) {
+        throw new Error('Unable to start over right now. Please try again.')
+      }
+
+      notifications.show({
+        title: 'Started a new iteration',
+        message: 'You are now in a fresh session with the same setup.',
+        color: 'green',
+      })
+      setResumePromptOpen(false)
+      setAutoConnectConversation(false)
+      router.replace(`/session/${nextSessionId}`)
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Unable to start a new iteration right now.'
+      notifications.show({
+        title: 'Start over failed',
+        message,
+        color: 'red',
+      })
+    } finally {
+      setStartOverLoading(false)
+    }
+  }, [loadedSessionRecord, router, sessionId, startOverLoading])
 
   // Hidden pose camera for MediaPipe across session types.
   // The visible video area is reserved for the AI avatar on video sessions.
   useEffect(() => {
     if (sessionType === null) return
 
-    if (!visualEnabled || !isConnected) {
+    if (!isVideoSession || !visualEnabled || !isConnected) {
       poseCameraStreamRef.current?.getTracks().forEach((t) => t.stop())
       poseCameraStreamRef.current = null
       if (poseVideoRef.current) poseVideoRef.current.srcObject = null
@@ -448,7 +603,7 @@ export default function LiveSessionPage() {
       poseCameraStreamRef.current = null
       if (poseVideoElement) poseVideoElement.srcObject = null
     }
-  }, [visualEnabled, isConnected, sessionType])
+  }, [isVideoSession, visualEnabled, isConnected, sessionType])
 
   const handleStartPhoneCall = async () => {
     if (!sessionId) return
@@ -706,7 +861,7 @@ export default function LiveSessionPage() {
   ])
 
   useEffect(() => {
-    if (sessionType !== 'video' || isRealtimeVideoSession) return
+    if (sessionType !== 'video' || useRealtimeAvatar) return
 
     const lastMessage = messages[messages.length - 1]
     if (!lastMessage || lastMessage.role !== 'assistant') return
@@ -715,10 +870,10 @@ export default function LiveSessionPage() {
     lastAssistantMessageIdRef.current = lastMessage.id
     setAvatarVideoStatus('rendering')
     setAvatarVideoError(null)
-  }, [isRealtimeVideoSession, messages, sessionType])
+  }, [messages, sessionType, useRealtimeAvatar])
 
   useEffect(() => {
-    if (sessionType !== 'video' || isRealtimeVideoSession) return
+    if (sessionType !== 'video' || useRealtimeAvatar) return
     if (avatarVideoStatus !== 'queued' && avatarVideoStatus !== 'rendering') return
     if (!sessionId) return
 
@@ -744,14 +899,13 @@ export default function LiveSessionPage() {
       cancelled = true
       clearInterval(interval)
     }
-  }, [avatarVideoStatus, isRealtimeVideoSession, sessionId, sessionType, syncSessionState])
+  }, [avatarVideoStatus, sessionId, sessionType, syncSessionState, useRealtimeAvatar])
 
   useEffect(() => {
-    if (sessionType !== 'video' || isRealtimeVideoSession || !avatarVideoUrl || !videoRef.current)
-      return
+    if (sessionType !== 'video' || useRealtimeAvatar || !avatarVideoUrl || !videoRef.current) return
     videoRef.current.currentTime = 0
     videoRef.current.play().catch(() => {})
-  }, [avatarVideoUrl, isRealtimeVideoSession, sessionType])
+  }, [avatarVideoUrl, sessionType, useRealtimeAvatar])
 
   // Refresh timeline when messages change (conversation progresses)
   useEffect(() => {
@@ -815,7 +969,6 @@ export default function LiveSessionPage() {
   }, [sessionType, sessionStatus, sessionId, router])
 
   const isTextSession = sessionType === 'text'
-  const isVideoSession = sessionType === 'video'
   const sttCommitProgress = Math.min(1, Math.max(0, sttCommitRemainingMs / speechFinalizeDelayMs))
 
   const todayStr = new Date().toLocaleDateString('en-US', {
@@ -828,7 +981,7 @@ export default function LiveSessionPage() {
   // AI state label shown in the voice panel
   const aiStateLabel = assistantSpeaking
     ? 'Speaking'
-    : isRealtimeVideoSession && liveAvatarStatus === 'starting'
+    : useRealtimeAvatar && liveAvatarStatus === 'starting'
       ? 'Connecting avatar...'
       : isProcessing
         ? 'Thinking...'
@@ -836,10 +989,38 @@ export default function LiveSessionPage() {
           ? 'Listening'
           : ''
   const aiStateColor = assistantSpeaking ? 'green' : isProcessing ? 'blue' : 'dimmed'
-  const assistantBubbleBackground =
-    colorScheme === 'dark' ? 'var(--mantine-color-dark-6)' : 'var(--mantine-color-gray-1)'
-  const assistantBubbleTextColor =
-    colorScheme === 'dark' ? 'var(--mantine-color-gray-0)' : 'var(--mantine-color-dark-9)'
+  // The session page is always dark-9 — use reliable palette tokens that never depend on the user's theme profile.
+  const userBubbleBackground = 'var(--mantine-color-blue-9)'
+  const userBubbleTextColor = 'var(--mantine-color-blue-1)'
+  const assistantBubbleBackground = 'var(--mantine-color-dark-5)'
+  const assistantBubbleTextColor = 'var(--mantine-color-gray-3)'
+
+  // ── Tool event derived UI state ────────────────────────────────────────────
+  const latestMoodEvent = toolEvents.findLast((e) => e.tool === 'update_mood')
+  const currentMood = latestMoodEvent ? (latestMoodEvent.args.mood as string) : null
+  const moodDotColor =
+    currentMood === 'interested' || currentMood === 'satisfied'
+      ? 'green'
+      : currentMood === 'skeptical'
+        ? 'orange'
+        : currentMood === 'impatient' || currentMood === 'frustrated'
+          ? 'red'
+          : 'gray'
+
+  const activeObjections = toolEvents.filter((e) => e.tool === 'raise_objection')
+  const latestNextStep = toolEvents.findLast((e) => e.tool === 'propose_next_step')
+
+  // Show coaching toast for each new flag_moment event
+  useEffect(() => {
+    const lastFlag = toolEvents.findLast((e) => e.tool === 'flag_moment')
+    if (!lastFlag) return
+    notifications.show({
+      title: '🎯 Coaching Moment',
+      message: String(lastFlag.args.description ?? ''),
+      color: 'blue',
+      autoClose: 6000,
+    })
+  }, [toolEvents])
 
   return (
     <Box
@@ -851,6 +1032,33 @@ export default function LiveSessionPage() {
         overflow: 'hidden',
       }}
     >
+      <Modal
+        opened={resumePromptOpen}
+        onClose={() => {}}
+        title="Resume previous progress?"
+        centered
+        closeOnClickOutside={false}
+        closeOnEscape={false}
+        withCloseButton={false}
+      >
+        <Stack gap="md">
+          <Text size="sm" c="dimmed">
+            You already have an in-progress session with saved turns.
+          </Text>
+          <Text size="sm" c="dimmed">
+            Choose <strong>Resume</strong> to continue where you left off, or{' '}
+            <strong>Start Over</strong> to create a brand new iteration from scratch.
+          </Text>
+          <Group justify="flex-end">
+            <Button variant="default" onClick={handleResumeSession} disabled={startOverLoading}>
+              Resume
+            </Button>
+            <Button color="brand" onClick={handleStartOver} loading={startOverLoading}>
+              Start Over
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
       <Modal
         opened={callModalOpen && sessionType === 'phone'}
         onClose={() => setCallModalOpen(false)}
@@ -895,6 +1103,41 @@ export default function LiveSessionPage() {
           </Group>
         </Stack>
       </Modal>
+
+      {/* AI Hang-up Confirmation Modal */}
+      <Modal
+        opened={!!hangupRequest}
+        onClose={clearHangupRequest}
+        title="The AI persona wants to hang up"
+        centered
+        size="sm"
+        styles={{
+          header: { background: 'var(--mantine-color-dark-7)' },
+          body: { background: 'var(--mantine-color-dark-7)' },
+        }}
+      >
+        <Stack gap="md">
+          <Text size="sm" c="dimmed">
+            {hangupRequest?.reason}
+          </Text>
+          <Group justify="flex-end" gap="sm">
+            <Button variant="default" onClick={clearHangupRequest}>
+              Continue anyway
+            </Button>
+            <Button
+              color="red"
+              leftSection={<IconPhone size={14} />}
+              onClick={() => {
+                clearHangupRequest()
+                void handleHangUp()
+              }}
+            >
+              Let them hang up
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+
       {/* Top Bar */}
       <Box
         style={{
@@ -912,9 +1155,24 @@ export default function LiveSessionPage() {
                 {sessionName || 'Live Session'}
               </Text>
               {personaName && (
-                <Text size="xs" c="dimmed">
-                  with {personaName}
-                </Text>
+                <Group gap={6} align="center">
+                  <Text size="xs" c="dimmed">
+                    with {personaName}
+                  </Text>
+                  {currentMood && (
+                    <Box
+                      title={`Mood: ${currentMood}`}
+                      style={{
+                        width: 8,
+                        height: 8,
+                        borderRadius: '50%',
+                        backgroundColor: `var(--mantine-color-${moodDotColor}-5)`,
+                        flexShrink: 0,
+                        transition: 'background-color 0.4s ease',
+                      }}
+                    />
+                  )}
+                </Group>
               )}
             </Stack>
           </Group>
@@ -939,6 +1197,7 @@ export default function LiveSessionPage() {
             <Text c="dimmed">{todayStr}</Text>
             <Group gap="xs">
               {isConnecting && <Loader size="sm" color="white" />}
+              {entryDecisionLoading && <Loader size="sm" color="white" />}
               {conversationError && (
                 <Text size="xs" c="red">
                   {conversationError}
@@ -954,11 +1213,13 @@ export default function LiveSessionPage() {
                   }}
                 />
               )}
-              <CameraEngagementIndicator
-                isActive={visualEnabled}
-                isReady={poseIsReady}
-                onToggle={() => setVisualEnabled((v) => !v)}
-              />
+              {isVideoSession && (
+                <CameraEngagementIndicator
+                  isActive={visualEnabled}
+                  isReady={poseIsReady}
+                  onToggle={() => setVisualEnabled((v) => !v)}
+                />
+              )}
               {sessionType === 'phone' && sessionStatus !== 'ended' && !callStarted && (
                 <Button
                   size="xs"
@@ -1078,6 +1339,35 @@ export default function LiveSessionPage() {
                   {messages.length} messages
                 </Badge>
               </Group>
+              {/* Objection badges — shown when AI raises an objection */}
+              {activeObjections.length > 0 && (
+                <Stack gap={4} mb="sm">
+                  {activeObjections.slice(-3).map((e) => (
+                    <Box
+                      key={e.id}
+                      style={{
+                        backgroundColor: 'var(--mantine-color-orange-9)',
+                        borderRadius: 8,
+                        padding: '6px 12px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6,
+                      }}
+                    >
+                      <Text size="xs" c="orange.2" fw={600}>
+                        ⚠{' '}
+                        {String(e.args.type ?? 'objection')
+                          .replace('_', ' ')
+                          .toUpperCase()}{' '}
+                        OBJECTION
+                      </Text>
+                      <Text size="xs" c="orange.3">
+                        — {String(e.args.text ?? '')}
+                      </Text>
+                    </Box>
+                  ))}
+                </Stack>
+              )}
               <ScrollArea style={{ flex: 1 }} offsetScrollbars scrollbarSize={6}>
                 <Stack gap="lg" px="xs" pb="md">
                   {messages.length === 0 ? (
@@ -1099,7 +1389,7 @@ export default function LiveSessionPage() {
                             style={{
                               maxWidth: '72%',
                               backgroundColor: isUser
-                                ? 'var(--pitch-accent-soft)'
+                                ? userBubbleBackground
                                 : assistantBubbleBackground,
                               borderRadius: 18,
                               padding: '12px 14px',
@@ -1110,9 +1400,7 @@ export default function LiveSessionPage() {
                               size="sm"
                               style={{
                                 whiteSpace: 'pre-wrap',
-                                color: isUser
-                                  ? 'var(--pitch-surface-text)'
-                                  : assistantBubbleTextColor,
+                                color: isUser ? userBubbleTextColor : assistantBubbleTextColor,
                               }}
                             >
                               {msg.text}
@@ -1127,6 +1415,26 @@ export default function LiveSessionPage() {
                   )}
                 </Stack>
               </ScrollArea>
+              {/* Propose next step card — shown when AI proposes a concrete next step */}
+              {latestNextStep && (
+                <Box
+                  mt="sm"
+                  style={{
+                    backgroundColor: 'var(--mantine-color-dark-6)',
+                    borderRadius: 10,
+                    padding: '8px 14px',
+                    borderLeft: '3px solid var(--mantine-color-teal-6)',
+                  }}
+                >
+                  <Text size="xs" c="teal.4" fw={600}>
+                    📅 Buyer proposed next step
+                  </Text>
+                  <Text size="xs" c="gray.3" mt={2}>
+                    {String(latestNextStep.args.action ?? '')} —{' '}
+                    {String(latestNextStep.args.timeframe ?? '')}
+                  </Text>
+                </Box>
+              )}
               <Paper
                 withBorder
                 radius="md"
@@ -1198,7 +1506,7 @@ export default function LiveSessionPage() {
                       }}
                     >
                       <Box style={{ position: 'relative', width: '100%', height: '100%' }}>
-                        {isRealtimeVideoSession ? (
+                        {useRealtimeAvatar ? (
                           <>
                             <video
                               ref={videoRef}
@@ -1345,7 +1653,7 @@ export default function LiveSessionPage() {
                         >
                           <Badge
                             color={
-                              isRealtimeVideoSession
+                              useRealtimeAvatar
                                 ? liveAvatarError
                                   ? 'red'
                                   : isLiveAvatarReady
@@ -1359,7 +1667,7 @@ export default function LiveSessionPage() {
                             }
                             variant="filled"
                           >
-                            {isRealtimeVideoSession
+                            {useRealtimeAvatar
                               ? liveAvatarError
                                 ? 'Error'
                                 : isLiveAvatarReady
@@ -1375,7 +1683,7 @@ export default function LiveSessionPage() {
                                     ? 'Waiting'
                                     : 'Rendering'}
                           </Badge>
-                          {isRealtimeVideoSession ? (
+                          {useRealtimeAvatar ? (
                             <Badge variant="light" color="gray">
                               {liveAvatarName ?? 'HeyGen LiveAvatar'}
                             </Badge>
@@ -1386,7 +1694,7 @@ export default function LiveSessionPage() {
                               </Badge>
                             )
                           )}
-                          {isRealtimeVideoSession && (
+                          {useRealtimeAvatar && (
                             <Badge variant="light" color="gray">
                               PCM / Live
                             </Badge>
@@ -1632,6 +1940,35 @@ export default function LiveSessionPage() {
                     </Badge>
                   )}
                 </Group>
+                {/* Objection badges — shown when AI raises an objection */}
+                {activeObjections.length > 0 && (
+                  <Stack gap={4} mb="sm">
+                    {activeObjections.slice(-3).map((e) => (
+                      <Box
+                        key={e.id}
+                        style={{
+                          backgroundColor: 'var(--mantine-color-orange-9)',
+                          borderRadius: 8,
+                          padding: '6px 12px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 6,
+                        }}
+                      >
+                        <Text size="xs" c="orange.2" fw={600}>
+                          ⚠{' '}
+                          {String(e.args.type ?? 'objection')
+                            .replace('_', ' ')
+                            .toUpperCase()}{' '}
+                          OBJECTION
+                        </Text>
+                        <Text size="xs" c="orange.3">
+                          — {String(e.args.text ?? '')}
+                        </Text>
+                      </Box>
+                    ))}
+                  </Stack>
+                )}
                 <ScrollArea style={{ flex: 1 }} offsetScrollbars scrollbarSize={6}>
                   <Stack gap="sm" pr="sm">
                     {messages.length === 0 ? (
@@ -1653,7 +1990,7 @@ export default function LiveSessionPage() {
                               style={{
                                 maxWidth: '78%',
                                 backgroundColor: isUser
-                                  ? 'var(--pitch-accent-soft)'
+                                  ? userBubbleBackground
                                   : assistantBubbleBackground,
                                 borderRadius: 16,
                                 padding: '10px 12px',
@@ -1663,9 +2000,7 @@ export default function LiveSessionPage() {
                                 size="sm"
                                 style={{
                                   whiteSpace: 'pre-wrap',
-                                  color: isUser
-                                    ? 'var(--pitch-surface-text)'
-                                    : assistantBubbleTextColor,
+                                  color: isUser ? userBubbleTextColor : assistantBubbleTextColor,
                                 }}
                               >
                                 {msg.text}
@@ -1680,6 +2015,26 @@ export default function LiveSessionPage() {
                     )}
                   </Stack>
                 </ScrollArea>
+                {/* Propose next step card — shown when AI proposes a concrete next step */}
+                {latestNextStep && (
+                  <Box
+                    mt="sm"
+                    style={{
+                      backgroundColor: 'var(--mantine-color-dark-6)',
+                      borderRadius: 10,
+                      padding: '8px 14px',
+                      borderLeft: '3px solid var(--mantine-color-teal-6)',
+                    }}
+                  >
+                    <Text size="xs" c="teal.4" fw={600}>
+                      📅 Buyer proposed next step
+                    </Text>
+                    <Text size="xs" c="gray.3" mt={2}>
+                      {String(latestNextStep.args.action ?? '')} —{' '}
+                      {String(latestNextStep.args.timeframe ?? '')}
+                    </Text>
+                  </Box>
+                )}
               </Paper>
             </>
           )}
@@ -1823,6 +2178,14 @@ export default function LiveSessionPage() {
           }
         }
       `}</style>
+
+      <CoachChatWidget
+        context={{
+          page: 'session',
+          sessionId,
+          recentTurns: messages.slice(-6).map((m) => ({ role: m.role, text: m.text })),
+        }}
+      />
     </Box>
   )
 }

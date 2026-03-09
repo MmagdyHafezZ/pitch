@@ -14,6 +14,7 @@ type TeamSideBarProps = {
   activeTeamId: string | null
   onSelectTeam: (id: string) => void
   onLeaveTeam?: (team: TeamInfo) => void
+  onNavigate?: () => void
 }
 
 function deriveInitials(name: string, max = 2): string {
@@ -32,7 +33,13 @@ function deriveInitials(name: string, max = 2): string {
   return letters.slice(0, max)
 }
 
-export function TeamSideBar({ teams, activeTeamId, onSelectTeam, onLeaveTeam }: TeamSideBarProps) {
+export function TeamSideBar({
+  teams,
+  activeTeamId,
+  onSelectTeam,
+  onLeaveTeam,
+  onNavigate,
+}: TeamSideBarProps) {
   const router = useRouter()
   const [menuTeamId, setMenuTeamId] = useState<string | null>(null)
   const allowContextOpenRef = useRef(false)
@@ -40,10 +47,12 @@ export function TeamSideBar({ teams, activeTeamId, onSelectTeam, onLeaveTeam }: 
   const handleTeamClick = (id: string) => {
     setMenuTeamId(null)
     onSelectTeam(id)
+    onNavigate?.()
   }
 
   const handleCreateTeam = () => {
     router.push('/studio/team-config?mode=create')
+    onNavigate?.()
   }
 
   return (
@@ -51,6 +60,7 @@ export function TeamSideBar({ teams, activeTeamId, onSelectTeam, onLeaveTeam }: 
       style={{
         width: 60,
         height: '100%',
+        boxSizing: 'border-box',
         background: 'var(--pitch-nav-bg, var(--mantine-color-nav-9))',
         borderTopRightRadius: 24,
         borderBottomRightRadius: 24,

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useTour } from '@/features/onboarding'
 import {
@@ -226,11 +226,27 @@ export default function DashboardHome() {
   const { user } = useAuth()
   const { teams, fetchUserTeams } = useTeams()
   const { startTour } = useTour()
+  const autoStartedTourKeyRef = useRef<string | null>(null)
 
-  // Auto-start tour if redirected from onboarding with ?startTour=home
+  // Auto-start tour if redirected from onboarding with query params.
   useEffect(() => {
-    if (searchParams.get('startTour') === 'home') {
+    const startTourParam = searchParams.get('startTour')
+    const tourScreenParam = searchParams.get('tourScreen')
+    const key = `${startTourParam ?? ''}:${tourScreenParam ?? ''}`
+
+    if (autoStartedTourKeyRef.current === key) {
+      return
+    }
+
+    if (startTourParam === 'home') {
+      autoStartedTourKeyRef.current = key
       const timer = setTimeout(() => void startTour('home'), 800)
+      return () => clearTimeout(timer)
+    }
+
+    if (startTourParam === 'full' && (!tourScreenParam || tourScreenParam === 'home')) {
+      autoStartedTourKeyRef.current = key
+      const timer = setTimeout(() => void startTour('home', { mode: 'full' }), 800)
       return () => clearTimeout(timer)
     }
   }, [searchParams, startTour])
@@ -513,7 +529,7 @@ export default function DashboardHome() {
       ) : (
         <>
           <SimpleGrid data-tour-id="home-analytics" cols={{ base: 1, sm: 2, lg: 4 }} spacing="md">
-            <Card withBorder radius="lg" p="lg">
+            <Card data-tour-id="home-stat-total" withBorder radius="lg" p="lg">
               <Group justify="space-between" mb={6}>
                 <Text size="sm" c="dimmed">
                   Total sessions
@@ -530,7 +546,7 @@ export default function DashboardHome() {
               </Text>
             </Card>
 
-            <Card withBorder radius="lg" p="lg">
+            <Card data-tour-id="home-stat-weekly" withBorder radius="lg" p="lg">
               <Group justify="space-between" mb={6}>
                 <Text size="sm" c="dimmed">
                   Weekly completions
@@ -547,7 +563,7 @@ export default function DashboardHome() {
               </Text>
             </Card>
 
-            <Card withBorder radius="lg" p="lg">
+            <Card data-tour-id="home-stat-completion" withBorder radius="lg" p="lg">
               <Group justify="space-between" mb={6}>
                 <Text size="sm" c="dimmed">
                   Completion rate
@@ -562,7 +578,7 @@ export default function DashboardHome() {
               <Progress value={completionRate} color="grape" mt="sm" />
             </Card>
 
-            <Card withBorder radius="lg" p="lg">
+            <Card data-tour-id="home-stat-streak" withBorder radius="lg" p="lg">
               <Group justify="space-between" mb={6}>
                 <Text size="sm" c="dimmed">
                   Current streak
@@ -582,7 +598,7 @@ export default function DashboardHome() {
 
           <Grid gutter="md">
             <Grid.Col span={{ base: 12, lg: 8 }}>
-              <Card withBorder radius="lg" p="lg" h="100%">
+              <Card data-tour-id="home-activity-map" withBorder radius="lg" p="lg" h="100%">
                 <Group justify="space-between" mb="sm">
                   <Stack gap={2}>
                     <Text fw={700}>Practice activity map</Text>
@@ -655,7 +671,7 @@ export default function DashboardHome() {
             </Grid.Col>
 
             <Grid.Col span={{ base: 12, lg: 4 }}>
-              <Card withBorder radius="lg" p="lg" h="100%">
+              <Card data-tour-id="home-team-snapshot" withBorder radius="lg" p="lg" h="100%">
                 <Group justify="space-between" mb="sm">
                   <Text fw={700}>Team snapshot</Text>
                   <ThemeIcon color="blue" variant="light" radius="xl">
@@ -713,7 +729,7 @@ export default function DashboardHome() {
             </Grid.Col>
 
             <Grid.Col span={{ base: 12, lg: 8 }}>
-              <Card withBorder radius="lg" p="lg">
+              <Card data-tour-id="home-momentum-chart" withBorder radius="lg" p="lg">
                 <Group justify="space-between" mb="sm">
                   <Text fw={700}>Session momentum</Text>
                   <Badge color="cyan" variant="light">

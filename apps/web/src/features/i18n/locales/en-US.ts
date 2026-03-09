@@ -1,4 +1,5 @@
 import type { LocaleDictionary } from '../types'
+import { enUSStudioPhrases } from './studio-phrases'
 
 export const enUS: LocaleDictionary = {
   code: 'en-US',
@@ -21,6 +22,7 @@ export const enUS: LocaleDictionary = {
     'nav.sessions': 'Sessions',
     'nav.analytics': 'Analytics',
     'nav.teamConfig': 'Team Config',
+    'nav.challenges': 'Challenges',
     'nav.settings': 'Settings',
     'tabs.all': 'All',
     'tabs.favorites': 'Favorites',
@@ -196,5 +198,6 @@ export const enUS: LocaleDictionary = {
     Difficulty: 'Difficulty',
     'Enter the destination number now. Phone-call sessions no longer store this during setup.':
       'Enter the destination number now. Phone-call sessions no longer store this during setup.',
+    ...enUSStudioPhrases,
   },
 }

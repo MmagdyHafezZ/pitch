@@ -6,7 +6,6 @@ import { useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { useOnboardingStore } from '../stores/onboarding.store'
 import { useOnboarding } from '../hooks/useOnboarding'
-import { useTour } from '../hooks/useTour'
 import { WelcomeStep } from './steps/WelcomeStep'
 import { RoleStep } from './steps/RoleStep'
 import { ManagerSalesforceStep } from './steps/ManagerSalesforceStep'
@@ -30,7 +29,6 @@ export function OnboardingWizard() {
   const router = useRouter()
   const { step, data, isSaving, setStep, updateData } = useOnboardingStore()
   const { completeOnboarding, skipAll } = useOnboarding()
-  const { startTour } = useTour()
 
   const steps = useMemo(() => buildSteps(data.role), [data.role])
   const currentIndex = steps.indexOf(step)
@@ -65,8 +63,8 @@ export function OnboardingWizard() {
   const handleTutorialStart = useCallback(async () => {
     updateData({ wantsTutorial: true })
     await completeOnboarding({ ...data, wantsTutorial: true })
-    // After navigating to home, start the home tour
-    router.push('/studio/home?startTour=home')
+    // After navigating to home, start the full tour flow.
+    router.push('/studio/home?startTour=full&tourScreen=home')
   }, [data, completeOnboarding, updateData, router])
 
   const handleTutorialSkip = useCallback(async () => {

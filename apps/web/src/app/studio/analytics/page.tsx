@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import {
   Alert,
@@ -42,6 +42,7 @@ import {
   IconUsers,
 } from '@tabler/icons-react'
 import { useAuth } from '@/features/auth'
+import { useTour } from '@/features/onboarding'
 import { useTeams } from '@/features/teams'
 import type { Team } from '@/features/teams'
 import { api } from '@/lib/client'
@@ -245,7 +246,9 @@ export default function AnalyticsPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { user } = useAuth()
+  const { startTour } = useTour()
   const { teams, fetchUserTeams } = useTeams()
+  const autoStartedTourKeyRef = useRef<string | null>(null)
 
   // Tab is driven by URL (?tab=Personal|Team)
   const activeTab = searchParams.get('tab') ?? 'Personal'
@@ -266,6 +269,28 @@ export default function AnalyticsPage() {
   const [tableStatusFilter, setTableStatusFilter] = useState<string | null>(null)
   const [sortKey, setSortKey] = useState<SortKey>('date')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
+
+  useEffect(() => {
+    const startTourParam = searchParams.get('startTour')
+    const tourScreenParam = searchParams.get('tourScreen')
+    const key = `${startTourParam ?? ''}:${tourScreenParam ?? ''}`
+
+    if (autoStartedTourKeyRef.current === key) {
+      return
+    }
+
+    if (startTourParam === 'analytics') {
+      autoStartedTourKeyRef.current = key
+      const timer = setTimeout(() => void startTour('analytics'), 800)
+      return () => clearTimeout(timer)
+    }
+
+    if (startTourParam === 'full' && tourScreenParam === 'analytics') {
+      autoStartedTourKeyRef.current = key
+      const timer = setTimeout(() => void startTour('analytics', { mode: 'full' }), 800)
+      return () => clearTimeout(timer)
+    }
+  }, [searchParams, startTour])
 
   useEffect(() => {
     void fetchUserTeams()
@@ -496,7 +521,7 @@ export default function AnalyticsPage() {
       `}</style>
 
       <Box p={{ base: 'md', sm: 'xl' }} style={{ minHeight: '100vh' }}>
-        <Stack gap="lg">
+        <Stack data-tour-id="analytics-dashboard" gap="lg">
           {error && (
             <Alert
               color="red"
@@ -552,13 +577,9 @@ export default function AnalyticsPage() {
                   </Stack>
                 </Card>
               ) : (
-                <Stack data-tour-id="analytics-dashboard" gap="lg">
+                <Stack gap="lg">
                   {/* KPI cards */}
-                  <SimpleGrid
-                    data-tour-id="analytics-charts"
-                    cols={{ base: 2, sm: 4 }}
-                    spacing="md"
-                  >
+                  <SimpleGrid data-tour-id="analytics-kpis" cols={{ base: 2, sm: 4 }} spacing="md">
                     {kpiItems.map((item, i) => (
                       <Card
                         key={item.label}
@@ -591,6 +612,7 @@ export default function AnalyticsPage() {
                   <Grid gutter="md">
                     <Grid.Col span={{ base: 12, md: 8 }}>
                       <Card
+                        data-tour-id="analytics-score-trend"
                         radius="lg"
                         p="lg"
                         withBorder
@@ -644,6 +666,7 @@ export default function AnalyticsPage() {
 
                     <Grid.Col span={{ base: 12, md: 4 }}>
                       <Card
+                        data-tour-id="analytics-session-types"
                         radius="lg"
                         p="lg"
                         withBorder
@@ -705,6 +728,7 @@ export default function AnalyticsPage() {
                   {/* Competency breakdown */}
                   {competencyData.length > 0 && (
                     <Card
+                      data-tour-id="analytics-competencies"
                       radius="lg"
                       p="lg"
                       withBorder
@@ -741,6 +765,7 @@ export default function AnalyticsPage() {
 
                   {/* ── Session history table ── */}
                   <Card
+                    data-tour-id="analytics-history"
                     radius="lg"
                     p="lg"
                     withBorder
@@ -989,7 +1014,11 @@ export default function AnalyticsPage() {
               ) : teamLoaded ? (
                 <Stack gap="lg">
                   {/* Team KPI cards */}
-                  <SimpleGrid cols={{ base: 2, sm: 4 }} spacing="md">
+                  <SimpleGrid
+                    data-tour-id="analytics-team-kpis"
+                    cols={{ base: 2, sm: 4 }}
+                    spacing="md"
+                  >
                     {[
                       {
                         label: 'Members',
@@ -1063,7 +1092,7 @@ export default function AnalyticsPage() {
 
                   {/* Team leaderboard */}
                   {teamLeaderboard.length > 0 && (
-                    <Card radius="lg" p="lg" withBorder>
+                    <Card data-tour-id="analytics-team-leaderboard" radius="lg" p="lg" withBorder>
                       <Group justify="space-between" mb="md">
                         <Stack gap={2}>
                           <Text fw={700}>Team leaderboard</Text>
@@ -1095,7 +1124,11 @@ export default function AnalyticsPage() {
                   )}
 
                   {/* Member detail cards */}
-                  <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="md">
+                  <SimpleGrid
+                    data-tour-id="analytics-team-members"
+                    cols={{ base: 1, sm: 2, lg: 3 }}
+                    spacing="md"
+                  >
                     {teamMemberData.map((member) => {
                       const memberAvg = calcAvgScore(member.sessions)
                       const memberBest = calcBestScore(member.sessions)

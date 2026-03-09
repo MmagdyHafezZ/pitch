@@ -10,7 +10,16 @@ import {
   ConversationAudioReadyPayload,
   ConversationAudioChunkPayload,
   ConversationErrorPayload,
+  ConversationHangupRequestedPayload,
+  ConversationToolExecutedPayload,
 } from '../types/conversation.types'
+
+export interface ConversationToolEvent {
+  id: string
+  tool: string
+  args: Record<string, unknown>
+  timestamp: Date
+}
 
 interface ConversationMessage {
   id: string
@@ -62,6 +71,8 @@ export function useConversation(options: UseConversationOptions) {
   const [error, setError] = useState<string | null>(null)
   const [currentAudioUrl, setCurrentAudioUrl] = useState<string | null>(null)
   const [isAudioPlaying, setIsAudioPlaying] = useState(false)
+  const [hangupRequest, setHangupRequest] = useState<{ reason: string } | null>(null)
+  const [toolEvents, setToolEvents] = useState<ConversationToolEvent[]>([])
 
   const currentRequestIdRef = useRef<string | null>(null)
   const currentAudioRef = useRef<HTMLAudioElement | null>(null)
@@ -269,6 +280,8 @@ export function useConversation(options: UseConversationOptions) {
     conversationService.offConversationError()
     conversationService.offConversationEnd()
     conversationService.offConversationCancel()
+    conversationService.offConversationHangupRequested()
+    conversationService.offConversationToolExecuted()
 
     conversationService.disconnect()
     setIsConnected(false)
@@ -294,6 +307,8 @@ export function useConversation(options: UseConversationOptions) {
     conversationService.offConversationError()
     conversationService.offConversationEnd()
     conversationService.offConversationCancel()
+    conversationService.offConversationHangupRequested()
+    conversationService.offConversationToolExecuted()
 
     const upsertAssistantMessage = (
       requestId: string,
@@ -438,6 +453,27 @@ export function useConversation(options: UseConversationOptions) {
         clearAudioQueue()
       }
     })
+
+    conversationService.onConversationHangupRequested(
+      (data: WsEnvelope<ConversationHangupRequestedPayload>) => {
+        if (isHungUpRef.current) return
+        setHangupRequest({ reason: data.payload.reason })
+      }
+    )
+
+    conversationService.onConversationToolExecuted(
+      (data: WsEnvelope<ConversationToolExecutedPayload>) => {
+        if (isHungUpRef.current) return
+        const event: ConversationToolEvent = {
+          id: `tool_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+          tool: data.payload.tool,
+          args: data.payload.args,
+          timestamp: new Date(),
+        }
+        // Ring buffer — keep last 10 tool events
+        setToolEvents((prev) => [...prev.slice(-9), event])
+      }
+    )
   }, [playAudio, stopAudio, revokeAudioUrls, tryPlayNext, clearAudioQueue])
 
   const connect = useCallback(async () => {
@@ -525,6 +561,7 @@ export function useConversation(options: UseConversationOptions) {
 
       setIsProcessing(true)
       setError(null)
+      setHangupRequest(null)
       stopAudio()
       clearAudioQueue()
 
@@ -576,6 +613,14 @@ export function useConversation(options: UseConversationOptions) {
     setMessages([])
   }, [])
 
+  const clearHangupRequest = useCallback(() => {
+    setHangupRequest(null)
+  }, [])
+
+  const clearToolEvents = useCallback(() => {
+    setToolEvents([])
+  }, [])
+
   const replayAudio = useCallback(() => {
     if (audioOutput !== 'browser') return
     if (!currentAudioUrl) return
@@ -621,6 +666,8 @@ export function useConversation(options: UseConversationOptions) {
     error,
     currentAudioUrl,
     isAudioPlaying,
+    hangupRequest,
+    toolEvents,
     connect,
     disconnect,
     hangUp,
@@ -628,6 +675,8 @@ export function useConversation(options: UseConversationOptions) {
     sendMessage,
     startAssistantTurn,
     clearMessages,
+    clearHangupRequest,
+    clearToolEvents,
     stopAudio,
     replayAudio,
   }

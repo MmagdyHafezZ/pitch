@@ -11,6 +11,7 @@ import {
   Grid,
   Group,
   Paper,
+  Stack,
   Stepper,
   Text,
   Title,
@@ -65,6 +66,108 @@ const resolveConfig = (session: Session | null) => {
     return {}
   }
   return session.sessionConfig as Record<string, any>
+}
+
+const COUNTERPART_ROLE_PATTERN =
+  /client|customer|buyer|prospect|stakeholder|procurement|decision maker|decision-maker|economic buyer|cto|cfo|cio|vp/i
+
+const PITCHER_ROLE_PATTERN =
+  /sales|seller|pitch|account executive|account manager|sales rep|representative|bdr|sdr|business development|founder|consultant/i
+
+const pickString = (value: unknown): string | undefined =>
+  typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined
+
+const normalizeRole = (value: string | undefined): string | undefined =>
+  value ? value.trim().replace(/\s+/g, ' ').toLowerCase() : undefined
+
+const alignPitchRolePair = (
+  aiRole?: string,
+  userRole?: string
+): { aiRole?: string; userRole?: string } => {
+  let resolvedAiRole = pickString(aiRole)
+  let resolvedUserRole = pickString(userRole)
+
+  if (
+    resolvedAiRole &&
+    resolvedUserRole &&
+    PITCHER_ROLE_PATTERN.test(resolvedAiRole.toLowerCase()) &&
+    COUNTERPART_ROLE_PATTERN.test(resolvedUserRole.toLowerCase())
+  ) {
+    const previousAiRole = resolvedAiRole
+    resolvedAiRole = resolvedUserRole
+    resolvedUserRole = previousAiRole
+  }
+
+  if (
+    resolvedAiRole &&
+    resolvedUserRole &&
+    normalizeRole(resolvedAiRole) === normalizeRole(resolvedUserRole)
+  ) {
+    resolvedAiRole = undefined
+  }
+
+  return {
+    aiRole: resolvedAiRole,
+    userRole: resolvedUserRole,
+  }
+}
+
+const scrollTrackByCard = (container: HTMLDivElement, direction: 'left' | 'right') => {
+  const items = Array.from(container.children).filter(
+    (element): element is HTMLElement => element instanceof HTMLElement && element.clientWidth > 0
+  )
+  if (items.length === 0) {
+    return
+  }
+
+  const maxScrollLeft = Math.max(0, container.scrollWidth - container.clientWidth)
+  if (maxScrollLeft <= 0) {
+    return
+  }
+
+  const targets = Array.from(
+    new Set(items.map((item) => Math.min(Math.max(0, item.offsetLeft), maxScrollLeft)))
+  ).sort((a, b) => a - b)
+  if (targets.length === 0) {
+    return
+  }
+
+  const current = container.scrollLeft
+  const epsilon = 8
+  const lastIndex = targets.length - 1
+  let nextIndex = 0
+
+  if (direction === 'right') {
+    let baseIndex = 0
+    for (let index = 0; index <= lastIndex; index += 1) {
+      if ((targets[index] ?? 0) <= current + epsilon) {
+        baseIndex = index
+      }
+    }
+    nextIndex = Math.min(baseIndex + 1, lastIndex)
+  } else {
+    let baseIndex = lastIndex
+    for (let index = 0; index <= lastIndex; index += 1) {
+      if ((targets[index] ?? 0) >= current - epsilon) {
+        baseIndex = index
+        break
+      }
+    }
+    nextIndex = Math.max(baseIndex - 1, 0)
+  }
+
+  const target = targets[nextIndex] ?? current
+
+  if (Math.abs(target - current) < 2) {
+    const fallbackAmount = container.clientWidth * 0.8
+    container.scrollBy({
+      left: direction === 'left' ? -fallbackAmount : fallbackAmount,
+      behavior: 'smooth',
+    })
+    return
+  }
+
+  container.scrollTo({ left: target, behavior: 'smooth' })
 }
 
 export default function EditSessionPage() {
@@ -150,6 +253,7 @@ export default function EditSessionPage() {
   const languageTouchedRef = useRef(false)
 
   const session = currentSession?.id === sessionId ? currentSession : null
+  const isReadOnlySession = Boolean(session && user?.id && session.userId !== user.id)
 
   useEffect(() => {
     if (!session && !languageTouchedRef.current) {
@@ -685,6 +789,15 @@ export default function EditSessionPage() {
 
   const handleSubmit = async () => {
     if (!sessionId || !session) return
+    if (isReadOnlySession) {
+      notifications.show({
+        title: 'Permission denied',
+        message: 'Only the session owner can modify this session.',
+        color: 'red',
+        icon: <IconAlertCircle size={16} />,
+      })
+      return
+    }
 
     if (!validateAllSteps()) {
       notifications.show({
@@ -734,8 +847,7 @@ export default function EditSessionPage() {
         initiativeLevel,
         difficulty,
         durationMinutes,
-        aiRole: aiRole.trim() || undefined,
-        userRole: userRole.trim() || undefined,
+        ...alignPitchRolePair(aiRole, userRole),
       }
 
       delete sessionConfig.phoneNumber
@@ -848,15 +960,13 @@ export default function EditSessionPage() {
   const scrollPersona = (direction: 'left' | 'right') => {
     const container = personaScrollRef.current
     if (!container) return
-    const amount = container.clientWidth * 0.8
-    container.scrollBy({ left: direction === 'left' ? -amount : amount, behavior: 'smooth' })
+    scrollTrackByCard(container, direction)
   }
 
   const scrollModels = (direction: 'left' | 'right') => {
     const container = modelScrollRef.current
     if (!container) return
-    const amount = container.clientWidth * 0.8
-    container.scrollBy({ left: direction === 'left' ? -amount : amount, behavior: 'smooth' })
+    scrollTrackByCard(container, direction)
   }
 
   const steps = [
@@ -1068,14 +1178,15 @@ export default function EditSessionPage() {
       <Container size="xl" py="xl">
         <Group
           style={{
-            width: '100vw',
+            width: '100%',
           }}
           py="md"
           className={classes.hero}
         >
           <Group
             style={{
-              width: '80.6em',
+              width: '100%',
+              maxWidth: '80.6em',
             }}
             align="flex-start"
           >
@@ -1110,8 +1221,24 @@ export default function EditSessionPage() {
           <Paper shadow="sm" p="xl" radius="md" withBorder>
             <Text c="dimmed">Session not found.</Text>
           </Paper>
+        ) : isReadOnlySession ? (
+          <Paper shadow="sm" p="xl" radius="md" withBorder>
+            <Stack gap="md">
+              <Alert icon={<IconAlertCircle size={16} />} title="Read-only session" color="yellow">
+                Only the session owner can modify this session.
+              </Alert>
+              <Group justify="flex-end">
+                <Button
+                  variant="default"
+                  onClick={() => router.push(`/studio/sessions/${session.id}`)}
+                >
+                  Back to session
+                </Button>
+              </Group>
+            </Stack>
+          </Paper>
         ) : (
-          <Grid gutter="xl">
+          <Grid gutter={isStepperCompact ? 'md' : 'xl'}>
             <Grid.Col span={{ base: 12, md: 3 }}>
               <Box className={classes.stepPanel}>
                 <Paper className={classes.stepPanelCard} p="md">
@@ -1137,11 +1264,11 @@ export default function EditSessionPage() {
             </Grid.Col>
 
             <Grid.Col span={{ base: 12, md: 9 }}>
-              <Paper className={classes.contentCard} p="xl">
+              <Paper className={classes.contentCard} p={isStepperCompact ? 'md' : 'xl'}>
                 {steps[active]?.content}
               </Paper>
 
-              <Group justify="space-between" mt="xl">
+              <Group justify="space-between" mt="xl" gap="sm" wrap="wrap">
                 <Button variant="default" onClick={prevStep} disabled={active === 0}>
                   Back
                 </Button>

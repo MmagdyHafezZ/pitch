@@ -42,6 +42,7 @@ import { useTeamConfigStore } from '@/features/teams/stores/team-config.store'
 import type { TeamMembership } from '@/features/teams/types/teams.types'
 import { notifications } from '@mantine/notifications'
 import { modals } from '@mantine/modals'
+import { useMediaQuery } from '@mantine/hooks'
 
 const ROLE_OPTIONS = [
   { value: 'OWNER', label: 'Owner' },
@@ -87,6 +88,7 @@ const isMembershipPending = (membership: TeamMembership) => {
 
 export function TeamMembersPanel() {
   const { currentTeam, addMember, updateMember, deleteMember, loading } = useTeams()
+  const isMobile = useMediaQuery('(max-width: 48em)')
   const orgUsers = useTeamConfigStore((s) => s.orgUsers)
   const orgUsersLoading = useTeamConfigStore((s) => s.orgUsersLoading)
   const orgUsersError = useTeamConfigStore((s) => s.orgUsersError)
@@ -396,12 +398,12 @@ export function TeamMembersPanel() {
               value={search}
               onChange={(e) => setSearch(e.currentTarget.value)}
               size="sm"
-              style={{ flex: 1, minWidth: 220 }}
+              style={{ flex: 1, minWidth: isMobile ? 0 : 220 }}
             />
             <Select
               leftSection={<IconFilter size={14} />}
               size="sm"
-              w={180}
+              w={isMobile ? '100%' : 180}
               value={roleFilter}
               onChange={(v) => setRoleFilter((v as any) ?? 'ALL')}
               data={[
@@ -419,6 +421,7 @@ export function TeamMembersPanel() {
             </Text>
             <SegmentedControl
               size="xs"
+              fullWidth={isMobile}
               value={membershipFilter}
               onChange={(value) => setMembershipFilter(value as 'IN_TEAM' | 'NOT_IN_TEAM' | 'ALL')}
               data={[
@@ -447,8 +450,13 @@ export function TeamMembersPanel() {
               No users match the current filters.
             </Text>
           ) : (
-            <ScrollArea h={420} type="auto">
-              <Table highlightOnHover verticalSpacing="xs" horizontalSpacing="md">
+            <ScrollArea h={isMobile ? 340 : 420} type="auto">
+              <Table
+                highlightOnHover
+                verticalSpacing="xs"
+                horizontalSpacing="md"
+                style={{ minWidth: isMobile ? 720 : undefined }}
+              >
                 <Table.Thead>
                   <Table.Tr>
                     <Table.Th>User</Table.Th>
@@ -631,14 +639,14 @@ export function TeamMembersPanel() {
                     if (inviteError) setInviteError(null)
                   }}
                   size="sm"
-                  style={{ flex: 1, minWidth: 220 }}
+                  style={{ flex: 1, minWidth: isMobile ? 0 : 220 }}
                 />
                 <Select
                   value={newRole}
                   onChange={(v) => setNewRole((v as any) ?? 'MEMBER')}
                   data={INVITE_ROLE_OPTIONS}
                   size="sm"
-                  w={130}
+                  w={isMobile ? '100%' : 130}
                 />
                 <Button
                   leftSection={<IconMailPlus size={16} />}
