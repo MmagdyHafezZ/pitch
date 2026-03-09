@@ -11,7 +11,6 @@ import { HintsGatewayController } from './controllers/simulation/hints-gateway.c
 import { AssessmentGatewayController } from './controllers/simulation/assessment-gateway.controller';
 import { PhoneCallGatewayController } from './controllers/simulation/phone-call-gateway.controller';
 import { PhoneCallWebhookController } from './controllers/simulation/phone-call-webhook.controller';
-import { VideoGenerationController } from './controllers/simulation/video-generation.controller';
 import { GlobalJwtAuthGuard } from './guards/global-jwt-auth.guard';
 import { UserClaimsInterceptor } from './interceptors/user-claims.interceptor';
 import { TtsGatewayController } from './controllers/simulation/tts.controller';
@@ -32,6 +31,9 @@ import { APP_GUARD } from '@nestjs/core';
 import { SimulationWsGateway } from './controllers/simulation/simulation-ws.gateway';
 import { SimulationModule } from '@microservices/simulation/simulation.module';
 import { RagController } from '@microservices/simulation/rag/rag.controller';
+import { ChallengesGatewayController } from './controllers/challenges/challenges-gateway.controller';
+import { SupportChatGatewayController } from './controllers/support/support-chat-gateway.controller';
+import { CoachStreamService } from './controllers/support/coach-stream.service';
 
 @Module({
   imports: [
@@ -66,17 +68,19 @@ import { RagController } from '@microservices/simulation/rag/rag.controller';
     AssessmentGatewayController,
     PhoneCallGatewayController,
     PhoneCallWebhookController,
-    VideoGenerationController,
     LtiV1p3GatewayController,
     LtiV1p1GatewayController,
     LtiAdvantageGatewayController,
     LtiManagementGatewayController,
     RagController,
+    ChallengesGatewayController,
+    SupportChatGatewayController,
   ],
   providers: [
     { provide: APP_GUARD, useClass: GlobalJwtAuthGuard },
     UserClaimsInterceptor,
     SimulationWsGateway,
+    CoachStreamService,
   ],
 })
 export class GatewayModule {}

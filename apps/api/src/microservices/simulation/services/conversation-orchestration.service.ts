@@ -6,8 +6,17 @@ import { TtsService } from '../tts/tts.service';
 import { StageDetectorService } from './stage-detector.service';
 import { AssessmentService } from '../assessment/assessment.service';
 import { SimulationRedisService } from './redis/redis.service';
-import { buildConversationSystemPrompt } from '../prompts/conversation.prompt';
-import type { LLMConfigDto, LLMMessageDto } from '../dto/llm.dto';
+import {
+  buildConversationFallbackResponse,
+  buildConversationSystemPrompt,
+  isDisallowedGenericFallbackReply,
+} from '../prompts/conversation.prompt';
+import { ConversationToolsService } from './conversation-tools.service';
+import type {
+  LLMConfigDto,
+  LLMMessageDto,
+  LLMToolCallDto,
+} from '../dto/llm.dto';
 import type {
   WsEnvelope,
   ConversationStartPayload,
@@ -145,6 +154,7 @@ export class ConversationOrchestrationService {
     private readonly ragService: RagService,
     private readonly ragIndexer: RagIndexerService,
     private readonly videoGeneration: VideoGenerationService,
+    private readonly conversationTools: ConversationToolsService,
   ) {}
 
   stream(
@@ -341,6 +351,16 @@ export class ConversationOrchestrationService {
             .join('\n')
         : undefined;
 
+    // ── 5.6. Mood context from Redis (set by update_mood tool) ────────────────
+    const moodState = await this.redis
+      .getMoodState(sessionId)
+      .catch(() => null);
+    const moodContext = moodState
+      ? `Your current mood is ${moodState.mood} (intensity ${moodState.intensity}/10). ` +
+        `This was triggered by: ${moodState.trigger}. ` +
+        `Mood set at: ${moodState.setAt}.`
+      : undefined;
+
     // ── 6. Build LLM messages ─────────────────────────────────────────────────
     const systemPrompt = buildConversationSystemPrompt({
       persona: personaData,
@@ -349,6 +369,7 @@ export class ConversationOrchestrationService {
       scenarioConfig,
       ragContext,
       visualContext: payload.visualContext,
+      moodContext,
     });
 
     const historyForPrompt = startAsAssistant
@@ -397,9 +418,14 @@ export class ConversationOrchestrationService {
       session.type,
     );
 
+    // Attach tool definitions so the LLM can call them during generation
+    llmConfig.tools = this.conversationTools.getToolDefinitions();
+    llmConfig.toolChoice = 'auto';
+
     // ── 7. LLM stream + per-sentence TTS ──────────────────────────────────────
     let fullText = '';
     let isFirstChunk = true;
+    const pendingToolCalls: LLMToolCallDto[] = [];
 
     const sentenceDetector = new SentenceDetector({
       minWords: 3,
@@ -450,7 +476,13 @@ export class ConversationOrchestrationService {
               );
             }
           }
-          if (chunk.done) resolve();
+          if (chunk.done) {
+            // Collect tool calls from the done chunk for post-TTS execution
+            if (chunk.toolCalls && chunk.toolCalls.length > 0) {
+              pendingToolCalls.push(...chunk.toolCalls);
+            }
+            resolve();
+          }
         },
         error: (err) =>
           reject(err instanceof Error ? err : new Error(String(err))),
@@ -459,14 +491,47 @@ export class ConversationOrchestrationService {
     });
 
     if (!fullText.trim()) {
-      fullText = startAsAssistant
-        ? "Hello! Thanks for joining. Let's dive into today's scenario whenever you're ready."
-        : 'Got it. Could you say a bit more so I can respond properly?';
+      // When the LLM emits only tool calls (no text deltas), extract displayable
+      // text from tool arguments so the user hears the actual objection/question
+      // rather than the generic fallback.
+      const toolTexts = pendingToolCalls
+        .flatMap((tc) => {
+          try {
+            const args = JSON.parse(tc.arguments) as Record<string, unknown>;
+            if (tc.name === 'raise_objection' && typeof args.text === 'string')
+              return [args.text];
+            if (
+              tc.name === 'request_clarification' &&
+              typeof args.question === 'string'
+            )
+              return [args.question];
+          } catch {
+            /* malformed args — skip */
+          }
+          return [];
+        })
+        .join(' ');
+
+      fullText =
+        toolTexts ||
+        buildConversationFallbackResponse({
+          startAsAssistant,
+          persona: personaData,
+          sessionConfig,
+          scenarioConfig,
+        });
+    } else if (isDisallowedGenericFallbackReply(fullText)) {
+      fullText = buildConversationFallbackResponse({
+        startAsAssistant,
+        persona: personaData,
+        sessionConfig,
+        scenarioConfig,
+      });
     }
 
     // Flush remaining text in the sentence detector buffer
     const remaining = sentenceDetector.flush();
-    if (remaining) {
+    if (remaining?.sentence) {
       const idx = sentenceIndex++;
       sentenceTtsJobs.push(
         this.processSentenceTts(
@@ -579,6 +644,43 @@ export class ConversationOrchestrationService {
         progress,
       },
     });
+
+    // ── Execute tool calls collected from the LLM stream ──────────────────────
+    if (pendingToolCalls.length > 0) {
+      const toolContext = { sessionId, iterationId, turnId: assistantTurnId };
+      const effects = await this.conversationTools
+        .execute(pendingToolCalls, toolContext)
+        .catch((err) => {
+          this.logger.warn(
+            `Tool execution failed: ${(err as Error)?.message ?? err}`,
+          );
+          return [];
+        });
+
+      for (const effect of effects) {
+        if (effect.streamEventOverride === 'hangup_requested') {
+          const rawReason = effect.args.reason;
+          const reason =
+            typeof rawReason === 'string'
+              ? rawReason
+              : typeof rawReason === 'number' || typeof rawReason === 'boolean'
+                ? String(rawReason)
+                : 'Call ended';
+          this.logger.log(
+            `AI requested hang-up via end_call for session ${sessionId}: ${reason}`,
+          );
+          subject.next({
+            type: 'hangup_requested',
+            data: { reason },
+          });
+        } else {
+          subject.next({
+            type: 'tool_executed',
+            data: { tool: effect.tool, args: effect.args },
+          });
+        }
+      }
+    }
 
     if (videoConfig?.mode === 'rendered') {
       void this.videoGeneration

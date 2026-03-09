@@ -72,6 +72,8 @@ export const RedisKeys = {
   /** Cached persona preview audio */
   personaPreviewAudio: (personaId: string) =>
     `sim:persona:${personaId}:preview-audio`,
+  /** AI persona mood state — set by update_mood tool, injected into next turn prompt */
+  sessionMood: (sessionId: string) => `sim:session:${sessionId}:mood`,
 } as const;
 
 /**
@@ -308,4 +310,6 @@ export const RedisTTL = {
   VIDEO_JOB: 24 * 60 * 60,
   /** Persona preview audio cache — 30 days */
   PERSONA_PREVIEW_AUDIO: 30 * 24 * 60 * 60,
+  /** AI persona mood state — 30 min */
+  SESSION_MOOD: 30 * 60,
 } as const;

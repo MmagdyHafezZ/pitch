@@ -37,6 +37,7 @@
     "dev:lti": "pnpm --filter api dev:lti",
     "dev:s3": "pnpm --filter api dev:s3",
     "dev:crm": "pnpm --filter api dev:crm",
+    "dev:jobs": "pnpm --filter api dev:jobs",
     "build:api": "pnpm --filter api build",
     "build:web": "pnpm --filter web build",
     "start:api": "pnpm --filter api start",

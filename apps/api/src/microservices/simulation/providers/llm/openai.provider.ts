@@ -200,6 +200,12 @@ export class OpenAIProvider implements ILLMProvider {
             ...config.providerOptions,
           });
 
+          // Accumulate tool call deltas across chunks (index → partial call)
+          const toolCallsAccumulator = new Map<
+            number,
+            { id: string; name: string; arguments: string }
+          >();
+
           for await (const chunk of stream) {
             const delta = chunk.choices[0]?.delta;
             const finishReason = chunk.choices[0]?.finish_reason;
@@ -211,6 +217,21 @@ export class OpenAIProvider implements ILLMProvider {
                 delta: delta.content,
                 done: false,
               });
+            }
+
+            // Accumulate tool call fragments streamed across multiple chunks
+            if (delta?.tool_calls) {
+              for (const tc of delta.tool_calls) {
+                const acc = toolCallsAccumulator.get(tc.index) ?? {
+                  id: '',
+                  name: '',
+                  arguments: '',
+                };
+                acc.id ||= tc.id ?? '';
+                acc.name += tc.function?.name ?? '';
+                acc.arguments += tc.function?.arguments ?? '';
+                toolCallsAccumulator.set(tc.index, acc);
+              }
             }
 
             if (finishReason || chunk.usage) {
@@ -239,10 +260,25 @@ export class OpenAIProvider implements ILLMProvider {
                     estimated: true,
                   };
 
+              // Build assembled tool calls array for the done chunk
+              const assembledToolCalls =
+                toolCallsAccumulator.size > 0
+                  ? Array.from(toolCallsAccumulator.entries())
+                      .sort(([a], [b]) => a - b)
+                      .map(([, tc]) => ({
+                        id: tc.id,
+                        name: tc.name,
+                        arguments: tc.arguments,
+                      }))
+                  : undefined;
+
               subscriber.next({
                 done: true,
                 usage,
                 finishReason: finishReason || 'stop',
+                ...(assembledToolCalls
+                  ? { toolCalls: assembledToolCalls }
+                  : {}),
               });
 
               subscriber.complete();

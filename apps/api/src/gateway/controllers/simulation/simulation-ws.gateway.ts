@@ -16,6 +16,8 @@ import {
   ChatStartPayload,
   ConversationStartPayload,
   ConversationErrorPayload,
+  ConversationHangupRequestedPayload,
+  ConversationToolExecutedPayload,
   ConversationStreamDeltaPayload,
   ConversationStreamCompletedPayload,
   ConversationStageTransitionPayload,
@@ -376,6 +378,37 @@ export class SimulationWsGateway
               requestId,
               sessionId,
               transitionPayload,
+              envelope.turnId,
+            ),
+          );
+        } else if (event.type === 'hangup_requested') {
+          // AI persona has signalled it wants to end the conversation
+          const hangupPayload: ConversationHangupRequestedPayload = {
+            reason: event.data.reason,
+          };
+          client.emit(
+            WsMessageType.CONVERSATION_HANGUP_REQUESTED,
+            WsEnvelopeFactory.create(
+              WsMessageType.CONVERSATION_HANGUP_REQUESTED,
+              requestId,
+              sessionId,
+              hangupPayload,
+              envelope.turnId,
+            ),
+          );
+        } else if (event.type === 'tool_executed') {
+          const toolPayload: ConversationToolExecutedPayload = {
+            tool: event.data.tool,
+            args: event.data.args,
+            ...(event.data.effect ? { effect: event.data.effect } : {}),
+          };
+          client.emit(
+            WsMessageType.CONVERSATION_TOOL_EXECUTED,
+            WsEnvelopeFactory.create(
+              WsMessageType.CONVERSATION_TOOL_EXECUTED,
+              requestId,
+              sessionId,
+              toolPayload,
               envelope.turnId,
             ),
           );

@@ -21,6 +21,7 @@ import {
   IVideoJob,
   IPersonaPreviewAudioAsset,
 } from './redis-key-patterns';
+import type { IMoodState } from '../conversation-tools.service';
 
 /**
  * SimulationRedisService
@@ -548,6 +549,20 @@ export class SimulationRedisService {
 
   async deletePersonaPreviewAudio(personaId: string): Promise<void> {
     await this.redis.del(RedisKeys.personaPreviewAudio(personaId));
+  }
+
+  // ── AI persona mood state ──────────────────────────────────────────────────
+
+  async getMoodState(sessionId: string): Promise<IMoodState | null> {
+    const key = RedisKeys.sessionMood(sessionId);
+    const data = await this.redis.get(key);
+    if (!data) return null;
+    return JSON.parse(data) as IMoodState;
+  }
+
+  async setMoodState(sessionId: string, state: IMoodState): Promise<void> {
+    const key = RedisKeys.sessionMood(sessionId);
+    await this.redis.setex(key, RedisTTL.SESSION_MOOD, JSON.stringify(state));
   }
 
   /**

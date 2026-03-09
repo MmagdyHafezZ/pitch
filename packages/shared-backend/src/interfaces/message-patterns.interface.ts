@@ -153,6 +153,13 @@ export const SIMULATION_SERVICE_PATTERNS = {
   PHONE_CALL_START: 'simulation.phone.call.start',
 
   ANALYTICS_DASHBOARD: 'analytics.dashboard',
+
+  CHALLENGE_LIST: 'simulation.challenge.list',
+  CHALLENGE_GET: 'simulation.challenge.get',
+  CHALLENGE_PARTICIPATE: 'simulation.challenge.participate',
+  CHALLENGE_SUBMIT_SCORE: 'simulation.challenge.submitScore',
+  CHALLENGE_LEADERBOARD: 'simulation.challenge.leaderboard',
+  CHALLENGE_TRIGGER_GENERATE: 'simulation.challenge.triggerGenerate',
 } as const
 
 export type UserServicePattern = (typeof USER_SERVICE_PATTERNS)[keyof typeof USER_SERVICE_PATTERNS]
@@ -164,6 +171,7 @@ export type SimulationServicePattern =
   (typeof SIMULATION_SERVICE_PATTERNS)[keyof typeof SIMULATION_SERVICE_PATTERNS]
 export const SUPPORT_SERVICE_PATTERNS = {
   EMAIL_SEND_VERIFICATION_CODE: 'support.email.sendVerificationCode',
+  CHAT: 'support.chat',
 } as const
 export const TTS_SERVICE_PATTERNS = {
   SPEAK: 'tts.speak',
