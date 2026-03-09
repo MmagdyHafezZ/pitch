@@ -23,6 +23,8 @@ import { AssessmentService } from '../assessment/assessment.service';
 import { AssessmentModeDto } from '../assessment/dto/assessment.dto';
 import type { SessionWithOwner } from '../repositories/session.repository';
 import { SimulationPrismaService } from '../prisma/simulation-prisma.service';
+import { PersonaMediaService } from './persona-media.service';
+import { SimulationRedisService } from './redis/redis.service';
 
 /**
  * Session Service
@@ -38,6 +40,8 @@ export class SessionService {
     private readonly sessionMemberRepository: SessionMemberRepository,
     private readonly assessmentService: AssessmentService,
     private readonly prisma: SimulationPrismaService,
+    private readonly personaMediaService: PersonaMediaService,
+    private readonly redis: SimulationRedisService,
   ) {}
 
   /**
@@ -202,6 +206,7 @@ export class SessionService {
         crmContextId: createSessionDto.crmContextId,
       });
 
+      await this.invalidateSessionFullCache(session.id);
       this.logger.log(`Created session: ${session.id}`);
       return this.mapToResponseDto(session);
     } catch (error) {
@@ -265,6 +270,7 @@ export class SessionService {
         endedReason: updateSessionDto.endedReason,
       });
 
+      await this.invalidateSessionFullCache(session.id);
       this.logger.log(`Updated session: ${session.id}`);
       return this.mapToResponseDto(session);
     } catch (error) {
@@ -294,24 +300,17 @@ export class SessionService {
         throw new NotFoundException(`Session with ID ${id} not found`);
       }
 
-      const member = requesterUserId
-        ? await this.sessionMemberRepository.findBySessionIdAndUserId(
-            id,
-            requesterUserId,
-          )
-        : await this.sessionMemberRepository.findOwner(id);
+      this.assertOwner(existingSession, requesterUserId);
 
-      if (!member) {
-        if (requesterUserId) {
-          throw new ForbiddenException(
-            `User ${requesterUserId} is not a member of session ${id}`,
-          );
-        }
-        throw new NotFoundException('No session member found for session');
+      const ownerMember =
+        this.getOwnerMember(existingSession) ||
+        (await this.sessionMemberRepository.findOwner(id));
+      if (!ownerMember) {
+        throw new NotFoundException('No session owner found for session');
       }
 
       const iteration = await this.prisma.client.iteration.findFirst({
-        where: { sessionMemberId: member.id },
+        where: { sessionMemberId: ownerMember.id },
         orderBy: { iterationNumber: 'desc' },
       });
 
@@ -341,6 +340,7 @@ export class SessionService {
         );
       }
 
+      await this.invalidateSessionFullCache(existingSession.id);
       this.logger.log(`Completed iteration for session: ${existingSession.id}`);
       return this.mapToResponseDto(existingSession);
     } catch (error) {
@@ -370,6 +370,7 @@ export class SessionService {
       this.assertOwner(existingSession, requesterUserId);
 
       await this.sessionRepository.delete(id);
+      await this.invalidateSessionFullCache(id);
 
       this.logger.log(`Deleted session: ${id}`);
       return {
@@ -420,6 +421,32 @@ export class SessionService {
     session: SessionWithOwner,
   ): SessionResponseDto => {
     const ownerMember = this.getOwnerMember(session);
+    const persona = session.persona
+      ? {
+          id: session.persona.id,
+          orgId: session.persona.orgId,
+          name: session.persona.name,
+          traits: this.personaMediaService.enrichTraits({
+            personaId: session.persona.id,
+            name: session.persona.name,
+            traits: session.persona.traits,
+          }),
+          createdAt: session.persona.createdAt,
+          updatedAt: session.persona.updatedAt,
+        }
+      : undefined;
+    const scenario = session.scenario
+      ? {
+          id: session.scenario.id,
+          orgId: session.scenario.orgId,
+          name: session.scenario.name,
+          description: session.scenario.description,
+          config: session.scenario.config as Record<string, any> | undefined,
+          createdAt: session.scenario.createdAt,
+          updatedAt: session.scenario.updatedAt,
+        }
+      : undefined;
+
     return {
       id: session.id,
       name: session.name ?? undefined,
@@ -434,6 +461,8 @@ export class SessionService {
       sessionConfig: session.sessionConfig as Record<string, any> | undefined,
       scenarioId: session.scenarioId || undefined,
       personaId: session.personaId || undefined,
+      scenario,
+      persona,
       language: session.language || undefined,
       crmContextId: session.crmContextId || undefined,
       status: session.status,
@@ -446,6 +475,18 @@ export class SessionService {
 
   private getOwnerMember(session: SessionWithOwner): SessionMember | undefined {
     return session.members?.[0];
+  }
+
+  private async invalidateSessionFullCache(sessionId: string): Promise<void> {
+    try {
+      await this.redis.deleteSessionFull(sessionId);
+    } catch (error) {
+      this.logger.warn(
+        `Failed to invalidate session full cache for ${sessionId}: ${
+          (error as Error)?.message ?? error
+        }`,
+      );
+    }
   }
 
   private assertOwner(

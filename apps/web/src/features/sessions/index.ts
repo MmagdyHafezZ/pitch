@@ -17,6 +17,7 @@ export type {
   ListSessionsParams,
   SessionListResponse,
   DeleteSessionResponse,
+  SessionConfigData,
 } from './types/sessions.types'
 export type {
   Invitation,

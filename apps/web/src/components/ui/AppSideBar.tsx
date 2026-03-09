@@ -8,6 +8,7 @@ import {
   IconUserCog,
   IconHelp,
   IconSettings,
+  IconTrophy,
 } from '@tabler/icons-react'
 import { Dispatch, SetStateAction, useState } from 'react'
 import { useRouter } from 'next/navigation'
@@ -18,25 +19,29 @@ import { useI18n } from '@/features/i18n'
 
 export type SidebarLink = {
   icon: React.ComponentType<{ size?: number }>
-  label: 'Home' | 'Sessions' | 'Teams' | 'Analytics' | 'Settings' | 'Team Config'
+  label: 'Home' | 'Sessions' | 'Teams' | 'Analytics' | 'Settings' | 'Team Config' | 'Challenges'
 }
 
 type Props = {
-  active: 'Home' | 'Sessions' | 'Teams' | 'Analytics' | 'Settings' | 'Team Config'
+  active: 'Home' | 'Sessions' | 'Teams' | 'Analytics' | 'Settings' | 'Team Config' | 'Challenges'
   setActive: Dispatch<
-    SetStateAction<'Home' | 'Sessions' | 'Teams' | 'Analytics' | 'Settings' | 'Team Config'>
+    SetStateAction<
+      'Home' | 'Sessions' | 'Teams' | 'Analytics' | 'Settings' | 'Team Config' | 'Challenges'
+    >
   >
   selectedDate: Date | null
   setSelectedDate: Dispatch<SetStateAction<Date | null>>
   showTeamConfig?: boolean
   mainLinks?: SidebarLink[]
   secondaryLinks?: SidebarLink[]
+  onNavigate?: () => void
 }
 
 const DEFAULT_MAIN: SidebarLink[] = [
   { icon: IconHome, label: 'Home' },
   { icon: IconCalendar, label: 'Sessions' },
   { icon: IconChartBar, label: 'Analytics' },
+  { icon: IconTrophy, label: 'Challenges' },
   { icon: IconUserCog, label: 'Team Config' },
 ]
 
@@ -47,6 +52,7 @@ export function AppSidebar({
   setSelectedDate,
   showTeamConfig = true,
   mainLinks = DEFAULT_MAIN,
+  onNavigate,
 }: Props) {
   const router = useRouter()
   const { t } = useI18n()
@@ -61,7 +67,9 @@ export function AppSidebar({
       <Box
         style={{
           height: '100%',
-          width: '100%',
+          flex: 1,
+          minWidth: 0,
+          boxSizing: 'border-box',
           background: 'transparent',
           display: 'flex',
         }}
@@ -78,6 +86,7 @@ export function AppSidebar({
             gap: rem(8),
             width: '100%',
             height: '100%',
+            boxSizing: 'border-box',
           }}
         >
           <Stack gap={6} mt="xs" flex={1}>
@@ -88,6 +97,7 @@ export function AppSidebar({
                 onClick={() => {
                   setActive(label)
                   router.push(`/studio/${label.toLowerCase().replace(/\s+/g, '-')}`)
+                  onNavigate?.()
                 }}
                 leftSection={<Icon size={18} />}
                 label={
@@ -100,7 +110,9 @@ export function AppSidebar({
                           ? t('nav.analytics')
                           : label === 'Team Config'
                             ? t('nav.teamConfig')
-                            : label}
+                            : label === 'Challenges'
+                              ? t('nav.challenges')
+                              : label}
                   </Text>
                 }
                 variant="subtle"

@@ -20,7 +20,7 @@ describe('CreatePersonaModal', () => {
     const onClose = jest.fn()
     const onCreatePersona = jest.fn().mockResolvedValue({
       id: 'persona_1',
-      name: 'Arden - Skeptical CTO',
+      name: 'Arden',
       orgId: 'org_123',
       traits: null,
     })

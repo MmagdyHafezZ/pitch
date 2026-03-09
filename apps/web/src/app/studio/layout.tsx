@@ -3,6 +3,7 @@ import { AppLayout } from '@/components/layout/AppLayout'
 import { AppSidebar } from '@/components/ui/AppSideBar'
 import { AppTopBar } from '@/components/ui/AppTopBar'
 import { TeamSideBar } from '@/components/ui/TeamSideBar'
+import { CoachChatWidget } from '@/components/ui/CoachChatWidget'
 import { useTeams } from '@/features/teams/hooks/useTeams'
 import { useAuthStore } from '@/features/auth/stores/auth.store'
 import { Box } from '@mantine/core'
@@ -13,7 +14,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 
 export default function ClientLayerComponent({ children }: { children: React.ReactNode }) {
   const [active, setActive] = useState<
-    'Home' | 'Sessions' | 'Teams' | 'Analytics' | 'Settings' | 'Team Config'
+    'Home' | 'Sessions' | 'Teams' | 'Analytics' | 'Settings' | 'Team Config' | 'Challenges'
   >('Home')
   const [selectedDate, setSelectedDate] = useState<Date | null>(new Date())
   const {
@@ -37,16 +38,19 @@ export default function ClientLayerComponent({ children }: { children: React.Rea
   }, [user, router])
 
   const [tabsByPage, setTabsByPage] = useState<
-    Record<'Home' | 'Sessions' | 'Teams' | 'Analytics' | 'Settings', string>
+    Record<'Home' | 'Sessions' | 'Teams' | 'Analytics' | 'Challenges' | 'Settings', string>
   >({
     Home: 'All',
     Sessions: 'All',
     Teams: 'All',
     Analytics: 'Overview',
+    Challenges: '',
     Settings: '',
   })
 
-  const handleTabChange = (page: 'Home' | 'Sessions' | 'Teams' | 'Analytics' | 'Settings') => {
+  const handleTabChange = (
+    page: 'Home' | 'Sessions' | 'Teams' | 'Analytics' | 'Challenges' | 'Settings'
+  ) => {
     return (tab: string) => {
       setTabsByPage((prev) => ({ ...prev, [page]: tab }))
       if (page === 'Sessions') {
@@ -58,6 +62,16 @@ export default function ClientLayerComponent({ children }: { children: React.Rea
         const params = new URLSearchParams(searchParams.toString())
         params.set('tab', tab)
         router.replace(`${pathname}?${params.toString()}`)
+      }
+      if (page === 'Challenges') {
+        const params = new URLSearchParams(searchParams.toString())
+        if (tab === 'All') {
+          params.delete('period')
+        } else {
+          params.set('period', tab.toUpperCase())
+        }
+        const query = params.toString()
+        router.replace(query ? `${pathname}?${query}` : pathname)
       }
     }
   }
@@ -78,17 +92,29 @@ export default function ClientLayerComponent({ children }: { children: React.Rea
     if (pathname.startsWith('/studio/settings')) {
       return { page: 'Settings' as const, nav: 'Settings' as const }
     }
+    if (pathname.startsWith('/studio/challenges')) {
+      return { page: 'Challenges' as const, nav: 'Challenges' as const }
+    }
     return { page: 'Home' as const, nav: 'Home' as const }
   }, [pathname])
 
   const sessionFilter = searchParams.get('filter') ?? 'All'
   const analyticsTab = searchParams.get('tab') ?? 'Personal'
-  const selectedTab =
-    pageInfo.page === 'Sessions'
-      ? sessionFilter
-      : pageInfo.page === 'Analytics'
-        ? analyticsTab
-        : tabsByPage[pageInfo.page]
+  const challengesPeriodRaw = searchParams.get('period')
+  const challengesPeriod = challengesPeriodRaw
+    ? challengesPeriodRaw.charAt(0).toUpperCase() + challengesPeriodRaw.slice(1).toLowerCase()
+    : 'All'
+
+  let selectedTab: string
+  if (pageInfo.page === 'Sessions') {
+    selectedTab = sessionFilter
+  } else if (pageInfo.page === 'Analytics') {
+    selectedTab = analyticsTab
+  } else if (pageInfo.page === 'Challenges') {
+    selectedTab = challengesPeriod
+  } else {
+    selectedTab = tabsByPage[pageInfo.page]
+  }
 
   const activeTeam = useMemo(
     () => teams.find((t) => t.id === activeTeamId) ?? null,
@@ -177,37 +203,44 @@ export default function ClientLayerComponent({ children }: { children: React.Rea
   }, [activeTeam, canAccessTeamConfig, pathname, router, teamsLoading])
 
   return (
-    <AppLayout
-      header={
-        <Suspense fallback={<Box style={{ height: '100%' }} />}>
-          <AppTopBar
-            currentPage={pageInfo.page}
-            searchPlaceholder="Search"
-            teamName={activeTeam?.name ?? 'PITCH'}
-            selectedTab={selectedTab}
-            onTabChange={handleTabChange(pageInfo.page)}
-          />
-        </Suspense>
-      }
-      navbar={
-        <Box h="100%" style={{ display: 'flex', flexDirection: 'row' }}>
-          <TeamSideBar
-            teams={teamsForSidebar}
-            activeTeamId={activeTeamId}
-            onSelectTeam={handleSelectTeam}
-            onLeaveTeam={handleLeaveTeam}
-          />
-          <AppSidebar
-            active={active}
-            setActive={setActive}
-            selectedDate={selectedDate}
-            setSelectedDate={setSelectedDate}
-            showTeamConfig={canAccessTeamConfig}
-          />
-        </Box>
-      }
-    >
-      {children}
-    </AppLayout>
+    <>
+      <AppLayout
+        header={({ toggleMobileNav, mobileNavOpened }) => (
+          <Suspense fallback={<Box style={{ height: '100%' }} />}>
+            <AppTopBar
+              currentPage={pageInfo.page}
+              searchPlaceholder="Search"
+              teamName={activeTeam?.name ?? 'PITCH'}
+              selectedTab={selectedTab}
+              onTabChange={handleTabChange(pageInfo.page)}
+              onToggleMobileNav={toggleMobileNav}
+              mobileNavOpened={mobileNavOpened}
+            />
+          </Suspense>
+        )}
+        navbar={({ closeMobileNav }) => (
+          <Box h="100%" style={{ display: 'flex', flexDirection: 'row' }}>
+            <TeamSideBar
+              teams={teamsForSidebar}
+              activeTeamId={activeTeamId}
+              onSelectTeam={handleSelectTeam}
+              onLeaveTeam={handleLeaveTeam}
+              onNavigate={closeMobileNav}
+            />
+            <AppSidebar
+              active={active}
+              setActive={setActive}
+              selectedDate={selectedDate}
+              setSelectedDate={setSelectedDate}
+              showTeamConfig={canAccessTeamConfig}
+              onNavigate={closeMobileNav}
+            />
+          </Box>
+        )}
+      >
+        {children}
+      </AppLayout>
+      <CoachChatWidget context={{ page: pathname ?? undefined }} />
+    </>
   )
 }

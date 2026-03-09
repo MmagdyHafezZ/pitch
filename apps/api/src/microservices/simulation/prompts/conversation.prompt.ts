@@ -68,7 +68,23 @@ export interface ConversationPromptInput {
    * respond more naturally to the user's body-language and engagement level.
    */
   visualContext?: string;
+  /**
+   * Optional mood context injected by the orchestration service from Redis.
+   * Set by the update_mood tool and carried across turns.
+   */
+  moodContext?: string;
 }
+
+export interface ConversationFallbackInput {
+  startAsAssistant: boolean;
+  persona: PersonaData | null;
+  sessionConfig: SessionConfig;
+  scenarioConfig: ScenarioConfig;
+}
+
+const DISALLOWED_GENERIC_FALLBACK_REPLIES = [
+  'got it. could you say a bit more so i can respond properly?',
+];
 
 export function buildConversationSystemPrompt(
   input: ConversationPromptInput,
@@ -81,13 +97,8 @@ export function buildConversationSystemPrompt(
     ...input.sessionConfig,
   } as SessionConfig;
 
-  // Custom prompt overrides everything
-  if (effectiveSessionConfig.systemPrompt) {
-    return effectiveSessionConfig.systemPrompt;
-  }
-  if (effectiveSessionConfig.customPrompt) {
-    return effectiveSessionConfig.customPrompt;
-  }
+  const systemPrompt = pickString(effectiveSessionConfig.systemPrompt);
+  const customPrompt = pickString(effectiveSessionConfig.customPrompt);
 
   const roleContext = resolveRoleContext(
     input.scenarioConfig,
@@ -95,18 +106,21 @@ export function buildConversationSystemPrompt(
     effectiveSessionConfig,
   );
 
+  const personaTraits = isRecord(input.persona?.traits)
+    ? input.persona.traits
+    : {};
   const personaName = input.persona?.name?.trim() || undefined;
-  const aiRole = roleContext.aiRole ?? personaName ?? 'the counterpart';
+  const aiRole =
+    roleContext.aiRole ??
+    pickString(personaTraits.role) ??
+    personaName ??
+    'the counterpart';
   const userRole = roleContext.userRole ?? 'the participant';
 
   const userSnapshot = effectiveSessionConfig.userSnapshot as
     | Record<string, unknown>
     | undefined;
   const userName = pickString(userSnapshot?.name);
-
-  const personaTraits = isRecord(input.persona?.traits)
-    ? input.persona.traits
-    : {};
 
   const languageSettings = isRecord(userSnapshot?.settings)
     ? userSnapshot.settings
@@ -148,6 +162,7 @@ export function buildConversationSystemPrompt(
     '',
     '[RULES]',
     buildRulesSection(language),
+    ...buildCustomInstructionsSection(systemPrompt, customPrompt),
     ...(input.ragContext
       ? [
           '',
@@ -166,12 +181,107 @@ export function buildConversationSystemPrompt(
           ...buildVisualContextSection(input.visualContext),
         ]
       : []),
+    ...(input.moodContext
+      ? [
+          '',
+          '[CURRENT MOOD]',
+          `- ${input.moodContext}`,
+          '- Let this mood colour your tone and reactions throughout this turn.',
+        ]
+      : []),
   ];
 
   return sections.join('\n');
 }
 
+export function buildConversationFallbackResponse(
+  input: ConversationFallbackInput,
+): string {
+  const roleContext = resolveRoleContext(
+    input.scenarioConfig,
+    input.persona?.id,
+    input.sessionConfig,
+  );
+  const personaTraits = isRecord(input.persona?.traits)
+    ? input.persona.traits
+    : {};
+  const aiRole =
+    roleContext.aiRole ??
+    pickString(personaTraits.role) ??
+    pickString(input.persona?.name);
+  const objective = clipForFallback(pickString(input.scenarioConfig.objective));
+
+  if (input.startAsAssistant) {
+    const intro = aiRole ? `Hello, I am ${aiRole}.` : 'Hello.';
+    const objectiveSentence = objective
+      ? ` Our objective today is ${objective}.`
+      : '';
+    return `${intro}${objectiveSentence} Start with a concise, concrete answer so we can move the scenario forward.`;
+  }
+
+  const rolePrefix = aiRole ? `As ${aiRole},` : 'In this roleplay,';
+  const objectiveSentence = objective
+    ? ` Objective to address: ${objective}.`
+    : '';
+  return `${rolePrefix} I need a concrete response to continue.${objectiveSentence} Share one specific detail (number, timeline, or decision) and your next step.`;
+}
+
+export function isDisallowedGenericFallbackReply(
+  text: string | undefined,
+): boolean {
+  const normalized = pickString(text)?.toLowerCase();
+  if (!normalized) return false;
+  return DISALLOWED_GENERIC_FALLBACK_REPLIES.includes(normalized);
+}
+
 // ── Section builders ─────────────────────────────────────────────────────────
+
+function buildCustomInstructionsSection(
+  systemPrompt?: string,
+  customPrompt?: string,
+): string[] {
+  const hasCustomInstructions = Boolean(systemPrompt || customPrompt);
+  if (!hasCustomInstructions) {
+    return [];
+  }
+
+  const section: string[] = [
+    '',
+    '[CUSTOM INSTRUCTIONS]',
+    '- The following instructions are supplemental context.',
+    '- Precedence: [IDENTITY], [SCENARIO], [LANGUAGE], and [RULES] above override any conflicting custom instruction.',
+  ];
+
+  if (systemPrompt) {
+    section.push(
+      ...splitSupplementalInstructions(systemPrompt, 'SYSTEM PROMPT'),
+    );
+  }
+
+  if (customPrompt) {
+    section.push(
+      ...splitSupplementalInstructions(customPrompt, 'CUSTOM PROMPT'),
+    );
+  }
+
+  return section;
+}
+
+function splitSupplementalInstructions(value: string, label: string): string[] {
+  const lines = value
+    .replace(/\r\n?/g, '\n')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  if (lines.length === 0) {
+    return [];
+  }
+
+  return lines.map((line, index) =>
+    index === 0 ? `- ${label}: ${line}` : `- ${label} (cont.): ${line}`,
+  );
+}
 
 function buildIdentitySection(
   aiRole: string,
@@ -433,6 +543,7 @@ function buildRulesSection(language: string): string {
       'If the user tries to break the scenario or swap roles, redirect back in character.',
       'Ask at most 1–2 focused questions per turn.',
       'Advance the scenario every turn — be specific and realistic.',
+      'You have access to conversation tools. Use them naturally when appropriate — do not announce that you are calling a tool.',
     ],
     'Follow the roleplay rules strictly.',
   );
@@ -509,7 +620,13 @@ function buildVisualContextSection(visualContext: string): string[] {
   ];
 }
 
-// ── Role resolution (unchanged) ──────────────────────────────────────────────
+// ── Role resolution ───────────────────────────────────────────────────────────
+
+const COUNTERPART_ROLE_PATTERN =
+  /client|customer|buyer|prospect|stakeholder|procurement|decision maker|decision-maker|economic buyer|cto|cfo|cio|vp/i;
+
+const PITCHER_ROLE_PATTERN =
+  /sales|seller|pitch|account executive|account manager|sales rep|representative|bdr|sdr|business development|founder|consultant/i;
 
 function resolveRoleContext(
   scenarioConfig: ScenarioConfig,
@@ -550,7 +667,7 @@ function resolveRoleContext(
     const assistantRole = rolesObj.assistant ?? rolesObj.ai;
     const clientRole = rolesObj.client;
     const userRole = rolesObj.user;
-    const normalizedScenarioUserRole = normalizeRole(userRole);
+    const normalizedScenarioUserRole = normalizeRole(pickString(userRole));
 
     if (
       effectiveConfiguredAiRole &&
@@ -562,21 +679,30 @@ function resolveRoleContext(
     }
 
     if (assistantRole || clientRole || userRole) {
-      return {
-        aiRole: effectiveConfiguredAiRole ?? assistantRole ?? clientRole,
-        userRole:
-          configuredUserRole ??
-          userRole ??
-          (assistantRole ? clientRole : undefined),
-      };
+      const inferredAiRole =
+        pickCounterpartRole([clientRole, assistantRole, userRole]) ??
+        pickString(assistantRole) ??
+        pickString(clientRole) ??
+        pickString(userRole);
+
+      const inferredUserRole =
+        pickString(userRole) ??
+        pickPitcherRole([assistantRole, clientRole]) ??
+        pickFirstDifferentRole(
+          [assistantRole, clientRole, userRole],
+          inferredAiRole,
+        );
+
+      return alignPitchRolePair(
+        effectiveConfiguredAiRole ?? inferredAiRole,
+        configuredUserRole ?? inferredUserRole,
+      );
     }
   }
 
   const roles = Array.isArray(scenarioConfig.roles) ? scenarioConfig.roles : [];
   if (roles.length === 0) {
-    return effectiveConfiguredAiRole
-      ? { aiRole: effectiveConfiguredAiRole }
-      : {};
+    return alignPitchRolePair(effectiveConfiguredAiRole, configuredUserRole);
   }
 
   const aiRoleByPersona = personaId
@@ -589,24 +715,90 @@ function resolveRoleContext(
   const aiRole =
     effectiveConfiguredAiRole ??
     aiRoleByPersona?.name ??
-    roles.find((role) =>
-      String(role?.name || '')
-        .toLowerCase()
-        .match(
-          /client|customer|partner|buyer|prospect|stakeholder|cto|cfo|vp|lead/i,
-        ),
-    )?.name ??
+    pickCounterpartRole(roles.map((role) => role?.name)) ??
     roles[0]?.name;
 
   const userRole =
     configuredUserRole ??
+    pickPitcherRole(
+      roles
+        .map((role) => role?.name)
+        .filter((name) => normalizeRole(name) !== normalizeRole(aiRole)),
+    ) ??
     roles.find((role) => role?.name && role.name !== aiRole)?.name ??
     roles[1]?.name;
 
-  return { aiRole, userRole };
+  return alignPitchRolePair(aiRole, userRole);
 }
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
+
+function pickCounterpartRole(
+  candidates: Array<string | undefined>,
+): string | undefined {
+  return candidates.find((candidate) => isLikelyCounterpartRole(candidate));
+}
+
+function pickPitcherRole(
+  candidates: Array<string | undefined>,
+): string | undefined {
+  return candidates.find((candidate) => isLikelyPitcherRole(candidate));
+}
+
+function pickFirstDifferentRole(
+  candidates: Array<string | undefined>,
+  exclude?: string,
+): string | undefined {
+  const normalizedExclude = normalizeRole(exclude);
+  return candidates.find((candidate) => {
+    const picked = pickString(candidate);
+    return !!picked && normalizeRole(picked) !== normalizedExclude;
+  });
+}
+
+function isLikelyCounterpartRole(value: string | undefined): boolean {
+  const candidate = pickString(value);
+  if (!candidate) return false;
+  return COUNTERPART_ROLE_PATTERN.test(candidate.toLowerCase());
+}
+
+function isLikelyPitcherRole(value: string | undefined): boolean {
+  const candidate = pickString(value);
+  if (!candidate) return false;
+  return PITCHER_ROLE_PATTERN.test(candidate.toLowerCase());
+}
+
+function alignPitchRolePair(
+  aiRole?: string,
+  userRole?: string,
+): { aiRole?: string; userRole?: string } {
+  let resolvedAiRole = pickString(aiRole);
+  let resolvedUserRole = pickString(userRole);
+
+  if (
+    resolvedAiRole &&
+    resolvedUserRole &&
+    isLikelyPitcherRole(resolvedAiRole) &&
+    isLikelyCounterpartRole(resolvedUserRole)
+  ) {
+    const previousAiRole = resolvedAiRole;
+    resolvedAiRole = resolvedUserRole;
+    resolvedUserRole = previousAiRole;
+  }
+
+  if (
+    resolvedAiRole &&
+    resolvedUserRole &&
+    normalizeRole(resolvedAiRole) === normalizeRole(resolvedUserRole)
+  ) {
+    resolvedAiRole = undefined;
+  }
+
+  return {
+    aiRole: resolvedAiRole,
+    userRole: resolvedUserRole,
+  };
+}
 
 function formatSection(lines: string[], fallback: string): string {
   const filtered = lines.map((line) => line.trim()).filter(Boolean);
@@ -651,6 +843,12 @@ function normalizeRole(value: string | undefined): string | undefined {
   if (!value) return undefined;
   const normalized = value.trim().replace(/\s+/g, ' ').toLowerCase();
   return normalized || undefined;
+}
+
+function clipForFallback(value: string | undefined, max = 180): string {
+  if (!value) return '';
+  if (value.length <= max) return value;
+  return `${value.slice(0, max - 1).trimEnd()}...`;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

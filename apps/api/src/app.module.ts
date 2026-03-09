@@ -10,6 +10,7 @@ import { AnalyticsModule } from '@microservices/analytics/analytics.module';
 import { CrmModule } from '@microservices/crm/crm.module';
 import { S3Module } from '@microservices/s3/s3.module';
 import { LtiModule } from '@microservices/lti/lti.module';
+import { JobsModule } from '@microservices/jobs/jobs.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { LtiModule } from '@microservices/lti/lti.module';
     S3Module,
     CrmModule,
     LtiModule,
+    JobsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

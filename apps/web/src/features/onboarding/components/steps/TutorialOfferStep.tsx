@@ -45,7 +45,7 @@ export function TutorialOfferStep({ onStartTour, onSkip }: TutorialOfferStepProp
           </Text>
         </Box>
 
-        <SimpleGrid cols={2} spacing="sm">
+        <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
           {tourHighlights.map((item) => (
             <Card key={item.label} padding="md" radius="md" withBorder>
               <Group gap="sm">
@@ -65,7 +65,7 @@ export function TutorialOfferStep({ onStartTour, onSkip }: TutorialOfferStepProp
           ))}
         </SimpleGrid>
 
-        <Group justify="space-between">
+        <Group justify="space-between" wrap="wrap">
           <Button variant="subtle" color="gray" onClick={onSkip}>
             Skip tour
           </Button>

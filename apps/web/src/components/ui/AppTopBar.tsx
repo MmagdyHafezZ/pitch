@@ -20,7 +20,7 @@ import {
   Loader,
   useMantineColorScheme,
 } from '@mantine/core'
-import { IconSearch, IconBell, IconUser, IconHelp, IconX } from '@tabler/icons-react'
+import { IconSearch, IconBell, IconUser, IconHelp, IconMenu2, IconX } from '@tabler/icons-react'
 import dayjs from 'dayjs'
 import { ReactNode, useEffect, useMemo, useState } from 'react'
 import { SettingsModal } from './SettingsModal'
@@ -56,12 +56,14 @@ export type HeaderProps = {
   searchPlaceholder?: string
   rightSlot?: ReactNode
   teamName?: string
-  currentPage?: 'Home' | 'Sessions' | 'Teams' | 'Analytics' | 'Settings'
+  currentPage?: 'Home' | 'Sessions' | 'Teams' | 'Analytics' | 'Challenges' | 'Settings'
   selectedTab?: string
   onTabChange?: (tab: string) => void
+  onToggleMobileNav?: () => void
+  mobileNavOpened?: boolean
 }
 
-type PageKey = 'Home' | 'Sessions' | 'Teams' | 'Analytics' | 'Settings'
+type PageKey = 'Home' | 'Sessions' | 'Teams' | 'Analytics' | 'Challenges' | 'Settings'
 type ActionBarProps = {
   actionButtons?: ReactNode
   leadingAction?: ReactNode
@@ -120,7 +122,7 @@ function ActionBar({
           display: 'grid',
           gridTemplateColumns: `repeat(${availableTabs.length}, minmax(0, 1fr))`,
           alignItems: 'center',
-          maxWidth: rem(280),
+          maxWidth: isCompact ? '100%' : rem(280),
           marginRight: 'auto',
           marginLeft: 'auto',
           gap: rem(3),
@@ -185,9 +187,9 @@ function ActionBar({
     </Group>
   ) : null
 
-  const searchWidth = isCompact ? rem(180) : rem(320)
+  const searchWidth = isCompact ? '100%' : rem(320)
   const searchInput = enableSearch ? (
-    <Box style={{ width: searchWidth, flexShrink: 0 }}>
+    <Box style={{ width: searchWidth, flexShrink: isCompact ? 1 : 0 }}>
       <TextInput
         value={searchValue}
         onChange={(event) => {
@@ -219,6 +221,16 @@ function ActionBar({
   ) : null
 
   if (tabs) {
+    if (isCompact) {
+      return (
+        <Stack gap={rem(8)} w="100%">
+          {actions ? <Box>{actions}</Box> : null}
+          <Box style={{ minWidth: 0, width: '100%' }}>{tabs}</Box>
+          {searchInput ? <Box>{searchInput}</Box> : null}
+        </Stack>
+      )
+    }
+
     const columns = [actions ? 'auto' : null, '1fr', searchInput ? 'auto' : null]
       .filter(Boolean)
       .join(' ')
@@ -240,11 +252,82 @@ function ActionBar({
     )
   }
 
+  if (isCompact) {
+    return (
+      <Stack gap={rem(8)} w="100%">
+        {actions}
+        {searchInput}
+      </Stack>
+    )
+  }
+
   return (
     <Group justify="space-between" align="center" w="100%" wrap="nowrap">
       {actions}
       {searchInput}
     </Group>
+  )
+}
+
+function ChallengesActionBar({
+  selectedTab,
+  onTabChange,
+  isCompact,
+}: {
+  selectedTab?: string
+  onTabChange?: (tab: string) => void
+  isCompact?: boolean
+}) {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const pathname = usePathname()
+  const difficulty = searchParams.get('difficulty') ?? 'ALL'
+
+  const handleDifficultyChange = (val: string | null) => {
+    const params = new URLSearchParams(searchParams.toString())
+    if (val && val !== 'ALL') {
+      params.set('difficulty', val)
+    } else {
+      params.delete('difficulty')
+    }
+    const query = params.toString()
+    router.replace(query ? `${pathname}?${query}` : pathname)
+  }
+
+  return (
+    <ActionBar
+      enableSearch={false}
+      availableTabs={['All', 'Daily', 'Weekly', 'Monthly']}
+      selectedTab={selectedTab}
+      onTabChange={onTabChange}
+      isCompact={isCompact}
+      leadingAction={
+        <Select
+          size="sm"
+          value={difficulty}
+          onChange={handleDifficultyChange}
+          data={[
+            { value: 'ALL', label: 'All Levels' },
+            { value: 'BEGINNER', label: 'Beginner' },
+            { value: 'INTERMEDIATE', label: 'Intermediate' },
+            { value: 'EXPERT', label: 'Expert' },
+            { value: 'MASTER', label: 'Master' },
+          ]}
+          w={rem(140)}
+          allowDeselect={false}
+          styles={{
+            input: {
+              background: 'var(--pitch-nav-accent-soft)',
+              color: 'var(--pitch-nav-text)',
+              borderColor: 'var(--pitch-nav-text-dim)',
+            },
+            section: { color: 'var(--pitch-nav-text-dim)' },
+            dropdown: { background: 'var(--pitch-surface-bg)' },
+            option: { color: 'var(--pitch-surface-text)' },
+          }}
+        />
+      }
+    />
   )
 }
 
@@ -306,6 +389,7 @@ function ActionConfig({
           translateTab={(tab) => tabLabels[tab] ?? tab}
           leadingAction={
             <Button
+              data-tour-id="sessions-create-btn"
               size={isCompact ? 'sm' : 'md'}
               variant="light"
               color="brand"
@@ -347,6 +431,14 @@ function ActionConfig({
           translateTab={(tab) => tabLabels[tab] ?? tab}
         />
       )
+    case 'Challenges':
+      return (
+        <ChallengesActionBar
+          selectedTab={selectedTab}
+          onTabChange={onTabChange}
+          isCompact={isCompact}
+        />
+      )
     case 'Settings':
       return (
         <ActionBar
@@ -372,6 +464,8 @@ export function AppTopBar({
   currentPage,
   selectedTab,
   onTabChange,
+  onToggleMobileNav,
+  mobileNavOpened = false,
 }: HeaderProps) {
   const { t, locale, setLocale, localeOptions } = useI18n()
   const weekday = useMemo(
@@ -397,6 +491,7 @@ export function AppTopBar({
   const pageToTourScreen: Partial<Record<PageKey, TourScreen>> = {
     Home: 'home',
     Sessions: 'sessions',
+    Challenges: 'challenges',
     Analytics: 'analytics',
     Teams: 'team-config',
   }
@@ -633,6 +728,140 @@ export function AppTopBar({
     />
   )
   const showActionArea = Boolean(rightSlot || currentPage)
+  const actionIconSize = isMobile ? 24 : isNarrow ? 26 : 28
+  const showLanguageSelect = !isMobile
+  const languageSelectWidth = isMobile ? 104 : isNarrow ? 92 : 140
+  const utilityControls = (
+    <Group align="center" gap={isNarrow ? 8 : 12} wrap="nowrap">
+      {onToggleMobileNav && isMobile && (
+        <ActionIcon
+          aria-label={mobileNavOpened ? 'Close navigation menu' : 'Open navigation menu'}
+          size={actionIconSize}
+          radius="md"
+          variant="default"
+          onClick={onToggleMobileNav}
+          styles={{
+            root: {
+              background: 'var(--pitch-nav-accent-soft)',
+              color: 'var(--pitch-nav-text)',
+              boxShadow: '0 0 0 1px var(--pitch-nav-text-dim)',
+            },
+          }}
+        >
+          {mobileNavOpened ? <IconX size={16} /> : <IconMenu2 size={16} />}
+        </ActionIcon>
+      )}
+
+      {!isMobile && !isNarrow && (
+        <Box ta="right" lh={1}>
+          <Text size="xs" fw={700} c="var(--pitch-nav-text)">
+            {weekday}
+          </Text>
+          <Text size="xs" c="var(--pitch-nav-text-dim)">
+            {shortDate}
+          </Text>
+        </Box>
+      )}
+
+      {tourScreen && (
+        <ActionIcon
+          aria-label={t('topbar.startTour')}
+          size={actionIconSize}
+          radius="md"
+          variant="default"
+          onClick={() => startTour(tourScreen)}
+          styles={{
+            root: {
+              background: 'var(--pitch-nav-accent-soft)',
+              color: 'var(--pitch-nav-text)',
+              boxShadow: '0 0 0 1px var(--pitch-nav-text-dim)',
+            },
+          }}
+        >
+          <IconHelp size={16} />
+        </ActionIcon>
+      )}
+
+      {showLanguageSelect && (
+        <Select
+          data-i18n-skip="true"
+          aria-label={t('settings.language.platformLabel')}
+          size={isNarrow ? 'xs' : 'sm'}
+          w={languageSelectWidth}
+          value={locale}
+          onChange={(value) => {
+            if (value) {
+              setLocale(value)
+            }
+          }}
+          allowDeselect={false}
+          data={localeOptions.map((option) => ({
+            value: option.value,
+            label: option.nativeLabel,
+          }))}
+          styles={{
+            input: {
+              background: 'var(--pitch-nav-accent-soft)',
+              color: 'var(--pitch-nav-text)',
+              borderColor: 'var(--pitch-nav-text-dim)',
+            },
+            section: {
+              color: 'var(--pitch-nav-text-dim)',
+            },
+            dropdown: {
+              background: 'var(--pitch-surface-bg)',
+            },
+            option: {
+              color: 'var(--pitch-surface-text)',
+            },
+          }}
+        />
+      )}
+
+      <Indicator
+        disabled={unreadCount === 0}
+        label={unreadCount > 99 ? '99+' : unreadCount}
+        size={16}
+        color="red"
+        offset={6}
+      >
+        <ActionIcon
+          aria-label={t('topbar.notifications')}
+          size={actionIconSize}
+          radius="md"
+          variant="default"
+          onClick={() => setNotificationsOpened(true)}
+          styles={{
+            root: {
+              background: 'var(--pitch-nav-accent-soft)',
+              color: 'var(--pitch-nav-text)',
+              boxShadow: '0 0 0 1px var(--pitch-nav-text-dim)',
+            },
+          }}
+        >
+          <IconBell size={16} />
+        </ActionIcon>
+      </Indicator>
+
+      <ActionIcon
+        aria-label={t('topbar.account')}
+        size={actionIconSize}
+        radius="md"
+        variant="default"
+        onClick={() => setSettingsOpened(true)}
+        styles={{
+          root: {
+            background: 'var(--pitch-nav-accent-soft)',
+            color: 'var(--pitch-nav-text)',
+            boxShadow: '0 0 0 1px var(--pitch-nav-text-dim)',
+            cursor: 'pointer',
+          },
+        }}
+      >
+        <IconUser size={16} />
+      </ActionIcon>
+    </Group>
+  )
 
   return (
     <>
@@ -789,136 +1018,52 @@ export function AppTopBar({
           borderBottomLeftRadius: 0,
           height: '100%',
           paddingInline: rem(isMobile ? 12 : 16),
+          paddingTop: isMobile ? 'env(safe-area-inset-top, 0px)' : 0,
           paddingBlock: rem(isMobile ? 6 : 4),
           display: 'flex',
           alignItems: 'center',
           gap: rem(10),
+          overflowX: 'hidden',
         }}
       >
-        <Group justify="space-between" align="center" w="100%" wrap="nowrap">
-          <Group align="center" style={{ minWidth: 0 }}>
-            <Text
-              px={rem(isMobile ? 16 : 32)}
-              size={rem(isMobile ? 22 : 28)}
-              fw={700}
-              c="var(--pitch-accent-strong)"
-              style={{ whiteSpace: 'nowrap' }}
-            >
-              P.I.T.C.H.
-            </Text>
-          </Group>
-
-          {showActionArea && <Box style={{ flex: 1, minWidth: 0 }}>{actionArea}</Box>}
-
-          <Group align="center" gap={isNarrow ? 8 : 12}>
-            {!isNarrow && (
-              <Box ta="right" lh={1}>
-                <Text size="xs" fw={700} c="var(--pitch-nav-text)">
-                  {weekday}
+        {isMobile ? (
+          <Stack gap={rem(8)} w="100%">
+            <Group justify="space-between" align="center" w="100%" wrap="nowrap">
+              <Group align="center" style={{ minWidth: 0 }}>
+                <Text
+                  px={rem(isNarrow ? 4 : 10)}
+                  size={rem(isNarrow ? 20 : 22)}
+                  fw={700}
+                  c="var(--pitch-accent-strong)"
+                  style={{ whiteSpace: 'nowrap' }}
+                >
+                  P.I.T.C.H.
                 </Text>
-                <Text size="xs" c="var(--pitch-nav-text-dim)">
-                  {shortDate}
-                </Text>
-              </Box>
-            )}
+              </Group>
 
-            {tourScreen && (
-              <ActionIcon
-                aria-label={t('topbar.startTour')}
-                size={isNarrow ? 26 : 28}
-                radius="md"
-                variant="default"
-                onClick={() => startTour(tourScreen)}
-                styles={{
-                  root: {
-                    background: 'var(--pitch-nav-accent-soft)',
-                    color: 'var(--pitch-nav-text)',
-                    boxShadow: '0 0 0 1px var(--pitch-nav-text-dim)',
-                  },
-                }}
+              {utilityControls}
+            </Group>
+
+            {showActionArea && <Box style={{ width: '100%', minWidth: 0 }}>{actionArea}</Box>}
+          </Stack>
+        ) : (
+          <Group justify="space-between" align="center" w="100%" wrap="nowrap">
+            <Group align="center" style={{ minWidth: 0 }}>
+              <Text
+                px={rem(32)}
+                size={rem(28)}
+                fw={700}
+                c="var(--pitch-accent-strong)"
+                style={{ whiteSpace: 'nowrap' }}
               >
-                <IconHelp size={16} />
-              </ActionIcon>
-            )}
+                P.I.T.C.H.
+              </Text>
+            </Group>
 
-            <Select
-              data-i18n-skip="true"
-              aria-label={t('settings.language.platformLabel')}
-              size={isNarrow ? 'xs' : 'sm'}
-              w={isNarrow ? 92 : 140}
-              value={locale}
-              onChange={(value) => {
-                if (value) {
-                  setLocale(value)
-                }
-              }}
-              allowDeselect={false}
-              data={localeOptions.map((option) => ({
-                value: option.value,
-                label: option.nativeLabel,
-              }))}
-              styles={{
-                input: {
-                  background: 'var(--pitch-nav-accent-soft)',
-                  color: 'var(--pitch-nav-text)',
-                  borderColor: 'var(--pitch-nav-text-dim)',
-                },
-                section: {
-                  color: 'var(--pitch-nav-text-dim)',
-                },
-                dropdown: {
-                  background: 'var(--pitch-surface-bg)',
-                },
-                option: {
-                  color: 'var(--pitch-surface-text)',
-                },
-              }}
-            />
-
-            <Indicator
-              disabled={unreadCount === 0}
-              label={unreadCount > 99 ? '99+' : unreadCount}
-              size={16}
-              color="red"
-              offset={6}
-            >
-              <ActionIcon
-                aria-label={t('topbar.notifications')}
-                size={isNarrow ? 26 : 28}
-                radius="md"
-                variant="default"
-                onClick={() => setNotificationsOpened(true)}
-                styles={{
-                  root: {
-                    background: 'var(--pitch-nav-accent-soft)',
-                    color: 'var(--pitch-nav-text)',
-                    boxShadow: '0 0 0 1px var(--pitch-nav-text-dim)',
-                  },
-                }}
-              >
-                <IconBell size={16} />
-              </ActionIcon>
-            </Indicator>
-
-            <ActionIcon
-              aria-label={t('topbar.account')}
-              size={isNarrow ? 26 : 28}
-              radius="md"
-              variant="default"
-              onClick={() => setSettingsOpened(true)}
-              styles={{
-                root: {
-                  background: 'var(--pitch-nav-accent-soft)',
-                  color: 'var(--pitch-nav-text)',
-                  boxShadow: '0 0 0 1px var(--pitch-nav-text-dim)',
-                  cursor: 'pointer',
-                },
-              }}
-            >
-              <IconUser size={16} />
-            </ActionIcon>
+            {showActionArea && <Box style={{ flex: 1, minWidth: 0 }}>{actionArea}</Box>}
+            {utilityControls}
           </Group>
-        </Group>
+        )}
       </Box>
     </>
   )

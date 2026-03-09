@@ -1,5 +1,6 @@
 import type { LocaleDictionary } from '../types'
 import { enUS } from './en-US'
+import { frFRStudioPhrases } from './studio-phrases'
 
 export const frFR: LocaleDictionary = {
   ...enUS,
@@ -24,6 +25,7 @@ export const frFR: LocaleDictionary = {
     'nav.sessions': 'Sessions',
     'nav.analytics': 'Analytique',
     'nav.teamConfig': "Configuration de l'équipe",
+    'nav.challenges': 'Défis',
     'nav.settings': 'Paramètres',
     'tabs.all': 'Tout',
     'tabs.favorites': 'Favoris',
@@ -207,5 +209,6 @@ export const frFR: LocaleDictionary = {
     Difficulty: 'Difficulté',
     'Enter the destination number now. Phone-call sessions no longer store this during setup.':
       'Saisissez maintenant le numéro de destination. Les sessions téléphoniques ne le stockent plus pendant la configuration.',
+    ...frFRStudioPhrases,
   },
 }

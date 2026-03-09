@@ -300,4 +300,9 @@ export class LLMStreamChunkDto {
   @IsString()
   @IsOptional()
   finishReason?: string;
+
+  /** Fully-assembled tool calls — populated only in the done chunk */
+  @IsArray()
+  @IsOptional()
+  toolCalls?: LLMToolCallDto[];
 }

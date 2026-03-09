@@ -33,6 +33,9 @@ import { APP_GUARD } from '@nestjs/core';
 import { SimulationWsGateway } from './controllers/simulation/simulation-ws.gateway';
 import { SimulationModule } from '@microservices/simulation/simulation.module';
 import { RagController } from '@microservices/simulation/rag/rag.controller';
+import { ChallengesGatewayController } from './controllers/challenges/challenges-gateway.controller';
+import { SupportChatGatewayController } from './controllers/support/support-chat-gateway.controller';
+import { CoachStreamService } from './controllers/support/coach-stream.service';
 
 @Module({
   imports: [
@@ -74,11 +77,14 @@ import { RagController } from '@microservices/simulation/rag/rag.controller';
     LtiAdvantageGatewayController,
     LtiManagementGatewayController,
     RagController,
+    ChallengesGatewayController,
+    SupportChatGatewayController,
   ],
   providers: [
     { provide: APP_GUARD, useClass: GlobalJwtAuthGuard },
     UserClaimsInterceptor,
     SimulationWsGateway,
+    CoachStreamService,
   ],
 })
 export class GatewayModule {}

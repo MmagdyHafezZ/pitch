@@ -25,6 +25,8 @@ export enum WsMessageType {
   CONVERSATION_STAGE_TRANSITION = 'conversation.stage.transition',
   CONVERSATION_AUDIO_CHUNK = 'conversation.audio.chunk',
   CONVERSATION_VISUAL_STATE = 'conversation.visual_state',
+  CONVERSATION_HANGUP_REQUESTED = 'conversation.hangup_requested',
+  CONVERSATION_TOOL_EXECUTED = 'conversation.tool_executed',
 
   PING = 'ping',
   PONG = 'pong',
@@ -95,7 +97,7 @@ export interface ConversationStreamCompletedPayload {
 
 export interface ConversationAudioChunkPayload {
   sentenceIndex: number
-  audio: ArrayBuffer
+  audio: ArrayBuffer | Uint8Array
   contentType: string
 }
 
@@ -109,4 +111,14 @@ export interface ConversationErrorPayload {
   error: string
   code?: string
   stage?: 'llm' | 'tts'
+}
+
+export interface ConversationHangupRequestedPayload {
+  reason: string
+}
+
+export interface ConversationToolExecutedPayload {
+  tool: string
+  args: Record<string, unknown>
+  effect?: Record<string, unknown>
 }

@@ -995,6 +995,14 @@ export class AssessmentGraphRunner {
         };
       }
 
+      const aPolarity = this.getLabelPolarity(a.label, config);
+      const bPolarity = this.getLabelPolarity(b.label, config);
+      if (aPolarity === bPolarity && aPolarity !== 'neutral') {
+        return (a.confidence ?? 0) >= (b.confidence ?? 0)
+          ? { ...a, isFinal: true }
+          : { ...b, isFinal: true };
+      }
+
       const diff = Math.abs((a.confidence ?? 0) - (b.confidence ?? 0));
       if (diff < config.thresholds.disagreementCutoff) {
         return {
@@ -1015,5 +1023,19 @@ export class AssessmentGraphRunner {
       summary: primary.summary || secondary.summary,
       labels: merged,
     };
+  }
+
+  private getLabelPolarity(
+    label: AssessmentLabelValue,
+    config: AssessmentConfig,
+  ): 'positive' | 'negative' | 'neutral' {
+    const delta = config.labelScoreDelta[label] ?? 0;
+    if (delta > 0) {
+      return 'positive';
+    }
+    if (delta < 0) {
+      return 'negative';
+    }
+    return 'neutral';
   }
 }
