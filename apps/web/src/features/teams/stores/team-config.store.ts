@@ -48,7 +48,9 @@ type TeamConfigStore = {
   ) => Promise<SubscriptionLike>
 }
 
-const notFoundSubscriptionError = /not found|couldn'?t find a subscription/i
+const notFoundSubscriptionError =
+  /not found|couldn'?t find a subscription|cannot get\s+\/api\/v\d+\/subscriptions\/teams\/|membership not found|team not found/i
+const plansRouteMissingError = /cannot get\s+\/api\/v\d+\/plans/i
 
 export const useTeamConfigStore = create<TeamConfigStore>()((set, get) => ({
   orgUsers: [],
@@ -96,8 +98,14 @@ export const useTeamConfigStore = create<TeamConfigStore>()((set, get) => ({
       set({ plans: sorted, plansLoading: false })
       return sorted
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to load plans'
-      set({ plansLoading: false, plansError: message })
+      const rawMessage = error instanceof Error ? error.message : String(error)
+      if (plansRouteMissingError.test(rawMessage)) {
+        set({ plans: [], plansLoading: false, plansError: null })
+        return []
+      }
+
+      const fallbackMessage = error instanceof Error ? error.message : 'Failed to load plans'
+      set({ plansLoading: false, plansError: fallbackMessage })
       throw error
     }
   },

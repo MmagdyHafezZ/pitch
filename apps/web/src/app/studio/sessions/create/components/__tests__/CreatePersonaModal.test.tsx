@@ -1,7 +1,7 @@
 /**
  * @jest-environment jsdom
  */
-import { render, screen, waitFor } from '@/__tests__/utils/test-utils'
+import { fireEvent, render, screen, waitFor } from '@/__tests__/utils/test-utils'
 import userEvent from '@testing-library/user-event'
 import { CreatePersonaModal } from '../CreatePersonaModal'
 
@@ -34,18 +34,28 @@ describe('CreatePersonaModal', () => {
       />
     )
 
-    await user.type(screen.getByPlaceholderText('Arden - Skeptical CTO'), 'Arden')
-    await user.type(screen.getByPlaceholderText('Chief Technology Officer'), 'CTO')
-    await user.type(screen.getByLabelText(/personality/i), 'Detail-heavy.')
-    await user.type(screen.getByLabelText(/background/i), 'Owns platform.')
+    fireEvent.change(screen.getByPlaceholderText('Arden - Skeptical CTO'), {
+      target: { value: 'Arden - Skeptical CTO' },
+    })
+    fireEvent.change(screen.getByPlaceholderText('Chief Technology Officer'), {
+      target: { value: 'Chief Technology Officer' },
+    })
+    fireEvent.change(screen.getByLabelText(/personality/i), {
+      target: { value: 'Detail-heavy, skeptical, and focused on architecture integrity.' },
+    })
+    fireEvent.change(screen.getByLabelText(/background/i), {
+      target: {
+        value: 'Owns platform decisions and expects implementation depth before agreeing.',
+      },
+    })
 
     await user.click(screen.getByRole('button', { name: /create persona$/i }))
 
     await waitFor(() => {
       expect(onCreatePersona).toHaveBeenCalledWith({
-        name: 'Arden',
+        name: 'Arden - Skeptical CTO',
         traits: expect.objectContaining({
-          role: 'CTO',
+          role: 'Chief Technology Officer',
           voiceProfile: 'OpenAI / alloy',
           voice: {
             provider: 'openai',
@@ -73,10 +83,20 @@ describe('CreatePersonaModal', () => {
       />
     )
 
-    await user.type(screen.getByPlaceholderText('Arden - Skeptical CTO'), 'Arden')
-    await user.type(screen.getByPlaceholderText('Chief Technology Officer'), 'CTO')
-    await user.type(screen.getByLabelText(/personality/i), 'Detail-heavy.')
-    await user.type(screen.getByLabelText(/background/i), 'Owns platform.')
+    fireEvent.change(screen.getByPlaceholderText('Arden - Skeptical CTO'), {
+      target: { value: 'Arden - Skeptical CTO' },
+    })
+    fireEvent.change(screen.getByPlaceholderText('Chief Technology Officer'), {
+      target: { value: 'Chief Technology Officer' },
+    })
+    fireEvent.change(screen.getByLabelText(/personality/i), {
+      target: { value: 'Detail-heavy, skeptical, and focused on architecture integrity.' },
+    })
+    fireEvent.change(screen.getByLabelText(/background/i), {
+      target: {
+        value: 'Owns platform decisions and expects implementation depth before agreeing.',
+      },
+    })
 
     await user.click(screen.getByRole('button', { name: /create persona$/i }))
 

@@ -39,7 +39,7 @@ import {
 } from '@tabler/icons-react'
 import { useTeams } from '@/features/teams/hooks/useTeams'
 import { useTeamConfigStore } from '@/features/teams/stores/team-config.store'
-import type { TeamMembership } from '@/features/teams/types/teams.types'
+import type { TeamMembership, TeamPendingSignupInvite } from '@/features/teams/types/teams.types'
 import { notifications } from '@mantine/notifications'
 import { modals } from '@mantine/modals'
 import { useMediaQuery } from '@mantine/hooks'
@@ -81,13 +81,21 @@ const formatDate = (value?: string | null) => {
 }
 
 const isMembershipPending = (membership: TeamMembership) => {
-  if (membership.isActive === false) return true
-  if (membership.acceptedAt) return false
-  return Boolean(membership.user?.invitedAt)
+  return (
+    membership.isActive === false &&
+    membership.acceptedAt == null &&
+    Boolean(membership.invitedByUserId)
+  )
+}
+
+const isMembershipInTeam = (membership?: TeamMembership | null) => {
+  if (!membership) return false
+  return membership.isActive !== false
 }
 
 export function TeamMembersPanel() {
-  const { currentTeam, addMember, updateMember, deleteMember, loading } = useTeams()
+  const { currentTeam, inviteMember, sendSignupInvite, updateMember, deleteMember, loading } =
+    useTeams()
   const isMobile = useMediaQuery('(max-width: 48em)')
   const orgUsers = useTeamConfigStore((s) => s.orgUsers)
   const orgUsersLoading = useTeamConfigStore((s) => s.orgUsersLoading)
@@ -102,34 +110,55 @@ export function TeamMembersPanel() {
   const [submitting, setSubmitting] = useState(false)
   const [inviteError, setInviteError] = useState<string | null>(null)
   const [quickInvitingUserId, setQuickInvitingUserId] = useState<string | null>(null)
+  const [optimisticPendingUserIds, setOptimisticPendingUserIds] = useState<string[]>([])
   const [membershipFilter, setMembershipFilter] = useState<'IN_TEAM' | 'NOT_IN_TEAM' | 'ALL'>('ALL')
 
   useEffect(() => {
     void fetchOrgUsers()
   }, [fetchOrgUsers])
 
-  const members: TeamMembership[] = useMemo(
-    () => (currentTeam?.memberships ?? []).filter((m) => m.isActive !== false),
+  useEffect(() => {
+    setInviteError(null)
+  }, [currentTeam?.id])
+
+  useEffect(() => {
+    // Keep optimistic pending users in sync with real server state.
+    setOptimisticPendingUserIds((prev) =>
+      prev.filter((userId) =>
+        (currentTeam?.memberships ?? []).some(
+          (membership) => membership.userId === userId && isMembershipPending(membership)
+        )
+      )
+    )
+  }, [currentTeam?.memberships])
+
+  const memberships: TeamMembership[] = useMemo(() => currentTeam?.memberships ?? [], [currentTeam])
+  const activeMembers: TeamMembership[] = useMemo(
+    () => memberships.filter((m) => isMembershipInTeam(m)),
+    [memberships]
+  )
+  const pendingEmailInvites: TeamPendingSignupInvite[] = useMemo(
+    () => currentTeam?.metadata?.pendingSignupInvites ?? [],
     [currentTeam]
   )
   const currentOwner = useMemo(
-    () => members.find((m) => m.role === 'OWNER' && m.isActive !== false) ?? null,
-    [members]
+    () => activeMembers.find((m) => m.role === 'OWNER') ?? null,
+    [activeMembers]
   )
 
   const memberStats = useMemo(() => {
-    const total = members.length
-    const pending = members.filter(isMembershipPending).length
-    const admins = members.filter((m) => m.role === 'ADMIN' || m.role === 'OWNER').length
+    const total = activeMembers.length
+    const pending = memberships.filter(isMembershipPending).length + pendingEmailInvites.length
+    const admins = activeMembers.filter((m) => m.role === 'ADMIN' || m.role === 'OWNER').length
     return { total, pending, admins }
-  }, [members])
+  }, [activeMembers, memberships, pendingEmailInvites.length])
 
   const peopleRows = useMemo(() => {
     const q = search.trim().toLowerCase()
     const rows = orgUsers
       .map((user) => {
-        const membership = members.find((m) => m.userId === user?.id)
-        const inTeam = Boolean(membership)
+        const membership = memberships.find((m) => m.userId === user?.id)
+        const inTeam = isMembershipInTeam(membership)
         return { user, membership, inTeam }
       })
       .filter(({ user, membership, inTeam }) => {
@@ -169,20 +198,21 @@ export function TeamMembersPanel() {
       })
 
     return rows
-  }, [orgUsers, members, membershipFilter, roleFilter, search])
+  }, [orgUsers, memberships, membershipFilter, roleFilter, search])
 
   const inviteExistingUserToTeam = async (user: any) => {
     if (!currentTeam?.id || !user?.id) return
     setInviteError(null)
     setQuickInvitingUserId(user.id)
     try {
-      await addMember(currentTeam.id, {
+      await inviteMember(currentTeam.id, {
         userId: user.id,
         role: newRole,
       })
+      setOptimisticPendingUserIds((prev) => (prev.includes(user.id) ? prev : [...prev, user.id]))
       notifications.show({
-        title: 'Member invited',
-        message: `${user.name ?? user.email} was added to ${currentTeam.name}.`,
+        title: 'Invitation sent',
+        message: `${user.name ?? user.email} is now pending acceptance for ${currentTeam.name}.`,
         color: 'teal',
       })
     } catch (error) {
@@ -210,24 +240,26 @@ export function TeamMembersPanel() {
         (candidate: any) => String(candidate?.email ?? '').toLowerCase() === email
       )
 
-      if (!matchedUser?.id) {
-        setInviteError(
-          'No account found for that email. Ask them to register first, then invite them again.'
-        )
-        return
-      }
-
-      await addMember(currentTeam.id, {
-        userId: matchedUser.id,
-        role: newRole,
-      })
-
       setInviteEmail('')
-      notifications.show({
-        title: 'Member invited',
-        message: `${matchedUser.name ?? matchedUser.email} was added to ${currentTeam.name}.`,
-        color: 'teal',
-      })
+      if (matchedUser?.id) {
+        await inviteMember(currentTeam.id, {
+          userId: matchedUser.id,
+          role: newRole,
+        })
+
+        notifications.show({
+          title: 'Invitation sent',
+          message: `${matchedUser.name ?? matchedUser.email} is now pending acceptance for ${currentTeam.name}.`,
+          color: 'teal',
+        })
+      } else {
+        await sendSignupInvite(currentTeam.id, { email, role: newRole })
+        notifications.show({
+          title: 'Signup invitation sent',
+          message: `${email} will receive an email to sign up and join ${currentTeam.name}.`,
+          color: 'teal',
+        })
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to invite member'
       setInviteError(message)
@@ -309,12 +341,34 @@ export function TeamMembersPanel() {
 
   const handleKickMember = async (membership: TeamMembership) => {
     if (!currentTeam) return
-    const confirmed = window.confirm(
-      `Remove ${membership.user?.name ?? membership.user?.email ?? 'this member'} from the team?`
-    )
-    if (!confirmed) return
+    const memberName = membership.user?.name ?? membership.user?.email ?? 'this member'
+    const actionLabel = isMembershipPending(membership) ? 'Cancel invitation' : 'Remove member'
 
-    await deleteMember(currentTeam.id, membership.userId)
+    modals.openConfirmModal({
+      title: actionLabel,
+      centered: true,
+      labels: {
+        confirm: actionLabel,
+        cancel: 'Cancel',
+      },
+      confirmProps: { color: 'red' },
+      children: (
+        <Stack gap={6}>
+          <Text size="sm">
+            Are you sure you want to{' '}
+            {isMembershipPending(membership) ? 'cancel the invite for' : 'remove'}{' '}
+            <strong>{memberName}</strong>?
+          </Text>
+          <Text size="xs" c="dimmed">
+            Team: <strong>{currentTeam.name}</strong>
+          </Text>
+        </Stack>
+      ),
+      onConfirm: async () => {
+        await deleteMember(currentTeam.id, membership.userId)
+        setOptimisticPendingUserIds((prev) => prev.filter((id) => id !== membership.userId))
+      },
+    })
   }
 
   const getSessionCount = (userId: string): number => {
@@ -432,7 +486,7 @@ export function TeamMembersPanel() {
             />
           </Group>
 
-          {orgUsersError && (
+          {orgUsersError && orgUsers.length === 0 && (
             <Alert color="red" variant="light" icon={<IconAlertCircle size={16} />}>
               {orgUsersError}
             </Alert>
@@ -473,7 +527,9 @@ export function TeamMembersPanel() {
                     const email = user?.email ?? '—'
                     const avatarSrc =
                       user?.avatar ?? user?.avatarUrl ?? membership?.user?.avatar ?? undefined
-                    const isPending = membership ? isMembershipPending(membership) : false
+                    const isPending = membership
+                      ? isMembershipPending(membership)
+                      : optimisticPendingUserIds.includes(user.id)
                     const sessions = membership ? getSessionCount(membership.userId) : 0
 
                     return (
@@ -503,13 +559,17 @@ export function TeamMembersPanel() {
                         </Table.Td>
 
                         <Table.Td>
-                          {inTeam ? (
+                          {membership && isPending ? (
+                            <Badge color="yellow" variant="light">
+                              Pending
+                            </Badge>
+                          ) : inTeam ? (
                             <Badge
-                              color={isPending ? 'yellow' : 'teal'}
+                              color="teal"
                               variant="light"
-                              leftSection={!isPending ? <IconUserCheck size={12} /> : undefined}
+                              leftSection={<IconUserCheck size={12} />}
                             >
-                              {isPending ? 'Pending' : 'In team'}
+                              In team
                             </Badge>
                           ) : (
                             <Badge color="gray" variant="light">
@@ -519,7 +579,7 @@ export function TeamMembersPanel() {
                         </Table.Td>
 
                         <Table.Td>
-                          {membership ? (
+                          {membership && inTeam ? (
                             <Select
                               size="xs"
                               value={membership.role}
@@ -536,7 +596,7 @@ export function TeamMembersPanel() {
                         </Table.Td>
 
                         <Table.Td>
-                          {membership ? (
+                          {membership && inTeam ? (
                             <NumberInput
                               size="xs"
                               min={0}
@@ -571,9 +631,12 @@ export function TeamMembersPanel() {
                         </Table.Td>
 
                         <Table.Td>
-                          {membership ? (
+                          {membership && (inTeam || isPending) ? (
                             <Group justify="flex-end" gap={4}>
-                              <Tooltip label="Remove from team" withArrow>
+                              <Tooltip
+                                label={isPending ? 'Cancel invitation' : 'Remove from team'}
+                                withArrow
+                              >
                                 <ActionIcon
                                   size="sm"
                                   color="red"
@@ -585,17 +648,18 @@ export function TeamMembersPanel() {
                               </Tooltip>
                             </Group>
                           ) : (
-                            <Group justify="flex-end">
-                              <Button
-                                data-tour-id="team-invite-btn"
-                                size="xs"
-                                variant="light"
-                                leftSection={<IconUserPlus size={14} />}
-                                onClick={() => void inviteExistingUserToTeam(user)}
-                                loading={quickInvitingUserId === user.id || loading}
-                              >
-                                Invite to team
-                              </Button>
+                            <Group justify="flex-end" gap={4}>
+                              <Tooltip label="Invite to team" withArrow>
+                                <ActionIcon
+                                  size="sm"
+                                  color="blue"
+                                  variant="subtle"
+                                  onClick={() => void inviteExistingUserToTeam(user)}
+                                  loading={quickInvitingUserId === user.id || loading}
+                                >
+                                  <IconUserPlus size={14} />
+                                </ActionIcon>
+                              </Tooltip>
                             </Group>
                           )}
                         </Table.Td>
@@ -607,10 +671,46 @@ export function TeamMembersPanel() {
             </ScrollArea>
           )}
 
-          {inviteError && (
+          {inviteError && inviteError !== orgUsersError && (
             <Alert color="red" variant="light" icon={<IconAlertCircle size={16} />}>
               {inviteError}
             </Alert>
+          )}
+
+          {pendingEmailInvites.length > 0 && (
+            <Paper
+              withBorder
+              radius="lg"
+              p="sm"
+              bg="dark.7"
+              style={{
+                borderColor: 'color-mix(in srgb, var(--mantine-color-dark-4) 35%, transparent)',
+              }}
+            >
+              <Stack gap="xs">
+                <Text size="sm" fw={600}>
+                  Pending email invites
+                </Text>
+                {pendingEmailInvites.map((invite) => {
+                  const invitedAt = formatDate(invite.invitedAt)
+                  return (
+                    <Group key={`${invite.email}-${invite.invitedAt}`} justify="space-between">
+                      <Stack gap={0}>
+                        <Text size="sm" fw={500}>
+                          {invite.email}
+                        </Text>
+                        <Text size="xs" c="dimmed">
+                          {invitedAt ? `Invited ${invitedAt}` : 'Invited'}
+                        </Text>
+                      </Stack>
+                      <Badge color="yellow" variant="light">
+                        Pending {invite.role ? `(${invite.role})` : ''}
+                      </Badge>
+                    </Group>
+                  )
+                })}
+              </Stack>
+            </Paper>
           )}
 
           <Paper
@@ -627,7 +727,8 @@ export function TeamMembersPanel() {
                 Can&apos;t find who you&apos;re looking for?
               </Text>
               <Text size="xs" c="dimmed">
-                Invite them by email!
+                Invite them by email. If they do not have an account yet, they will be prompted to
+                sign up first.
               </Text>
               <Group align="end" gap="xs" wrap="wrap">
                 <TextInput

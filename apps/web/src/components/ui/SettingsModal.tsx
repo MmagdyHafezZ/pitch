@@ -64,8 +64,8 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
   const isMobile = useMediaQuery('(max-width: 48em)')
   const isDark = computedColorScheme === 'dark'
   const [activeSection, setActiveSection] = useState<SettingsSection>('Account')
-  const [name, setName] = useState(user?.name || 'John Doe')
-  const [email, setEmail] = useState(user?.email || 'john.doe@ibm.com')
+  const [name, setName] = useState(user?.name ?? '')
+  const [email, setEmail] = useState(user?.email ?? '')
   const [timezone, setTimezone] = useState('(GMT-5:00) Eastern Time')
   const {
     colorMode,
@@ -134,6 +134,11 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
       setProfileName(activeProfile.name)
     }
   }, [activeProfile])
+
+  useEffect(() => {
+    setName(user?.name ?? '')
+    setEmail(user?.email ?? '')
+  }, [user?.name, user?.email])
 
   useEffect(() => {
     const handlePointerUp = () => setDraggingPicker(false)

@@ -152,7 +152,6 @@ export class PersonaService {
       traits = this.validateTraits(
         createPersonaDto.traits as Record<string, unknown>,
       ) as Prisma.InputJsonValue;
-
       traits = this.personaMediaService.enrichTraits({
         name,
         traits,

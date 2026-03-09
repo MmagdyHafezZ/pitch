@@ -42,6 +42,7 @@ export function TeamSideBar({
 }: TeamSideBarProps) {
   const router = useRouter()
   const [menuTeamId, setMenuTeamId] = useState<string | null>(null)
+  const [hoveredTeamId, setHoveredTeamId] = useState<string | null>(null)
   const allowContextOpenRef = useRef(false)
 
   const handleTeamClick = (id: string) => {
@@ -93,6 +94,7 @@ export function TeamSideBar({
         >
           {teams.map((team) => {
             const isActive = team.id === activeTeamId
+            const showContextHint = team.canLeave && hoveredTeamId === team.id
 
             return (
               <Menu
@@ -128,6 +130,10 @@ export function TeamSideBar({
                         size="lg"
                         variant={isActive ? 'filled' : 'light'}
                         color={isActive ? 'brand' : 'white'}
+                        onMouseEnter={() => setHoveredTeamId(team.id)}
+                        onMouseLeave={() =>
+                          setHoveredTeamId((current) => (current === team.id ? null : current))
+                        }
                         onClick={() => handleTeamClick(team.id)}
                         onContextMenu={(event) => {
                           if (!team.canLeave || !onLeaveTeam) return
@@ -145,6 +151,12 @@ export function TeamSideBar({
                             ? 'var(--pitch-accent-strong)'
                             : 'var(--pitch-nav-accent-soft)',
                           color: isActive ? 'var(--pitch-nav-text)' : 'var(--pitch-nav-text-dim)',
+                          cursor: team.canLeave ? 'context-menu' : 'pointer',
+                          boxShadow: showContextHint
+                            ? '0 0 0 2px color-mix(in srgb, var(--pitch-accent-strong) 40%, transparent)'
+                            : 'none',
+                          transition: 'box-shadow 120ms ease',
+                          position: 'relative',
                         }}
                       >
                         <Text
@@ -154,6 +166,20 @@ export function TeamSideBar({
                         >
                           {deriveInitials(team.name)}
                         </Text>
+                        {showContextHint ? (
+                          <Box
+                            style={{
+                              position: 'absolute',
+                              right: -2,
+                              bottom: -2,
+                              width: 10,
+                              height: 10,
+                              borderRadius: '50%',
+                              background: 'var(--pitch-accent-strong)',
+                              border: '1px solid var(--pitch-nav-bg, var(--mantine-color-nav-9))',
+                            }}
+                          />
+                        ) : null}
                       </ActionIcon>
                     </Tooltip>
                   </span>

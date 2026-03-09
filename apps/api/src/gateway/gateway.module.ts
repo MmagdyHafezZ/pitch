@@ -4,6 +4,8 @@ import { JwtModule, type JwtSignOptions } from '@nestjs/jwt';
 import { UserGatewayController } from './controllers/userManagement/user-gateway.controller';
 import { AuthGatewayController } from './controllers/userManagement/auth-gateway.controller';
 import { TeamGatewayController } from './controllers/userManagement/team-gateway.controller';
+import { PlanGatewayController } from './controllers/userManagement/plans.controller';
+import { SubscriptionGatewayController } from './controllers/userManagement/subscription.controller';
 import { SalesforceGatewayController } from './controllers/crm/salesforce-gateway.controller';
 import { SessionGatewayController } from './controllers/simulation/session-gateway.controller';
 import { InvitationGatewayController } from './controllers/simulation/invitation-gateway.controller';
@@ -60,6 +62,8 @@ import { CoachStreamService } from './controllers/support/coach-stream.service';
     UserGatewayController,
     AuthGatewayController,
     TeamGatewayController,
+    PlanGatewayController,
+    SubscriptionGatewayController,
     SalesforceGatewayController,
     TtsGatewayController,
     SessionGatewayController,

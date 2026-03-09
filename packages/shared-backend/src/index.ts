@@ -12,6 +12,7 @@ export * from './interfaces/business.interface'
 export * from './interfaces/error.interface'
 export * from './interfaces/message-patterns.interface'
 export * from './interfaces/request.interface'
+export * from './interfaces/support-email.interface'
 export * from './interfaces/user.interface'
 export * from './interfaces/user-claims.interface'
 

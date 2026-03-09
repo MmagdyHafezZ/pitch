@@ -18,6 +18,7 @@ import {
 import {
   HtmlContentDto,
   SendEmailDto,
+  SendTemplatedEmailDto,
   SendVerificationCodeDto,
   TextContentDto,
 } from '../dto/email.dto';
@@ -47,9 +48,32 @@ export class EmailHttpController {
       this.logger.log(
         `HTTP sendVerificationCode to=${dto.email} purpose=${dto.purpose ?? 'login'}`,
       );
-      return await this.emailService.sendVerificationCode(dto.email, dto.code);
+      return await this.emailService.sendVerificationCode(
+        dto.email,
+        dto.code,
+        dto.purpose,
+      );
     } catch (error) {
       this.logger.error('HTTP sendVerificationCode failed', error as Error);
+      throw error;
+    }
+  }
+
+  @Post('template')
+  @HttpCode(HttpStatus.OK)
+  @UsePipes(new ValidationPipe({ whitelist: true, transform: true }))
+  async sendTemplate(@Body() dto: SendTemplatedEmailDto) {
+    try {
+      this.logger.log(
+        `HTTP sendTemplate to=${dto.to} template=${dto.template}`,
+      );
+      return await this.emailService.sendTemplate(
+        dto.to,
+        dto.template,
+        dto.data,
+      );
+    } catch (error) {
+      this.logger.error('HTTP sendTemplate failed', error as Error);
       throw error;
     }
   }

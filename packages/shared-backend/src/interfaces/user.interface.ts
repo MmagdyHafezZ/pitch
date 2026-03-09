@@ -113,6 +113,7 @@ export interface TeamMembership {
   role: Role
   tokenLimit: number
   isActive?: boolean
+  invitedAt?: Date
   acceptedAt?: Date | null
   invitedByUserId: string | null
   user?: UserSummary
@@ -149,6 +150,7 @@ export interface Subscription {
 }
 
 export interface TeamMetadata {
+  pendingSignupInvites?: TeamPendingSignupInvite[]
   audit?: {
     ownerUserId?: string
     createdByUserId?: string
@@ -168,6 +170,13 @@ export interface TeamMetadata {
   }
   tags?: string[]
   notes?: string
+}
+
+export interface TeamPendingSignupInvite {
+  email: string
+  role?: Role
+  invitedAt: string
+  invitedByUserId?: string
 }
 
 export interface SubscriptionMetadata {

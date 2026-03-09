@@ -13,6 +13,9 @@ export function useTeams() {
   const updateTeam = useTeamsStore((s) => s.updateTeam)
   const deleteTeam = useTeamsStore((s) => s.deleteTeam)
   const addMember = useTeamsStore((s) => s.addMember)
+  const inviteMember = useTeamsStore((s) => s.inviteMember)
+  const sendSignupInvite = useTeamsStore((s) => s.sendSignupInvite)
+  const acceptInvite = useTeamsStore((s) => s.acceptInvite)
   const updateMember = useTeamsStore((s) => s.updateMember)
   const deleteMember = useTeamsStore((s) => s.deleteMember)
   const leaveTeam = useTeamsStore((s) => s.leaveTeam)
@@ -31,6 +34,9 @@ export function useTeams() {
     updateTeam,
     deleteTeam,
     addMember,
+    inviteMember,
+    sendSignupInvite,
+    acceptInvite,
     updateMember,
     deleteMember,
     leaveTeam,

@@ -24,6 +24,7 @@ interface OAuthProvider {
 interface RegisterFormProps {
   onSwitchToLogin?: () => void
   onSuccess?: () => void
+  inviteEmail?: string
 }
 
 const getProviderIcon = (name: string) => {
@@ -74,7 +75,7 @@ const getProviderProps = (name: string) => {
   }
 }
 
-export function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
+export function RegisterForm({ onSwitchToLogin, inviteEmail }: RegisterFormProps) {
   const [showError, setShowError] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
 
@@ -83,6 +84,9 @@ export function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
     isLoading: loading,
     error: providersError,
   } = useOAuthProvidersQuery()
+  const signupProviders = oauthProviders.filter(
+    (provider) => provider.name.toLowerCase() === 'google'
+  )
 
   // Show error if providers query fails
   React.useEffect(() => {
@@ -105,7 +109,7 @@ export function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
       })
 
       // Use utility function to redirect to OAuth provider (same flow for signup and login)
-      redirectToOAuthProvider(baseUrl, provider.name)
+      redirectToOAuthProvider(baseUrl, provider.name, inviteEmail)
     } catch (error) {
       console.error('OAuth signup error:', error)
       setErrorMessage(`Failed to initiate ${provider.displayName} signup`)
@@ -154,8 +158,8 @@ export function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
           <Text ta="center" c="dimmed">
             Loading authentication providers...
           </Text>
-        ) : oauthProviders.length > 0 ? (
-          oauthProviders.map((provider) => (
+        ) : signupProviders.length > 0 ? (
+          signupProviders.map((provider) => (
             <Button
               key={provider.name}
               {...getProviderProps(provider.name)}

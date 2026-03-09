@@ -7,6 +7,8 @@ import { CoachChatWidget } from '@/components/ui/CoachChatWidget'
 import { useTeams } from '@/features/teams/hooks/useTeams'
 import { useAuthStore } from '@/features/auth/stores/auth.store'
 import { Box } from '@mantine/core'
+import { notifications } from '@mantine/notifications'
+import { modals } from '@mantine/modals'
 import { useState, useEffect, useMemo, Suspense } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 
@@ -15,7 +17,14 @@ export default function ClientLayerComponent({ children }: { children: React.Rea
     'Home' | 'Sessions' | 'Teams' | 'Analytics' | 'Settings' | 'Team Config' | 'Challenges'
   >('Home')
   const [selectedDate, setSelectedDate] = useState<Date | null>(new Date())
-  const { teams, activeTeamId, setActiveTeamId, fetchUserTeams } = useTeams()
+  const {
+    teams,
+    activeTeamId,
+    setActiveTeamId,
+    fetchUserTeams,
+    leaveTeam,
+    loading: teamsLoading,
+  } = useTeams()
   const pathname = usePathname()
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -111,6 +120,70 @@ export default function ClientLayerComponent({ children }: { children: React.Rea
     () => teams.find((t) => t.id === activeTeamId) ?? null,
     [teams, activeTeamId]
   )
+  const teamsForSidebar = useMemo(() => {
+    return teams.map((team) => {
+      const membership = team.memberships?.find((member) => member.userId === user?.id)
+      const canLeave = Boolean(
+        membership && membership.isActive !== false && membership.role !== 'OWNER'
+      )
+
+      return {
+        id: team.id,
+        name: team.name,
+        canLeave,
+      }
+    })
+  }, [teams, user?.id])
+  const canAccessTeamConfig = useMemo(() => {
+    if (!user?.id) return false
+    const membership = activeTeam?.memberships?.find((m) => m.userId === user.id)
+    return membership?.role === 'OWNER' || membership?.role === 'ADMIN'
+  }, [activeTeam?.memberships, user?.id])
+
+  const handleLeaveTeam = (team: { id: string; name: string; canLeave?: boolean }) => {
+    if (!user?.id) return
+    modals.openConfirmModal({
+      title: 'Leave team',
+      centered: true,
+      labels: {
+        confirm: 'Leave team',
+        cancel: 'Cancel',
+      },
+      confirmProps: { color: 'red' },
+      children: `Are you sure you want to leave "${team.name}"?`,
+      onConfirm: async () => {
+        try {
+          await leaveTeam(team.id, user.id)
+          notifications.show({
+            title: 'Left team',
+            message: `You have left ${team.name}.`,
+            color: 'teal',
+          })
+        } catch (error) {
+          notifications.show({
+            title: 'Failed to leave team',
+            message: error instanceof Error ? error.message : 'Please try again.',
+            color: 'red',
+          })
+        }
+      },
+    })
+  }
+
+  const handleSelectTeam = (teamId: string) => {
+    if (teamId === activeTeamId) return
+
+    setActiveTeamId(teamId)
+    const nextTeam = teamsForSidebar.find((team) => team.id === teamId)
+    if (!nextTeam) return
+
+    notifications.show({
+      title: 'Team switched',
+      message: `Switched to ${nextTeam.name}.`,
+      color: 'teal',
+    })
+  }
+
   useEffect(() => {
     fetchUserTeams()
   }, [fetchUserTeams])
@@ -119,6 +192,16 @@ export default function ClientLayerComponent({ children }: { children: React.Rea
       setActive(pageInfo.nav)
     }
   }, [active, pageInfo.nav])
+
+  useEffect(() => {
+    if (!pathname?.startsWith('/studio/team-config')) return
+    if (teamsLoading) return
+
+    if (!activeTeam || !canAccessTeamConfig) {
+      router.replace('/studio/home')
+    }
+  }, [activeTeam, canAccessTeamConfig, pathname, router, teamsLoading])
+
   return (
     <>
       <AppLayout
@@ -138,9 +221,10 @@ export default function ClientLayerComponent({ children }: { children: React.Rea
         navbar={({ closeMobileNav }) => (
           <Box h="100%" style={{ display: 'flex', flexDirection: 'row' }}>
             <TeamSideBar
-              teams={teams.map((t) => ({ id: t.id, name: t.name }))}
+              teams={teamsForSidebar}
               activeTeamId={activeTeamId}
-              onSelectTeam={setActiveTeamId}
+              onSelectTeam={handleSelectTeam}
+              onLeaveTeam={handleLeaveTeam}
               onNavigate={closeMobileNav}
             />
             <AppSidebar
@@ -148,6 +232,7 @@ export default function ClientLayerComponent({ children }: { children: React.Rea
               setActive={setActive}
               selectedDate={selectedDate}
               setSelectedDate={setSelectedDate}
+              showTeamConfig={canAccessTeamConfig}
               onNavigate={closeMobileNav}
             />
           </Box>
