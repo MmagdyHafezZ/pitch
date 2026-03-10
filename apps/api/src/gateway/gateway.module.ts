@@ -35,6 +35,7 @@ import { SimulationModule } from '@microservices/simulation/simulation.module';
 import { RagController } from '@microservices/simulation/rag/rag.controller';
 import { ChallengesGatewayController } from './controllers/challenges/challenges-gateway.controller';
 import { SupportChatGatewayController } from './controllers/support/support-chat-gateway.controller';
+import { SupportAttachmentGatewayController } from './controllers/support/support-attachment-gateway.controller';
 import { CoachStreamService } from './controllers/support/coach-stream.service';
 
 @Module({
@@ -79,6 +80,7 @@ import { CoachStreamService } from './controllers/support/coach-stream.service';
     RagController,
     ChallengesGatewayController,
     SupportChatGatewayController,
+    SupportAttachmentGatewayController,
   ],
   providers: [
     { provide: APP_GUARD, useClass: GlobalJwtAuthGuard },

@@ -27,9 +27,14 @@ import { UserClaims } from '../../decorators/user-claims.decorator';
 import type { UserClaims as UserClaimsType } from '@pitch/shared-backend/interfaces/user-claims.interface';
 import { normalizeError } from '@pitch/shared-backend/helpers/exceptions';
 import { CoachStreamService } from './coach-stream.service';
+import type { StreamItem, Attachment } from './coach-stream.service';
 
 interface CoachChatRequest {
-  messages: Array<{ role: 'user' | 'assistant'; content: string }>;
+  messages: Array<{
+    role: 'user' | 'assistant';
+    content: string;
+    attachments?: Attachment[];
+  }>;
   context?: {
     page?: string;
     sessionId?: string;
@@ -95,22 +100,34 @@ export class SupportChatGatewayController {
   })
   async chatStream(@Body() body: CoachChatRequest, @Res() res: Response) {
     res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
     res.setHeader('Connection', 'keep-alive');
+    // Prevent nginx / any reverse-proxy from buffering SSE frames
+    res.setHeader('X-Accel-Buffering', 'no');
     res.flushHeaders();
 
+    // compression() middleware (if active) wraps res.write — calling res.flush()
+    // after each write drains its internal buffer so tokens reach the client immediately.
+    const flush = () => (res as Response & { flush?: () => void }).flush?.();
+
     try {
-      for await (const delta of this.coachStreamService.stream(
+      for await (const item of this.coachStreamService.stream(
         body.messages ?? [],
         body.context,
       )) {
-        res.write(`data: ${JSON.stringify({ delta })}\n\n`);
+        if (typeof item === 'string') {
+          res.write(`data: ${JSON.stringify({ delta: item })}\n\n`);
+        } else {
+          res.write(`data: ${JSON.stringify(item)}\n\n`);
+        }
+        flush();
       }
     } catch (err) {
       this.logger.error('chatStream error', err as Error);
       res.write(
         `data: ${JSON.stringify({ error: 'Failed to generate response' })}\n\n`,
       );
+      flush();
     } finally {
       res.write('data: [DONE]\n\n');
       res.end();

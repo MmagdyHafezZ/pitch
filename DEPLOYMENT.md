@@ -822,7 +822,8 @@ Use this flow when deploying the backend API as a dedicated Vercel project.
 
 - `vercel.json` at repo root:
   - runs workspace install (`pnpm install --frozen-lockfile`)
-  - builds backend (`pnpm --filter api build`)
+  - builds shared package + backend
+    (`pnpm --filter @pitch/shared-backend build && pnpm --filter api build`)
   - routes requests to `apps/api/api/index.js`
 - `apps/api/api/index.js`:
   - boots the Nest app once per runtime

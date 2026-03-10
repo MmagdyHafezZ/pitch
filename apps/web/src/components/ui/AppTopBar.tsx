@@ -488,6 +488,21 @@ export function AppTopBar({
   const router = useRouter()
   const { startTour } = useTour()
 
+  useEffect(() => {
+    const handler = () => setSettingsOpened(true)
+    window.addEventListener('pitch:open-settings', handler)
+    return () => window.removeEventListener('pitch:open-settings', handler)
+  }, [])
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const screen = (e as CustomEvent<{ screen: string }>).detail?.screen
+      if (screen) startTour(screen as Parameters<typeof startTour>[0])
+    }
+    window.addEventListener('pitch:start-tour', handler)
+    return () => window.removeEventListener('pitch:start-tour', handler)
+  }, [startTour])
+
   const pageToTourScreen: Partial<Record<PageKey, TourScreen>> = {
     Home: 'home',
     Sessions: 'sessions',

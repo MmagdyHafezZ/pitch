@@ -703,7 +703,7 @@ export class AssessmentGraphRunner {
   ): Promise<JudgeOutput> {
     const systemPrompt = await buildJudgeSystemPrompt(config);
 
-    let primary = await this.invokeJudgeForTurns({
+    const primary = await this.invokeJudgeForTurns({
       turns: chunk.turns,
       retrievalContext,
       config,

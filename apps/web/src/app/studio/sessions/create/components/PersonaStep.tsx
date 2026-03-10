@@ -313,6 +313,7 @@ export function PersonaStep({
                           padding="md"
                           radius="xl"
                           data-selected="false"
+                          data-tour-id="create-session-persona-item"
                           className={`${classes.selectionCard} ${classes.personaCard}`}
                           onClick={() => {
                             setSelectedPersona(persona.id)
