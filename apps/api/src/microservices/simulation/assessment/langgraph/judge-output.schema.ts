@@ -63,6 +63,27 @@ const coerceConfidence = (value: unknown): number | undefined => {
   return Math.min(1, Math.max(0, raw));
 };
 
+const coerceText = (value: unknown): string => {
+  if (typeof value === 'string') {
+    return value;
+  }
+  if (
+    typeof value === 'number' ||
+    typeof value === 'boolean' ||
+    typeof value === 'bigint'
+  ) {
+    return String(value);
+  }
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return '[unserializable]';
+  }
+};
+
 const labelEnum = z.preprocess(
   (value) => coerceLabel(value),
   z.nativeEnum(AssessmentLabelValue),
@@ -77,7 +98,7 @@ export const JudgeLabelSchema = z.object({
     .default(0.5),
   evidence: z
     .preprocess(
-      (value) => (value == null ? null : String(value)),
+      (value) => (value == null ? null : coerceText(value)),
       z.string().nullable(),
     )
     .optional(),
@@ -88,7 +109,7 @@ export const JudgeLabelSchema = z.object({
         return [];
       }
       if (Array.isArray(value)) {
-        return value.map((item) => String(item));
+        return value.map((item) => coerceText(item));
       }
       if (typeof value === 'string') {
         return value
