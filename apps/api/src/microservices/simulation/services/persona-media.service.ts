@@ -10,7 +10,6 @@ type PersonaAccent = 'american' | 'british' | 'australian';
 type PersonaTrack = 'executive' | 'technical' | 'training' | 'general';
 
 interface CuratedAvatarOption {
-  avatarId: string;
   label: string;
   gender: 'female' | 'male';
   imageUrl: string;
@@ -44,7 +43,6 @@ interface PersonaPreviewAudioResult {
 
 const CURATED_AVATARS: CuratedAvatarOption[] = [
   {
-    avatarId: 'Adriana_BizTalk_Front_public',
     label: 'Adriana BizTalk Front',
     gender: 'female',
     imageUrl:
@@ -54,7 +52,6 @@ const CURATED_AVATARS: CuratedAvatarOption[] = [
     tracks: ['training', 'general'],
   },
   {
-    avatarId: 'Amelia_standing_business_training_front',
     label: 'Amelia Business Training Front',
     gender: 'female',
     imageUrl:
@@ -64,7 +61,6 @@ const CURATED_AVATARS: CuratedAvatarOption[] = [
     tracks: ['training', 'executive'],
   },
   {
-    avatarId: 'Annie_Office_Sitting_Front_public',
     label: 'Annie Office Sitting Front',
     gender: 'female',
     imageUrl:
@@ -74,7 +70,6 @@ const CURATED_AVATARS: CuratedAvatarOption[] = [
     tracks: ['technical', 'general'],
   },
   {
-    avatarId: 'Sabine_standing_office_front',
     label: 'Sabine Office Front',
     gender: 'female',
     imageUrl:
@@ -84,7 +79,6 @@ const CURATED_AVATARS: CuratedAvatarOption[] = [
     tracks: ['technical', 'general'],
   },
   {
-    avatarId: 'Seema_Business_Front_public',
     label: 'Seema Business Front',
     gender: 'female',
     imageUrl:
@@ -94,7 +88,6 @@ const CURATED_AVATARS: CuratedAvatarOption[] = [
     tracks: ['executive', 'general'],
   },
   {
-    avatarId: 'Shirley_Business_Front_public',
     label: 'Shirley Business Front',
     gender: 'female',
     imageUrl:
@@ -104,7 +97,6 @@ const CURATED_AVATARS: CuratedAvatarOption[] = [
     tracks: ['executive', 'training'],
   },
   {
-    avatarId: 'Artur_sitting_office_front',
     label: 'Artur Office Front',
     gender: 'male',
     imageUrl:
@@ -114,7 +106,6 @@ const CURATED_AVATARS: CuratedAvatarOption[] = [
     tracks: ['technical', 'general'],
   },
   {
-    avatarId: 'Bojan_standing_businesstraining_front',
     label: 'Bojan Business Training Front',
     gender: 'male',
     imageUrl:
@@ -124,7 +115,6 @@ const CURATED_AVATARS: CuratedAvatarOption[] = [
     tracks: ['training', 'general'],
   },
   {
-    avatarId: 'Brandon_Office_Standing_Front_public',
     label: 'Brandon Office Standing Front',
     gender: 'male',
     imageUrl:
@@ -134,7 +124,6 @@ const CURATED_AVATARS: CuratedAvatarOption[] = [
     tracks: ['executive', 'general'],
   },
   {
-    avatarId: 'Shawn_Business_Front_public',
     label: 'Shawn Business Front',
     gender: 'male',
     imageUrl:
@@ -144,7 +133,6 @@ const CURATED_AVATARS: CuratedAvatarOption[] = [
     tracks: ['executive', 'training'],
   },
   {
-    avatarId: 'Teodor_sitting_office_front',
     label: 'Teodor Office Front',
     gender: 'male',
     imageUrl:
@@ -154,7 +142,6 @@ const CURATED_AVATARS: CuratedAvatarOption[] = [
     tracks: ['technical', 'general'],
   },
   {
-    avatarId: 'Vince_standing_businesstraining_front',
     label: 'Vince Business Training Front',
     gender: 'male',
     imageUrl:
@@ -411,13 +398,9 @@ export class PersonaMediaService {
       voice: nextVoice,
       voiceProfile: `ElevenLabs / ${voiceName}`,
       avatar: {
-        source: 'heygen',
         label: avatar.label,
         imageUrl: avatar.imageUrl,
         previewVideoUrl: avatar.previewVideoUrl,
-        heygenAvatarId: avatar.avatarId,
-        liveAvatarId: pickString(currentAvatar.liveAvatarId),
-        liveAvatarName: avatar.label,
         gender: avatar.gender,
         track,
       },

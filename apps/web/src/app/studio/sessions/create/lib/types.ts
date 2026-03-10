@@ -29,15 +29,9 @@ export interface PersonaTraits {
     model?: string
   }
   avatar?: {
-    source?: string
     label?: string
     imageUrl?: string
     previewVideoUrl?: string
-    heygenAvatarId?: string
-    liveAvatarId?: string
-    liveAvatarName?: string
-    avatarStyle?: string
-    backgroundColor?: string
     gender?: 'female' | 'male' | 'neutral' | string
     track?: string
   }

@@ -1,11 +1,6 @@
-import {
-  Injectable,
-  Logger,
-  ServiceUnavailableException,
-} from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 
 type JsonRecord = Record<string, unknown>;
-type VideoMode = 'rendered' | 'realtime';
 
 interface QueueAssistantVideoInput {
   sessionId: string;
@@ -23,18 +18,7 @@ interface TurnAudioResult {
 }
 
 interface ResolvedVideoConfig {
-  mode: VideoMode;
-}
-
-export interface LiveAvatarSessionTokenResult {
-  sessionId: string;
-  sessionToken: string;
-  avatarId: string;
-  avatarName: string;
-  previewUrl?: string | null;
-  mode: 'LITE';
-  quality: 'very_high' | 'high' | 'medium' | 'low';
-  encoding: 'VP8' | 'H264';
+  mode: 'rendered';
 }
 
 @Injectable()
@@ -52,16 +36,6 @@ export class VideoGenerationService {
   queueAssistantVideo(_input: QueueAssistantVideoInput): Promise<void> {
     // No-op: provider-based avatar generation has been removed.
     return Promise.resolve();
-  }
-
-  createLiveAvatarSessionToken(
-    _sessionId: string,
-  ): Promise<LiveAvatarSessionTokenResult> {
-    return Promise.reject(
-      new ServiceUnavailableException(
-        'Realtime avatar integration is disabled on this backend.',
-      ),
-    );
   }
 
   getVideoAudioAsset(

@@ -74,8 +74,7 @@ describe('PersonaService', () => {
         language: 'en-US',
       },
       avatar: {
-        imageUrl: 'https://files2.heygen.ai/avatar/example.webp',
-        heygenAvatarId: 'Sabine_standing_office_front',
+        imageUrl: 'https://example.com/avatar/example.webp',
       },
       audioPreview: {
         provider: 'elevenlabs',
@@ -127,7 +126,7 @@ describe('PersonaService', () => {
           language: 'en-US',
         },
         avatar: expect.objectContaining({
-          heygenAvatarId: 'Sabine_standing_office_front',
+          imageUrl: 'https://example.com/avatar/example.webp',
         }),
         audioPreview: expect.objectContaining({
           provider: 'elevenlabs',

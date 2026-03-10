@@ -28,7 +28,6 @@ import {
 import { useRouter, useParams } from 'next/navigation'
 import {
   useConversation,
-  useLiveAvatar,
   useVisualState,
   VisualStateOverlay,
   CameraEngagementIndicator,
@@ -104,20 +103,6 @@ const readPersonaImageUrl = (session: unknown): string | null => {
     : null
 }
 
-const readVideoMode = (session: unknown): 'rendered' | 'realtime' => {
-  if (!isRecord(session)) {
-    return 'rendered'
-  }
-
-  const sessionConfig = isRecord(session.sessionConfig) ? session.sessionConfig : {}
-  const videoConfig = isRecord(sessionConfig.video) ? sessionConfig.video : {}
-  const rawMode = typeof videoConfig.mode === 'string' ? videoConfig.mode.trim().toLowerCase() : ''
-
-  return rawMode === 'realtime' || rawMode === 'liveavatar' || rawMode === 'live-avatar'
-    ? 'realtime'
-    : 'rendered'
-}
-
 const buildSessionVideoStreamUrl = (sessionId: string, token: string, jobId?: string | null) => {
   const url = new URL(`${API_CONFIG.baseURL}/simulation/video/stream/${sessionId}`)
   url.searchParams.set('token', token)
@@ -126,10 +111,6 @@ const buildSessionVideoStreamUrl = (sessionId: string, token: string, jobId?: st
   }
   return url.toString()
 }
-
-const isLiveAvatarConcurrencyLimitError = (message: string | null | undefined): boolean =>
-  typeof message === 'string' &&
-  /session concurrency limit reached|concurrency limit/i.test(message)
 
 const buildCreateSessionPayload = (session: Record<string, unknown>): CreateSessionInput => {
   const orgId = typeof session.orgId === 'string' ? session.orgId : ''
@@ -196,8 +177,6 @@ export default function LiveSessionPage() {
   const [avatarVideoProvider, setAvatarVideoProvider] = useState<string | null>(null)
   const [avatarVideoError, setAvatarVideoError] = useState<string | null>(null)
   const [avatarVideoJobId, setAvatarVideoJobId] = useState<string | null>(null)
-  const [videoMode, setVideoMode] = useState<'rendered' | 'realtime'>('rendered')
-  const [isRealtimeAvatarBlocked, setIsRealtimeAvatarBlocked] = useState(false)
   const [autoConnectConversation, setAutoConnectConversation] = useState(false)
   const [resumePromptOpen, setResumePromptOpen] = useState(false)
   const [entryDecisionLoading, setEntryDecisionLoading] = useState(true)
@@ -224,35 +203,6 @@ export default function LiveSessionPage() {
   const [visualEnabled, setVisualEnabled] = useState(true)
   const speechFinalizeDelayMs = sessionType === 'voice' || sessionType === 'video' ? 250 : 1500
   const isVideoSession = sessionType === 'video'
-  const isRealtimeVideoSession = sessionType === 'video' && videoMode === 'realtime'
-  const useRealtimeAvatar = isRealtimeVideoSession && !isRealtimeAvatarBlocked
-  const handleLiveAvatarError = useCallback((errorMessage: string) => {
-    if (isLiveAvatarConcurrencyLimitError(errorMessage)) {
-      setIsRealtimeAvatarBlocked(true)
-    }
-  }, [])
-
-  const {
-    status: liveAvatarStatus,
-    error: liveAvatarError,
-    isReady: isLiveAvatarReady,
-    isSpeaking: isLiveAvatarSpeaking,
-    avatarName: liveAvatarName,
-    autoplayBlocked: isLiveAvatarAutoplayBlocked,
-    stop: stopLiveAvatar,
-    interrupt: interruptLiveAvatar,
-    speakAudio: speakAvatarAudio,
-  } = useLiveAvatar({
-    sessionId,
-    enabled: useRealtimeAvatar && sessionStatus !== 'ended',
-    videoRef,
-    onError: handleLiveAvatarError,
-  })
-  const useExternalAudioOutput = useRealtimeAvatar && !liveAvatarError
-
-  useEffect(() => {
-    setIsRealtimeAvatarBlocked(false)
-  }, [sessionId, videoMode])
 
   const scheduleIdleHints = useCallback(
     (delayMs = 20000) => {
@@ -340,12 +290,10 @@ export default function LiveSessionPage() {
   } = useConversation({
     sessionId,
     autoConnect: autoConnectConversation,
-    audioOutput: useExternalAudioOutput ? 'external' : 'browser',
-    onExternalAudioChunk: ({ audio, contentType }) => speakAvatarAudio({ audio, contentType }),
-    onExternalAudioStop: interruptLiveAvatar,
+    audioOutput: 'browser',
     onError: () => {},
   })
-  const assistantSpeaking = useExternalAudioOutput ? isLiveAvatarSpeaking : isAudioPlaying
+  const assistantSpeaking = isAudioPlaying
 
   const {
     isListening,
@@ -416,7 +364,6 @@ export default function LiveSessionPage() {
     setSessionName((session as any)?.name ?? (session as any)?.scenario?.name ?? '')
     setPersonaName((session as any)?.persona?.name ?? null)
     setPersonaImageUrl(readPersonaImageUrl(session))
-    setVideoMode(readVideoMode(session))
     setPhoneNumber('')
     setAvatarVideoStatus(avatarState.status)
     setAvatarVideoProvider(avatarState.provider)
@@ -861,7 +808,7 @@ export default function LiveSessionPage() {
   ])
 
   useEffect(() => {
-    if (sessionType !== 'video' || useRealtimeAvatar) return
+    if (sessionType !== 'video') return
 
     const lastMessage = messages[messages.length - 1]
     if (!lastMessage || lastMessage.role !== 'assistant') return
@@ -870,10 +817,10 @@ export default function LiveSessionPage() {
     lastAssistantMessageIdRef.current = lastMessage.id
     setAvatarVideoStatus('rendering')
     setAvatarVideoError(null)
-  }, [messages, sessionType, useRealtimeAvatar])
+  }, [messages, sessionType])
 
   useEffect(() => {
-    if (sessionType !== 'video' || useRealtimeAvatar) return
+    if (sessionType !== 'video') return
     if (avatarVideoStatus !== 'queued' && avatarVideoStatus !== 'rendering') return
     if (!sessionId) return
 
@@ -899,13 +846,13 @@ export default function LiveSessionPage() {
       cancelled = true
       clearInterval(interval)
     }
-  }, [avatarVideoStatus, sessionId, sessionType, syncSessionState, useRealtimeAvatar])
+  }, [avatarVideoStatus, sessionId, sessionType, syncSessionState])
 
   useEffect(() => {
-    if (sessionType !== 'video' || useRealtimeAvatar || !avatarVideoUrl || !videoRef.current) return
+    if (sessionType !== 'video' || !avatarVideoUrl || !videoRef.current) return
     videoRef.current.currentTime = 0
     videoRef.current.play().catch(() => {})
-  }, [avatarVideoUrl, sessionType, useRealtimeAvatar])
+  }, [avatarVideoUrl, sessionType])
 
   // Refresh timeline when messages change (conversation progresses)
   useEffect(() => {
@@ -957,7 +904,6 @@ export default function LiveSessionPage() {
       console.warn('Failed to end session', err)
     }
 
-    await stopLiveAvatar()
     hangUp()
     router.push(`/session/${sessionId}/performance`)
   }
@@ -981,13 +927,11 @@ export default function LiveSessionPage() {
   // AI state label shown in the voice panel
   const aiStateLabel = assistantSpeaking
     ? 'Speaking'
-    : useRealtimeAvatar && liveAvatarStatus === 'starting'
-      ? 'Connecting avatar...'
-      : isProcessing
-        ? 'Thinking...'
-        : isListening
-          ? 'Listening'
-          : ''
+    : isProcessing
+      ? 'Thinking...'
+      : isListening
+        ? 'Listening'
+        : ''
   const aiStateColor = assistantSpeaking ? 'green' : isProcessing ? 'blue' : 'dimmed'
   // The session page is always dark-9 — use reliable palette tokens that never depend on the user's theme profile.
   const userBubbleBackground = 'var(--mantine-color-blue-9)'
@@ -1506,76 +1450,7 @@ export default function LiveSessionPage() {
                       }}
                     >
                       <Box style={{ position: 'relative', width: '100%', height: '100%' }}>
-                        {useRealtimeAvatar ? (
-                          <>
-                            <video
-                              ref={videoRef}
-                              poster={personaImageUrl ?? undefined}
-                              autoPlay
-                              playsInline
-                              style={{
-                                width: '100%',
-                                height: '100%',
-                                objectFit: 'cover',
-                                background:
-                                  'radial-gradient(circle at top, rgba(255,255,255,0.18), transparent 50%), #050505',
-                              }}
-                            />
-                            {(!isLiveAvatarReady ||
-                              liveAvatarError ||
-                              isLiveAvatarAutoplayBlocked) && (
-                              <Stack
-                                gap="xs"
-                                align="center"
-                                justify="center"
-                                style={{
-                                  position: 'absolute',
-                                  inset: 0,
-                                  padding: 24,
-                                  background:
-                                    'radial-gradient(circle at top, rgba(255,255,255,0.18), transparent 50%), rgba(5,5,5,0.82)',
-                                }}
-                              >
-                                {personaImageUrl && (
-                                  <Avatar
-                                    size={144}
-                                    radius="xl"
-                                    src={personaImageUrl}
-                                    style={{
-                                      border: '2px solid rgba(255,255,255,0.12)',
-                                      boxShadow: '0 18px 48px rgba(0,0,0,0.35)',
-                                    }}
-                                  />
-                                )}
-                                <Badge
-                                  color={
-                                    liveAvatarError ? 'red' : isLiveAvatarReady ? 'green' : 'blue'
-                                  }
-                                  variant="light"
-                                  tt="uppercase"
-                                >
-                                  HeyGen LiveAvatar
-                                </Badge>
-                                <Text c="white" fw={600} ta="center">
-                                  {liveAvatarError
-                                    ? 'Realtime avatar unavailable'
-                                    : isLiveAvatarAutoplayBlocked
-                                      ? 'Tap once to enable avatar audio'
-                                      : liveAvatarStatus === 'starting'
-                                        ? 'Connecting realtime avatar'
-                                        : 'Preparing avatar stream'}
-                                </Text>
-                                <Text c="dimmed" size="sm" ta="center">
-                                  {liveAvatarError
-                                    ? liveAvatarError
-                                    : isLiveAvatarAutoplayBlocked
-                                      ? 'Your browser blocked autoplay for the LiveAvatar stream. A click or keypress will resume it.'
-                                      : 'The avatar stream stays open for the full conversation and speaks each assistant turn as soon as PCM audio is ready.'}
-                                </Text>
-                              </Stack>
-                            )}
-                          </>
-                        ) : avatarVideoUrl ? (
+                        {avatarVideoUrl ? (
                           <video
                             key={`${avatarVideoUrl}:${avatarVideoJobId ?? 'no-job'}`}
                             ref={videoRef}
@@ -1615,11 +1490,7 @@ export default function LiveSessionPage() {
                               variant="light"
                               tt="uppercase"
                             >
-                              {avatarVideoProvider === 'azure-avatar'
-                                ? 'Azure Avatar'
-                                : avatarVideoProvider === 'heygen'
-                                  ? 'HeyGen'
-                                  : 'Avatar'}
+                              Avatar
                             </Badge>
                             <Text c="white" fw={600} ta="center">
                               {avatarVideoStatus === 'failed'
@@ -1636,9 +1507,7 @@ export default function LiveSessionPage() {
                                   'The assistant will continue with audio only.')
                                 : avatarVideoStatus === 'idle'
                                   ? 'The conversation starts with low-latency audio, then each AI reply is rendered as a matching avatar clip.'
-                                  : avatarVideoProvider === 'azure-avatar'
-                                    ? 'HeyGen failed, so Azure avatar is rendering this turn.'
-                                    : 'Audio plays immediately while the avatar video renders in the background.'}
+                                  : 'Audio plays immediately while the avatar video renders in the background.'}
                             </Text>
                           </Stack>
                         )}
@@ -1653,50 +1522,25 @@ export default function LiveSessionPage() {
                         >
                           <Badge
                             color={
-                              useRealtimeAvatar
-                                ? liveAvatarError
-                                  ? 'red'
-                                  : isLiveAvatarReady
-                                    ? 'green'
-                                    : 'blue'
-                                : avatarVideoStatus === 'failed'
-                                  ? 'red'
-                                  : avatarVideoStatus === 'ready'
-                                    ? 'green'
-                                    : 'blue'
+                              avatarVideoStatus === 'failed'
+                                ? 'red'
+                                : avatarVideoStatus === 'ready'
+                                  ? 'green'
+                                  : 'blue'
                             }
                             variant="filled"
                           >
-                            {useRealtimeAvatar
-                              ? liveAvatarError
-                                ? 'Error'
-                                : isLiveAvatarReady
-                                  ? 'Live'
-                                  : liveAvatarStatus === 'starting'
-                                    ? 'Connecting'
-                                    : 'Waiting'
-                              : avatarVideoStatus === 'ready'
-                                ? 'Ready'
-                                : avatarVideoStatus === 'failed'
-                                  ? 'Fallback failed'
-                                  : avatarVideoStatus === 'idle'
-                                    ? 'Waiting'
-                                    : 'Rendering'}
+                            {avatarVideoStatus === 'ready'
+                              ? 'Ready'
+                              : avatarVideoStatus === 'failed'
+                                ? 'Failed'
+                                : avatarVideoStatus === 'idle'
+                                  ? 'Waiting'
+                                  : 'Rendering'}
                           </Badge>
-                          {useRealtimeAvatar ? (
+                          {avatarVideoProvider && (
                             <Badge variant="light" color="gray">
-                              {liveAvatarName ?? 'HeyGen LiveAvatar'}
-                            </Badge>
-                          ) : (
-                            avatarVideoProvider && (
-                              <Badge variant="light" color="gray">
-                                {avatarVideoProvider === 'azure-avatar' ? 'Azure' : 'HeyGen'}
-                              </Badge>
-                            )
-                          )}
-                          {useRealtimeAvatar && (
-                            <Badge variant="light" color="gray">
-                              PCM / Live
+                              {avatarVideoProvider}
                             </Badge>
                           )}
                         </Group>
