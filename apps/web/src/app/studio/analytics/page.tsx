@@ -280,14 +280,18 @@ export default function AnalyticsPage() {
     }
 
     if (startTourParam === 'analytics') {
-      autoStartedTourKeyRef.current = key
-      const timer = setTimeout(() => void startTour('analytics'), 800)
+      const timer = setTimeout(() => {
+        autoStartedTourKeyRef.current = key
+        void startTour('analytics')
+      }, 800)
       return () => clearTimeout(timer)
     }
 
     if (startTourParam === 'full' && tourScreenParam === 'analytics') {
-      autoStartedTourKeyRef.current = key
-      const timer = setTimeout(() => void startTour('analytics', { mode: 'full' }), 800)
+      const timer = setTimeout(() => {
+        autoStartedTourKeyRef.current = key
+        void startTour('analytics', { mode: 'full' })
+      }, 800)
       return () => clearTimeout(timer)
     }
   }, [searchParams, startTour])

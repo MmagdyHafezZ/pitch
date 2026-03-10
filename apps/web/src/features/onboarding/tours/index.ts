@@ -2,6 +2,26 @@ import type { DriveStep } from 'driver.js'
 
 export const homeTourSteps: DriveStep[] = [
   {
+    element: '[data-tour-id="app-sidebar"]',
+    popover: {
+      title: 'Workspace Navigation',
+      description:
+        'Use this sidebar to move between Home, Sessions, Challenges, Analytics, and Team Configuration.',
+      side: 'right',
+      align: 'start',
+    },
+  },
+  {
+    element: '[data-tour-id="app-topbar-controls"]',
+    popover: {
+      title: 'Quick Controls',
+      description:
+        'These controls give quick access to tour restart, language, notifications, and account actions.',
+      side: 'bottom',
+      align: 'start',
+    },
+  },
+  {
     element: '[data-tour-id="home-header"]',
     popover: {
       title: 'Dashboard Overview',
@@ -135,12 +155,65 @@ export const sessionsTourSteps: DriveStep[] = [
     },
   },
   {
-    element: '[data-tour-id="sessions-detail-panel"]',
+    element: '[data-tour-id="sessions-session-card"]',
     popover: {
-      title: 'Session Detail Panel',
+      title: 'Session Cards',
       description:
-        'When you select a session, this panel shows config, metadata, and direct actions to edit or launch.',
-      side: 'left',
+        'Open any card to continue a practice, review transcripts, and check performance analytics.',
+      side: 'top',
+      align: 'start',
+    },
+  },
+]
+
+export const createSessionTourSteps: DriveStep[] = [
+  {
+    element: '[data-tour-id="create-session-hero"]',
+    popover: {
+      title: 'Session Builder',
+      description:
+        'This wizard guides you through all settings required to launch a high-quality pitch simulation.',
+      side: 'bottom',
+      align: 'start',
+    },
+  },
+  {
+    element: '[data-tour-id="create-session-stepper"]',
+    popover: {
+      title: 'Step Navigation',
+      description:
+        'Progress through Basics, Scenario, Persona, AI Brain, CRM, Style, and Review before creating.',
+      side: 'right',
+      align: 'start',
+    },
+  },
+  {
+    element: '[data-tour-id="create-session-content"]',
+    popover: {
+      title: 'Configuration Workspace',
+      description:
+        'Each step updates this panel so you can configure session details with immediate context.',
+      side: 'top',
+      align: 'start',
+    },
+  },
+  {
+    element: '[data-tour-id="create-session-name"]',
+    popover: {
+      title: 'Session Naming',
+      description:
+        'Use a specific name that reflects objective or scenario so sessions remain easy to compare later.',
+      side: 'top',
+      align: 'start',
+    },
+  },
+  {
+    element: '[data-tour-id="create-session-nav"]',
+    popover: {
+      title: 'Move Through Steps',
+      description:
+        'Use Back and Next to refine setup. In full tour mode, we will continue to the next workspace automatically.',
+      side: 'top',
       align: 'start',
     },
   },

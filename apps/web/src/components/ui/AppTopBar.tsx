@@ -303,6 +303,7 @@ function ChallengesActionBar({
       isCompact={isCompact}
       leadingAction={
         <Select
+          data-tour-id="challenges-filters"
           size="sm"
           value={difficulty}
           onChange={handleDifficultyChange}
@@ -486,6 +487,8 @@ export function AppTopBar({
   const [acceptingInviteIds, setAcceptingInviteIds] = useState<string[]>([])
   const [acceptedInviteIds, setAcceptedInviteIds] = useState<string[]>([])
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const pathname = usePathname()
   const { startTour } = useTour()
 
   useEffect(() => {
@@ -510,15 +513,17 @@ export function AppTopBar({
     Analytics: 'analytics',
     Teams: 'team-config',
   }
-  const tourScreen = currentPage ? pageToTourScreen[currentPage] : undefined
+  const tourScreen: TourScreen | undefined = pathname.startsWith('/studio/sessions/create')
+    ? 'create-session'
+    : currentPage
+      ? pageToTourScreen[currentPage]
+      : undefined
   const isMobile = useMediaQuery('(max-width: 768px)')
   const isNarrow = useMediaQuery('(max-width: 520px)')
   const queryClient = useQueryClient()
   const currentUser = useAuthStore((state) => state.user)
   const teams = useTeamsStore((state) => state.teams) ?? []
   const refreshUserTeams = useTeamsStore((state) => state.fetchUserTeams)
-  const searchParams = useSearchParams()
-  const pathname = usePathname()
   const sessionQuery = useMemo(() => searchParams.get('q') ?? '', [searchParams])
   const handleSessionSearch = (next: string) => {
     const params = new URLSearchParams(searchParams.toString())
@@ -747,7 +752,7 @@ export function AppTopBar({
   const showLanguageSelect = !isMobile
   const languageSelectWidth = isMobile ? 104 : isNarrow ? 92 : 140
   const utilityControls = (
-    <Group align="center" gap={isNarrow ? 8 : 12} wrap="nowrap">
+    <Group data-tour-id="app-topbar-controls" align="center" gap={isNarrow ? 8 : 12} wrap="nowrap">
       {onToggleMobileNav && isMobile && (
         <ActionIcon
           aria-label={mobileNavOpened ? 'Close navigation menu' : 'Open navigation menu'}

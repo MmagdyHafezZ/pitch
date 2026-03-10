@@ -750,6 +750,7 @@ export function TeamMembersPanel() {
                   w={isMobile ? '100%' : 130}
                 />
                 <Button
+                  data-tour-id="team-invite-btn"
                   leftSection={<IconMailPlus size={16} />}
                   onClick={handleAddMember}
                   loading={submitting || loading}
