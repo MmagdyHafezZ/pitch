@@ -79,6 +79,7 @@ export class AssessmentService {
       request.mode === AssessmentModeDto.live
         ? AssessmentMode.live
         : AssessmentMode.final;
+    const forceRecalculate = request.forceRecalculate === true;
     const context = await this.resolveIterationContext({
       iterationId: request.iterationId,
       sessionMemberId: request.sessionMemberId,
@@ -98,24 +99,35 @@ export class AssessmentService {
       persona: context.persona,
     });
 
-    const existing = await this.assessmentRepository.findByInputHash(inputHash);
-    if (existing && existing.status !== AssessmentRunStatus.failed) {
-      return {
-        runId: existing.id,
-        iterationId: existing.iterationId,
-        status: this.mapRunStatus(existing.status),
-        mode: this.mapMode(existing.mode),
-        totalScore: existing.totalScore ?? undefined,
-        configVersion: config.version,
-        engineVersion: existing.engineVersion ?? undefined,
-        summary: this.mapSummary(existing.summary ?? undefined),
-      };
+    if (!forceRecalculate) {
+      const existing =
+        await this.assessmentRepository.findByInputHash(inputHash);
+      if (existing && existing.status !== AssessmentRunStatus.failed) {
+        return {
+          runId: existing.id,
+          iterationId: existing.iterationId,
+          status: this.mapRunStatus(existing.status),
+          mode: this.mapMode(existing.mode),
+          totalScore: existing.totalScore ?? undefined,
+          configVersion: config.version,
+          engineVersion: existing.engineVersion ?? undefined,
+          summary: this.mapSummary(existing.summary ?? undefined),
+        };
+      }
     }
+
+    const runInputHash = forceRecalculate
+      ? createHash('sha256')
+          .update(
+            `${inputHash}:forced:${Date.now()}:${Math.random().toString(36).slice(2, 10)}`,
+          )
+          .digest('hex')
+      : inputHash;
 
     const run = await this.assessmentRepository.createRun({
       iterationId: context.iterationId,
       mode,
-      inputHash,
+      inputHash: runInputHash,
       config: this.buildConfigSnapshot(config),
       engineVersion: ASSESSMENT_ENGINE_VERSION,
     });

@@ -10,6 +10,7 @@ export interface AssessmentConfig {
   };
   thresholds: {
     confidenceCutoff: number;
+    hardNeutralCutoff: number;
     disagreementCutoff: number;
     negativeDeltaTrigger: number;
   };
@@ -97,6 +98,9 @@ const baseConfig: Omit<AssessmentConfig, 'version'> = {
   },
   thresholds: {
     confidenceCutoff: 0.6,
+    // Labels below this are force-overridden to Neutral (garbage output guard).
+    // Keep well below confidenceCutoff so only truly zero-confidence outputs are neutered.
+    hardNeutralCutoff: 0.1,
     disagreementCutoff: 0.35,
     negativeDeltaTrigger: -2,
   },
@@ -110,7 +114,9 @@ const baseConfig: Omit<AssessmentConfig, 'version'> = {
   },
   timeBudgetMs: {
     retrieval: 3500,
-    judge: 12000,
+    // 30 s: gpt-4o generating JSON for a full 12-turn chunk can easily exceed 12 s
+    // under normal API load; 30 s gives ample headroom without blocking the pipeline.
+    judge: 30000,
     reduce: 4000,
     persist: 5000,
   },
@@ -119,9 +125,12 @@ const baseConfig: Omit<AssessmentConfig, 'version'> = {
     namespace: 'simulation',
   },
   judge: {
-    model: 'gpt-4o-mini',
+    provider: 'openai',
+    model: 'gpt-4o',
     temperature: 0.2,
-    maxTokens: 800,
+    // 12 turns × ~200 tokens/label ≈ 2400 tokens minimum; 3500 gives safe headroom
+    // and leaves room for a richer summary field.
+    maxTokens: 3500,
   },
   live: {
     maxTurns: 2,

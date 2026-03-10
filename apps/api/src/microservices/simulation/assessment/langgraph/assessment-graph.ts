@@ -62,6 +62,7 @@ export class AssessmentGraphRunner {
   async run(
     state: Omit<
       AssessmentStateType,
+      | 'sessionContext'
       | 'turnsRaw'
       | 'turns'
       | 'chunks'
@@ -78,6 +79,7 @@ export class AssessmentGraphRunner {
     const result = await this.graph.invoke(
       {
         ...state,
+        sessionContext: undefined,
         turnsRaw: [],
         turns: [],
         chunks: [],
@@ -110,6 +112,7 @@ export class AssessmentGraphRunner {
   private buildRunConfig(
     state: Omit<
       AssessmentStateType,
+      | 'sessionContext'
       | 'turnsRaw'
       | 'turns'
       | 'chunks'
@@ -207,26 +210,103 @@ export class AssessmentGraphRunner {
   }
 
   private loadSessionData = async (state: AssessmentStateType) => {
-    const turns = await this.prisma.client.turn.findMany({
-      where: {
-        iteration: {
-          sessionId: state.sessionId,
-          sessionMemberId: state.sessionMemberId,
+    const [turns, session] = await Promise.all([
+      this.prisma.client.turn.findMany({
+        where: {
+          iteration: {
+            sessionId: state.sessionId,
+            sessionMemberId: state.sessionMemberId,
+          },
         },
-      },
-      orderBy: [{ iteration: { iterationNumber: 'asc' } }, { order: 'asc' }],
-      include: {
-        messages: true,
-        iteration: { select: { iterationNumber: true } },
-      },
-    });
+        orderBy: [{ iteration: { iterationNumber: 'asc' } }, { order: 'asc' }],
+        include: {
+          messages: true,
+          iteration: { select: { iterationNumber: true } },
+        },
+      }),
+      this.prisma.client.session.findUnique({
+        where: { id: state.sessionId },
+        select: {
+          name: true,
+          sessionConfig: true,
+          scenario: { select: { name: true, description: true, config: true } },
+          persona: { select: { name: true, traits: true } },
+        },
+      }),
+    ]);
+
+    const sessionContext = this.buildSessionContext(session);
 
     if (state.mode === 'live' && state.config.live.maxTurns > 0) {
-      return { turnsRaw: turns.slice(-state.config.live.maxTurns) };
+      return {
+        turnsRaw: turns.slice(-state.config.live.maxTurns),
+        sessionContext,
+      };
     }
 
-    return { turnsRaw: turns };
+    return { turnsRaw: turns, sessionContext };
   };
+
+  private buildSessionContext(
+    session: {
+      name?: string | null;
+      sessionConfig?: unknown;
+      scenario?: {
+        name?: string | null;
+        description?: string | null;
+        config?: unknown;
+      } | null;
+      persona?: { name?: string | null; traits?: unknown } | null;
+    } | null,
+  ): string | undefined {
+    if (!session) return undefined;
+
+    const parts: string[] = [];
+
+    const cfg = session.sessionConfig as
+      | Record<string, unknown>
+      | null
+      | undefined;
+    const objective = cfg?.objective ?? cfg?.goal ?? cfg?.salesObjective;
+    if (typeof objective === 'string' && objective.trim()) {
+      parts.push(`Objective: ${objective.trim()}`);
+    }
+
+    if (session.scenario?.name) {
+      parts.push(`Scenario: ${session.scenario.name}`);
+    }
+    if (session.scenario?.description) {
+      parts.push(
+        `Scenario description: ${session.scenario.description.trim()}`,
+      );
+    }
+    const scenCfg = session.scenario?.config as
+      | Record<string, unknown>
+      | null
+      | undefined;
+    const scenObjective = scenCfg?.objective ?? scenCfg?.goal;
+    if (typeof scenObjective === 'string' && scenObjective.trim()) {
+      parts.push(`Scenario objective: ${scenObjective.trim()}`);
+    }
+
+    if (session.persona?.name) {
+      parts.push(`Persona (buyer): ${session.persona.name}`);
+    }
+    const traits = session.persona?.traits;
+    if (traits && typeof traits === 'object' && !Array.isArray(traits)) {
+      const traitMap = traits as Record<string, any>;
+      const traitStr = Object.entries(traitMap)
+        .map(([k, v]) => `${k}: ${v}`)
+        .join(', ');
+      if (traitStr) parts.push(`Persona traits: ${traitStr}`);
+    }
+
+    if (session.name) {
+      parts.push(`Session name: ${session.name}`);
+    }
+
+    return parts.length > 0 ? parts.join('\n') : undefined;
+  }
 
   private normalizeTurns = (
     state: AssessmentStateType,
@@ -351,12 +431,24 @@ export class AssessmentGraphRunner {
         state,
         chunk.chunkIndex,
       );
-      const judgeOutput = await this.runJudge(
-        chunk,
-        retrievalContext,
-        config,
-        state,
-      );
+
+      let judgeOutput: JudgeOutput;
+      try {
+        judgeOutput = await this.runJudge(
+          chunk,
+          retrievalContext,
+          config,
+          state,
+        );
+      } catch (err) {
+        this.logger.error(
+          `runJudge threw unexpectedly for run=${state.runId} chunk=${chunk.chunkIndex}: ${String((err as Error)?.message || err)}`,
+        );
+        warnings.push(`chunk_${chunk.chunkIndex}_judge_threw`);
+        partial = true;
+        judgeOutput = this.buildNeutralJudgeOutput(chunk, config);
+      }
+
       if (!judgeOutput.labels || judgeOutput.labels.length === 0) {
         warnings.push(`chunk_${chunk.chunkIndex}_judge_empty`);
         partial = true;
@@ -626,10 +718,7 @@ export class AssessmentGraphRunner {
     config: AssessmentConfig,
   ): ChunkJudgment['labels'] {
     const finalLabels: ChunkJudgment['labels'] = [];
-    const hardNeutralCutoff = Math.min(
-      0.3,
-      config.thresholds.confidenceCutoff * 0.5,
-    );
+    const hardNeutralCutoff = config.thresholds.hardNeutralCutoff;
 
     for (const label of labels) {
       const confidence = label.confidence ?? 0;
@@ -701,7 +790,18 @@ export class AssessmentGraphRunner {
     config: AssessmentConfig,
     state: AssessmentStateType,
   ): Promise<JudgeOutput> {
-    const systemPrompt = await buildJudgeSystemPrompt(config);
+    let systemPrompt: string;
+    try {
+      systemPrompt = buildJudgeSystemPrompt(
+        config,
+        state.sessionContext ?? undefined,
+      );
+    } catch (err) {
+      this.logger.error(
+        `buildJudgeSystemPrompt threw for run=${state.runId} chunk=${chunk.chunkIndex}: ${String((err as Error)?.message || err)}`,
+      );
+      return this.buildNeutralJudgeOutput(chunk, config);
+    }
 
     const primary = await this.invokeJudgeForTurns({
       turns: chunk.turns,
@@ -714,6 +814,10 @@ export class AssessmentGraphRunner {
     });
 
     if (!primary) {
+      this.logger.error(
+        `Judge produced no output for run=${state.runId} chunk=${chunk.chunkIndex} — falling back to neutral. ` +
+          `Check warn logs above for the root cause (timeout / API error / JSON parse failure).`,
+      );
       return this.buildNeutralJudgeOutput(chunk, config);
     }
 
@@ -837,6 +941,10 @@ export class AssessmentGraphRunner {
       { chunkIndex: input.chunkIndex },
     );
     if (primaryAttempt.status !== 'ok') {
+      this.logger.error(
+        `Judge primary attempt failed (${primaryAttempt.status}) for run=${input.state.runId} ` +
+          `chunk=${input.chunkIndex} suffix=${input.requestSuffix}`,
+      );
       return null;
     }
 
@@ -845,16 +953,29 @@ export class AssessmentGraphRunner {
       return parsed;
     }
 
+    this.logger.warn(
+      `Judge primary parse failed for run=${input.state.runId} chunk=${input.chunkIndex} — retrying`,
+    );
+
     const retryAttempt = await this.withTimeout(
       executeJudgeRaw(),
       input.config.timeBudgetMs.judge,
       { chunkIndex: input.chunkIndex },
     );
     if (retryAttempt.status !== 'ok') {
+      this.logger.error(
+        `Judge retry attempt failed (${retryAttempt.status}) for run=${input.state.runId} ` +
+          `chunk=${input.chunkIndex} suffix=${input.requestSuffix}`,
+      );
       return null;
     }
 
     parsed = this.parseJudgeOutput(retryAttempt.value, input.chunkIndex);
+    if (!parsed) {
+      this.logger.error(
+        `Judge retry parse also failed for run=${input.state.runId} chunk=${input.chunkIndex} — both attempts exhausted`,
+      );
+    }
     return parsed;
   }
 
