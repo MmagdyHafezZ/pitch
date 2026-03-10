@@ -93,7 +93,7 @@ export function EmployeeCareerStep({ onNext, onSkip }: EmployeeCareerStepProps) 
           />
         </Stack>
 
-        <Group justify="space-between">
+        <Group justify="space-between" wrap="wrap">
           <Button variant="subtle" color="gray" onClick={onSkip}>
             Skip
           </Button>

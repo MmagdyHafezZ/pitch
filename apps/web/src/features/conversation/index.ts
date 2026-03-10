@@ -1,4 +1,5 @@
 export * from './hooks/useConversation'
+export * from './hooks/useLiveAvatar'
 export * from './hooks/usePoseLandmarker'
 export * from './hooks/useVisualState'
 export * from './services/conversation.service'

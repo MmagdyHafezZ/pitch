@@ -13,6 +13,7 @@ import { PersonaHttpController } from './controllers/persona-http.controller';
 import { ScenarioHttpController } from './controllers/scenario-http.controller';
 import { HintsController } from './controllers/hints.controller';
 import { TimelineController } from './controllers/timeline.controller';
+import { ChallengeController } from './controllers/challenge.controller';
 import { SimulationPrismaService } from './prisma/simulation-prisma.service';
 import { MongoConnectionService } from './services/mongo/mongo-connection.service';
 import { LLMService } from './services/llm/llm.service';
@@ -37,10 +38,16 @@ import { ScenarioRepository } from './repositories/scenario.repository';
 import { ScenarioService } from './services/scenario.service';
 import { HintsRepository } from './repositories/hints.repository';
 import { HintsService } from './services/hints.service';
+import { ChallengeRepository } from './repositories/challenge.repository';
+import { ChallengeService } from './services/challenge.service';
+import { ChallengeGenerationService } from './services/challenge-generation.service';
 import { StageDetectorService } from './services/stage-detector.service';
 import { StreamingConversationService } from './services/streaming-conversation.service';
 import { ConversationOrchestrationService } from './services/conversation-orchestration.service';
+import { ConversationToolsService } from './services/conversation-tools.service';
 import { SimulationRedisService } from './services/redis/redis.service';
+import { VideoGenerationService } from './services/video-generation.service';
+import { PersonaMediaService } from './services/persona-media.service';
 import { RedisModule } from '@pitch/shared-backend/redis/index';
 import { TtsModule } from './tts/tts.module';
 import { AssessmentModule } from './assessment/assessment.module';
@@ -76,6 +83,7 @@ import { RagModule } from './rag/rag.module';
     ScenarioHttpController,
     HintsController,
     TimelineController,
+    ChallengeController,
   ],
   providers: [
     SimulationPrismaService,
@@ -111,13 +119,19 @@ import { RagModule } from './rag/rag.module';
     InvitationService,
     PersonaRepository,
     PersonaService,
+    PersonaMediaService,
     ScenarioRepository,
     ScenarioService,
     HintsRepository,
     HintsService,
+    ChallengeRepository,
+    ChallengeService,
+    ChallengeGenerationService,
     StageDetectorService,
     SimulationRedisService,
+    VideoGenerationService,
     StreamingConversationService,
+    ConversationToolsService,
     ConversationOrchestrationService,
   ],
   exports: [
@@ -128,9 +142,11 @@ import { RagModule } from './rag/rag.module';
     SessionMemberService,
     InvitationService,
     PersonaService,
+    PersonaMediaService,
     HintsService,
     SimulationPrismaService,
     MongoConnectionService,
+    VideoGenerationService,
     RagModule,
   ],
 })

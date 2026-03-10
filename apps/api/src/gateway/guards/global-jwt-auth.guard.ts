@@ -38,6 +38,12 @@ export class GlobalJwtAuthGuard implements CanActivate {
       .switchToHttp()
       .getRequest<RequestWithHeaders & RequestWithUser>();
 
+    // Guard can be registered both globally and at controller-level.
+    // If a previous guard pass already attached user claims, skip re-validating.
+    if (req.user?.id) {
+      return Promise.resolve(true);
+    }
+
     const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
       context.getHandler(),
       context.getClass(),
@@ -57,7 +63,7 @@ export class GlobalJwtAuthGuard implements CanActivate {
       this.logger.warn('No JWT token provided');
       throw new UnauthorizedException('Access token is required');
     }
-    this.logger.log('JWT Token:', token);
+
     if (this.isBypassToken(token)) {
       req.user = {
         id: process.env.DEV_BYPASS_USER_ID || 'dev-user',

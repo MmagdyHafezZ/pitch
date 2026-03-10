@@ -1,6 +1,6 @@
 'use client'
 
-import { Suspense, useEffect, useMemo, useState } from 'react'
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import {
   Alert,
@@ -31,6 +31,7 @@ import {
 import { Space_Grotesk, Fraunces } from 'next/font/google'
 import { useTeams } from '@/features/teams/hooks/useTeams'
 import { useAuth } from '@/features/auth'
+import { useTour } from '@/features/onboarding'
 import { useCreateTeamForm } from '@/features/teams/hooks/useTeamForm'
 import { TeamMembersPanel } from '@/components/ui/TeamMembersPanel'
 import { TeamSubscriptionPanel } from '@/components/ui/TeamSubscriptionPanel'
@@ -62,6 +63,8 @@ function TeamConfigInner() {
   const searchParams = useSearchParams()
   const isCreateMode = searchParams.get('mode') === 'create'
   const isCompactStepper = useMediaQuery('(max-width: 900px)')
+  const { startTour } = useTour()
+  const autoStartedTourKeyRef = useRef<string | null>(null)
 
   const { user } = useAuth()
   const { currentTeam, updateTeam, loading, fetchTeamById } = useTeams()
@@ -79,6 +82,28 @@ function TeamConfigInner() {
   })
   const [editError, setEditError] = useState<string | null>(null)
   const [savingEdit, setSavingEdit] = useState(false)
+
+  useEffect(() => {
+    const startTourParam = searchParams.get('startTour')
+    const tourScreenParam = searchParams.get('tourScreen')
+    const key = `${startTourParam ?? ''}:${tourScreenParam ?? ''}`
+
+    if (autoStartedTourKeyRef.current === key) {
+      return
+    }
+
+    if (startTourParam === 'team-config') {
+      autoStartedTourKeyRef.current = key
+      const timer = setTimeout(() => void startTour('team-config'), 800)
+      return () => clearTimeout(timer)
+    }
+
+    if (startTourParam === 'full' && tourScreenParam === 'team-config') {
+      autoStartedTourKeyRef.current = key
+      const timer = setTimeout(() => void startTour('team-config', { mode: 'full' }), 800)
+      return () => clearTimeout(timer)
+    }
+  }, [searchParams, startTour])
 
   useEffect(() => {
     if (!isCreateMode && currentTeam && !currentTeam.memberships?.length) {
@@ -182,7 +207,11 @@ function TeamConfigInner() {
       <Paper className={classes.shell} p={{ base: 'md', sm: 'xl' }}>
         <Stack gap="lg">
           {isCreateMode && (
-            <Paper className={classes.heroCard} p={{ base: 'md', sm: 'xl' }}>
+            <Paper
+              data-tour-id="team-create-hero"
+              className={classes.heroCard}
+              p={{ base: 'md', sm: 'xl' }}
+            >
               <Group justify="space-between" align="flex-start" wrap="wrap">
                 <Stack gap="sm" maw={700}>
                   <Group gap="xs">
@@ -266,7 +295,7 @@ function CreateModeLayout({
 }) {
   return (
     <SimpleGrid cols={{ base: 1, lg: 2 }} spacing="lg">
-      <Paper className={classes.contentCard} p="lg">
+      <Paper data-tour-id="team-create-details" className={classes.contentCard} p="lg">
         <Stack gap="md">
           <Group gap="xs">
             <IconBuildingSkyscraper size={18} />
@@ -298,7 +327,7 @@ function CreateModeLayout({
         </Stack>
       </Paper>
 
-      <Paper className={classes.contentCard} p="lg">
+      <Paper data-tour-id="team-create-billing" className={classes.contentCard} p="lg">
         <Stack gap="md">
           <Group gap="xs">
             <IconMapPin size={18} />
@@ -390,13 +419,13 @@ function EditModeLayout({
 
   return (
     <Stack gap="lg">
-      <Stack gap={4}>
+      <Stack data-tour-id="team-config-header" gap={4}>
         <Title order={2} className={fontClass}>
           {currentTeamName}
         </Title>
       </Stack>
 
-      <Paper className={classes.stepperWrap} p="md">
+      <Paper data-tour-id="team-config-stepper" className={classes.stepperWrap} p="md">
         <Stepper
           active={activeStep}
           onStepClick={setActiveStep}
@@ -437,7 +466,7 @@ function EditModeLayout({
       </Paper>
 
       {activeStep === 0 && (
-        <Paper className={classes.contentCard} p="lg">
+        <Paper data-tour-id="team-profile-form" className={classes.contentCard} p="lg">
           <Stack gap="md">
             <Title order={3} className={fontClass}>
               Team profile
@@ -480,7 +509,7 @@ function EditModeLayout({
       )}
 
       {activeStep === 2 && (
-        <Paper className={classes.contentCard} p="lg">
+        <Paper data-tour-id="team-billing-form" className={classes.contentCard} p="lg">
           <Stack gap="md">
             <Group justify="space-between" align="center" wrap="wrap">
               <Group gap="xs">
@@ -537,14 +566,16 @@ function EditModeLayout({
       )}
 
       {activeStep === 3 && currentTeamId && (
-        <TeamSubscriptionPanel
-          teamId={currentTeamId}
-          teamName={currentTeamName}
-          canManage={canManage}
-        />
+        <Box data-tour-id="team-subscription">
+          <TeamSubscriptionPanel
+            teamId={currentTeamId}
+            teamName={currentTeamName}
+            canManage={canManage}
+          />
+        </Box>
       )}
 
-      <Group justify="space-between" wrap="wrap">
+      <Group data-tour-id="team-config-nav" justify="space-between" wrap="wrap">
         <Button
           variant="default"
           leftSection={<IconChevronLeft size={16} />}

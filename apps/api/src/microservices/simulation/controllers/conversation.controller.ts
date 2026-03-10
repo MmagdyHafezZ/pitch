@@ -15,7 +15,11 @@ import { Prisma } from '@prisma/simulation-client';
 import type { TtsResult } from '../tts/providers/tts.provider';
 import { Observable, Subject } from 'rxjs';
 import { StreamEvent, TextStreamChunk } from '../dto/text-stream.dto';
-import { buildConversationSystemPrompt } from '../prompts/conversation.prompt';
+import {
+  buildConversationFallbackResponse,
+  buildConversationSystemPrompt,
+  isDisallowedGenericFallbackReply,
+} from '../prompts/conversation.prompt';
 import { resolveTtsConfig } from '../utils/tts-config';
 
 type JsonRecord = Record<string, unknown>;
@@ -360,10 +364,13 @@ export class ConversationController {
       });
 
       // If no text was generated, use fallback
-      if (!fullText.trim()) {
-        fullText = startAsAssistant
-          ? "Hello! Thanks for joining. Let's dive into today's scenario whenever you're ready."
-          : 'Got it. Could you say a bit more so I can respond properly?';
+      if (!fullText.trim() || isDisallowedGenericFallbackReply(fullText)) {
+        fullText = buildConversationFallbackResponse({
+          startAsAssistant,
+          persona: personaData,
+          sessionConfig,
+          scenarioConfig,
+        });
       }
 
       // Save assistant turn
@@ -908,10 +915,16 @@ export class ConversationController {
         responseText = retryResponse.response.content || '';
       }
 
-      if (!responseText.trim()) {
-        responseText = startAsAssistant
-          ? 'Hello! Thanks for joining. Let’s dive into today’s scenario whenever you’re ready.'
-          : 'Got it. Could you say a bit more so I can respond properly?';
+      if (
+        !responseText.trim() ||
+        isDisallowedGenericFallbackReply(responseText)
+      ) {
+        responseText = buildConversationFallbackResponse({
+          startAsAssistant,
+          persona: personaData,
+          sessionConfig,
+          scenarioConfig,
+        });
       }
 
       const assistantOrder = startAsAssistant ? nextOrder : nextOrder + 1;

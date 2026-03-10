@@ -54,7 +54,8 @@ const signatureTraitOptions = [
 ]
 
 const buildDefaultState = (providers: TtsProvider[]) => {
-  const provider = providers[0]
+  const provider =
+    providers.find((entry) => entry.name.toLowerCase() === 'elevenlabs') ?? providers[0]
   return {
     name: '',
     role: '',
@@ -112,7 +113,9 @@ export function CreatePersonaModal({
       }
 
       const provider =
-        ttsProviders.find((entry) => entry.name === current.provider) ?? ttsProviders[0]
+        ttsProviders.find((entry) => entry.name === current.provider) ??
+        ttsProviders.find((entry) => entry.name.toLowerCase() === 'elevenlabs') ??
+        ttsProviders[0]
       return {
         ...current,
         provider: provider?.name ?? '',

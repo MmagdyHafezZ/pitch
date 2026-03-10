@@ -43,6 +43,14 @@ interface ConversationContext extends IConversationContext {
   latestUserMessage?: string;
   objectives?: string[];
   pendingObjectives?: string[];
+  /** Role the user is playing in the session (e.g. "Sales Representative") */
+  userRole?: string;
+  /** Role the AI counterpart is playing (e.g. "Marketing Manager") */
+  aiRole?: string;
+  /** High-level topic or product name for the session */
+  scenarioTopic?: string;
+  /** The user's goal in this session */
+  scenarioObjective?: string;
 }
 
 interface ParsedHint {
@@ -453,7 +461,8 @@ export class HintsService {
     includeObjectives?: boolean,
     userId?: string,
   ): Promise<ConversationContext> {
-    // If messages are provided, use them
+    // If messages are provided, use them — but still fetch session context from DB
+    // so the hints LLM knows the user's role, topic, and objective.
     if (providedMessages && providedMessages.length > 0) {
       const messages = providedMessages.map((m) => ({
         role: m.role,
@@ -468,12 +477,78 @@ export class HintsService {
       const latestAssistantQuestion = extractLatestQuestion(
         latestAssistantMessage,
       );
+
+      // Fetch session config for grounding — non-fatal if unavailable
+      let userRole: string | undefined;
+      let aiRole: string | undefined;
+      let scenarioTopic: string | undefined;
+      let scenarioObjective: string | undefined;
+      try {
+        const sessionRow = await this.prisma.client.session.findUnique({
+          where: { id: sessionId },
+          select: {
+            sessionConfig: true,
+            scenario: { select: { config: true } },
+          },
+        });
+        if (sessionRow) {
+          const sc =
+            typeof sessionRow.sessionConfig === 'object' &&
+            sessionRow.sessionConfig !== null &&
+            !Array.isArray(sessionRow.sessionConfig)
+              ? (sessionRow.sessionConfig as Record<string, unknown>)
+              : {};
+          userRole = typeof sc.userRole === 'string' ? sc.userRole : undefined;
+          aiRole = typeof sc.aiRole === 'string' ? sc.aiRole : undefined;
+
+          // Scenario sub-object embedded in sessionConfig (used by challenge sessions)
+          const scScenario =
+            typeof sc.scenario === 'object' &&
+            sc.scenario !== null &&
+            !Array.isArray(sc.scenario)
+              ? (sc.scenario as Record<string, unknown>)
+              : {};
+          scenarioTopic =
+            typeof scScenario.topic === 'string' ? scScenario.topic : undefined;
+          scenarioObjective =
+            typeof scScenario.objective === 'string'
+              ? scScenario.objective
+              : undefined;
+
+          // Fall back to the linked DB scenario config
+          if (sessionRow.scenario) {
+            const dbConfig =
+              typeof sessionRow.scenario.config === 'object' &&
+              sessionRow.scenario.config !== null &&
+              !Array.isArray(sessionRow.scenario.config)
+                ? (sessionRow.scenario.config as Record<string, unknown>)
+                : {};
+            if (!scenarioTopic) {
+              scenarioTopic =
+                typeof dbConfig.name === 'string' ? dbConfig.name : undefined;
+            }
+            if (!scenarioObjective) {
+              scenarioObjective =
+                typeof dbConfig.objective === 'string'
+                  ? dbConfig.objective
+                  : undefined;
+            }
+          }
+        }
+      } catch {
+        // Non-fatal — hints degrade gracefully without session context
+      }
+
       return {
         messages,
         conversationLength: messages.length,
         latestAssistantMessage,
         latestAssistantQuestion,
         latestUserMessage,
+        userRole,
+        aiRole,
+        scenarioTopic,
+        scenarioObjective,
       };
     }
 
@@ -643,10 +718,36 @@ export class HintsService {
   }
 
   /**
-   * Format conversation context for LLM
+   * Format conversation context for LLM.
+   * The [SESSION CONTEXT] block is prepended so the hints LLM knows the user's
+   * role and objective and won't drift to irrelevant topics mentioned in passing.
    */
   private formatConversationForLLM(context: ConversationContext): string {
-    let formatted = 'Current Conversation:\n\n';
+    let formatted = '';
+
+    const hasSessionContext =
+      context.userRole ||
+      context.aiRole ||
+      context.scenarioTopic ||
+      context.scenarioObjective;
+    if (hasSessionContext) {
+      formatted += '[SESSION CONTEXT]\n';
+      if (context.userRole) {
+        formatted += `- User role (who you are coaching): ${context.userRole}\n`;
+      }
+      if (context.aiRole) {
+        formatted += `- AI counterpart role: ${context.aiRole}\n`;
+      }
+      if (context.scenarioTopic) {
+        formatted += `- Topic / product: ${context.scenarioTopic}\n`;
+      }
+      if (context.scenarioObjective) {
+        formatted += `- User objective: ${context.scenarioObjective}\n`;
+      }
+      formatted += '\n';
+    }
+
+    formatted += 'Current Conversation:\n\n';
 
     if (context.messages && context.messages.length > 0) {
       formatted += context.messages

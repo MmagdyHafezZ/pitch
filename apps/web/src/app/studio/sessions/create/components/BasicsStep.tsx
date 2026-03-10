@@ -112,6 +112,7 @@ export function BasicsStep({
           return (
             <Paper
               key={option.value}
+              data-tour-id={`session-type-${option.value}`}
               withBorder
               p="md"
               radius="lg"
@@ -179,6 +180,7 @@ export function BasicsStep({
                 value={sessionName}
                 onChange={(event) => setSessionName(event.currentTarget.value)}
                 description="Optional, but helpful for searching later"
+                data-tour-id="create-session-name"
               />
             </Grid.Col>
             <Grid.Col span={{ base: 12, md: 5 }}>

@@ -69,6 +69,131 @@ const fraunces = Fraunces({ subsets: ['latin'], display: 'swap' })
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
 
+const COUNTERPART_ROLE_PATTERN =
+  /client|customer|buyer|prospect|stakeholder|procurement|decision maker|decision-maker|economic buyer|cto|cfo|cio|vp/i
+
+const PITCHER_ROLE_PATTERN =
+  /sales|seller|pitch|account executive|account manager|sales rep|representative|bdr|sdr|business development|founder|consultant/i
+
+const pickString = (value: unknown): string | undefined =>
+  typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined
+
+const normalizeRole = (value: string | undefined): string | undefined =>
+  value ? value.trim().replace(/\s+/g, ' ').toLowerCase() : undefined
+
+const pickCounterpartRole = (candidates: Array<string | undefined>): string | undefined =>
+  candidates.find((candidate) => {
+    const role = pickString(candidate)
+    return !!role && COUNTERPART_ROLE_PATTERN.test(role.toLowerCase())
+  })
+
+const pickPitcherRole = (candidates: Array<string | undefined>): string | undefined =>
+  candidates.find((candidate) => {
+    const role = pickString(candidate)
+    return !!role && PITCHER_ROLE_PATTERN.test(role.toLowerCase())
+  })
+
+const pickFirstDifferentRole = (
+  candidates: Array<string | undefined>,
+  exclude?: string
+): string | undefined => {
+  const normalizedExclude = normalizeRole(exclude)
+  return candidates.find((candidate) => {
+    const role = pickString(candidate)
+    return !!role && normalizeRole(role) !== normalizedExclude
+  })
+}
+
+const alignPitchRolePair = (
+  aiRole?: string,
+  userRole?: string
+): { aiRole?: string; userRole?: string } => {
+  let resolvedAiRole = pickString(aiRole)
+  let resolvedUserRole = pickString(userRole)
+
+  if (
+    resolvedAiRole &&
+    resolvedUserRole &&
+    PITCHER_ROLE_PATTERN.test(resolvedAiRole.toLowerCase()) &&
+    COUNTERPART_ROLE_PATTERN.test(resolvedUserRole.toLowerCase())
+  ) {
+    const previousAiRole = resolvedAiRole
+    resolvedAiRole = resolvedUserRole
+    resolvedUserRole = previousAiRole
+  }
+
+  if (
+    resolvedAiRole &&
+    resolvedUserRole &&
+    normalizeRole(resolvedAiRole) === normalizeRole(resolvedUserRole)
+  ) {
+    resolvedAiRole = undefined
+  }
+
+  return {
+    aiRole: resolvedAiRole,
+    userRole: resolvedUserRole,
+  }
+}
+
+const scrollTrackByCard = (container: HTMLDivElement, direction: 'left' | 'right') => {
+  const items = Array.from(container.children).filter(
+    (element): element is HTMLElement => element instanceof HTMLElement && element.clientWidth > 0
+  )
+  if (items.length === 0) {
+    return
+  }
+
+  const maxScrollLeft = Math.max(0, container.scrollWidth - container.clientWidth)
+  if (maxScrollLeft <= 0) {
+    return
+  }
+
+  const targets = Array.from(
+    new Set(items.map((item) => Math.min(Math.max(0, item.offsetLeft), maxScrollLeft)))
+  ).sort((a, b) => a - b)
+  if (targets.length === 0) {
+    return
+  }
+
+  const current = container.scrollLeft
+  const epsilon = 8
+  const lastIndex = targets.length - 1
+  let nextIndex = 0
+
+  if (direction === 'right') {
+    let baseIndex = 0
+    for (let index = 0; index <= lastIndex; index += 1) {
+      if ((targets[index] ?? 0) <= current + epsilon) {
+        baseIndex = index
+      }
+    }
+    nextIndex = Math.min(baseIndex + 1, lastIndex)
+  } else {
+    let baseIndex = lastIndex
+    for (let index = 0; index <= lastIndex; index += 1) {
+      if ((targets[index] ?? 0) >= current - epsilon) {
+        baseIndex = index
+        break
+      }
+    }
+    nextIndex = Math.max(baseIndex - 1, 0)
+  }
+
+  const target = targets[nextIndex] ?? current
+
+  if (Math.abs(target - current) < 2) {
+    const fallbackAmount = container.clientWidth * 0.8
+    container.scrollBy({
+      left: direction === 'left' ? -fallbackAmount : fallbackAmount,
+      behavior: 'smooth',
+    })
+    return
+  }
+
+  container.scrollTo({ left: target, behavior: 'smooth' })
+}
+
 export default function CreateSessionPage() {
   const router = useRouter()
   const { user } = useAuth()
@@ -98,7 +223,7 @@ export default function CreateSessionPage() {
   const [aiRole, setAiRole] = useState('')
   const [userRole, setUserRole] = useState('')
   const [scenarioGenerating, setScenarioGenerating] = useState(false)
-  const [scenarioCount, setScenarioCount] = useState(3)
+  const [scenarioCount, setScenarioCount] = useState(1)
 
   const [llmProvider, setLlmProvider] = useState<string | null>(null)
   const [llmModel, setLlmModel] = useState<string | null>(null)
@@ -290,31 +415,42 @@ export default function CreateSessionPage() {
             : undefined
       const clientRole = typeof rolesObj.client === 'string' ? rolesObj.client : undefined
       const userRole = typeof rolesObj.user === 'string' ? rolesObj.user : undefined
-      aiRoleFromRoles = assistantRole ?? clientRole
-      userRoleFromRoles = userRole
+      aiRoleFromRoles =
+        pickCounterpartRole([clientRole, assistantRole, userRole]) ??
+        assistantRole ??
+        clientRole ??
+        userRole
+      userRoleFromRoles =
+        userRole ??
+        pickPitcherRole([assistantRole, clientRole]) ??
+        pickFirstDifferentRole([assistantRole, clientRole, userRole], aiRoleFromRoles)
     } else if (Array.isArray(scenarioConfig.roles)) {
       const rolesArray = scenarioConfig.roles as Array<{ name?: string }>
       const preferredAiRole =
-        rolesArray.find((role) =>
-          String(role?.name || '')
-            .toLowerCase()
-            .match(/client|customer|partner|buyer|prospect|stakeholder|cto|cfo|vp|lead/i)
-        )?.name ?? rolesArray[0]?.name
+        pickCounterpartRole(rolesArray.map((role) => role?.name)) ?? rolesArray[0]?.name
       aiRoleFromRoles = preferredAiRole
-      userRoleFromRoles = rolesArray.find(
-        (role) => role?.name && role.name !== preferredAiRole
-      )?.name
+      userRoleFromRoles =
+        pickPitcherRole(
+          rolesArray
+            .map((role) => role?.name)
+            .filter((name) => normalizeRole(name) !== normalizeRole(preferredAiRole))
+        ) ?? rolesArray.find((role) => role?.name && role.name !== preferredAiRole)?.name
     }
 
+    const alignedInferredRoles = alignPitchRolePair(
+      aiRoleFromSessionConfig ?? aiRoleFromRoles,
+      userRoleFromSessionConfig ?? userRoleFromRoles
+    )
+
     if (!aiRole.trim()) {
-      const nextAiRole = aiRoleFromSessionConfig ?? aiRoleFromRoles
+      const nextAiRole = alignedInferredRoles.aiRole
       if (nextAiRole) {
         setAiRole(nextAiRole)
       }
     }
 
     if (!userRole.trim()) {
-      const nextUserRole = userRoleFromSessionConfig ?? userRoleFromRoles
+      const nextUserRole = alignedInferredRoles.userRole
       if (nextUserRole) {
         setUserRole(nextUserRole)
       }
@@ -615,8 +751,7 @@ export default function CreateSessionPage() {
         initiativeLevel,
         difficulty,
         durationMinutes,
-        aiRole: aiRole.trim() || undefined,
-        userRole: userRole.trim() || undefined,
+        ...alignPitchRolePair(aiRole, userRole),
       }
 
       if (llmProvider && llmModel) {
@@ -659,6 +794,31 @@ export default function CreateSessionPage() {
       }
 
       sessionConfig.attachments = attachments.length > 0 ? attachments : undefined
+      if (sessionType === 'video') {
+        const personaAvatar = selectedPersonaData?.traits?.avatar
+        sessionConfig.video = {
+          mode: 'realtime',
+          provider: 'heygen',
+          fallbackProvider: 'azure-avatar',
+          ...(personaAvatar?.liveAvatarId ? { liveAvatarId: personaAvatar.liveAvatarId } : {}),
+          ...(personaAvatar?.liveAvatarName
+            ? { liveAvatarName: personaAvatar.liveAvatarName }
+            : personaAvatar?.label
+              ? { liveAvatarName: personaAvatar.label }
+              : {}),
+          ...(personaAvatar?.heygenAvatarId
+            ? {
+                heygenAvatarId: personaAvatar.heygenAvatarId,
+                ...(personaAvatar.avatarStyle
+                  ? { heygenAvatarStyle: personaAvatar.avatarStyle }
+                  : {}),
+                ...(personaAvatar.backgroundColor
+                  ? { heygenBackgroundColor: personaAvatar.backgroundColor }
+                  : {}),
+              }
+            : {}),
+        }
+      }
 
       const sessionData: CreateSessionInput = {
         orgId: selectedTeamId || user.id,
@@ -706,15 +866,13 @@ export default function CreateSessionPage() {
   const scrollPersona = (direction: 'left' | 'right') => {
     const container = personaScrollRef.current
     if (!container) return
-    const amount = container.clientWidth * 0.8
-    container.scrollBy({ left: direction === 'left' ? -amount : amount, behavior: 'smooth' })
+    scrollTrackByCard(container, direction)
   }
 
   const scrollModels = (direction: 'left' | 'right') => {
     const container = modelScrollRef.current
     if (!container) return
-    const amount = container.clientWidth * 0.8
-    container.scrollBy({ left: direction === 'left' ? -amount : amount, behavior: 'smooth' })
+    scrollTrackByCard(container, direction)
   }
 
   const handleGenerateScenario = async () => {
@@ -747,8 +905,7 @@ export default function CreateSessionPage() {
         sessionConfig: {
           difficulty,
           durationMinutes,
-          aiRole: aiRole.trim() || undefined,
-          userRole: userRole.trim() || undefined,
+          ...alignPitchRolePair(aiRole, userRole),
         },
         personaId: selectedPersona || undefined,
         crmContextId: undefined,
@@ -1126,14 +1283,15 @@ export default function CreateSessionPage() {
       <Container size="xl" py="xl">
         <Group
           style={{
-            width: '100vw',
+            width: '100%',
           }}
           py="md"
           className={classes.hero}
         >
           <Group
             style={{
-              width: '80.6em',
+              width: '100%',
+              maxWidth: '80.6em',
             }}
             align="flex-start"
           >
@@ -1160,7 +1318,7 @@ export default function CreateSessionPage() {
           </Alert>
         )}
 
-        <Grid gutter="xl">
+        <Grid gutter={isStepperCompact ? 'md' : 'xl'}>
           <Grid.Col span={{ base: 12, md: 3 }}>
             <Box className={classes.stepPanel}>
               <Paper className={classes.stepPanelCard} p="md">
@@ -1186,17 +1344,19 @@ export default function CreateSessionPage() {
           </Grid.Col>
 
           <Grid.Col span={{ base: 12, md: 9 }}>
-            <Paper className={classes.contentCard} p="xl">
+            <Paper className={classes.contentCard} p={isStepperCompact ? 'md' : 'xl'}>
               {steps[active]?.content}
             </Paper>
 
-            <Group justify="space-between" mt="xl">
+            <Group justify="space-between" mt="xl" gap="sm" wrap="wrap">
               <Button variant="default" onClick={prevStep} disabled={active === 0}>
                 Back
               </Button>
 
               {active < steps.length - 1 ? (
-                <Button onClick={nextStep}>Next</Button>
+                <Button data-tour-id="create-session-next" onClick={nextStep}>
+                  Next
+                </Button>
               ) : (
                 <Button
                   onClick={handleSubmit}

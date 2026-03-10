@@ -16,6 +16,7 @@ interface SessionConfig extends JsonRecord {
   durationMinutes?: number;
   duration?: number;
   stages?: unknown;
+  scenario?: unknown;
 }
 
 interface ScenarioConfig extends JsonRecord {
@@ -190,11 +191,16 @@ export class TimelineController {
       });
     }
 
-    // Fallback: Generate default stages based on common sales patterns
+    // Fallback: Generate default stages based on common sales patterns.
+    // Prefer objective from DB scenario config, then sessionConfig.scenario.objective
+    // (used by challenge sessions which embed the scenario inline instead of linking a DB record).
+    const sessionScenario = toRecord(sessionConfig.scenario);
     const objective =
       typeof scenarioConfig.objective === 'string'
         ? scenarioConfig.objective
-        : 'Complete the simulation';
+        : typeof sessionScenario.objective === 'string'
+          ? sessionScenario.objective
+          : 'Complete the simulation';
     const defaultStages = [
       { label: 'Introduction', description: 'Opening and building rapport' },
       { label: 'Discovery', description: 'Understanding needs and challenges' },
@@ -224,7 +230,6 @@ export class TimelineController {
   ): number {
     if (currentTurns === 0) return 0;
 
-    // Calculate based on expected turns per stage
     const duration =
       toNumber(sessionConfig.durationMinutes) ??
       toNumber(sessionConfig.duration) ??
@@ -232,8 +237,15 @@ export class TimelineController {
       toNumber(scenarioConfig.duration) ??
       15;
 
-    // Estimate ~2 turns per minute of expected duration
-    const estimatedTotalTurns = Math.max(totalStages * 2, duration * 2);
+    // Target turns: ~3 turns per stage, capped by an estimate derived from session duration.
+    // Text sessions run faster than voice; 4 turns/minute is a reasonable upper bound.
+    // This prevents progress from freezing at a low value for very short sessions.
+    const turnsByStage = totalStages * 3;
+    const turnsByDuration = Math.round(duration * 4);
+    const estimatedTotalTurns = Math.max(
+      turnsByStage,
+      Math.min(turnsByDuration, totalStages * 6),
+    );
     const progress = Math.min(
       100,
       Math.max(1, Math.round((currentTurns / estimatedTotalTurns) * 100)),

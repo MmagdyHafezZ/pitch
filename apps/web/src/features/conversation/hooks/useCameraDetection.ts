@@ -57,6 +57,27 @@ export interface UseCameraDetectionReturn {
   faceReady: boolean
 }
 
+const isFaceBlendshape = (value: unknown): value is FaceBlendshape => {
+  if (!value || typeof value !== 'object') return false
+  const record = value as Record<string, unknown>
+  return typeof record.categoryName === 'string' && typeof record.score === 'number'
+}
+
+const normalizeFaceBlendshapeFrame = (frame: unknown): FaceBlendshape[] => {
+  if (Array.isArray(frame) && frame.every(isFaceBlendshape)) {
+    return frame
+  }
+
+  if (frame && typeof frame === 'object') {
+    const categories = (frame as { categories?: unknown }).categories
+    if (Array.isArray(categories) && categories.every(isFaceBlendshape)) {
+      return categories
+    }
+  }
+
+  return []
+}
+
 /**
  * useCameraDetection
  *
@@ -200,7 +221,8 @@ export function useCameraDetection({
       lastFaceMsRef.current = nowMs
       const result = faceLandmarkerRef.current.detectForVideo(video, nowMs)
       if (result.faceBlendshapes?.length > 0) {
-        onFaceRef.current?.(result.faceBlendshapes[0] as FaceBlendshape[])
+        const normalizedBlendshapes = normalizeFaceBlendshapeFrame(result.faceBlendshapes[0])
+        onFaceRef.current?.(normalizedBlendshapes.length > 0 ? normalizedBlendshapes : null)
       } else {
         onFaceRef.current?.(null)
       }

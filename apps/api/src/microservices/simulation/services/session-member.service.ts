@@ -21,6 +21,7 @@ import type {
   SessionMemberRole,
   Prisma,
 } from '@prisma/simulation-client';
+import { SimulationRedisService } from './redis/redis.service';
 
 @Injectable()
 export class SessionMemberService {
@@ -30,6 +31,7 @@ export class SessionMemberService {
     private readonly sessionRepository: SessionRepository,
     private readonly sessionMemberRepository: SessionMemberRepository,
     private readonly prisma: SimulationPrismaService,
+    private readonly redis: SimulationRedisService,
   ) {}
 
   async listMembers(
@@ -114,6 +116,7 @@ export class SessionMemberService {
     this.logger.log(
       `Added ${created} members to session ${sessionId}, ${failed} failed`,
     );
+    await this.invalidateSessionFullCache(sessionId);
 
     return {
       members: createdMembers.map(this.mapToResponseDto),
@@ -205,6 +208,8 @@ export class SessionMemberService {
       ? `Session ${sessionId} deleted because it has no members`
       : `Member ${userId} removed from session ${sessionId}`;
 
+    await this.invalidateSessionFullCache(sessionId);
+
     return {
       message,
       sessionId,
@@ -256,4 +261,16 @@ export class SessionMemberService {
       updatedAt: member.updatedAt,
     };
   };
+
+  private async invalidateSessionFullCache(sessionId: string): Promise<void> {
+    try {
+      await this.redis.deleteSessionFull(sessionId);
+    } catch (error) {
+      this.logger.warn(
+        `Failed to invalidate session full cache for ${sessionId}: ${
+          (error as Error)?.message ?? error
+        }`,
+      );
+    }
+  }
 }

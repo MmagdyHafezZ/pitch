@@ -236,6 +236,7 @@ export function StyleStep({
                   withBorder
                   p="md"
                   radius="lg"
+                  data-tour-id={`style-tone-${option.value.toLowerCase().replace(/\s+/g, '-')}`}
                   className={`${classes.optionCard} ${isSelected ? classes.optionCardSelected : ''}`}
                   onClick={() => setTone(option.value)}
                 >
@@ -270,6 +271,7 @@ export function StyleStep({
                   withBorder
                   p="md"
                   radius="lg"
+                  data-tour-id={`style-pace-${option.value.toLowerCase()}`}
                   className={`${classes.optionCard} ${
                     isSelected ? classes.optionCardSelected : ''
                   }`}
@@ -306,6 +308,7 @@ export function StyleStep({
                   withBorder
                   p="md"
                   radius="lg"
+                  data-tour-id={`style-length-${option.value.toLowerCase()}`}
                   className={`${classes.optionCard} ${
                     isSelected ? classes.optionCardSelected : ''
                   }`}
@@ -342,6 +345,7 @@ export function StyleStep({
                   withBorder
                   p="md"
                   radius="lg"
+                  data-tour-id={`style-patience-${option.value.toLowerCase()}`}
                   className={`${classes.optionCard} ${
                     isSelected ? classes.optionCardSelected : ''
                   }`}
@@ -378,6 +382,7 @@ export function StyleStep({
                   withBorder
                   p="md"
                   radius="lg"
+                  data-tour-id={`style-initiative-${option.value.toLowerCase()}`}
                   className={`${classes.optionCard} ${
                     isSelected ? classes.optionCardSelected : ''
                   }`}
@@ -414,6 +419,7 @@ export function StyleStep({
                   withBorder
                   p="md"
                   radius="lg"
+                  data-tour-id={`style-difficulty-${option.label.toLowerCase().replace(/\s+/g, '-')}`}
                   className={`${classes.optionCard} ${
                     isSelected ? classes.optionCardSelected : ''
                   }`}

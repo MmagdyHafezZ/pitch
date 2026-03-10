@@ -807,6 +807,36 @@ docker logs pitch-user
 
 ---
 
+## Vercel Backend Deployment
+
+Use this flow when deploying the backend API as a dedicated Vercel project.
+
+### Project Settings
+
+1. Set **Root Directory** to the repository root (do not set it to `apps/api`).
+2. Keep framework auto-detection off for this backend project.
+3. Configure backend environment variables in Vercel (DB URLs, RabbitMQ, Redis,
+   JWT, OAuth, etc.).
+
+### Repo Files
+
+- `vercel.json` at repo root:
+  - runs workspace install (`pnpm install --frozen-lockfile`)
+  - builds shared package + backend
+    (`pnpm --filter @pitch/shared-backend build && pnpm --filter api build`)
+  - routes requests to `apps/api/api/index.js`
+- `apps/api/api/index.js`:
+  - boots the Nest app once per runtime
+  - reuses the same server instance on warm invocations
+
+### Deploy
+
+```bash
+vercel --prod
+```
+
+---
+
 ## Kubernetes Deployment
 
 ### Helm Charts

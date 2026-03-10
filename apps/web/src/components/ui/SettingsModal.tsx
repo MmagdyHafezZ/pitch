@@ -39,6 +39,7 @@ import {
   IconSparkles,
 } from '@tabler/icons-react'
 import { modals } from '@mantine/modals'
+import { useMediaQuery } from '@mantine/hooks'
 import { useAuth } from '@/features/auth'
 import { useRouter } from 'next/navigation'
 import { useAppearanceStore } from '@/lib/stores/appearance.store'
@@ -60,6 +61,7 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
   const { user, logout } = useAuth()
   const { locale, setLocale, localeOptions, t, isSavingLocale, localeSaveError } = useI18n()
   const computedColorScheme = useComputedColorScheme('light')
+  const isMobile = useMediaQuery('(max-width: 48em)')
   const isDark = computedColorScheme === 'dark'
   const [activeSection, setActiveSection] = useState<SettingsSection>('Account')
   const [name, setName] = useState(user?.name ?? '')
@@ -189,22 +191,32 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
     <Modal
       opened={opened}
       onClose={onClose}
-      size="800px"
+      size={isMobile ? '100%' : '800px'}
       padding={0}
       withCloseButton={false}
       styles={{
-        body: { padding: 0, height: 'min(80vh, 720px)' },
-        content: { borderRadius: rem(12), overflow: 'hidden', backgroundColor: contentBackground },
+        body: { padding: 0, height: isMobile ? 'calc(100dvh - 28px)' : 'min(80vh, 720px)' },
+        content: {
+          borderRadius: rem(isMobile ? 10 : 12),
+          overflow: 'hidden',
+          backgroundColor: contentBackground,
+        },
       }}
     >
-      <Group align="stretch" gap={0} wrap="nowrap" style={{ height: '100%', minHeight: 0 }}>
+      <Group
+        align="stretch"
+        gap={0}
+        wrap={isMobile ? 'wrap' : 'nowrap'}
+        style={{ height: '100%', minHeight: 0 }}
+      >
         {/* Left Sidebar */}
         <Box
           style={{
-            width: 280,
+            width: isMobile ? '100%' : 280,
             backgroundColor: navBackground,
-            padding: rem(24),
+            padding: rem(isMobile ? 16 : 24),
             position: 'relative',
+            borderBottom: isMobile ? `1px solid ${inputBorder}` : undefined,
           }}
         >
           <ActionIcon
@@ -256,10 +268,11 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
           <Box
             onClick={handleLogout}
             style={{
-              position: 'absolute',
+              position: isMobile ? 'static' : 'absolute',
               bottom: 24,
               left: 24,
               right: 24,
+              marginTop: rem(isMobile ? 16 : 0),
               padding: `${rem(12)} ${rem(16)}`,
               borderRadius: rem(8),
               cursor: 'pointer',
@@ -280,7 +293,7 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
         <ScrollArea style={{ flex: 1, height: '100%' }}>
           <Box
             style={{
-              padding: rem(40),
+              padding: rem(isMobile ? 16 : 40),
               backgroundColor: contentBackground,
               minHeight: '100%',
               color: contentText,
@@ -439,7 +452,7 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
                   </Tabs.List>
 
                   <Tabs.Panel value="profiles" pt="md">
-                    <SimpleGrid cols={2} spacing="sm">
+                    <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
                       {profiles.map((profile) => {
                         const surface = profile.tokens.surfaceBg
                         const profileText = getReadableTextColor(surface)
