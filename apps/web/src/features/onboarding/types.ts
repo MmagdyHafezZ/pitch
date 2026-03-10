@@ -21,4 +21,10 @@ export interface OnboardingData {
   wantsTutorial?: boolean
 }
 
-export type TourScreen = 'home' | 'sessions' | 'challenges' | 'analytics' | 'team-config'
+export type TourScreen =
+  | 'home'
+  | 'sessions'
+  | 'create-session'
+  | 'challenges'
+  | 'analytics'
+  | 'team-config'

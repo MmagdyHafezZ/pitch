@@ -377,8 +377,7 @@ export class SessionResponseDto {
       name: 'Arden - Skeptical CTO',
       traits: {
         avatar: {
-          imageUrl: 'https://files2.heygen.ai/example.webp',
-          heygenAvatarId: 'Artur_sitting_office_front',
+          imageUrl: 'https://example.com/avatar.webp',
         },
       },
     },

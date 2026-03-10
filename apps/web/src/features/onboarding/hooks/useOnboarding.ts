@@ -39,11 +39,11 @@ export function useOnboarding() {
     }
   }
 
-  const completeOnboarding = async (data: OnboardingData) => {
+  const completeOnboarding = async (data: OnboardingData, options?: { redirectTo?: string }) => {
     setIsSaving(true)
     try {
       await saveSettings(data, true)
-      router.replace('/studio/home')
+      router.replace(options?.redirectTo ?? '/studio/home')
     } finally {
       setIsSaving(false)
     }

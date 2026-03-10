@@ -239,14 +239,18 @@ export default function DashboardHome() {
     }
 
     if (startTourParam === 'home') {
-      autoStartedTourKeyRef.current = key
-      const timer = setTimeout(() => void startTour('home'), 800)
+      const timer = setTimeout(() => {
+        autoStartedTourKeyRef.current = key
+        void startTour('home')
+      }, 800)
       return () => clearTimeout(timer)
     }
 
     if (startTourParam === 'full' && (!tourScreenParam || tourScreenParam === 'home')) {
-      autoStartedTourKeyRef.current = key
-      const timer = setTimeout(() => void startTour('home', { mode: 'full' }), 800)
+      const timer = setTimeout(() => {
+        autoStartedTourKeyRef.current = key
+        void startTour('home', { mode: 'full' })
+      }, 800)
       return () => clearTimeout(timer)
     }
   }, [searchParams, startTour])

@@ -36,15 +36,12 @@ import {
 import {
   Area,
   AreaChart,
+  Bar,
+  BarChart as RechartsBarChart,
   CartesianGrid,
   Cell,
   Pie,
   PieChart,
-  PolarAngleAxis,
-  PolarGrid,
-  PolarRadiusAxis,
-  Radar,
-  RadarChart,
   ResponsiveContainer,
   Tooltip as RechartsTooltip,
   XAxis,
@@ -107,9 +104,10 @@ type AssessmentReport = {
   }>
 }
 
+type TurnAnnotation = NonNullable<AssessmentReport['turnAnnotations']>[number]
+type MoveGrade = 'brilliant' | 'good' | 'neutral' | 'miss' | 'inaccuracy' | 'mistake' | 'blunder'
+
 const POLL_INTERVAL_MS = 2500
-const POSITIVE_LABELS = new Set(['PositiveExample', 'ObjectiveMet', 'InsightfulQuestion'])
-const NEGATIVE_LABELS = new Set(['NegativeExample', 'ObjectiveNotMet', 'MissedOpportunity'])
 
 const LABEL_COPY: Record<string, string> = {
   PositiveExample: 'Positive Example',
@@ -135,7 +133,9 @@ const CHART_COLORS = {
   cyan: '#22d3ee',
   blue: '#3b82f6',
   teal: '#14b8a6',
+  lime: '#84cc16',
   green: '#22c55e',
+  yellow: '#eab308',
   red: '#ef4444',
   orange: '#f59e0b',
   gray: '#94a3b8',
@@ -143,11 +143,86 @@ const CHART_COLORS = {
   slateAxis: '#94a3b8',
 }
 
+const MOVE_GRADE_ORDER: MoveGrade[] = [
+  'brilliant',
+  'good',
+  'neutral',
+  'miss',
+  'inaccuracy',
+  'mistake',
+  'blunder',
+]
+
+const MOVE_GRADE_META: Record<
+  MoveGrade,
+  {
+    label: string
+    notation: string
+    badgeColor: string
+    chartColor: string
+    description: string
+  }
+> = {
+  brilliant: {
+    label: 'Brilliant Move',
+    notation: '!!',
+    badgeColor: 'lime',
+    chartColor: CHART_COLORS.lime,
+    description: 'High-impact response with strong relevance and execution.',
+  },
+  good: {
+    label: 'Good Move',
+    notation: '!',
+    badgeColor: 'teal',
+    chartColor: CHART_COLORS.teal,
+    description: 'Solid response that advances the objective clearly.',
+  },
+  neutral: {
+    label: 'Neutral Move',
+    notation: '=',
+    badgeColor: 'gray',
+    chartColor: CHART_COLORS.gray,
+    description: 'Acceptable move with limited impact on the outcome.',
+  },
+  miss: {
+    label: 'Miss',
+    notation: '?!',
+    badgeColor: 'yellow',
+    chartColor: CHART_COLORS.yellow,
+    description: 'A key opportunity was available but not fully used.',
+  },
+  inaccuracy: {
+    label: 'Inaccuracy',
+    notation: '?!',
+    badgeColor: 'orange',
+    chartColor: CHART_COLORS.orange,
+    description: 'Minor quality loss from vague or partially off-target wording.',
+  },
+  mistake: {
+    label: 'Mistake',
+    notation: '?',
+    badgeColor: 'red',
+    chartColor: CHART_COLORS.red,
+    description: 'Clear quality drop that weakens persuasion or fit.',
+  },
+  blunder: {
+    label: 'Blunder',
+    notation: '??',
+    badgeColor: 'red',
+    chartColor: '#b91c1c',
+    description: 'Severe move that materially hurts objective attainment.',
+  },
+}
+
+const NEEDS_WORK_GRADES = new Set<MoveGrade>(['miss', 'inaccuracy', 'mistake', 'blunder'])
+
 const toGrade = (score: number) => {
-  if (score >= 90) return { letter: 'A', color: 'green' as const }
-  if (score >= 80) return { letter: 'B', color: 'teal' as const }
-  if (score >= 70) return { letter: 'C', color: 'yellow' as const }
-  if (score >= 60) return { letter: 'D', color: 'orange' as const }
+  // Thresholds calibrated so that a majority-positive session scores B/A.
+  // At 9 turns, all-PositiveExample (+2 each) normalises to ~75 % → A.
+  if (score >= 73) return { letter: 'A', color: 'green' as const }
+  if (score >= 60) return { letter: 'B', color: 'teal' as const }
+  if (score >= 47) return { letter: 'C', color: 'yellow' as const }
+  if (score >= 35) return { letter: 'D', color: 'orange' as const }
   return { letter: 'F', color: 'red' as const }
 }
 
@@ -194,6 +269,24 @@ const buildRecommendation = (item: {
   return 'Keep this pattern: concise response with explicit relevance to stakeholder goals.'
 }
 
+const getMoveGrade = (
+  item: Pick<TurnAnnotation, 'label' | 'scoreDelta' | 'reasonSummary'>
+): MoveGrade => {
+  const delta = item.scoreDelta ?? 0
+  const reason = `${item.label} ${item.reasonSummary ?? ''}`.toLowerCase()
+
+  if (item.label === 'MissedOpportunity' || reason.includes('missed opportunity')) return 'miss'
+  if (delta >= 2.2) return 'brilliant'
+  if (delta >= 0.6) return 'good'
+  if (delta <= -2.6) return 'blunder'
+  if (delta <= -1.4) return 'mistake'
+  if (delta < 0) return 'inaccuracy'
+  if (item.label === 'NegativeExample' || item.label === 'ObjectiveNotMet') return 'mistake'
+  if (item.label === 'PositiveExample' || item.label === 'ObjectiveMet') return 'good'
+  if (item.label === 'InsightfulQuestion') return 'brilliant'
+  return 'neutral'
+}
+
 export default function SessionPerformancePage() {
   const router = useRouter()
   const params = useParams()
@@ -208,6 +301,7 @@ export default function SessionPerformancePage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [hasRequestedLiveRun, setHasRequestedLiveRun] = useState(false)
+  const [recalculating, setRecalculating] = useState(false)
 
   const rawScore = assessment?.summary?.totalScore ?? report?.totalScore ?? assessment?.totalScore
   const score = typeof rawScore === 'number' ? rawScore : null
@@ -238,23 +332,37 @@ export default function SessionPerformancePage() {
 
   const grade = normalizedScore === null ? null : toGrade(normalizedScore)
 
-  const positiveTurns = useMemo(
-    () =>
-      turnAnnotations.filter(
-        (item) => POSITIVE_LABELS.has(item.label) || (item.scoreDelta ?? 0) > 0
-      ).length,
-    [turnAnnotations]
-  )
+  const annotationByTurnId = useMemo(() => {
+    const map = new Map<string, TurnAnnotation>()
+    turnAnnotations.forEach((item) => {
+      map.set(item.turnId, item)
+    })
+    return map
+  }, [turnAnnotations])
 
-  const negativeTurns = useMemo(
-    () =>
-      turnAnnotations.filter(
-        (item) => NEGATIVE_LABELS.has(item.label) || (item.scoreDelta ?? 0) < 0
-      ).length,
-    [turnAnnotations]
-  )
+  const moveGradeCounts = useMemo(() => {
+    const counts: Record<MoveGrade, number> = {
+      brilliant: 0,
+      good: 0,
+      neutral: 0,
+      miss: 0,
+      inaccuracy: 0,
+      mistake: 0,
+      blunder: 0,
+    }
+    turnAnnotations.forEach((item) => {
+      const grade = getMoveGrade(item)
+      counts[grade] += 1
+    })
+    return counts
+  }, [turnAnnotations])
 
-  const neutralTurns = Math.max(0, evaluatedTurnCount - positiveTurns - negativeTurns)
+  const strongTurns = moveGradeCounts.brilliant + moveGradeCounts.good
+  const needsWorkTurns =
+    moveGradeCounts.miss +
+    moveGradeCounts.inaccuracy +
+    moveGradeCounts.mistake +
+    moveGradeCounts.blunder
 
   const avgConfidence = useMemo(() => {
     const samples = turnAnnotations
@@ -270,28 +378,35 @@ export default function SessionPerformancePage() {
     [turnAnnotations]
   )
 
-  const labelCountData = useMemo(() => {
-    const counts = new Map<string, number>()
-    turnAnnotations.forEach((item) => {
-      counts.set(item.label, (counts.get(item.label) ?? 0) + 1)
-    })
-    return Array.from(counts.entries())
-      .sort((a, b) => b[1] - a[1])
-      .map(([label, value]) => ({
-        name: labelTitle(label),
-        value,
-        color: LABEL_COLORS[label] ?? 'blue',
-      }))
-  }, [turnAnnotations])
-
-  const breakdownChartData = useMemo(
+  const moveGradeSummaryData = useMemo(
     () =>
-      Object.entries(scoreBreakdown).map(([label, value]) => ({
-        label: labelTitle(label),
-        impact: Number(value),
-      })),
-    [scoreBreakdown]
+      MOVE_GRADE_ORDER.map((grade) => ({
+        name: `${MOVE_GRADE_META[grade].notation} ${MOVE_GRADE_META[grade].label}`,
+        value: moveGradeCounts[grade],
+        color: MOVE_GRADE_META[grade].badgeColor,
+      })).filter((item) => item.value > 0),
+    [moveGradeCounts]
   )
+
+  // Sum the actual scoreDelta per label type so the chart shows real score
+  // contribution (+14 for 7 PositiveExamples) rather than a raw count (7).
+  const breakdownChartData = useMemo(() => {
+    const impactByLabel = new Map<string, number>()
+    for (const item of turnAnnotations) {
+      const delta = item.scoreDelta ?? 0
+      impactByLabel.set(item.label, (impactByLabel.get(item.label) ?? 0) + delta)
+    }
+    if (impactByLabel.size === 0) {
+      // No turn annotations yet — fall back to showing counts from scoreBreakdown
+      return Object.entries(scoreBreakdown).map(([label, count]) => ({
+        label: labelTitle(label),
+        impact: Number(count),
+      }))
+    }
+    return Array.from(impactByLabel.entries())
+      .sort((a, b) => b[1] - a[1])
+      .map(([label, totalImpact]) => ({ label: labelTitle(label), impact: totalImpact }))
+  }, [scoreBreakdown, turnAnnotations])
 
   const highlights = useMemo(() => {
     return [...turnAnnotations]
@@ -307,8 +422,7 @@ export default function SessionPerformancePage() {
   const improvements = useMemo(() => {
     return [...turnAnnotations]
       .filter((item) => {
-        if (NEGATIVE_LABELS.has(item.label)) return true
-        if ((item.scoreDelta ?? 0) < 0) return true
+        if (NEEDS_WORK_GRADES.has(getMoveGrade(item))) return true
         return item.label === 'Neutral' && Boolean(item.reasonSummary || item.evidence || item.text)
       })
       .sort((a, b) => {
@@ -368,27 +482,29 @@ export default function SessionPerformancePage() {
 
   const signalMixData = useMemo(
     () =>
-      [
-        { name: 'Strong', value: positiveTurns, color: CHART_COLORS.teal },
-        { name: 'Neutral', value: neutralTurns, color: CHART_COLORS.gray },
-        { name: 'Needs work', value: negativeTurns, color: CHART_COLORS.red },
-      ].filter((item) => item.value > 0),
-    [negativeTurns, neutralTurns, positiveTurns]
+      MOVE_GRADE_ORDER.map((grade) => ({
+        name: `${MOVE_GRADE_META[grade].notation} ${MOVE_GRADE_META[grade].label}`,
+        value: moveGradeCounts[grade],
+        color: MOVE_GRADE_META[grade].chartColor,
+      })).filter((item) => item.value > 0),
+    [moveGradeCounts]
   )
 
-  const radarData = useMemo(() => {
-    const entries = Object.entries(scoreBreakdown).map(([label, value]) => ({
-      competency: labelTitle(label),
-      value: Number(value),
-      absValue: Math.abs(Number(value)),
-    }))
-    if (entries.length === 0) return []
-    const maxAbs = Math.max(...entries.map((entry) => entry.absValue), 1)
-    return entries.map((entry) => ({
-      ...entry,
-      normalized: Math.round((entry.absValue / maxAbs) * 100),
-    }))
-  }, [scoreBreakdown])
+  // Per-turn data for the "Score per turn" bar chart.
+  const turnScoreData = useMemo(
+    () =>
+      turnAnnotations.map((item, index) => {
+        const moveGrade = getMoveGrade(item)
+        return {
+          turn: `T${index + 1}`,
+          delta: item.scoreDelta ?? 0,
+          label: labelTitle(item.label),
+          moveLabel: `${MOVE_GRADE_META[moveGrade].notation} ${MOVE_GRADE_META[moveGrade].label}`,
+          fill: MOVE_GRADE_META[moveGrade].chartColor,
+        }
+      }),
+    [turnAnnotations]
+  )
 
   const momentumData = useMemo(() => {
     let cumulative = 0
@@ -413,6 +529,38 @@ export default function SessionPerformancePage() {
       setReportLoadedForRunId(runId)
     }
   }, [])
+
+  const handleRecalculate = useCallback(async () => {
+    setRecalculating(true)
+    setLoading(true)
+    setReport(null)
+    setReportLoadedForRunId(null)
+    setAssessment(null)
+    setError(null)
+    try {
+      const run = await api.assessments.run({
+        sessionId,
+        mode: 'final',
+        forceRecalculate: true,
+      })
+      if (run?.runId) {
+        const newRunId = run.runId as string
+        setActiveRunId(newRunId)
+        setHasRequestedLiveRun(false)
+        // Persist the new runId in the URL so a page refresh lands on the same run
+        window.history.replaceState(
+          null,
+          '',
+          `/session/${sessionId}/performance?runId=${encodeURIComponent(newRunId)}`
+        )
+      }
+    } catch {
+      setError('Failed to start a new assessment run.')
+      setLoading(false)
+    } finally {
+      setRecalculating(false)
+    }
+  }, [sessionId])
 
   const pollAssessment = useCallback(async () => {
     try {
@@ -527,7 +675,7 @@ export default function SessionPerformancePage() {
           'radial-gradient(circle at 0% 0%, rgba(56, 189, 248, 0.14) 0, transparent 36%), radial-gradient(circle at 100% 20%, rgba(16, 185, 129, 0.12) 0, transparent 30%), var(--pitch-app-bg)',
       }}
     >
-      <Stack gap="lg">
+      <Stack gap="lg" w="100%" maw={1200} mx="auto">
         <Group justify="space-between" align="center">
           <Group>
             <Button
@@ -550,14 +698,10 @@ export default function SessionPerformancePage() {
             <Button
               variant="light"
               leftSection={<IconRefresh size={16} />}
-              onClick={() => {
-                setLoading(true)
-                setReport(null)
-                setReportLoadedForRunId(null)
-                void pollAssessment()
-              }}
+              loading={recalculating}
+              onClick={() => void handleRecalculate()}
             >
-              Refresh
+              Recalculate
             </Button>
           </Group>
         </Group>
@@ -690,8 +834,8 @@ export default function SessionPerformancePage() {
                         </Badge>
                       </Group>
                       <Text size="sm" c="gray.3">
-                        {evaluatedTurnCount} evaluated turns, {positiveTurns} strong,{' '}
-                        {negativeTurns} needs work
+                        {evaluatedTurnCount} evaluated turns, {strongTurns} strong (
+                        {moveGradeCounts.brilliant} brilliant), {needsWorkTurns} needs work
                       </Text>
                     </Stack>
                     <RingProgress
@@ -795,7 +939,7 @@ export default function SessionPerformancePage() {
               <Grid.Col span={{ base: 12, md: 4 }}>
                 <Card radius="lg" p="lg" withBorder h="100%">
                   <Group justify="space-between" mb="sm">
-                    <Text fw={700}>Signal mix</Text>
+                    <Text fw={700}>Move grades</Text>
                     <Badge color="gray" variant="light">
                       {evaluatedTurnCount} turns
                     </Badge>
@@ -835,7 +979,7 @@ export default function SessionPerformancePage() {
                   )}
                   <Divider my="sm" />
                   <Stack gap={8}>
-                    {labelCountData.slice(0, 5).map((item) => (
+                    {moveGradeSummaryData.map((item) => (
                       <Group key={item.name} justify="space-between">
                         <Text size="sm">{item.name}</Text>
                         <Badge color={item.color} variant="light">
@@ -852,33 +996,29 @@ export default function SessionPerformancePage() {
               <Grid.Col span={{ base: 12, md: 6 }}>
                 <Card radius="lg" p="lg" withBorder>
                   <Group justify="space-between" mb="sm">
-                    <Text fw={700}>Competency profile</Text>
+                    <Text fw={700}>Score per turn</Text>
                     <ThemeIcon color="blue" variant="light" radius="xl">
                       <IconTargetArrow size={16} />
                     </ThemeIcon>
                   </Group>
-                  {radarData.length > 0 ? (
+                  {turnScoreData.length > 0 ? (
                     <Box style={{ width: '100%', height: 280 }}>
                       <ResponsiveContainer>
-                        <RadarChart data={radarData}>
-                          <PolarGrid stroke={CHART_COLORS.slateGrid} />
-                          <PolarAngleAxis
-                            dataKey="competency"
+                        <RechartsBarChart data={turnScoreData} barCategoryGap="28%">
+                          <CartesianGrid strokeDasharray="3 3" stroke={CHART_COLORS.slateGrid} />
+                          <XAxis
+                            dataKey="turn"
                             tick={{ fill: CHART_COLORS.slateAxis, fontSize: 12 }}
                           />
-                          <PolarRadiusAxis axisLine={false} tick={false} domain={[0, 100]} />
-                          <Radar
-                            name="Normalized impact"
-                            dataKey="normalized"
-                            stroke={CHART_COLORS.cyan}
-                            fill={CHART_COLORS.cyan}
-                            fillOpacity={0.28}
-                          />
+                          <YAxis tick={{ fill: CHART_COLORS.slateAxis, fontSize: 12 }} />
                           <RechartsTooltip
-                            formatter={(value: number, _name, item) => {
-                              const raw = (item?.payload as { value?: number })?.value
-                              return [`${value}% (raw ${formatSigned(Number(raw ?? 0))})`, 'Impact']
-                            }}
+                            formatter={(value: number, _name, item) => [
+                              `${formatSigned(value)} pts`,
+                              (item?.payload as { moveLabel?: string; label?: string })
+                                ?.moveLabel ??
+                                (item?.payload as { label?: string })?.label ??
+                                '',
+                            ]}
                             contentStyle={{
                               borderRadius: 10,
                               border: `1px solid ${CHART_COLORS.slateGrid}`,
@@ -886,12 +1026,17 @@ export default function SessionPerformancePage() {
                             }}
                             labelStyle={{ color: '#e2e8f0' }}
                           />
-                        </RadarChart>
+                          <Bar dataKey="delta" radius={[4, 4, 0, 0]}>
+                            {turnScoreData.map((entry, index) => (
+                              <Cell key={`cell-${index}`} fill={entry.fill} />
+                            ))}
+                          </Bar>
+                        </RechartsBarChart>
                       </ResponsiveContainer>
                     </Box>
                   ) : (
                     <Text size="sm" c="dimmed">
-                      No competency profile available for this run.
+                      Turn scores appear once annotations are available.
                     </Text>
                   )}
                 </Card>
@@ -956,16 +1101,16 @@ export default function SessionPerformancePage() {
               </Grid.Col>
             </Grid>
 
-            <Tabs defaultValue="strengths" variant="pills" radius="md">
+            <Tabs defaultValue="conversation" variant="pills" radius="md">
               <Tabs.List>
+                <Tabs.Tab value="conversation" leftSection={<IconHistory size={14} />}>
+                  Conversation
+                </Tabs.Tab>
                 <Tabs.Tab value="strengths" leftSection={<IconCircleCheck size={14} />}>
                   Strengths
                 </Tabs.Tab>
                 <Tabs.Tab value="plan" leftSection={<IconTargetArrow size={14} />}>
                   Improvement Plan
-                </Tabs.Tab>
-                <Tabs.Tab value="conversation" leftSection={<IconHistory size={14} />}>
-                  Conversation
                 </Tabs.Tab>
               </Tabs.List>
 
@@ -973,37 +1118,46 @@ export default function SessionPerformancePage() {
                 <Card radius="lg" p="lg" withBorder>
                   {highlights.length > 0 ? (
                     <Stack gap="sm">
-                      {highlights.map((item, index) => (
-                        <Paper
-                          key={`strength-${item.turnId}-${index}`}
-                          radius="md"
-                          withBorder
-                          p="sm"
-                        >
-                          <Group justify="space-between" mb={6}>
-                            <Badge color={LABEL_COLORS[item.label] ?? 'teal'} variant="light">
-                              {labelTitle(item.label)}
-                            </Badge>
-                            <Text size="xs" c="dimmed">
-                              {(item.scoreDelta ?? 0) >= 0 ? '+' : ''}
-                              {item.scoreDelta ?? 0}
-                              {typeof item.confidence === 'number'
-                                ? ` • ${Math.round(item.confidence * 100)}%`
-                                : ''}
-                            </Text>
-                          </Group>
-                          {item.reasonSummary && (
-                            <Text size="sm" mb={4}>
-                              {item.reasonSummary}
-                            </Text>
-                          )}
-                          {(item.evidence || item.text) && (
-                            <Text size="xs" c="dimmed">
-                              {shorten(item.evidence || item.text)}
-                            </Text>
-                          )}
-                        </Paper>
-                      ))}
+                      {highlights.map((item, index) => {
+                        const moveGrade = getMoveGrade(item)
+                        const moveMeta = MOVE_GRADE_META[moveGrade]
+                        return (
+                          <Paper
+                            key={`strength-${item.turnId}-${index}`}
+                            radius="md"
+                            withBorder
+                            p="sm"
+                          >
+                            <Group justify="space-between" mb={6}>
+                              <Group gap="xs">
+                                <Badge color={moveMeta.badgeColor} variant="light">
+                                  {moveMeta.notation} {moveMeta.label}
+                                </Badge>
+                                <Badge color={LABEL_COLORS[item.label] ?? 'gray'} variant="outline">
+                                  {labelTitle(item.label)}
+                                </Badge>
+                              </Group>
+                              <Text size="xs" c="dimmed">
+                                {(item.scoreDelta ?? 0) >= 0 ? '+' : ''}
+                                {item.scoreDelta ?? 0}
+                                {typeof item.confidence === 'number'
+                                  ? ` • ${Math.round(item.confidence * 100)}%`
+                                  : ''}
+                              </Text>
+                            </Group>
+                            {item.reasonSummary && (
+                              <Text size="sm" mb={4}>
+                                {item.reasonSummary}
+                              </Text>
+                            )}
+                            {(item.evidence || item.text) && (
+                              <Text size="xs" c="dimmed">
+                                {shorten(item.evidence || item.text)}
+                              </Text>
+                            )}
+                          </Paper>
+                        )
+                      })}
                     </Stack>
                   ) : (
                     <Text size="sm" c="dimmed">
@@ -1017,38 +1171,44 @@ export default function SessionPerformancePage() {
                 <Card radius="lg" p="lg" withBorder>
                   {improvements.length > 0 ? (
                     <Stack gap="sm">
-                      {improvements.map((item, index) => (
-                        <Paper
-                          key={`improve-${item.turnId}-${index}`}
-                          radius="md"
-                          withBorder
-                          p="sm"
-                        >
-                          <Group justify="space-between" mb={6}>
-                            <Badge
-                              color={(item.scoreDelta ?? 0) < 0 ? 'red' : 'orange'}
-                              variant="light"
-                            >
-                              {labelTitle(item.label)}
-                            </Badge>
-                            <Text size="xs" c="dimmed">
-                              {(item.scoreDelta ?? 0) >= 0 ? '+' : ''}
-                              {item.scoreDelta ?? 0}
+                      {improvements.map((item, index) => {
+                        const moveGrade = getMoveGrade(item)
+                        const moveMeta = MOVE_GRADE_META[moveGrade]
+                        return (
+                          <Paper
+                            key={`improve-${item.turnId}-${index}`}
+                            radius="md"
+                            withBorder
+                            p="sm"
+                          >
+                            <Group justify="space-between" mb={6}>
+                              <Group gap="xs">
+                                <Badge color={moveMeta.badgeColor} variant="light">
+                                  {moveMeta.notation} {moveMeta.label}
+                                </Badge>
+                                <Badge color={LABEL_COLORS[item.label] ?? 'gray'} variant="outline">
+                                  {labelTitle(item.label)}
+                                </Badge>
+                              </Group>
+                              <Text size="xs" c="dimmed">
+                                {(item.scoreDelta ?? 0) >= 0 ? '+' : ''}
+                                {item.scoreDelta ?? 0}
+                              </Text>
+                            </Group>
+                            {item.reasonSummary && (
+                              <Text size="sm" mb={4}>
+                                {item.reasonSummary}
+                              </Text>
+                            )}
+                            <Text size="sm" fw={600}>
+                              Try this:
                             </Text>
-                          </Group>
-                          {item.reasonSummary && (
-                            <Text size="sm" mb={4}>
-                              {item.reasonSummary}
+                            <Text size="sm" c="dimmed">
+                              {buildRecommendation(item)}
                             </Text>
-                          )}
-                          <Text size="sm" fw={600}>
-                            Try this:
-                          </Text>
-                          <Text size="sm" c="dimmed">
-                            {buildRecommendation(item)}
-                          </Text>
-                        </Paper>
-                      ))}
+                          </Paper>
+                        )
+                      })}
                     </Stack>
                   ) : (
                     <Text size="sm" c="dimmed">
@@ -1070,6 +1230,9 @@ export default function SessionPerformancePage() {
                     <Stack gap="sm">
                       {conversationHistory.map((turn, index) => {
                         const isUser = turn.role === 'user'
+                        const annotation = annotationByTurnId.get(turn.turnId)
+                        const moveGrade = annotation ? getMoveGrade(annotation) : null
+                        const moveMeta = moveGrade ? MOVE_GRADE_META[moveGrade] : null
                         const roleLabel = isUser
                           ? 'You'
                           : turn.role === 'assistant'
@@ -1078,15 +1241,35 @@ export default function SessionPerformancePage() {
                         return (
                           <Paper key={`${turn.turnId}-${index}`} radius="md" withBorder p="sm">
                             <Group justify="space-between" mb={6}>
-                              <Badge color={isUser ? 'blue' : 'teal'} variant="light">
-                                {roleLabel}
-                              </Badge>
+                              <Group gap="xs">
+                                <Badge color={isUser ? 'blue' : 'teal'} variant="light">
+                                  {roleLabel}
+                                </Badge>
+                                {isUser && moveMeta && (
+                                  <Badge color={moveMeta.badgeColor} variant="light">
+                                    {moveMeta.notation} {moveMeta.label}
+                                  </Badge>
+                                )}
+                                {isUser && !moveMeta && (
+                                  <Badge color="gray" variant="outline">
+                                    Move Pending
+                                  </Badge>
+                                )}
+                              </Group>
                               <Text size="xs" c="dimmed">
                                 {turn.createdAt
                                   ? new Date(turn.createdAt).toLocaleTimeString()
                                   : `Turn ${index + 1}`}
                               </Text>
                             </Group>
+                            {isUser && moveMeta && (
+                              <Text size="xs" mb={6} c="dimmed">
+                                {moveMeta.description}
+                                {annotation?.reasonSummary
+                                  ? ` • ${shorten(annotation.reasonSummary, 120)}`
+                                  : ''}
+                              </Text>
+                            )}
                             <Text size="sm" c="dimmed">
                               {turn.text?.trim() ? turn.text : 'No text captured for this turn.'}
                             </Text>

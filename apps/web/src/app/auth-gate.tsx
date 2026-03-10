@@ -11,6 +11,7 @@ const AUTH_CALLBACK_PATH = '/auth/callback'
 const AUTH_REDIRECT = '/auth/login'
 const AUTHENTICATED_REDIRECT = '/studio/home'
 const ONBOARDING_PATH = '/onboarding'
+const PUBLIC_PATHS = new Set(['/'])
 const REFRESH_CHECK_INTERVAL_MS = 60 * 1000
 const REFRESH_WINDOW_MS = 2 * 60 * 1000
 
@@ -34,6 +35,10 @@ export function AuthGate({ children }: AuthGateProps) {
 
   const isCallbackRoute = pathname === AUTH_CALLBACK_PATH
   const isOnboardingRoute = pathname === ONBOARDING_PATH
+  const isPublicRoute = useMemo(() => {
+    if (!pathname) return false
+    return PUBLIC_PATHS.has(pathname)
+  }, [pathname])
   const hasTeamInviteParams = useMemo(() => {
     if (!isAuthRoute) return false
     return !!searchParams.get('teamId')
@@ -55,6 +60,11 @@ export function AuthGate({ children }: AuthGateProps) {
     }
 
     const handleAuthFlow = async () => {
+      if (isPublicRoute) {
+        setChecked(true)
+        return
+      }
+
       if (!token) {
         await maybeRefreshToken()
       }
@@ -99,6 +109,7 @@ export function AuthGate({ children }: AuthGateProps) {
     isAuthRoute,
     isCallbackRoute,
     isOnboardingRoute,
+    isPublicRoute,
     pathname,
     refreshAccessToken,
     router,

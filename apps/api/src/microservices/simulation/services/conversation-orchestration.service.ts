@@ -214,9 +214,6 @@ export class ConversationOrchestrationService {
             personaData?.traits ? toRecord(personaData.traits) : null,
           )
         : null;
-    const useRealtimeAvatar =
-      session.type === 'video' && videoConfig?.mode === 'realtime';
-
     // ── 3. Resolve session member + iteration (cached) ────────────────────────
     const smCache = forceNewIteration
       ? null
@@ -468,8 +465,8 @@ export class ConversationOrchestrationService {
                   resolvedTts.voice,
                   resolvedTts.language,
                   resolvedTts.model,
-                  useRealtimeAvatar ? 'pcm' : undefined,
-                  useRealtimeAvatar ? 24000 : undefined,
+                  undefined,
+                  undefined,
                   ttsSemaphore,
                   subject,
                 ),
@@ -541,8 +538,8 @@ export class ConversationOrchestrationService {
           resolvedTts.voice,
           resolvedTts.language,
           resolvedTts.model,
-          useRealtimeAvatar ? 'pcm' : undefined,
-          useRealtimeAvatar ? 24000 : undefined,
+          undefined,
+          undefined,
           ttsSemaphore,
           subject,
         ),

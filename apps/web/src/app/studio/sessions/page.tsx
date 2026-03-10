@@ -144,14 +144,18 @@ function SessionsPageInner() {
     }
 
     if (startTourParam === 'sessions') {
-      autoStartedTourKeyRef.current = key
-      const timer = setTimeout(() => void startTour('sessions'), 800)
+      const timer = setTimeout(() => {
+        autoStartedTourKeyRef.current = key
+        void startTour('sessions')
+      }, 800)
       return () => clearTimeout(timer)
     }
 
     if (startTourParam === 'full' && tourScreenParam === 'sessions') {
-      autoStartedTourKeyRef.current = key
-      const timer = setTimeout(() => void startTour('sessions', { mode: 'full' }), 800)
+      const timer = setTimeout(() => {
+        autoStartedTourKeyRef.current = key
+        void startTour('sessions', { mode: 'full' })
+      }, 800)
       return () => clearTimeout(timer)
     }
   }, [searchParams, startTour])
@@ -299,7 +303,11 @@ function SessionsPageInner() {
                 >
                   <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="lg">
                     {groupSessions.map((session) => (
-                      <motion.div key={session.id} variants={cardVariants}>
+                      <motion.div
+                        key={session.id}
+                        variants={cardVariants}
+                        data-tour-id="sessions-session-card"
+                      >
                         <SessionCard
                           session={session}
                           onClick={() => router.push(`/studio/sessions/${session.id}`)}

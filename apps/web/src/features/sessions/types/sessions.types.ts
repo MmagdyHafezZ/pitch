@@ -148,8 +148,7 @@ export interface PhoneConfig {
 
 export interface VideoRuntimeConfig {
   status?: 'idle' | 'queued' | 'rendering' | 'ready' | 'failed' | string
-  provider?: 'heygen' | 'azure-avatar' | string
-  fallbackProvider?: 'azure-avatar' | string
+  provider?: string
   activeJobId?: string
   playbackToken?: string
   requestId?: string
@@ -164,22 +163,8 @@ export interface VideoRuntimeConfig {
 }
 
 export interface VideoConfig {
-  mode?: 'rendered' | 'realtime' | string
-  provider?: 'heygen' | 'azure-avatar' | string
-  fallbackProvider?: 'azure-avatar' | string
-  heygenAvatarId?: string
-  heygenAvatarStyle?: string
-  heygenBackgroundColor?: string
-  heygenWidth?: number
-  heygenHeight?: number
-  liveAvatarId?: string
-  liveAvatarName?: string
-  liveAvatarQuality?: 'very_high' | 'high' | 'medium' | 'low' | string
-  liveAvatarEncoding?: 'VP8' | 'H264' | string
-  azureAvatarCharacter?: string
-  azureAvatarStyle?: string
-  azureVoice?: string
-  azureBackgroundColor?: string
+  mode?: 'rendered' | string
+  provider?: string
   runtime?: VideoRuntimeConfig
 }
 

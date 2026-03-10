@@ -894,34 +894,11 @@ export default function EditSessionPage() {
       }
 
       if (sessionType === 'video') {
-        const personaAvatar = selectedPersonaData?.traits?.avatar
         const existingVideoConfig =
           sessionConfig.video && typeof sessionConfig.video === 'object'
             ? (sessionConfig.video as Record<string, unknown>)
             : {}
-        sessionConfig.video = {
-          ...existingVideoConfig,
-          mode: 'realtime',
-          provider: 'heygen',
-          fallbackProvider: 'azure-avatar',
-          ...(personaAvatar?.liveAvatarId ? { liveAvatarId: personaAvatar.liveAvatarId } : {}),
-          ...(personaAvatar?.liveAvatarName
-            ? { liveAvatarName: personaAvatar.liveAvatarName }
-            : personaAvatar?.label
-              ? { liveAvatarName: personaAvatar.label }
-              : {}),
-          ...(personaAvatar?.heygenAvatarId
-            ? {
-                heygenAvatarId: personaAvatar.heygenAvatarId,
-                ...(personaAvatar.avatarStyle
-                  ? { heygenAvatarStyle: personaAvatar.avatarStyle }
-                  : {}),
-                ...(personaAvatar.backgroundColor
-                  ? { heygenBackgroundColor: personaAvatar.backgroundColor }
-                  : {}),
-              }
-            : {}),
-        }
+        sessionConfig.video = { ...existingVideoConfig, mode: 'rendered' }
       }
 
       await updateSession(sessionId, {

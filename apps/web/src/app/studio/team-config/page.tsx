@@ -93,14 +93,18 @@ function TeamConfigInner() {
     }
 
     if (startTourParam === 'team-config') {
-      autoStartedTourKeyRef.current = key
-      const timer = setTimeout(() => void startTour('team-config'), 800)
+      const timer = setTimeout(() => {
+        autoStartedTourKeyRef.current = key
+        void startTour('team-config')
+      }, 800)
       return () => clearTimeout(timer)
     }
 
     if (startTourParam === 'full' && tourScreenParam === 'team-config') {
-      autoStartedTourKeyRef.current = key
-      const timer = setTimeout(() => void startTour('team-config', { mode: 'full' }), 800)
+      const timer = setTimeout(() => {
+        autoStartedTourKeyRef.current = key
+        void startTour('team-config', { mode: 'full' })
+      }, 800)
       return () => clearTimeout(timer)
     }
   }, [searchParams, startTour])

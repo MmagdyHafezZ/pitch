@@ -260,7 +260,7 @@ export interface IVideoJob {
   jobId: string;
   sessionId: string;
   requestId: string;
-  provider: 'heygen' | 'azure-avatar';
+  provider: string;
   text: string;
   language?: string;
   fallbackAttempted: boolean;

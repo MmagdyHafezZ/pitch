@@ -3,7 +3,6 @@
 import { Box, Button, Group, Progress, Text } from '@mantine/core'
 import { AnimatePresence } from 'framer-motion'
 import { useCallback, useMemo } from 'react'
-import { useRouter } from 'next/navigation'
 import { useOnboardingStore } from '../stores/onboarding.store'
 import { useOnboarding } from '../hooks/useOnboarding'
 import { WelcomeStep } from './steps/WelcomeStep'
@@ -26,7 +25,6 @@ function buildSteps(role: UserRole | undefined): OnboardingStep[] {
 }
 
 export function OnboardingWizard() {
-  const router = useRouter()
   const { step, data, isSaving, setStep, updateData } = useOnboardingStore()
   const { completeOnboarding, skipAll } = useOnboarding()
 
@@ -62,10 +60,14 @@ export function OnboardingWizard() {
 
   const handleTutorialStart = useCallback(async () => {
     updateData({ wantsTutorial: true })
-    await completeOnboarding({ ...data, wantsTutorial: true })
-    // After navigating to home, start the full tour flow.
-    router.push('/studio/home?startTour=full&tourScreen=home')
-  }, [data, completeOnboarding, updateData, router])
+    await completeOnboarding(
+      { ...data, wantsTutorial: true },
+      {
+        // Navigate once with tour params so the home screen auto-start effect can run.
+        redirectTo: '/studio/home?startTour=full&tourScreen=home',
+      }
+    )
+  }, [data, completeOnboarding, updateData])
 
   const handleTutorialSkip = useCallback(async () => {
     await completeOnboarding({ ...data, wantsTutorial: false })

@@ -186,14 +186,18 @@ export default function ChallengesPage() {
     if (autoStartedTourKeyRef.current === key) return
 
     if (startTourParam === 'challenges') {
-      autoStartedTourKeyRef.current = key
-      const timer = setTimeout(() => void startTour('challenges'), 800)
+      const timer = setTimeout(() => {
+        autoStartedTourKeyRef.current = key
+        void startTour('challenges')
+      }, 800)
       return () => clearTimeout(timer)
     }
 
     if (startTourParam === 'full' && tourScreenParam === 'challenges') {
-      autoStartedTourKeyRef.current = key
-      const timer = setTimeout(() => void startTour('challenges', { mode: 'full' }), 800)
+      const timer = setTimeout(() => {
+        autoStartedTourKeyRef.current = key
+        void startTour('challenges', { mode: 'full' })
+      }, 800)
       return () => clearTimeout(timer)
     }
   }, [searchParams, startTour])

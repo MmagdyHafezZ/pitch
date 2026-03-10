@@ -66,6 +66,13 @@ export class CreatePlatformDto {
   @IsString({ each: true })
   redirectUris?: string[];
 
+  @ApiPropertyOptional({
+    description: 'LTI 1.3 deployment ID assigned by the LMS',
+  })
+  @IsOptional()
+  @IsString()
+  deploymentId?: string;
+
   @ApiPropertyOptional({ default: true })
   @IsOptional()
   @IsBoolean()

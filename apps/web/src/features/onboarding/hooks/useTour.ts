@@ -8,6 +8,7 @@ import { useAuthStore } from '@/features/auth/stores/auth.store'
 import {
   homeTourSteps,
   sessionsTourSteps,
+  createSessionTourSteps,
   challengesTourSteps,
   analyticsTourSteps,
   teamConfigTourSteps,
@@ -17,6 +18,7 @@ import type { TourScreen } from '../types'
 const tourStepsMap = {
   home: homeTourSteps,
   sessions: sessionsTourSteps,
+  'create-session': createSessionTourSteps,
   challenges: challengesTourSteps,
   analytics: analyticsTourSteps,
   'team-config': teamConfigTourSteps,
@@ -25,6 +27,7 @@ const tourStepsMap = {
 const screenRoutes: Record<TourScreen, string> = {
   home: '/studio/home',
   sessions: '/studio/sessions',
+  'create-session': '/studio/sessions/create',
   challenges: '/studio/challenges',
   analytics: '/studio/analytics',
   'team-config': '/studio/team-config',
@@ -57,6 +60,48 @@ export function useTour() {
     }
   }, [user, setUser])
 
+  const showCoachHandoff = useCallback(async () => {
+    const { driver } = await import('driver.js')
+    const coachSelector = '[data-tour-id="coach-chat-trigger"]'
+    const hasCoachTrigger = document.querySelector(coachSelector) !== null
+
+    driverRef.current?.destroy()
+    driverRef.current = driver({
+      animate: true,
+      showProgress: false,
+      showButtons: ['close'],
+      allowClose: true,
+      steps: [
+        hasCoachTrigger
+          ? {
+              element: coachSelector,
+              popover: {
+                title: 'Need help or actions?',
+                description:
+                  'Use this PITCH Coach button anytime to ask for help, generate guidance, or trigger assisted actions in the app.',
+                side: 'left',
+                align: 'start',
+              },
+            }
+          : {
+              popover: {
+                title: 'Need help or actions?',
+                description:
+                  'Use the PITCH Coach chat button in the lower-right corner anytime for guidance or assisted actions.',
+                side: 'bottom',
+                align: 'center',
+              },
+            },
+      ],
+    })
+    driverRef.current.drive()
+  }, [])
+
+  const finishFullTour = useCallback(async () => {
+    await completeTour()
+    await showCoachHandoff()
+  }, [completeTour, showCoachHandoff])
+
   const startTour = useCallback(
     async (screen: TourScreen, options?: StartTourOptions) => {
       const { driver } = await import('driver.js')
@@ -64,8 +109,8 @@ export function useTour() {
       const onboardingRole = user?.settings?.onboarding?.role
       const fullFlowScreens: TourScreen[] =
         onboardingRole === 'MANAGER'
-          ? ['home', 'sessions', 'challenges', 'analytics', 'team-config']
-          : ['home', 'sessions', 'challenges', 'analytics']
+          ? ['home', 'sessions', 'create-session', 'challenges', 'analytics', 'team-config']
+          : ['home', 'sessions', 'create-session', 'challenges', 'analytics']
 
       const steps = tourStepsMap[screen]
       // Filter to only steps whose elements actually exist in the DOM
@@ -85,7 +130,7 @@ export function useTour() {
         }
 
         if (mode === 'full') {
-          await completeTour()
+          await finishFullTour()
         }
         return
       }
@@ -131,15 +176,19 @@ export function useTour() {
             return
           }
 
-          void completeTour()
           activeDriver.destroy()
           driverRef.current = null
+          if (mode === 'full') {
+            void finishFullTour()
+          } else {
+            void completeTour()
+          }
         },
       })
 
       driverRef.current.drive()
     },
-    [completeTour, router, user?.settings?.onboarding?.role]
+    [completeTour, finishFullTour, router, user?.settings?.onboarding?.role]
   )
 
   const destroyTour = useCallback(() => {

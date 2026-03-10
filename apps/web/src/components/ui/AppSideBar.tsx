@@ -65,6 +65,7 @@ export function AppSidebar({
     <>
       <SettingsModal opened={settingsOpened} onClose={() => setSettingsOpened(false)} />
       <Box
+        data-tour-id="app-sidebar"
         style={{
           height: '100%',
           flex: 1,

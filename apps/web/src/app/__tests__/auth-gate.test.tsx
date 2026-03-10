@@ -10,8 +10,8 @@ const mockUsePathname = jest.fn()
 const mockUseSearchParams = jest.fn()
 const mockUseAuthStore = jest.fn()
 const mockAuthState = {
-  token: 'token-1',
-  refreshAccessToken: mockRefreshAccessToken,
+  token: 'token-1' as string | null,
+  refreshAccessToken: mockRefreshAccessToken as () => Promise<boolean>,
 }
 
 jest.mock('next/navigation', () => ({
@@ -32,11 +32,10 @@ jest.mock('@/features/auth/stores/auth.store', () => ({
 describe('AuthGate', () => {
   beforeEach(() => {
     jest.clearAllMocks()
-    mockUseAuthStore.mockImplementation((selector: (state: any) => unknown) =>
-      selector({
-        ...mockAuthState,
-        refreshAccessToken: mockRefreshAccessToken.mockResolvedValue(true),
-      })
+    mockAuthState.token = 'token-1'
+    mockRefreshAccessToken.mockResolvedValue(true)
+    mockUseAuthStore.mockImplementation((selector: (state: typeof mockAuthState) => unknown) =>
+      selector(mockAuthState)
     )
   })
 
@@ -71,5 +70,23 @@ describe('AuthGate', () => {
     await waitFor(() => {
       expect(mockReplace).toHaveBeenCalledWith('/studio/home')
     })
+  })
+
+  it('allows unauthenticated users on the public home route', async () => {
+    mockAuthState.token = null
+    mockUsePathname.mockReturnValue('/')
+    mockUseSearchParams.mockReturnValue({
+      get: () => null,
+    })
+
+    render(
+      <AuthGate>
+        <div>Child</div>
+      </AuthGate>
+    )
+
+    expect(await screen.findByText('Child')).toBeInTheDocument()
+    expect(mockReplace).not.toHaveBeenCalled()
+    expect(mockRefreshAccessToken).not.toHaveBeenCalled()
   })
 })

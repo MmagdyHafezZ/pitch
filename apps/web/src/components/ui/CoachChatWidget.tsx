@@ -820,20 +820,8 @@ export function CoachChatWidget({ context }: CoachChatWidgetProps) {
                 </div>
                 <Stack gap={0}>
                   <Text fw={800} size="sm" c="white" style={{ letterSpacing: 0.3 }}>
-                    PITCH Coach
+                    Pablo - Your PITCH Coach
                   </Text>
-                  <Group gap={6}>
-                    <span className="coach-live-dot" />
-                    <Text
-                      size="10px"
-                      fw={700}
-                      c="gray.4"
-                      tt="uppercase"
-                      style={{ letterSpacing: 1.1 }}
-                    >
-                      Strategy AI Online
-                    </Text>
-                  </Group>
                 </Stack>
               </Group>
 
@@ -1343,6 +1331,7 @@ export function CoachChatWidget({ context }: CoachChatWidgetProps) {
 
       {/* ── Mascot Button ─────────────────────────────────────────────── */}
       <div
+        data-tour-id="coach-chat-trigger"
         onPointerDown={(e) => startDrag(e, pos)}
         onPointerMove={onPointerMove}
         onPointerUp={onMascotPointerUp}

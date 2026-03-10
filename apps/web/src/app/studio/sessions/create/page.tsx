@@ -26,7 +26,7 @@ import {
   IconChecklist,
   IconDatabase,
 } from '@tabler/icons-react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuth } from '@/features/auth'
 import { useTeams } from '@/features/teams'
 import { useSessions, type SessionType, type CreateSessionInput } from '@/features/sessions'
@@ -48,6 +48,7 @@ import { SessionConfigForm, Persona, PersonaTraits } from './lib/types'
 import { getBrainCompatibleModels, getPreferredBrainModel } from './lib/brain-models'
 import { useCrm } from '@/features/crm'
 import { useI18n } from '@/features/i18n'
+import { useTour } from '@/features/onboarding'
 import {
   getSavedCrmConnections,
   getSavedCrmSessionConnections,
@@ -193,8 +194,10 @@ const scrollTrackByCard = (container: HTMLDivElement, direction: 'left' | 'right
 
 export default function CreateSessionPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { user } = useAuth()
   const { locale } = useI18n()
+  const { startTour } = useTour()
   const { teams, activeTeamId, fetchUserTeams, loading: teamsLoading } = useTeams()
   const { createSession, loading, error } = useSessions()
   const { providers: ttsProviders, loading: ttsLoading } = useTtsProviders()
@@ -269,9 +272,36 @@ export default function CreateSessionPage() {
 
   const [errors, setErrors] = useState<Record<string, string>>({})
 
+  const autoStartedTourKeyRef = useRef<string | null>(null)
   const personaScrollRef = useRef<HTMLDivElement | null>(null)
   const modelScrollRef = useRef<HTMLDivElement | null>(null)
   const languageTouchedRef = useRef(false)
+
+  useEffect(() => {
+    const startTourParam = searchParams.get('startTour')
+    const tourScreenParam = searchParams.get('tourScreen')
+    const key = `${startTourParam ?? ''}:${tourScreenParam ?? ''}`
+
+    if (autoStartedTourKeyRef.current === key) {
+      return
+    }
+
+    if (startTourParam === 'create-session') {
+      const timer = setTimeout(() => {
+        autoStartedTourKeyRef.current = key
+        void startTour('create-session')
+      }, 800)
+      return () => clearTimeout(timer)
+    }
+
+    if (startTourParam === 'full' && tourScreenParam === 'create-session') {
+      const timer = setTimeout(() => {
+        autoStartedTourKeyRef.current = key
+        void startTour('create-session', { mode: 'full' })
+      }, 800)
+      return () => clearTimeout(timer)
+    }
+  }, [searchParams, startTour])
 
   useEffect(() => {
     if (!languageTouchedRef.current) {
@@ -768,29 +798,7 @@ export default function CreateSessionPage() {
       }
 
       if (sessionType === 'video') {
-        const personaAvatar = selectedPersonaData?.traits?.avatar
-        sessionConfig.video = {
-          mode: 'realtime',
-          provider: 'heygen',
-          fallbackProvider: 'azure-avatar',
-          ...(personaAvatar?.liveAvatarId ? { liveAvatarId: personaAvatar.liveAvatarId } : {}),
-          ...(personaAvatar?.liveAvatarName
-            ? { liveAvatarName: personaAvatar.liveAvatarName }
-            : personaAvatar?.label
-              ? { liveAvatarName: personaAvatar.label }
-              : {}),
-          ...(personaAvatar?.heygenAvatarId
-            ? {
-                heygenAvatarId: personaAvatar.heygenAvatarId,
-                ...(personaAvatar.avatarStyle
-                  ? { heygenAvatarStyle: personaAvatar.avatarStyle }
-                  : {}),
-                ...(personaAvatar.backgroundColor
-                  ? { heygenBackgroundColor: personaAvatar.backgroundColor }
-                  : {}),
-              }
-            : {}),
-        }
+        sessionConfig.video = { mode: 'rendered' }
       }
 
       const sessionData: CreateSessionInput = {
@@ -1259,7 +1267,7 @@ export default function CreateSessionPage() {
             <ActionIcon variant="subtle" size="lg" onClick={() => router.push('/studio/sessions')}>
               <IconArrowLeft size={20} />
             </ActionIcon>
-            <Paper className={classes.heroCard}>
+            <Paper data-tour-id="create-session-hero" className={classes.heroCard}>
               <Badge variant="light" color="blue" radius="md" mb={10}>
                 New Session Wizard
               </Badge>
@@ -1282,7 +1290,7 @@ export default function CreateSessionPage() {
         <Grid gutter={isStepperCompact ? 'md' : 'xl'}>
           <Grid.Col span={{ base: 12, md: 3 }}>
             <Box className={classes.stepPanel}>
-              <Paper className={classes.stepPanelCard} p="md">
+              <Paper data-tour-id="create-session-stepper" className={classes.stepPanelCard} p="md">
                 <Stepper
                   active={active}
                   onStepClick={attemptStepChange}
@@ -1305,11 +1313,21 @@ export default function CreateSessionPage() {
           </Grid.Col>
 
           <Grid.Col span={{ base: 12, md: 9 }}>
-            <Paper className={classes.contentCard} p={isStepperCompact ? 'md' : 'xl'}>
+            <Paper
+              data-tour-id="create-session-content"
+              className={classes.contentCard}
+              p={isStepperCompact ? 'md' : 'xl'}
+            >
               {steps[active]?.content}
             </Paper>
 
-            <Group justify="space-between" mt="xl" gap="sm" wrap="wrap">
+            <Group
+              data-tour-id="create-session-nav"
+              justify="space-between"
+              mt="xl"
+              gap="sm"
+              wrap="wrap"
+            >
               <Button variant="default" onClick={prevStep} disabled={active === 0}>
                 Back
               </Button>
