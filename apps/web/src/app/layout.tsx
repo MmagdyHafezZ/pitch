@@ -1,4 +1,4 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import { Suspense } from 'react'
 import '@mantine/core/styles.css'
 import 'driver.js/dist/driver.css'
@@ -10,6 +10,11 @@ import { AuthGate } from './auth-gate'
 export const metadata: Metadata = {
   title: 'PITCH - Your Business Platform',
   description: 'A modern business management platform',
+}
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
 }
 
 export default function RootLayout({
