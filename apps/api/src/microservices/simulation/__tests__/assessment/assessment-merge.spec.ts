@@ -65,7 +65,7 @@ describe('Assessment merge policy', () => {
     expect(merged.labels[0]?.label).not.toBe(AssessmentLabelValue.Neutral);
   });
 
-  it('falls back to neutral when opposite polarities disagree at similar confidence', () => {
+  it('keeps a concrete label when opposite polarities disagree at similar confidence', () => {
     const runner = createRunner();
     const mergeJudgeOutputs = (
       runner as unknown as { mergeJudgeOutputs: MergeMethod }
@@ -105,7 +105,10 @@ describe('Assessment merge policy', () => {
     const merged = mergeJudgeOutputs(primary, secondary, config);
 
     expect(merged.labels).toHaveLength(1);
-    expect(merged.labels[0]?.label).toBe(AssessmentLabelValue.Neutral);
-    expect(merged.labels[0]?.scoreDelta).toBe(0);
+    expect(merged.labels[0]?.label).toBe(AssessmentLabelValue.PositiveExample);
+    expect(merged.labels[0]?.scoreDelta).toBe(2);
+    expect(merged.labels[0]?.reasonSummary).toContain(
+      'Alternate reading considered',
+    );
   });
 });

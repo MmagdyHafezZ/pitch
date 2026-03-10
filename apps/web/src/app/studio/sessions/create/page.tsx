@@ -220,7 +220,7 @@ export default function CreateSessionPage() {
   const [aiRole, setAiRole] = useState('')
   const [userRole, setUserRole] = useState('')
   const [scenarioGenerating, setScenarioGenerating] = useState(false)
-  const [scenarioCount, setScenarioCount] = useState(3)
+  const [scenarioCount, setScenarioCount] = useState(1)
 
   const [llmProvider, setLlmProvider] = useState<string | null>(null)
   const [llmModel, setLlmModel] = useState<string | null>(null)
@@ -1315,7 +1315,9 @@ export default function CreateSessionPage() {
               </Button>
 
               {active < steps.length - 1 ? (
-                <Button onClick={nextStep}>Next</Button>
+                <Button data-tour-id="create-session-next" onClick={nextStep}>
+                  Next
+                </Button>
               ) : (
                 <Button
                   onClick={handleSubmit}

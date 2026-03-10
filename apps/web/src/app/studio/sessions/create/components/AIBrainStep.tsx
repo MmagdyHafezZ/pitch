@@ -193,6 +193,7 @@ export function AIBrainStep({
                               withBorder
                               radius="lg"
                               p="md"
+                              {...(!isSelected && { 'data-tour-id': 'create-session-model-item' })}
                               className={`${classes.modelCard} ${
                                 isSelected ? classes.modelCardSelected : ''
                               }`}

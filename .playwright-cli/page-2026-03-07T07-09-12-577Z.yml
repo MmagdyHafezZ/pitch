@@ -1,0 +1,5 @@
+- generic [ref=e1]:
+    - img "PITCH" [ref=e3]
+    - generic [ref=e4]:
+        - generic [ref=e5]: PITCH
+        - generic [ref=e6]: Preparing your workspace

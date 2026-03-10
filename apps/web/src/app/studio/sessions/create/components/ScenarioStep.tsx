@@ -132,6 +132,7 @@ export function ScenarioStep({
               value={scenarioTopic}
               onChange={(event) => setScenarioTopic(event.currentTarget.value)}
               leftSection={<IconTarget size={16} />}
+              data-tour-id="create-session-topic"
             />
             {errors?.scenarioTopic && (
               <Text size="xs" c="red">
@@ -144,6 +145,7 @@ export function ScenarioStep({
               minRows={2}
               value={scenarioObjective}
               onChange={(event) => setScenarioObjective(event.currentTarget.value)}
+              data-tour-id="create-session-objective"
             />
             <Textarea
               label="Context"
@@ -152,18 +154,21 @@ export function ScenarioStep({
               value={scenarioContext}
               onChange={(event) => setScenarioContext(event.currentTarget.value)}
               leftSection={<IconNotes size={16} />}
+              data-tour-id="create-session-context"
             />
             <TextInput
               label="AI role in the simulation"
               placeholder="Customer / Partner / CTO"
               value={aiRole}
               onChange={(event) => setAiRole(event.currentTarget.value)}
+              data-tour-id="create-session-ai-role"
             />
             <TextInput
               label="Your role in the simulation"
               placeholder="Account executive / Founder / Sales rep"
               value={userRole}
               onChange={(event) => setUserRole(event.currentTarget.value)}
+              data-tour-id="create-session-user-role"
             />
             <NumberInput
               label="Session length (minutes)"
@@ -173,6 +178,7 @@ export function ScenarioStep({
               max={180}
               step={5}
               leftSection={<IconClock size={16} />}
+              data-tour-id="create-session-duration"
             />
             {errors?.durationMinutes && (
               <Text size="xs" c="red">
@@ -193,6 +199,7 @@ export function ScenarioStep({
                 onClick={onGenerate}
                 loading={isGenerating}
                 disabled={!scenarioTopic.trim()}
+                data-tour-id="create-session-generate"
               >
                 Generate {scenarioCount}
               </Button>
@@ -256,6 +263,7 @@ export function ScenarioStep({
                       radius="md"
                       p="md"
                       key={scenario.id}
+                      data-tour-id="create-session-scenario-item"
                       className={classes.scenarioPreview}
                       onClick={() => setSelectedScenarioId(scenario.id)}
                     >

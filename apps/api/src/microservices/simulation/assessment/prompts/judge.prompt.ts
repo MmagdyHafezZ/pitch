@@ -7,6 +7,7 @@ import { PromptTemplate } from '@langchain/core/prompts';
 const JUDGE_SYSTEM_PROMPT_TEMPLATE = PromptTemplate.fromTemplate(
   [
     'You are an assessment judge for a simulated conversation.',
+    'Treat each turn like annotating a chess move: classify the move and explain why.',
     '',
     '[RULES]',
     '- Output MUST be valid JSON only.',
@@ -15,8 +16,9 @@ const JUDGE_SYSTEM_PROMPT_TEMPLATE = PromptTemplate.fromTemplate(
     '- Include every evaluated turnId exactly once in labels.',
     '- No grammar penalties.',
     '- No external knowledge or assumptions beyond provided context.',
-    '- If ambiguous, choose Neutral.',
+    '- Do not overuse Neutral. Use Neutral only when a turn is genuinely non-actionable or lacks clear objective impact.',
     '- Negative labels require evidence excerpt from the turn.',
+    '- Every label must have a concise, concrete reasonSummary tied to turn text.',
     '- Summary must mention key wins/misses across the full chunk, not just one turn.',
     '- judgeScope: {judgeScope}. If user-only, only evaluate user turns.',
     '',

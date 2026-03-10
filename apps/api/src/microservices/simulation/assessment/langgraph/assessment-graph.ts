@@ -23,7 +23,10 @@ import {
 import { JudgeOutputSchema, type JudgeOutput } from './judge-output.schema';
 import { AssessmentLabelValue } from '@prisma/simulation-client';
 import { computeScore } from '../utils/scoring';
-import type { AssessmentConfig } from '../config/assessment.config';
+import {
+  ASSESSMENT_LABEL_DEFINITIONS,
+  type AssessmentConfig,
+} from '../config/assessment.config';
 import { RagService } from '../../rag/rag.service';
 
 interface AssessmentGraphResult {
@@ -623,13 +626,20 @@ export class AssessmentGraphRunner {
     config: AssessmentConfig,
   ): ChunkJudgment['labels'] {
     const finalLabels: ChunkJudgment['labels'] = [];
+    const hardNeutralCutoff = Math.min(
+      0.3,
+      config.thresholds.confidenceCutoff * 0.5,
+    );
 
     for (const label of labels) {
-      if ((label.confidence ?? 0) < config.thresholds.confidenceCutoff) {
+      const confidence = label.confidence ?? 0;
+      if (confidence < hardNeutralCutoff) {
         finalLabels.push({
           ...label,
           label: AssessmentLabelValue.Neutral,
-          scoreDelta: 0,
+          scoreDelta: config.labelScoreDelta[AssessmentLabelValue.Neutral] ?? 0,
+          reasonSummary:
+            'Low-confidence classification. Marked neutral until stronger evidence is available.',
           isFinal: true,
         });
         continue;
@@ -641,14 +651,23 @@ export class AssessmentGraphRunner {
       ) {
         finalLabels.push({
           ...label,
-          label: AssessmentLabelValue.Neutral,
-          scoreDelta: 0,
+          label: AssessmentLabelValue.MissedOpportunity,
+          scoreDelta:
+            config.labelScoreDelta[AssessmentLabelValue.MissedOpportunity] ??
+            -1,
+          reasonSummary:
+            label.reasonSummary?.trim() ||
+            'Potentially weak move, but no direct harmful evidence was provided.',
           isFinal: true,
         });
         continue;
       }
 
-      finalLabels.push({ ...label, isFinal: label.isFinal ?? true });
+      finalLabels.push({
+        ...label,
+        reasonSummary: this.buildReasonSummary(label),
+        isFinal: label.isFinal ?? true,
+      });
     }
 
     // Resolve mutually exclusive conflicts by selecting the highest confidence
@@ -670,7 +689,10 @@ export class AssessmentGraphRunner {
       }
     }
 
-    return finalLabels;
+    return finalLabels.map((label) => ({
+      ...label,
+      reasonSummary: this.buildReasonSummary(label),
+    }));
   }
 
   private async runJudge(
@@ -680,66 +702,33 @@ export class AssessmentGraphRunner {
     state: AssessmentStateType,
   ): Promise<JudgeOutput> {
     const systemPrompt = await buildJudgeSystemPrompt(config);
-    const userPrompt = buildJudgeUserPrompt({
+
+    const primary = await this.invokeJudgeForTurns({
+      turns: chunk.turns,
+      retrievalContext,
+      config,
+      state,
       chunkIndex: chunk.chunkIndex,
-      turns: chunk.turns.map((turn) => ({
-        turnId: turn.turnId,
-        role: turn.role,
-        text: turn.text,
-        createdAt: turn.createdAt,
-      })),
-      retrievedContext: retrievalContext,
+      systemPrompt,
+      requestSuffix: 'primary',
     });
 
-    const executeJudgeRaw = async (): Promise<string> => {
-      const response = await this.llmService.complete(
-        {
-          sessionId: state.sessionId,
-          iterationId: state.iterationId,
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userPrompt },
-          ],
-          config: {
-            model: config.judge.model,
-            provider: config.judge.provider,
-            temperature: config.judge.temperature,
-            maxTokens: config.judge.maxTokens,
-          },
-        },
-        {
-          userId: state.userId ?? undefined,
-          requestId: `assessment-${state.runId}-${chunk.chunkIndex}`,
-          purpose: 'evaluation',
-        },
-      );
-      return response.content ?? '';
-    };
+    if (!primary) {
+      return this.buildNeutralJudgeOutput(chunk, config);
+    }
 
-    const primaryAttempt = await this.withTimeout(
-      executeJudgeRaw(),
-      config.timeBudgetMs.judge,
-      { chunkIndex: chunk.chunkIndex },
+    const primaryCoverageMissing =
+      this.countMissingEvaluatedTurns(primary.labels, chunk.turns) > 0;
+    primary.labels = await this.repairMissingTurnCoverage(
+      primary.labels,
+      chunk.turns,
+      retrievalContext,
+      config,
+      state,
+      chunk.chunkIndex,
+      systemPrompt,
+      'primary',
     );
-    if (primaryAttempt.status !== 'ok') {
-      return this.buildNeutralJudgeOutput(chunk, config);
-    }
-
-    let primary = this.parseJudgeOutput(primaryAttempt.value, chunk.chunkIndex);
-    if (!primary) {
-      const retryAttempt = await this.withTimeout(
-        executeJudgeRaw(),
-        config.timeBudgetMs.judge,
-        { chunkIndex: chunk.chunkIndex },
-      );
-      if (retryAttempt.status !== 'ok') {
-        return this.buildNeutralJudgeOutput(chunk, config);
-      }
-      primary = this.parseJudgeOutput(retryAttempt.value, chunk.chunkIndex);
-    }
-    if (!primary) {
-      return this.buildNeutralJudgeOutput(chunk, config);
-    }
 
     primary.labels = this.ensureTurnCoverage(
       primary.labels,
@@ -754,34 +743,246 @@ export class AssessmentGraphRunner {
       };
     }
 
-    if (!this.shouldRunSecondJudge(primary, config)) {
+    if (
+      !primaryCoverageMissing &&
+      !this.shouldRunSecondJudge(primary, config)
+    ) {
       return primary;
     }
 
-    const secondaryAttempt = await this.withTimeout(
-      executeJudgeRaw(),
-      config.timeBudgetMs.judge,
-      { chunkIndex: chunk.chunkIndex },
-    );
-    if (secondaryAttempt.status !== 'ok') {
-      return primary;
-    }
+    const secondary = await this.invokeJudgeForTurns({
+      turns: chunk.turns,
+      retrievalContext,
+      config,
+      state,
+      chunkIndex: chunk.chunkIndex,
+      systemPrompt,
+      requestSuffix: 'secondary',
+    });
 
-    const secondary = this.parseJudgeOutput(
-      secondaryAttempt.value,
-      chunk.chunkIndex,
-    );
     if (!secondary) {
       return primary;
     }
 
+    secondary.labels = await this.repairMissingTurnCoverage(
+      secondary.labels,
+      chunk.turns,
+      retrievalContext,
+      config,
+      state,
+      chunk.chunkIndex,
+      systemPrompt,
+      'secondary',
+    );
     secondary.labels = this.ensureTurnCoverage(
       secondary.labels,
       chunk.turns,
       config,
     );
 
-    return this.mergeJudgeOutputs(primary, secondary, config);
+    const merged = this.mergeJudgeOutputs(primary, secondary, config);
+    merged.labels = this.ensureTurnCoverage(merged.labels, chunk.turns, config);
+    return merged;
+  }
+
+  private async invokeJudgeForTurns(input: {
+    turns: NormalizedTurn[];
+    retrievalContext: RetrievalItem[];
+    config: AssessmentConfig;
+    state: AssessmentStateType;
+    chunkIndex: number;
+    systemPrompt: string;
+    requestSuffix: string;
+  }): Promise<JudgeOutput | null> {
+    const userPrompt = buildJudgeUserPrompt({
+      chunkIndex: input.chunkIndex,
+      turns: input.turns.map((turn) => ({
+        turnId: turn.turnId,
+        role: turn.role,
+        text: turn.text,
+        createdAt: turn.createdAt,
+      })),
+      retrievedContext: input.retrievalContext,
+    });
+
+    const executeJudgeRaw = async (): Promise<string> => {
+      const response = await this.llmService.complete(
+        {
+          sessionId: input.state.sessionId,
+          iterationId: input.state.iterationId,
+          messages: [
+            { role: 'system', content: input.systemPrompt },
+            { role: 'user', content: userPrompt },
+          ],
+          config: {
+            model: input.config.judge.model,
+            provider: input.config.judge.provider,
+            temperature: input.config.judge.temperature,
+            maxTokens: input.config.judge.maxTokens,
+            providerOptions: this.getJudgeProviderOptions(input.config),
+          },
+        },
+        {
+          userId: input.state.userId ?? undefined,
+          requestId: `assessment-${input.state.runId}-${input.chunkIndex}-${input.requestSuffix}`,
+          purpose: 'evaluation',
+        },
+      );
+      return response.content ?? '';
+    };
+
+    const primaryAttempt = await this.withTimeout(
+      executeJudgeRaw(),
+      input.config.timeBudgetMs.judge,
+      { chunkIndex: input.chunkIndex },
+    );
+    if (primaryAttempt.status !== 'ok') {
+      return null;
+    }
+
+    let parsed = this.parseJudgeOutput(primaryAttempt.value, input.chunkIndex);
+    if (parsed) {
+      return parsed;
+    }
+
+    const retryAttempt = await this.withTimeout(
+      executeJudgeRaw(),
+      input.config.timeBudgetMs.judge,
+      { chunkIndex: input.chunkIndex },
+    );
+    if (retryAttempt.status !== 'ok') {
+      return null;
+    }
+
+    parsed = this.parseJudgeOutput(retryAttempt.value, input.chunkIndex);
+    return parsed;
+  }
+
+  private async repairMissingTurnCoverage(
+    labels: JudgeOutput['labels'],
+    turns: NormalizedTurn[],
+    retrievalContext: RetrievalItem[],
+    config: AssessmentConfig,
+    state: AssessmentStateType,
+    chunkIndex: number,
+    systemPrompt: string,
+    requestPrefix: string,
+  ): Promise<JudgeOutput['labels']> {
+    let merged = this.mergeLabelsByTurn(labels, []);
+    let missingTurns = this.getMissingEvaluatedTurns(merged, turns);
+    if (missingTurns.length === 0) {
+      return merged;
+    }
+
+    const coverageBatch = await this.invokeJudgeForTurns({
+      turns: missingTurns,
+      retrievalContext,
+      config,
+      state,
+      chunkIndex,
+      systemPrompt,
+      requestSuffix: `${requestPrefix}-coverage-batch`,
+    });
+    if (coverageBatch?.labels?.length) {
+      merged = this.mergeLabelsByTurn(merged, coverageBatch.labels);
+      missingTurns = this.getMissingEvaluatedTurns(merged, turns);
+    }
+
+    const fallbackLimit = 12;
+    const fallbackTurns = missingTurns.slice(0, fallbackLimit);
+    if (missingTurns.length > fallbackLimit) {
+      this.logger.warn(
+        `Chunk ${chunkIndex} still missing ${missingTurns.length} labels after coverage batch; capping single-turn retries at ${fallbackLimit}.`,
+      );
+    }
+
+    for (let index = 0; index < fallbackTurns.length; index += 1) {
+      const turn = fallbackTurns[index];
+      if (!turn) {
+        continue;
+      }
+      const singleTurn = await this.invokeJudgeForTurns({
+        turns: [turn],
+        retrievalContext,
+        config,
+        state,
+        chunkIndex,
+        systemPrompt,
+        requestSuffix: `${requestPrefix}-coverage-single-${index + 1}`,
+      });
+      if (singleTurn?.labels?.length) {
+        merged = this.mergeLabelsByTurn(merged, singleTurn.labels);
+      }
+    }
+
+    return merged;
+  }
+
+  private mergeLabelsByTurn(
+    base: JudgeOutput['labels'],
+    incoming: JudgeOutput['labels'],
+  ): JudgeOutput['labels'] {
+    const bestByTurn = new Map<string, JudgeOutput['labels'][number]>();
+
+    for (const label of [...(base ?? []), ...(incoming ?? [])]) {
+      const current = bestByTurn.get(label.turnId);
+      if (!current) {
+        bestByTurn.set(label.turnId, label);
+        continue;
+      }
+
+      const currentConfidence = current.confidence ?? 0;
+      const nextConfidence = label.confidence ?? 0;
+      if (nextConfidence > currentConfidence) {
+        bestByTurn.set(label.turnId, label);
+        continue;
+      }
+      if (nextConfidence < currentConfidence) {
+        continue;
+      }
+
+      const currentReasonLength = (current.reasonSummary ?? '').trim().length;
+      const nextReasonLength = (label.reasonSummary ?? '').trim().length;
+      if (nextReasonLength > currentReasonLength) {
+        bestByTurn.set(label.turnId, label);
+      }
+    }
+
+    return Array.from(bestByTurn.values());
+  }
+
+  private getMissingEvaluatedTurns(
+    labels: JudgeOutput['labels'],
+    turns: NormalizedTurn[],
+  ): NormalizedTurn[] {
+    const evaluatedTurns = turns.filter((turn) => turn.isEvaluated);
+    const evaluatedIds = new Set(evaluatedTurns.map((turn) => turn.turnId));
+    const labeledIds = new Set(
+      (labels ?? [])
+        .map((label) => label.turnId)
+        .filter((turnId) => evaluatedIds.has(turnId)),
+    );
+    return evaluatedTurns.filter((turn) => !labeledIds.has(turn.turnId));
+  }
+
+  private countMissingEvaluatedTurns(
+    labels: JudgeOutput['labels'],
+    turns: NormalizedTurn[],
+  ): number {
+    return this.getMissingEvaluatedTurns(labels, turns).length;
+  }
+
+  private getJudgeProviderOptions(
+    config: AssessmentConfig,
+  ): Record<string, unknown> | undefined {
+    const provider = (config.judge.provider ?? '').toLowerCase();
+    const model = config.judge.model.toLowerCase();
+    if (provider === 'openai' || model.startsWith('gpt-')) {
+      return {
+        response_format: { type: 'json_object' },
+      };
+    }
+    return undefined;
   }
 
   private ensureTurnCoverage(
@@ -805,7 +1006,10 @@ export class AssessmentGraphRunner {
       const existingConfidence = existing?.confidence ?? 0;
       const currentConfidence = label.confidence ?? 0;
       if (!existing || currentConfidence >= existingConfidence) {
-        bestByTurn.set(label.turnId, label);
+        bestByTurn.set(label.turnId, {
+          ...label,
+          reasonSummary: this.buildReasonSummary(label),
+        });
       }
     }
 
@@ -816,11 +1020,12 @@ export class AssessmentGraphRunner {
       bestByTurn.set(turn.turnId, {
         turnId: turn.turnId,
         label: AssessmentLabelValue.Neutral,
-        confidence: config.thresholds.confidenceCutoff,
+        confidence: Math.min(0.2, config.thresholds.confidenceCutoff * 0.5),
         evidence: null,
         scoreDelta: config.labelScoreDelta[AssessmentLabelValue.Neutral] ?? 0,
         citations: [],
-        reasonSummary: 'No clear positive or negative signal identified.',
+        reasonSummary:
+          'Coverage gap: judge omitted this turn. Neutral placeholder applied.',
       });
     }
 
@@ -842,7 +1047,15 @@ export class AssessmentGraphRunner {
 
     try {
       const jsonText = this.extractJson(raw);
-      return JudgeOutputSchema.parse(JSON.parse(jsonText));
+      const parsed = JudgeOutputSchema.parse(JSON.parse(jsonText));
+      return {
+        ...parsed,
+        chunkIndex,
+        labels: (parsed.labels ?? []).map((label) => ({
+          ...label,
+          reasonSummary: this.buildReasonSummary(label),
+        })),
+      };
     } catch (error) {
       this.logger.warn(
         `Failed to parse judge output for chunk ${chunkIndex}: ${String(
@@ -988,9 +1201,11 @@ export class AssessmentGraphRunner {
       if (!b) return a;
 
       if (a.label === b.label) {
+        const winner = (a.confidence ?? 0) >= (b.confidence ?? 0) ? a : b;
         return {
-          ...a,
+          ...winner,
           confidence: ((a.confidence ?? 0) + (b.confidence ?? 0)) / 2,
+          reasonSummary: this.buildReasonSummary(winner),
           isFinal: true,
         };
       }
@@ -998,24 +1213,31 @@ export class AssessmentGraphRunner {
       const aPolarity = this.getLabelPolarity(a.label, config);
       const bPolarity = this.getLabelPolarity(b.label, config);
       if (aPolarity === bPolarity && aPolarity !== 'neutral') {
-        return (a.confidence ?? 0) >= (b.confidence ?? 0)
-          ? { ...a, isFinal: true }
-          : { ...b, isFinal: true };
-      }
-
-      const diff = Math.abs((a.confidence ?? 0) - (b.confidence ?? 0));
-      if (diff < config.thresholds.disagreementCutoff) {
+        const winner = (a.confidence ?? 0) >= (b.confidence ?? 0) ? a : b;
         return {
-          ...a,
-          label: AssessmentLabelValue.Neutral,
-          scoreDelta: 0,
+          ...winner,
+          reasonSummary: this.buildReasonSummary(winner),
           isFinal: true,
         };
       }
 
-      return (a.confidence ?? 0) >= (b.confidence ?? 0)
-        ? { ...a, isFinal: true }
-        : { ...b, isFinal: true };
+      const diff = Math.abs((a.confidence ?? 0) - (b.confidence ?? 0));
+      if (diff < config.thresholds.disagreementCutoff) {
+        const winner = this.pickMoreDefensibleLabel(a, b, config);
+        const loser = winner === a ? b : a;
+        return {
+          ...winner,
+          reasonSummary: this.buildDisagreementReason(winner, loser),
+          isFinal: true,
+        };
+      }
+
+      const winner = (a.confidence ?? 0) >= (b.confidence ?? 0) ? a : b;
+      return {
+        ...winner,
+        reasonSummary: this.buildReasonSummary(winner),
+        isFinal: true,
+      };
     });
 
     return {
@@ -1037,5 +1259,66 @@ export class AssessmentGraphRunner {
       return 'negative';
     }
     return 'neutral';
+  }
+
+  private hasEvidence(label: { evidence?: string | null }): boolean {
+    return Boolean(label.evidence && label.evidence.trim().length > 0);
+  }
+
+  private buildReasonSummary(label: {
+    label: AssessmentLabelValue;
+    reasonSummary?: string | null;
+    evidence?: string | null;
+  }): string {
+    const explicit = label.reasonSummary?.trim();
+    if (explicit) {
+      return explicit;
+    }
+
+    const base =
+      ASSESSMENT_LABEL_DEFINITIONS[label.label]?.description ??
+      'Turn impact evaluated against the objective.';
+    const evidence = label.evidence?.trim();
+    if (!evidence) {
+      return base;
+    }
+
+    return `${base} Evidence: "${evidence.slice(0, 140)}"`;
+  }
+
+  private pickMoreDefensibleLabel(
+    a: JudgeOutput['labels'][number],
+    b: JudgeOutput['labels'][number],
+    config: AssessmentConfig,
+  ): JudgeOutput['labels'][number] {
+    const aHasEvidence = this.hasEvidence(a);
+    const bHasEvidence = this.hasEvidence(b);
+    if (aHasEvidence !== bHasEvidence) {
+      return aHasEvidence ? a : b;
+    }
+
+    const aStrength = Math.abs(
+      a.scoreDelta ?? config.labelScoreDelta[a.label] ?? 0,
+    );
+    const bStrength = Math.abs(
+      b.scoreDelta ?? config.labelScoreDelta[b.label] ?? 0,
+    );
+    if (aStrength !== bStrength) {
+      return aStrength >= bStrength ? a : b;
+    }
+
+    return (a.confidence ?? 0) >= (b.confidence ?? 0) ? a : b;
+  }
+
+  private buildDisagreementReason(
+    winner: JudgeOutput['labels'][number],
+    loser: JudgeOutput['labels'][number],
+  ): string {
+    const winnerReason = this.buildReasonSummary(winner);
+    const loserReason = this.buildReasonSummary(loser);
+    if (!loserReason || loserReason === winnerReason) {
+      return winnerReason;
+    }
+    return `${winnerReason} Alternate reading considered: ${loserReason}`;
   }
 }
