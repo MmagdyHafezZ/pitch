@@ -4,7 +4,6 @@
   "buildCommand": "pnpm --filter @pitch/shared-backend build && pnpm --filter api build",
   "functions": {
     "apps/api/api/index.js": {
-      "runtime": "nodejs20.x",
       "maxDuration": 60
     }
   },
