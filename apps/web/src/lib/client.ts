@@ -566,29 +566,13 @@ export const api = {
       }),
   },
 
-  video: {
-    createLiveAvatarSession: (sessionId: string) =>
-      apiRequest<{
-        sessionId: string
-        sessionToken: string
-        avatarId: string
-        avatarName?: string | null
-        previewUrl?: string | null
-        mode: 'LITE'
-        quality: 'very_high' | 'high' | 'medium' | 'low'
-        encoding: 'VP8' | 'H264'
-      }>('/simulation/video/live-avatar/session', {
-        method: 'POST',
-        body: JSON.stringify({ sessionId }),
-      }),
-  },
-
   assessments: {
     run: (data: {
       sessionId?: string
       iterationId?: string
       sessionMemberId?: string
       mode: 'live' | 'final'
+      forceRecalculate?: boolean
       configVersion?: string
       requestedBy?: string
     }) =>
@@ -610,6 +594,34 @@ export const api = {
         `/simulation/sessions/${sessionId}/assessments/latest${queryString ? `?${queryString}` : ''}`
       )
     },
+  },
+
+  lti: {
+    getCredentials: () =>
+      apiRequest<{
+        v13: {
+          launchUrl: string
+          oidcLoginUrl: string
+          jwksUrl: string
+          redirectUri: string
+          publicKeyPem: string | null
+        }
+        v11: { launchUrl: string }
+      }>('/lti/platforms/credentials'),
+
+    registerPlatform: (body: {
+      name: string
+      issuer: string
+      clientId: string
+      authLoginUrl: string
+      authTokenUrl: string
+      keysetUrl: string
+      deploymentId: string
+    }) =>
+      apiRequest<{ id: string }>('/lti/platforms', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
   },
 
   scenarios: {

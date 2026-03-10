@@ -24,7 +24,11 @@ export class PlatformRepository {
         keysetUrl: dto.keysetUrl,
         redirectUris: dto.redirectUris ?? [],
         isActive: dto.isActive ?? true,
+        ...(dto.deploymentId && {
+          deployments: { create: { deploymentId: dto.deploymentId } },
+        }),
       },
+      include: { deployments: true },
     });
   }
 

@@ -23,6 +23,7 @@ import {
   IconEdit,
   IconInfoCircle,
   IconLanguage,
+  IconLink,
   IconPlayerPlay,
   IconRobot,
   IconTag,
@@ -31,6 +32,7 @@ import {
 import { useEffect, useState, type ReactNode } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { JsonViewer } from '@/components/ui/JsonViewer'
+import { LtiEmbedModal } from '@/components/ui/LtiEmbedModal'
 import { useAuth } from '@/features/auth'
 import type { Session, SessionConfigData } from '@/features/sessions'
 import { api } from '@/lib/client'
@@ -146,6 +148,7 @@ export default function SessionDetailPage() {
   const [session, setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [ltiEmbedOpen, setLtiEmbedOpen] = useState(false)
 
   useEffect(() => {
     if (!id) return
@@ -296,6 +299,15 @@ export default function SessionDetailPage() {
             }}
           >
             Edit
+          </Button>
+          <Button
+            size="sm"
+            variant="light"
+            color="gray"
+            leftSection={<IconLink size={15} />}
+            onClick={() => setLtiEmbedOpen(true)}
+          >
+            Embed in LMS
           </Button>
           <Button
             size="sm"
@@ -477,6 +489,12 @@ export default function SessionDetailPage() {
           </Stack>
         </Grid.Col>
       </Grid>
+
+      <LtiEmbedModal
+        opened={ltiEmbedOpen}
+        onClose={() => setLtiEmbedOpen(false)}
+        sessionId={session.id}
+      />
     </Stack>
   )
 }
