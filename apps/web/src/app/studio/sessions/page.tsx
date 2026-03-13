@@ -14,8 +14,9 @@ import {
   UnstyledButton,
   Loader,
   Center,
+  ThemeIcon,
 } from '@mantine/core'
-import { IconChevronDown, IconChevronUp, IconX } from '@tabler/icons-react'
+import { IconCalendarStats, IconChevronDown, IconChevronUp, IconX } from '@tabler/icons-react'
 import { Suspense, useState, useEffect, useMemo } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { motion, AnimatePresence, type Variants } from 'framer-motion'
@@ -50,6 +51,40 @@ const cardVariants: Variants = {
   },
 }
 
+const themedCardStyle = {
+  background: `linear-gradient(
+    180deg,
+    var(--pitch-card-bg, var(--pitch-surface-bg, var(--mantine-color-body))) 0%,
+    color-mix(in srgb, var(--pitch-card-bg-strong, var(--pitch-card-bg, var(--pitch-surface-bg))) 84%, transparent) 100%
+  )`,
+  border: '1px solid var(--pitch-card-border, var(--pitch-border, var(--mantine-color-default-border)))',
+  boxShadow: `0 10px 24px color-mix(
+    in srgb,
+    var(--pitch-card-shadow, var(--pitch-surface-bg, #000)) 16%,
+    transparent
+  )`,
+}
+
+const detailPanelStyle = {
+  background: `linear-gradient(
+    180deg,
+    var(--pitch-card-hero-start, var(--pitch-card-bg, var(--pitch-surface-bg, var(--mantine-color-body)))) 0%,
+    var(--pitch-card-hero-end, var(--pitch-card-bg-strong, var(--pitch-card-bg, var(--pitch-surface-bg, var(--mantine-color-body))))) 100%
+  )`,
+  border: '1px solid var(--pitch-card-border-strong, var(--pitch-card-border, var(--pitch-border, var(--mantine-color-default-border))))',
+  boxShadow: `0 14px 32px color-mix(
+    in srgb,
+    var(--pitch-card-shadow, var(--pitch-accent-strong)) 18%,
+    transparent
+  )`,
+}
+
+const detailBlockStyle = {
+  background: 'var(--pitch-card-bg-subtle, var(--pitch-card-bg, var(--pitch-surface-bg, var(--mantine-color-body))))',
+  border: '1px solid var(--pitch-card-border, var(--pitch-border, var(--mantine-color-default-border)))',
+  borderRadius: 8,
+}
+
 function SessionCard({
   session,
   onClick,
@@ -72,11 +107,16 @@ function SessionCard({
       shadow="sm"
       onClick={onClick}
       style={{
+        ...themedCardStyle,
         cursor: 'pointer',
         transition: 'all 0.2s ease-in-out',
-        border: isSelected ? '2px solid var(--pitch-accent-strong)' : undefined,
+        border: isSelected
+          ? '2px solid color-mix(in srgb, var(--pitch-accent-strong) 78%, white 22%)'
+          : themedCardStyle.border,
         transform: isSelected ? 'scale(1.02)' : undefined,
-        boxShadow: isSelected ? '0 4px 12px rgba(0, 0, 0, 0.15)' : '0 1px 3px rgba(0, 0, 0, 0.1)',
+        boxShadow: isSelected
+          ? '0 14px 28px color-mix(in srgb, var(--pitch-accent-strong) 16%, transparent)'
+          : themedCardStyle.boxShadow,
       }}
     >
       <Stack gap="xs">
@@ -155,7 +195,7 @@ function SessionDetailPanel({ session, onDismiss }: { session: Session; onDismis
       return <JsonViewer data={formattedValue as Record<string, any>} />
     }
     return (
-      <Text size="sm" c="white">
+      <Text size="sm">
         {String(formattedValue)}
       </Text>
     )
@@ -182,8 +222,8 @@ function SessionDetailPanel({ session, onDismiss }: { session: Session; onDismis
       radius="lg"
       padding="xl"
       style={{
-        backgroundColor: 'var(--mantine-color-dark-8)',
-        color: 'white',
+        ...detailPanelStyle,
+        color: 'var(--mantine-color-text)',
         height: 'calc(100vh - 3.7em - 32px)',
         maxHeight: 'calc(100vh - 3.7em - 32px)',
         overflowY: 'auto',
@@ -197,7 +237,7 @@ function SessionDetailPanel({ session, onDismiss }: { session: Session; onDismis
         <motion.div variants={itemVariants}>
           <Group justify="space-between" align="start" mb="xs">
             <Stack gap={4} style={{ flex: 1 }}>
-              <Title order={2} c="white" style={{ fontWeight: 700 }}>
+              <Title order={2} style={{ fontWeight: 700 }}>
                 {displayName}
               </Title>
               <Text size="sm" c="dimmed">
@@ -215,7 +255,7 @@ function SessionDetailPanel({ session, onDismiss }: { session: Session; onDismis
                   alignItems: 'center',
                 }}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.color = 'white'
+                  e.currentTarget.style.color = 'var(--mantine-color-text)'
                 }}
                 onMouseLeave={(e) => {
                   e.currentTarget.style.color = 'var(--mantine-color-gray-5)'
@@ -240,7 +280,7 @@ function SessionDetailPanel({ session, onDismiss }: { session: Session; onDismis
 
         {/* Type & Tags */}
         <motion.div variants={itemVariants} style={{ marginTop: '2rem', marginBottom: '2rem' }}>
-          <Title order={4} c="white" mb="md">
+          <Title order={4} mb="md">
             Type & Tags
           </Title>
           <Group gap="xs">
@@ -263,7 +303,7 @@ function SessionDetailPanel({ session, onDismiss }: { session: Session; onDismis
 
         {/* Config */}
         <motion.div variants={itemVariants} style={{ marginBottom: '2rem' }}>
-          <Title order={4} c="white" mb="md">
+          <Title order={4} mb="md">
             Config
           </Title>
           {configEntries.length > 0 ? (
@@ -286,16 +326,13 @@ function SessionDetailPanel({ session, onDismiss }: { session: Session; onDismis
 
         {/* Details */}
         <motion.div variants={itemVariants} style={{ marginBottom: '2rem' }}>
-          <Title order={4} c="white" mb="md">
+          <Title order={4} mb="md">
             Details
           </Title>
           <Stack
             gap="sm"
             p="md"
-            style={{
-              backgroundColor: 'var(--mantine-color-dark-7)',
-              borderRadius: 8,
-            }}
+            style={detailBlockStyle}
           >
             {details.map((detail) => (
               <Group key={detail.label} align="flex-start" gap="sm" wrap="nowrap">
@@ -310,7 +347,7 @@ function SessionDetailPanel({ session, onDismiss }: { session: Session; onDismis
                 <Text size="sm" c="dimmed" mt="sm">
                   Description
                 </Text>
-                <Text size="sm" c="white">
+                <Text size="sm">
                   {description}
                 </Text>
               </>
@@ -469,31 +506,36 @@ function SessionsPageInner() {
               <Loader size="lg" />
             </Center>
           ) : groupedAndFilteredSessions.length === 0 ? (
-            <Box
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                justifyContent: 'center',
-                alignItems: 'center',
-                height: '100%',
-                width: '100%',
-                paddingTop: '10em',
-              }}
-            >
-              <Title order={3} c="dimmed" mb="md">
-                No sessions found
-              </Title>
-              <Text c="dimmed" mb="md">
-                Try adjusting your filters or create a new session.
-              </Text>
-              <Button
-                variant="light"
-                color="brand"
-                onClick={() => router.push('/studio/sessions/create')}
-              >
-                Create a session
-              </Button>
-            </Box>
+            <Card withBorder radius="xl" p="xl" style={detailPanelStyle}>
+              <Stack align="center" gap="md" py="xl">
+                <ThemeIcon
+                  size={64}
+                  radius="xl"
+                  style={{
+                    background:
+                      'var(--pitch-card-bg-subtle, var(--pitch-card-bg, var(--pitch-surface-bg, var(--mantine-color-body))))',
+                    color: 'var(--pitch-accent-strong)',
+                    border:
+                      '1px solid var(--pitch-card-border, var(--pitch-border, var(--mantine-color-default-border)))',
+                  }}
+                >
+                  <IconCalendarStats size={30} />
+                </ThemeIcon>
+                <Stack align="center" gap={4}>
+                  <Title order={3}>No sessions found</Title>
+                  <Text c="dimmed" ta="center" maw={420}>
+                    Try adjusting your filters or create a new session.
+                  </Text>
+                </Stack>
+                <Button
+                  variant="light"
+                  color="brand"
+                  onClick={() => router.push('/studio/sessions/create')}
+                >
+                  Create a session
+                </Button>
+              </Stack>
+            </Card>
           ) : (
             <>
               {groupedAndFilteredSessions.map(({ groupName, sessions: groupSessions }) => (
@@ -505,19 +547,24 @@ function SessionsPageInner() {
                     style={{
                       width: '100%',
                       padding: '16px 20px',
-                      backgroundColor: 'var(--mantine-color-dark-8)',
+                      background: `linear-gradient(
+                        180deg,
+                        var(--pitch-card-bg, var(--pitch-surface-bg, var(--mantine-color-body))) 0%,
+                        var(--pitch-card-bg-subtle, var(--pitch-card-bg, var(--pitch-surface-bg, var(--mantine-color-body)))) 100%
+                      )`,
+                      border: '1px solid var(--pitch-card-border, var(--pitch-border, var(--mantine-color-default-border)))',
                       borderRadius: '8px',
                       marginBottom: '16px',
                     }}
                   >
                     <Group justify="space-between" wrap="nowrap">
-                      <Title order={3} c="white" style={{ fontWeight: 600 }}>
+                      <Title order={3} style={{ fontWeight: 600 }}>
                         {groupName} ({groupSessions.length})
                       </Title>
                       {expandedCategories[groupName] ? (
-                        <IconChevronDown size={24} color="white" />
+                        <IconChevronDown size={24} color="currentColor" />
                       ) : (
-                        <IconChevronUp size={24} color="white" />
+                        <IconChevronUp size={24} color="currentColor" />
                       )}
                     </Group>
                   </UnstyledButton>
