@@ -103,6 +103,7 @@ export function AppSidebar({
               />
             ))}
             <Box
+              className={classes.calendarShell}
               mt="auto"
               pt="lg"
               mx="0"
@@ -111,7 +112,6 @@ export function AppSidebar({
                 width: '100%',
                 background: 'var(--pitch-nav-bg, var(--mantine-color-nav-9))',
                 borderRadius: 12,
-                border: '1px solid var(--pitch-nav-text-dim)',
                 overflow: 'hidden',
               }}
             >
