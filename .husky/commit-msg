@@ -1,9 +1,23 @@
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+. "$REPO_ROOT/scripts/setup-hook-env.sh"
+
 echo "📋 Validating commit message..."
 
-# Run commitlint to validate the commit message
-pnpm exec commitlint --edit "$1"
+if [ -x "$REPO_ROOT/node_modules/.bin/commitlint" ]; then
+  "$REPO_ROOT/node_modules/.bin/commitlint" --edit "$1"
+elif command -v pnpm >/dev/null 2>&1; then
+  pnpm exec commitlint --edit "$1"
+else
+  echo "commitlint not found. Run pnpm install." >&2
+  exit 127
+fi
 
-if [ $? -eq 0 ]; then
+status=$?
+
+if [ $status -eq 0 ]; then
   echo "✅ Commit message is valid!"
 else
   echo "❌ Commit message validation failed!"
@@ -18,5 +32,5 @@ else
   echo ""
   echo "Available types: feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert"
   echo "Available scopes: web, api, shared, config, deps, docker, docs, ci, release"
-  exit 1
+  exit $status
 fi
