@@ -173,7 +173,7 @@ pnpm start                  # Start production server
 # Database
 pnpm migrate:user          # Run user service migrations
 pnpm migrate:business      # Push business service schema
-pnpm db:seed              # Seed development data
+pnpm db:seed              # Bootstrap SQL schemas, then seed demo data across Prisma + Mongo services
 
 # Testing
 pnpm test                  # Run unit tests
