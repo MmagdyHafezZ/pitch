@@ -18,6 +18,7 @@ import {
   Indicator,
   Loader,
   useMantineColorScheme,
+  Burger,
 } from '@mantine/core'
 import { IconSearch, IconBell, IconUser } from '@tabler/icons-react'
 import dayjs from 'dayjs'
@@ -53,6 +54,8 @@ export type HeaderProps = {
   currentPage?: 'Home' | 'Sessions' | 'Teams' | 'Analytics' | 'Settings'
   selectedTab?: string
   onTabChange?: (tab: string) => void
+  mobileNavOpened?: boolean
+  onMobileNavToggle?: () => void
 }
 
 type PageKey = 'Home' | 'Sessions' | 'Teams' | 'Analytics' | 'Settings'
@@ -169,7 +172,7 @@ function ActionBar({
   ) : null
 
   const inputProps = value !== undefined ? { value } : {}
-  const searchWidth = isCompact ? rem(180) : rem(320)
+  const searchWidth = isCompact ? '100%' : rem(320)
   const searchInput = enableSearch ? (
     <Box style={{ width: searchWidth, flexShrink: 0 }}>
       <TextInput
@@ -197,6 +200,16 @@ function ActionBar({
   ) : null
 
   if (tabs) {
+    if (isCompact) {
+      return (
+        <Stack gap={8} w="100%">
+          {actions}
+          <Box style={{ minWidth: 0, width: '100%' }}>{tabs}</Box>
+          {searchInput}
+        </Stack>
+      )
+    }
+
     const columns = [actions ? 'auto' : null, '1fr', searchInput ? 'auto' : null]
       .filter(Boolean)
       .join(' ')
@@ -248,8 +261,7 @@ function ActionConfig({
       return (
         <ActionBar
           enableSearch={false}
-          searchPlaceholder="Search"
-          availableTabs={['All', 'Favorites', 'Archived']}
+          availableTabs={isCompact ? [] : ['All', 'Favorites', 'Archived']}
           selectedTab={selectedTab}
           onTabChange={onTabChange}
           value={value}
@@ -333,6 +345,8 @@ export function AppTopBar({
   currentPage,
   selectedTab,
   onTabChange,
+  mobileNavOpened = false,
+  onMobileNavToggle,
 }: HeaderProps) {
   const weekday = useMemo(() => dayjs(date).format('dddd'), [date])
   const shortDate = useMemo(() => dayjs(date).format('MMM D, YYYY'), [date])
@@ -420,6 +434,64 @@ export function AppTopBar({
     />
   )
   const showActionArea = Boolean(rightSlot || currentPage)
+
+  const topControls = (
+    <Group align="center" gap={isNarrow ? 8 : 12} wrap="nowrap">
+      {!isNarrow && (
+        <Box ta="right" lh={1}>
+          <Text size="xs" fw={700} c="var(--pitch-nav-text)">
+            {weekday}
+          </Text>
+          <Text size="xs" c="var(--pitch-nav-text-dim)">
+            {shortDate}
+          </Text>
+        </Box>
+      )}
+
+      <Indicator
+        disabled={unreadCount === 0}
+        label={unreadCount > 99 ? '99+' : unreadCount}
+        size={16}
+        color="red"
+        offset={6}
+      >
+        <ActionIcon
+          aria-label="Notifications"
+          size={isNarrow ? 26 : 28}
+          radius="md"
+          variant="default"
+          onClick={() => setNotificationsOpened(true)}
+          styles={{
+            root: {
+              background: 'var(--pitch-nav-accent-soft)',
+              color: 'var(--pitch-nav-text)',
+              boxShadow: '0 0 0 1px var(--pitch-nav-text-dim)',
+            },
+          }}
+        >
+          <IconBell size={16} />
+        </ActionIcon>
+      </Indicator>
+
+      <ActionIcon
+        aria-label="Account"
+        size={isNarrow ? 26 : 28}
+        radius="md"
+        variant="default"
+        onClick={() => setSettingsOpened(true)}
+        styles={{
+          root: {
+            background: 'var(--pitch-nav-accent-soft)',
+            color: 'var(--pitch-nav-text)',
+            boxShadow: '0 0 0 1px var(--pitch-nav-text-dim)',
+            cursor: 'pointer',
+          },
+        }}
+      >
+        <IconUser size={16} />
+      </ActionIcon>
+    </Group>
+  )
 
   return (
     <>
@@ -513,6 +585,35 @@ export function AppTopBar({
           gap: rem(10),
         }}
       >
+        {isMobile ? (
+          <Box style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: rem(8) }}>
+            <Group justify="space-between" align="center" w="100%" wrap="nowrap">
+              <Group align="center" gap={8} style={{ minWidth: 0 }}>
+                {onMobileNavToggle ? (
+                  <Burger
+                    opened={mobileNavOpened}
+                    onClick={onMobileNavToggle}
+                    size="sm"
+                    color="var(--pitch-nav-text)"
+                    aria-label="Toggle navigation"
+                  />
+                ) : null}
+                <Text
+                  px={rem(4)}
+                  size={rem(20)}
+                  fw={700}
+                  c="var(--pitch-accent-strong)"
+                  style={{ whiteSpace: 'nowrap' }}
+                >
+                  P.I.T.C.H.
+                </Text>
+              </Group>
+              {topControls}
+            </Group>
+
+            {showActionArea ? <Box style={{ width: '100%' }}>{actionArea}</Box> : null}
+          </Box>
+        ) : (
         <Group justify="space-between" align="center" w="100%" wrap="nowrap">
           <Group align="center" style={{ minWidth: 0 }}>
             <Text
@@ -528,62 +629,9 @@ export function AppTopBar({
 
           {showActionArea && <Box style={{ flex: 1, minWidth: 0 }}>{actionArea}</Box>}
 
-          <Group align="center" gap={isNarrow ? 8 : 12}>
-            {!isNarrow && (
-              <Box ta="right" lh={1}>
-                <Text size="xs" fw={700} c="var(--pitch-nav-text)">
-                  {weekday}
-                </Text>
-                <Text size="xs" c="var(--pitch-nav-text-dim)">
-                  {shortDate}
-                </Text>
-              </Box>
-            )}
-
-            <Indicator
-              disabled={unreadCount === 0}
-              label={unreadCount > 99 ? '99+' : unreadCount}
-              size={16}
-              color="red"
-              offset={6}
-            >
-              <ActionIcon
-                aria-label="Notifications"
-                size={isNarrow ? 26 : 28}
-                radius="md"
-                variant="default"
-                onClick={() => setNotificationsOpened(true)}
-                styles={{
-                  root: {
-                    background: 'var(--pitch-nav-accent-soft)',
-                    color: 'var(--pitch-nav-text)',
-                    boxShadow: '0 0 0 1px var(--pitch-nav-text-dim)',
-                  },
-                }}
-              >
-                <IconBell size={16} />
-              </ActionIcon>
-            </Indicator>
-
-            <ActionIcon
-              aria-label="Account"
-              size={isNarrow ? 26 : 28}
-              radius="md"
-              variant="default"
-              onClick={() => setSettingsOpened(true)}
-              styles={{
-                root: {
-                  background: 'var(--pitch-nav-accent-soft)',
-                  color: 'var(--pitch-nav-text)',
-                  boxShadow: '0 0 0 1px var(--pitch-nav-text-dim)',
-                  cursor: 'pointer',
-                },
-              }}
-            >
-              <IconUser size={16} />
-            </ActionIcon>
-          </Group>
+          {topControls}
         </Group>
+        )}
       </Box>
     </>
   )

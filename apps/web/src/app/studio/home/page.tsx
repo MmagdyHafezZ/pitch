@@ -14,6 +14,7 @@ import {
   Group,
   Loader,
   Progress,
+  SegmentedControl,
   SimpleGrid,
   Stack,
   Text,
@@ -21,6 +22,7 @@ import {
   Title,
 } from '@mantine/core'
 import { LineChart } from '@mantine/charts'
+import { useMediaQuery } from '@mantine/hooks'
 import {
   IconAlertTriangle,
   IconArrowRight,
@@ -264,6 +266,8 @@ export default function DashboardHome() {
   const router = useRouter()
   const { user } = useAuth()
   const { teams, fetchUserTeams } = useTeams()
+  const isMobile = useMediaQuery('(max-width: 768px)')
+  const [homeView, setHomeView] = useState<'All' | 'Favorites' | 'Archived'>('All')
 
   const [userSessions, setUserSessions] = useState<Session[]>([])
   const [teamSessionMap, setTeamSessionMap] = useState<Record<string, Session[]>>({})
@@ -484,7 +488,7 @@ export default function DashboardHome() {
         p="lg"
         style={{ ...heroCardStyle, color: 'var(--mantine-color-text)' }}
       >
-        <Group justify="space-between" align="flex-start">
+        <Group justify="space-between" align="flex-start" wrap={isMobile ? 'wrap' : 'nowrap'}>
           <Stack gap={6}>
             <Title order={2}>
               Welcome back, {welcomeName}
@@ -504,21 +508,66 @@ export default function DashboardHome() {
               </Badge>
             </Group>
           </Stack>
-          <Group>
+          <Group w={isMobile ? '100%' : undefined} justify={isMobile ? 'flex-start' : undefined}>
             <Button
               variant="filled"
               color="brand"
               rightSection={<IconArrowRight size={16} />}
               onClick={() => router.push('/studio/sessions/create')}
+              fullWidth={isMobile}
             >
               Start session
             </Button>
-            <Button variant="light" color="brand" onClick={() => router.push('/studio/sessions')}>
+            <Button
+              variant="light"
+              color="brand"
+              onClick={() => router.push('/studio/sessions')}
+              fullWidth={isMobile}
+            >
               View sessions
             </Button>
           </Group>
         </Group>
       </Card>
+
+      {isMobile ? (
+        <Group justify="flex-start">
+          <SegmentedControl
+            value={homeView}
+            onChange={(value) => setHomeView(value as 'All' | 'Favorites' | 'Archived')}
+            data={[
+              { label: 'All', value: 'All' },
+              { label: 'Favorites', value: 'Favorites' },
+              { label: 'Archived', value: 'Archived' },
+            ]}
+            size="sm"
+            radius="xl"
+            styles={{
+              root: {
+                background:
+                  'var(--pitch-card-bg-subtle, var(--pitch-card-bg, var(--pitch-surface-bg, var(--mantine-color-body))))',
+                border:
+                  '1px solid var(--pitch-card-border, var(--pitch-border, var(--mantine-color-default-border)))',
+                padding: 4,
+              },
+              control: {
+                border: 'none',
+              },
+              indicator: {
+                background:
+                  'linear-gradient(180deg, var(--pitch-accent-strong), color-mix(in srgb, var(--pitch-accent-strong) 78%, black))',
+                boxShadow:
+                  '0 8px 18px color-mix(in srgb, var(--pitch-accent-strong) 18%, transparent)',
+              },
+              label: {
+                color: 'var(--pitch-surface-text)',
+                fontWeight: 600,
+                minWidth: 84,
+              },
+            }}
+          />
+        </Group>
+      ) : null}
 
       {error && (
         <Alert
@@ -608,7 +657,7 @@ export default function DashboardHome() {
           <Grid gutter="md">
             <Grid.Col span={{ base: 12, lg: 8 }}>
               <Card withBorder radius="lg" p="lg" h="100%" style={themedCardStyle}>
-                <Group justify="space-between" mb="sm">
+                <Group justify="space-between" mb="sm" wrap="wrap">
                   <Stack gap={2}>
                     <Text fw={700}>Practice activity map</Text>
                     <Text size="xs" c="dimmed">
@@ -625,7 +674,7 @@ export default function DashboardHome() {
                   </Group>
                 </Group>
 
-                <Box mt="sm">
+                <Box mt="sm" style={{ overflowX: isMobile ? 'auto' : 'visible' }}>
                   <Group justify="space-between" mb={8}>
                     {monthLabels.map((label) => (
                       <Text key={`${label.label}-${label.index}`} size="xs" c="dimmed">
@@ -633,7 +682,12 @@ export default function DashboardHome() {
                       </Text>
                     ))}
                   </Group>
-                  <Group align="flex-start" wrap="nowrap" gap="xs">
+                  <Group
+                    align="flex-start"
+                    wrap="nowrap"
+                    gap="xs"
+                    style={{ minWidth: isMobile ? 360 : undefined }}
+                  >
                     <Stack gap={2} mt={6}>
                       {['Sun', '', 'Tue', '', 'Thu', '', 'Sat'].map((dayLabel, index) => (
                         <Text key={`${dayLabel}-${index}`} size="xs" c="dimmed" h={12}>
@@ -746,7 +800,7 @@ export default function DashboardHome() {
                   </Badge>
                 </Group>
                 <LineChart
-                  h={260}
+                  h={isMobile ? 220 : 260}
                   data={weeklyTrend}
                   dataKey="week"
                   series={[

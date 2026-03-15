@@ -2,17 +2,16 @@
 
 import { AppShell, Box, rem } from '@mantine/core'
 import { ReactNode } from 'react'
-import { useDisclosure } from '@mantine/hooks'
 import classes from './app-layout.module.css'
 
 type Props = {
   header: ReactNode
   navbar: ReactNode
   children: ReactNode
+  navbarOpened: boolean
 }
 
-export function AppLayout({ header, navbar, children }: Props) {
-  const [opened, { toggle }] = useDisclosure()
+export function AppLayout({ header, navbar, children, navbarOpened }: Props) {
   const headerHeight = '3.7em'
   const curveRadius = rem(18)
 
@@ -20,7 +19,7 @@ export function AppLayout({ header, navbar, children }: Props) {
     <AppShell
       withBorder={false}
       header={{ height: headerHeight }}
-      navbar={{ width: 300, breakpoint: 'md', collapsed: { mobile: !opened } }}
+      navbar={{ width: 300, breakpoint: 'md', collapsed: { mobile: !navbarOpened } }}
       styles={{
         header: {
           background:
@@ -33,7 +32,7 @@ export function AppLayout({ header, navbar, children }: Props) {
         main: {
           background:
             'var(--pitch-app-bg, var(--pitch-surface-bg, var(--mantine-color-surface-0, var(--mantine-color-body))))',
-          height: `calc(100vh - ${headerHeight})`,
+          minHeight: `calc(100vh - ${headerHeight})`,
           overflow: 'hidden',
         },
       }}

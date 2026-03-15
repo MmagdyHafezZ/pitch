@@ -7,6 +7,7 @@ import { useTeams } from '@/features/teams/hooks/useTeams'
 import { Box } from '@mantine/core'
 import { useState, useEffect, useMemo, Suspense } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
+import { useMediaQuery } from '@mantine/hooks'
 
 export default function ClientLayerComponent({ children }: { children: React.ReactNode }) {
   const [active, setActive] = useState<
@@ -17,6 +18,8 @@ export default function ClientLayerComponent({ children }: { children: React.Rea
   const pathname = usePathname()
   const router = useRouter()
   const searchParams = useSearchParams()
+  const isMobile = useMediaQuery('(max-width: 768px)')
+  const [navbarOpened, setNavbarOpened] = useState(false)
 
   const [tabsByPage, setTabsByPage] = useState<
     Record<'Home' | 'Sessions' | 'Teams' | 'Analytics' | 'Settings', string>
@@ -92,8 +95,14 @@ export default function ClientLayerComponent({ children }: { children: React.Rea
       setActive(pageInfo.nav)
     }
   }, [active, pageInfo.nav])
+  useEffect(() => {
+    if (!isMobile) {
+      setNavbarOpened(false)
+    }
+  }, [isMobile])
   return (
     <AppLayout
+      navbarOpened={navbarOpened}
       header={
         <Suspense fallback={<Box style={{ height: '100%' }} />}>
           <AppTopBar
@@ -102,6 +111,8 @@ export default function ClientLayerComponent({ children }: { children: React.Rea
             teamName={activeTeam?.name ?? 'PITCH'}
             selectedTab={selectedTab}
             onTabChange={handleTabChange(pageInfo.page)}
+            mobileNavOpened={navbarOpened}
+            onMobileNavToggle={() => setNavbarOpened((opened) => !opened)}
           />
         </Suspense>
       }
@@ -110,11 +121,17 @@ export default function ClientLayerComponent({ children }: { children: React.Rea
           <TeamSideBar
             teams={teams.map((t) => ({ id: t.id, name: t.name }))}
             activeTeamId={activeTeamId}
-            onSelectTeam={setActiveTeamId}
+            onSelectTeam={(teamId) => {
+              setActiveTeamId(teamId)
+              if (isMobile) setNavbarOpened(false)
+            }}
           />
           <AppSidebar
             active={active}
-            setActive={setActive}
+            setActive={(value) => {
+              setActive(value)
+              if (isMobile) setNavbarOpened(false)
+            }}
             selectedDate={selectedDate}
             setSelectedDate={setSelectedDate}
           />
