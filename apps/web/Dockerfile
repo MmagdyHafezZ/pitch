@@ -37,6 +37,7 @@ COPY . .
 # Disable Next.js telemetry
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NEXT_PUBLIC_API_URL=https://api.pitchapp.ca/api/v1
+ENV NEXT_PUBLIC_WS_URL=https://pitchapp.ca
 
 # Build the application
 RUN cd apps/web && pnpm build
