@@ -192,7 +192,7 @@ describe('TeamConfigPage', () => {
   it('renders the team list in default mode', async () => {
     render(<TeamConfigPage />)
 
-    expect(await screen.findByRole('heading', { name: 'All teams' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'All Teams' })).toBeInTheDocument()
     expect(await screen.findByText('Pitch Team')).toBeInTheDocument()
     expect(await screen.findByRole('button', { name: 'Edit' })).toBeInTheDocument()
   })
@@ -299,7 +299,7 @@ describe('TeamConfigPage', () => {
     })
 
     render(<TeamConfigPage />)
-    expect(await screen.findByRole('heading', { name: 'My teams' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'My Teams' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
   })
 })
