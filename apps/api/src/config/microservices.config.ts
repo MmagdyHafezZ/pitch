@@ -42,6 +42,9 @@ export function createMicroserviceOptions(queue: string): MicroserviceOptions {
       queueOptions: {
         durable: true,
       },
+      socketOptions: {
+        heartbeatIntervalInSeconds: 60,
+      },
     },
   };
 }

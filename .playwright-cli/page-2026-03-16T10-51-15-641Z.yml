@@ -1,0 +1,302 @@
+- generic [active] [ref=e110]:
+    - main [ref=e111]:
+        - generic [ref=e112]:
+            - generic [ref=e113]:
+                - link "PITCH." [ref=e114] [cursor=pointer]:
+                    - /url: /
+                - navigation [ref=e115]:
+                    - link "Overview" [ref=e116] [cursor=pointer]:
+                        - /url: "#overview"
+                    - link "Client Pain" [ref=e117] [cursor=pointer]:
+                        - /url: "#problem"
+                    - link "Solution" [ref=e118] [cursor=pointer]:
+                        - /url: "#solution"
+                    - link "Analytics" [ref=e119] [cursor=pointer]:
+                        - /url: "#analytics"
+                    - link "Screens" [ref=e120] [cursor=pointer]:
+                        - /url: "#screens"
+                    - link "Capstone" [ref=e121] [cursor=pointer]:
+                        - /url: "#capstone"
+                    - link "Team" [ref=e122] [cursor=pointer]:
+                        - /url: "#team"
+                    - link "GitHub" [ref=e123] [cursor=pointer]:
+                        - /url: "#github"
+                - generic [ref=e124]:
+                    - link "GitHub" [ref=e125] [cursor=pointer]:
+                        - /url: https://github.com/MmagdyHafezZ/PITCH
+                        - img [ref=e126]
+                        - text: GitHub
+                    - link "Try it out" [ref=e129] [cursor=pointer]:
+                        - /url: /auth/register
+            - generic [ref=e132]:
+                - generic [ref=e133]:
+                    - paragraph [ref=e134]: IBM Sponsored • UCalgary Capstone • 6 Student Builders
+                    - heading "An AI rehearsal platform that helps clients coach sales teams with confidence." [level=1] [ref=e135]
+                    - paragraph [ref=e136]: PITCH is a capstone product designed to help clients improve rep readiness, standardize coaching quality, and gain measurable performance signals before live customer calls.
+                    - generic [ref=e137]:
+                        - link "Book Client Walkthrough" [ref=e138] [cursor=pointer]:
+                            - /url: /auth/register
+                            - text: Book Client Walkthrough
+                            - img [ref=e139]
+                        - link "View Source" [ref=e141] [cursor=pointer]:
+                            - /url: https://github.com/MmagdyHafezZ/PITCH
+                            - img [ref=e142]
+                            - text: View Source
+                    - generic [ref=e145]:
+                        - generic [ref=e146]: Adaptive AI personas
+                        - generic [ref=e147]: Live coaching telemetry
+                        - generic [ref=e148]: Stakeholder-grade analytics
+                - complementary [ref=e149]:
+                    - paragraph [ref=e150]: Sponsored by
+                    - img "IBM Logo" [ref=e151]
+                    - paragraph [ref=e152]: Industry-supported innovation for a real client coaching challenge.
+                    - generic [ref=e153]:
+                        - article [ref=e154]:
+                            - paragraph [ref=e155]: 1.2M+
+                            - generic [ref=e156]: Conversation Simulations
+                        - article [ref=e157]:
+                            - paragraph [ref=e158]: 38%
+                            - generic [ref=e159]: Faster Ramp Time
+                        - article [ref=e160]:
+                            - paragraph [ref=e161]: 24%
+                            - generic [ref=e162]: Win-Confidence Lift
+                        - article [ref=e163]:
+                            - paragraph [ref=e164]: 4.9/5
+                            - generic [ref=e165]: Coach Satisfaction
+            - generic [ref=e167]:
+                - generic [ref=e168]:
+                    - paragraph [ref=e169]: Client Problem
+                    - heading "Why clients need a better rehearsal system" [level=2] [ref=e170]
+                    - paragraph [ref=e171]: Traditional role-play is inconsistent, hard to measure, and difficult to scale. PITCH addresses this with structured AI simulations and transparent coaching analytics.
+                - generic [ref=e172]:
+                    - generic [ref=e173]:
+                        - article [ref=e174]:
+                            - img [ref=e176]
+                            - heading "Slow Onboarding" [level=3] [ref=e181]
+                            - paragraph [ref=e182]: New reps take too long to reach confident, customer-ready performance.
+                        - article [ref=e183]:
+                            - img [ref=e185]
+                            - heading "Inconsistent Coaching" [level=3] [ref=e190]
+                            - paragraph [ref=e191]: Feedback quality varies by manager and is hard to scale across teams.
+                        - article [ref=e192]:
+                            - img [ref=e194]
+                            - heading "No Readiness Signal" [level=3] [ref=e197]
+                            - paragraph [ref=e198]: Leaders lack measurable evidence that reps are prepared for high-stakes calls.
+                    - generic [ref=e199]:
+                        - article [ref=e200]:
+                            - heading "Client Impact" [level=3] [ref=e201]
+                            - list [ref=e202]:
+                                - listitem [ref=e203]:
+                                    - img [ref=e204]
+                                    - text: Shorter time-to-readiness for new sales hires
+                                - listitem [ref=e207]:
+                                    - img [ref=e208]
+                                    - text: Standardized coaching quality across managers
+                                - listitem [ref=e211]:
+                                    - img [ref=e212]
+                                    - text: Clear dashboards for leadership decisions
+                        - article [ref=e215]:
+                            - heading "Business Value" [level=3] [ref=e216]
+                            - list [ref=e217]:
+                                - listitem [ref=e218]:
+                                    - img [ref=e219]
+                                    - text: Lower enablement cost per rep
+                                - listitem [ref=e222]:
+                                    - img [ref=e223]
+                                    - text: More consistent customer conversation quality
+                                - listitem [ref=e226]:
+                                    - img [ref=e227]
+                                    - text: Better confidence before live revenue calls
+            - generic [ref=e231]:
+                - generic [ref=e232]:
+                    - paragraph [ref=e233]: Solution Design
+                    - heading "Built for practical, measurable client adoption" [level=2] [ref=e234]
+                    - paragraph [ref=e235]: PITCH combines simulation quality, coaching intelligence, and clean reporting so clients can make faster enablement decisions with less ambiguity.
+                - generic [ref=e236]:
+                    - generic [ref=e237]:
+                        - article [ref=e238]:
+                            - img [ref=e240]
+                            - heading "AI Persona Simulations" [level=3] [ref=e252]
+                            - paragraph [ref=e253]: Practice against realistic buyer personalities that challenge value messaging, objection handling, and deal strategy.
+                        - article [ref=e254]:
+                            - img [ref=e256]
+                            - heading "Real-Time Coaching Signals" [level=3] [ref=e258]
+                            - paragraph [ref=e259]: Track talk ratio, narrative clarity, and objection handling quality while the conversation is still in progress.
+                        - article [ref=e260]:
+                            - img [ref=e262]
+                            - heading "Manager Analytics Layer" [level=3] [ref=e264]
+                            - paragraph [ref=e265]: View readiness trends, rep-level gaps, and team-wide progress with actionable coaching recommendations.
+                        - article [ref=e266]:
+                            - img [ref=e268]
+                            - heading "Secure Team Operations" [level=3] [ref=e271]
+                            - paragraph [ref=e272]: Support role controls, structured workflows, and auditable simulation history suitable for client environments.
+                    - complementary [ref=e273]:
+                        - heading "Client Workflow" [level=3] [ref=e274]:
+                            - img [ref=e275]
+                            - text: Client Workflow
+                        - list [ref=e279]:
+                            - listitem [ref=e280]:
+                                - heading "Define Scenario" [level=4] [ref=e281]
+                                - paragraph [ref=e282]: Configure sales stage, buyer pressure, and evaluation rubric to mirror real client conversations.
+                            - listitem [ref=e283]:
+                                - heading "Run Rehearsal" [level=4] [ref=e284]
+                                - paragraph [ref=e285]: Reps practice live while PITCH tracks communication quality and coaching opportunities.
+                            - listitem [ref=e286]:
+                                - heading "Coach and Improve" [level=4] [ref=e287]
+                                - paragraph [ref=e288]: Managers review metrics, assign targeted drills, and measure improvement over time.
+            - generic [ref=e290]:
+                - generic [ref=e291]:
+                    - paragraph [ref=e292]: Analytics
+                    - heading "Dedicated reporting screen for client stakeholders" [level=2] [ref=e293]
+                    - paragraph [ref=e294]: Visualize readiness progress and confidence growth over time, then compare pre- and post-coaching outcomes for each key sales competency.
+                - generic [ref=e295]:
+                    - article [ref=e296]:
+                        - generic [ref=e297]:
+                            - generic [ref=e298]:
+                                - paragraph [ref=e299]: Team Readiness Trend
+                                - text: 6-month pilot cohort
+                            - generic [ref=e300]:
+                                - img [ref=e301]
+                                - text: +19% readiness momentum
+                        - generic [ref=e304]:
+                            - img "Readiness and confidence trend chart" [ref=e305]
+                            - generic [ref=e327]:
+                                - generic [ref=e328]: Jan
+                                - generic [ref=e329]: Feb
+                                - generic [ref=e330]: Mar
+                                - generic [ref=e331]: Apr
+                                - generic [ref=e332]: May
+                                - generic [ref=e333]: Jun
+                    - complementary [ref=e334]:
+                        - heading "Before vs After Coaching" [level=3] [ref=e335]:
+                            - img [ref=e336]
+                            - text: Before vs After Coaching
+                        - list [ref=e340]:
+                            - listitem [ref=e341]:
+                                - paragraph [ref=e342]: Discovery Quality
+                            - listitem [ref=e348]:
+                                - paragraph [ref=e349]: Narrative Clarity
+                            - listitem [ref=e355]:
+                                - paragraph [ref=e356]: Objection Handling
+            - generic [ref=e363]:
+                - generic [ref=e364]:
+                    - paragraph [ref=e365]: Dedicated Product Screens
+                    - heading "Each product section has its own clear interface focus" [level=2] [ref=e366]
+                    - paragraph [ref=e367]: "Designed for high clarity in demos: one screen for leadership visibility, one for live rehearsal, and one for scenario setup and control."
+                - generic [ref=e368]:
+                    - article [ref=e369]:
+                        - paragraph [ref=e374]: Executive Dashboard
+                        - paragraph [ref=e389]: A clear view of team readiness, progress velocity, and coaching priorities.
+                    - article [ref=e390]:
+                        - paragraph [ref=e395]: Live Rehearsal Studio
+                        - generic [ref=e396]:
+                            - generic [ref=e397]:
+                                - img "PITCH AI coach preview" [ref=e398]
+                                - emphasis [ref=e399]: Live AI Coach
+                            - list [ref=e400]:
+                                - listitem [ref=e401]: "Rep: How is your team managing renewal risk right now?"
+                                - listitem [ref=e402]: "Buyer: We need stronger ROI proof before committing budget."
+                                - listitem [ref=e403]: "Coach: Good discovery. Quantify business impact next."
+                        - paragraph [ref=e404]: Interactive simulation with AI coach feedback and transcript intelligence.
+                    - article [ref=e405]:
+                        - paragraph [ref=e410]: Scenario Builder
+                        - generic [ref=e411]:
+                            - generic [ref=e412]:
+                                - generic [ref=e413]: Persona
+                                - generic [ref=e414]: CFO • Enterprise SaaS
+                            - generic [ref=e415]:
+                                - generic [ref=e416]: Pressure
+                                - generic [ref=e417]: Budget freeze + legal review
+                            - list [ref=e418]:
+                                - listitem [ref=e419]:
+                                    - img [ref=e420]
+                                    - text: Discovery depth
+                                - listitem [ref=e423]:
+                                    - img [ref=e424]
+                                    - text: Stakeholder mapping
+                                - listitem [ref=e427]:
+                                    - img [ref=e428]
+                                    - text: Objection structure
+                        - paragraph [ref=e431]: Configure role-specific training journeys and standardized quality checkpoints.
+            - generic [ref=e433]:
+                - generic [ref=e434]:
+                    - paragraph [ref=e435]: Capstone Credibility
+                    - heading "Built as an IBM-sponsored University of Calgary capstone" [level=2] [ref=e436]
+                    - paragraph [ref=e437]: "This project combines academic rigor with practical client strategy: clear outcomes, pilot structure, and measurable rollout planning."
+                - generic [ref=e438]:
+                    - generic [ref=e439]:
+                        - article [ref=e440]:
+                            - img [ref=e442]
+                            - heading "IBM Sponsored" [level=3] [ref=e446]
+                            - paragraph [ref=e447]: Developed with IBM-backed capstone support and industry-aligned mentorship.
+                        - article [ref=e448]:
+                            - img [ref=e450]
+                            - heading "University of Calgary" [level=3] [ref=e453]
+                            - paragraph [ref=e454]: Built as a multidisciplinary capstone at the University of Calgary in 2026.
+                        - article [ref=e455]:
+                            - img [ref=e457]
+                            - heading "6-Student Delivery Team" [level=3] [ref=e462]
+                            - paragraph [ref=e463]: A focused product team covering UX, frontend, backend, AI, data, and testing.
+                    - complementary [ref=e464]:
+                        - heading "Marketing and Adoption Strategy" [level=3] [ref=e465]:
+                            - img [ref=e466]
+                            - text: Marketing and Adoption Strategy
+                        - list [ref=e470]:
+                            - listitem [ref=e471]:
+                                - heading "Client Discovery" [level=4] [ref=e472]
+                                - paragraph [ref=e473]: Align with client goals, sales process maturity, and current coaching constraints.
+                            - listitem [ref=e474]:
+                                - heading "Pilot Execution" [level=4] [ref=e475]
+                                - paragraph [ref=e476]: Run a guided pilot with selected teams and track readiness uplift metrics.
+                            - listitem [ref=e477]:
+                                - heading "Scale Adoption" [level=4] [ref=e478]
+                                - paragraph [ref=e479]: Expand with playbook templates, manager enablement, and ongoing analytics review.
+            - generic [ref=e481]:
+                - generic [ref=e482]:
+                    - paragraph [ref=e483]: The Team
+                    - heading "Built by 6 University of Calgary students" [level=2] [ref=e484]
+                    - paragraph [ref=e485]: A six-person capstone team collaborated across product strategy, design, engineering, AI, and delivery quality.
+                - generic [ref=e486]:
+                    - article [ref=e487]:
+                        - heading "Product Strategy" [level=3] [ref=e488]
+                        - paragraph [ref=e489]: Client outcomes, roadmap alignment, and business-value positioning.
+                    - article [ref=e490]:
+                        - heading "Frontend Experience" [level=3] [ref=e491]
+                        - paragraph [ref=e492]: High-fidelity UI system and responsive interaction design.
+                    - article [ref=e493]:
+                        - heading "Backend Architecture" [level=3] [ref=e494]
+                        - paragraph [ref=e495]: Service orchestration, API reliability, and platform scalability.
+                    - article [ref=e496]:
+                        - heading "AI and Prompt Systems" [level=3] [ref=e497]
+                        - paragraph [ref=e498]: Persona behavior quality and coaching-feedback relevance.
+                    - article [ref=e499]:
+                        - heading "Data and Analytics" [level=3] [ref=e500]
+                        - paragraph [ref=e501]: Signal modeling, score interpretation, and trend visibility.
+                    - article [ref=e502]:
+                        - heading "QA and DevOps" [level=3] [ref=e503]
+                        - paragraph [ref=e504]: Test automation, deployment stability, and release confidence.
+            - generic [ref=e506]:
+                - generic [ref=e507]:
+                    - paragraph [ref=e508]: Open Project Access
+                    - heading "Explore the code, architecture, and progress on GitHub" [level=2] [ref=e509]
+                    - paragraph [ref=e510]: PITCH is presented as a client-ready capstone platform with transparent engineering delivery. Review source code, open issues, and implementation details.
+                    - generic [ref=e511]:
+                        - link "Open GitHub" [ref=e512] [cursor=pointer]:
+                            - /url: https://github.com/MmagdyHafezZ/PITCH
+                            - img [ref=e513]
+                            - text: Open GitHub
+                            - img [ref=e516]
+                        - link "View Issues" [ref=e520] [cursor=pointer]:
+                            - /url: https://github.com/MmagdyHafezZ/PITCH/issues
+                            - img [ref=e521]
+                            - text: View Issues
+                - generic [ref=e524]:
+                    - paragraph [ref=e525]: © 2026 PITCH Capstone Project
+                    - paragraph [ref=e526]: IBM Sponsored • University of Calgary • PITCH Team
+    - generic [ref=e1]:
+        - img [ref=e3]
+        - button "Open Tanstack query devtools" [ref=e51] [cursor=pointer]:
+            - img [ref=e52]
+    - button "Open Next.js Dev Tools" [ref=e105] [cursor=pointer]:
+        - img [ref=e106]
+    - alert [ref=e109]

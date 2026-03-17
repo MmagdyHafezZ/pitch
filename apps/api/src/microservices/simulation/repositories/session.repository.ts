@@ -50,8 +50,8 @@ export interface UpdateSessionData {
   language?: string;
   crmContextId?: string;
   status?: string;
-  endedReason?: string;
-  endedAt?: Date;
+  endedReason?: string | null;
+  endedAt?: Date | null;
 }
 
 /**

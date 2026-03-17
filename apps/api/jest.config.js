@@ -41,6 +41,9 @@ const baseConfig = {
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/$1',
     '^src/(.*)$': '<rootDir>/$1',
+    '^@api/(.*)$': '<rootDir>/$1',
+    '^@gateway/(.*)$': '<rootDir>/gateway/$1',
+    '^@microservices/(.*)$': '<rootDir>/microservices/$1',
   },
   transformIgnorePatterns: [
     '/node_modules/(?!(@faker-js/faker|uuid)/)',

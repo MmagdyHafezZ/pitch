@@ -8,6 +8,7 @@ import {
   UpdateSessionDto,
   ListSessionsQueryDto,
   EndSessionDto,
+  RestartSessionDto,
 } from '../dto/session.dto';
 import * as userClaimsInterface from '@pitch/shared-backend/interfaces/user-claims.interface';
 
@@ -141,6 +142,32 @@ export class SessionController {
       return await this.sessionService.end(id, endData, _userClaims?.id);
     } catch (error) {
       this.logger.error(`Failed to end session ${data.id}`, error);
+      throw toRpcException(error);
+    }
+  }
+
+  /**
+   * Restart a session with a fresh iteration on the same session record
+   */
+  @MessagePattern(SIMULATION_SERVICE_PATTERNS.RESTART_SESSION)
+  @UsePipes(new ValidationPipe({ transform: true }))
+  async restartSession(
+    @Payload()
+    data: { id: string } & RestartSessionDto &
+      userClaimsInterface.MessageWithUserClaims,
+  ) {
+    try {
+      this.logger.log(
+        `Restarting session ${data.id} - Requested by: ${data.userClaims?.email || 'unknown'}`,
+      );
+      const { userClaims: _userClaims, id, ...restartData } = data;
+      return await this.sessionService.restart(
+        id,
+        restartData,
+        _userClaims?.id,
+      );
+    } catch (error) {
+      this.logger.error(`Failed to restart session ${data.id}`, error);
       throw toRpcException(error);
     }
   }

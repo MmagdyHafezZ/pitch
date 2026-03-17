@@ -206,91 +206,169 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
       <Group
         align="stretch"
         gap={0}
-        wrap={isMobile ? 'wrap' : 'nowrap'}
-        style={{ height: '100%', minHeight: 0 }}
+        wrap="nowrap"
+        style={{ height: '100%', minHeight: 0, flexDirection: isMobile ? 'column' : 'row' }}
       >
         {/* Left Sidebar */}
         <Box
           style={{
             width: isMobile ? '100%' : 280,
+            flexShrink: 0,
             backgroundColor: navBackground,
-            padding: rem(isMobile ? 16 : 24),
+            padding: isMobile ? `${rem(8)} ${rem(12)}` : rem(24),
             position: 'relative',
             borderBottom: isMobile ? `1px solid ${inputBorder}` : undefined,
           }}
         >
-          <ActionIcon
-            variant="subtle"
-            color="white"
-            size="lg"
-            onClick={onClose}
-            style={{ position: 'absolute', top: 16, left: 16 }}
-          >
-            <IconX size={20} />
-          </ActionIcon>
-
-          <Stack gap="xs" mt={rem(40)}>
-            {sections.map((section) => {
-              const Icon = section.icon
-              return (
+          {isMobile ? (
+            /* Mobile: icon grid nav — no scrolling, 3×2 grid */
+            <Box py={rem(8)} px={rem(12)} style={{ position: 'relative' }}>
+              <Group justify="flex-end" mb={rem(6)}>
+                <ActionIcon variant="subtle" size="sm" onClick={onClose}>
+                  <IconX size={16} color={navText} />
+                </ActionIcon>
+              </Group>
+              <SimpleGrid cols={3} spacing={rem(4)}>
+                {sections.map((section) => {
+                  const Icon = section.icon
+                  const isActive = activeSection === section.label
+                  const mobileLabel =
+                    section.label === 'Account'
+                      ? t('topbar.account')
+                      : section.label === 'Notifications'
+                        ? 'Alerts'
+                        : section.label === 'Voice & Video'
+                          ? 'Audio'
+                          : section.label === 'Appearance'
+                            ? 'Theme'
+                            : t('settings.language.title')
+                  return (
+                    <Box
+                      key={section.label}
+                      onClick={() => setActiveSection(section.label)}
+                      style={{
+                        padding: `${rem(10)} ${rem(4)}`,
+                        borderRadius: rem(8),
+                        cursor: 'pointer',
+                        backgroundColor: isActive ? 'rgba(255,255,255,0.14)' : 'transparent',
+                        textAlign: 'center',
+                        transition: 'background-color 0.2s',
+                      }}
+                    >
+                      <Stack gap={rem(4)} align="center">
+                        <Box style={{ opacity: isActive ? 1 : 0.5, display: 'flex' }}>
+                          <Icon size={20} color={navText} />
+                        </Box>
+                        <Text
+                          c={navText}
+                          size="xs"
+                          fw={isActive ? 700 : 400}
+                          lh={1.2}
+                          ta="center"
+                          style={{ opacity: isActive ? 1 : 0.6 }}
+                        >
+                          {mobileLabel}
+                        </Text>
+                      </Stack>
+                    </Box>
+                  )
+                })}
+                {/* Logout tile */}
                 <Box
-                  key={section.label}
-                  onClick={() => setActiveSection(section.label)}
+                  onClick={handleLogout}
                   style={{
-                    padding: `${rem(12)} ${rem(16)}`,
+                    padding: `${rem(10)} ${rem(4)}`,
                     borderRadius: rem(8),
                     cursor: 'pointer',
-                    backgroundColor:
-                      activeSection === section.label ? 'rgba(255,255,255,0.1)' : 'transparent',
+                    textAlign: 'center',
                     transition: 'background-color 0.2s',
                   }}
                 >
-                  <Group gap="sm">
-                    <Icon size={20} color={navText} />
-                    <Text c={navText} size="sm" fw={500}>
-                      {section.label === 'Account'
-                        ? t('topbar.account')
-                        : section.label === 'Notifications'
-                          ? t('topbar.notifications')
-                          : section.label === 'Voice & Video'
-                            ? 'Voice & Video'
-                            : section.label === 'Appearance'
-                              ? 'Appearance'
-                              : t('settings.language.title')}
+                  <Stack gap={rem(4)} align="center">
+                    <IconX size={20} color="rgba(255,100,100,0.85)" />
+                    <Text c="rgba(255,100,100,0.85)" size="xs" fw={400} lh={1.2} ta="center">
+                      {t('common.logout')}
                     </Text>
-                  </Group>
+                  </Stack>
                 </Box>
-              )
-            })}
-          </Stack>
+              </SimpleGrid>
+            </Box>
+          ) : (
+            /* Desktop: vertical sidebar */
+            <>
+              <ActionIcon
+                variant="subtle"
+                color="white"
+                size="lg"
+                onClick={onClose}
+                style={{ position: 'absolute', top: 16, left: 16 }}
+              >
+                <IconX size={20} />
+              </ActionIcon>
 
-          {/* Logout Button */}
-          <Box
-            onClick={handleLogout}
-            style={{
-              position: isMobile ? 'static' : 'absolute',
-              bottom: 24,
-              left: 24,
-              right: 24,
-              marginTop: rem(isMobile ? 16 : 0),
-              padding: `${rem(12)} ${rem(16)}`,
-              borderRadius: rem(8),
-              cursor: 'pointer',
-              backgroundColor: 'rgba(255,255,255,0.05)',
-              transition: 'background-color 0.2s',
-            }}
-          >
-            <Group gap="sm">
-              <IconX size={20} color={navText} />
-              <Text c={navText} size="sm" fw={500}>
-                {t('common.logout')}
-              </Text>
-            </Group>
-          </Box>
+              <Stack gap="xs" mt={rem(40)}>
+                {sections.map((section) => {
+                  const Icon = section.icon
+                  return (
+                    <Box
+                      key={section.label}
+                      onClick={() => setActiveSection(section.label)}
+                      style={{
+                        padding: `${rem(12)} ${rem(16)}`,
+                        borderRadius: rem(8),
+                        cursor: 'pointer',
+                        backgroundColor:
+                          activeSection === section.label ? 'rgba(255,255,255,0.1)' : 'transparent',
+                        transition: 'background-color 0.2s',
+                      }}
+                    >
+                      <Group gap="sm">
+                        <Icon size={20} color={navText} />
+                        <Text c={navText} size="sm" fw={500}>
+                          {section.label === 'Account'
+                            ? t('topbar.account')
+                            : section.label === 'Notifications'
+                              ? t('topbar.notifications')
+                              : section.label === 'Voice & Video'
+                                ? 'Voice & Video'
+                                : section.label === 'Appearance'
+                                  ? 'Appearance'
+                                  : t('settings.language.title')}
+                        </Text>
+                      </Group>
+                    </Box>
+                  )
+                })}
+              </Stack>
+
+              {/* Logout Button */}
+              <Box
+                onClick={handleLogout}
+                style={{
+                  position: 'absolute',
+                  bottom: 24,
+                  left: 24,
+                  right: 24,
+                  padding: `${rem(12)} ${rem(16)}`,
+                  borderRadius: rem(8),
+                  cursor: 'pointer',
+                  backgroundColor: 'rgba(255,255,255,0.05)',
+                  transition: 'background-color 0.2s',
+                }}
+              >
+                <Group gap="sm">
+                  <IconX size={20} color={navText} />
+                  <Text c={navText} size="sm" fw={500}>
+                    {t('common.logout')}
+                  </Text>
+                </Group>
+              </Box>
+            </>
+          )}
         </Box>
 
         {/* Right Content */}
-        <ScrollArea style={{ flex: 1, height: '100%' }}>
+        <ScrollArea style={{ flex: 1, minHeight: 0 }}>
           <Box
             style={{
               padding: rem(isMobile ? 16 : 40),

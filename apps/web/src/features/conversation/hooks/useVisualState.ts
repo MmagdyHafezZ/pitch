@@ -53,6 +53,8 @@ const normalizeBlendshapes = (input: unknown): FaceBlendshape[] => {
   return []
 }
 
+const IS_DEV = process.env.NODE_ENV === 'development'
+
 export function useVisualState({
   sessionId,
   videoRef,
@@ -144,6 +146,7 @@ export function useVisualState({
           setCurrentState(UNKNOWN_VISUAL_STATE)
           conversationService.sendVisualState(sessionId, UNKNOWN_VISUAL_STATE)
           lastSentRef.current = { state: UNKNOWN_VISUAL_STATE, at: now }
+          if (IS_DEV) console.debug('[BodyDetect] ❌ Person absent — no pose landmarks')
         }
         return
       }
@@ -236,6 +239,14 @@ export function useVisualState({
 
       conversationService.sendVisualState(sessionId, state)
       lastSentRef.current = { state, at: now }
+
+      if (IS_DEV) {
+        console.debug(
+          `[BodyDetect] state sent — posture:${state.posture}  gaze:${state.gaze}  ` +
+            `move:${state.movement}(${state.movementType})  head:${state.headMotion}  ` +
+            `emotion:${state.emotion}  attention:${state.attention}%`
+        )
+      }
     },
     [sessionId, sendIntervalMs, absenceTimeoutMs, clearAbsenceTimer, resetBuffers]
   )

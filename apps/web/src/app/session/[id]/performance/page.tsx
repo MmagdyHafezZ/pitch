@@ -676,8 +676,8 @@ export default function SessionPerformancePage() {
       }}
     >
       <Stack gap="lg" w="100%" maw={1200} mx="auto">
-        <Group justify="space-between" align="center">
-          <Group>
+        <Group justify="space-between" align="center" wrap="wrap" gap="sm">
+          <Group wrap="wrap" gap="xs">
             <Button
               variant="subtle"
               leftSection={<IconArrowLeft size={16} />}
@@ -685,13 +685,19 @@ export default function SessionPerformancePage() {
             >
               Back to sessions
             </Button>
-            <Title order={2}>Session Analytics</Title>
+            <Title order={2} visibleFrom="sm">
+              Session Analytics
+            </Title>
+            <Title order={4} hiddenFrom="sm">
+              Session Analytics
+            </Title>
           </Group>
-          <Group>
+          <Group wrap="wrap" gap="xs">
             <Button
               variant="default"
               leftSection={<IconHistory size={16} />}
               onClick={() => router.push('/studio/analytics')}
+              visibleFrom="sm"
             >
               Past performances
             </Button>
