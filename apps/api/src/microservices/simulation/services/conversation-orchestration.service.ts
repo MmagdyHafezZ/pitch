@@ -514,7 +514,6 @@ export class ConversationOrchestrationService {
 
     await new Promise<void>((resolve, reject) => {
       let settled = false;
-      let streamSubscription: import('rxjs').Subscription | undefined;
 
       const resolveOnce = () => {
         if (settled) {
@@ -552,7 +551,7 @@ export class ConversationOrchestrationService {
         { once: true },
       );
 
-      streamSubscription = stream$.subscribe({
+      const streamSubscription = stream$.subscribe({
         next: (chunk) => {
           if (this.isCancelled(requestState, subscriber)) {
             resolveOnce();
