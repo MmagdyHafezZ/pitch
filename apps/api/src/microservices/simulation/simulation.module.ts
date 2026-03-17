@@ -45,6 +45,7 @@ import { StageDetectorService } from './services/stage-detector.service';
 import { StreamingConversationService } from './services/streaming-conversation.service';
 import { ConversationOrchestrationService } from './services/conversation-orchestration.service';
 import { ConversationToolsService } from './services/conversation-tools.service';
+import { PhoneConversationEngineService } from './services/phone-conversation-engine.service';
 import { SimulationRedisService } from './services/redis/redis.service';
 import { VideoGenerationService } from './services/video-generation.service';
 import { PersonaMediaService } from './services/persona-media.service';
@@ -133,11 +134,14 @@ import { RagModule } from './rag/rag.module';
     StreamingConversationService,
     ConversationToolsService,
     ConversationOrchestrationService,
+    PhoneConversationEngineService,
   ],
   exports: [
+    PhoneModule,
     LLMService,
     StreamingConversationService,
     ConversationOrchestrationService,
+    PhoneConversationEngineService,
     SessionService,
     SessionMemberService,
     InvitationService,

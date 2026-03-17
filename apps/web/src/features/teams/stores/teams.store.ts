@@ -137,7 +137,7 @@ export const useTeamsStore = create<TeamsState>()(
         const name = input.name?.trim()
         if (!name) {
           set({ error: 'Team name is required' })
-          return
+          throw new Error('Team name is required')
         }
 
         set({ loading: true, error: null })
@@ -160,6 +160,7 @@ export const useTeamsStore = create<TeamsState>()(
             loading: false,
             error: err instanceof Error ? err.message : 'Failed to create team',
           })
+          throw err
         }
       },
 

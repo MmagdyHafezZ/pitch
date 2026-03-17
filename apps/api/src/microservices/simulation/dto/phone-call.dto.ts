@@ -11,29 +11,13 @@ export class StartPhoneCallDto {
 
   @ApiPropertyOptional({
     example: '+15551234567',
-    description: 'Destination phone number in E.164 format.',
+    description:
+      'Verified destination phone number in E.164 format. This is populated server-side after phone verification checks.',
   })
   @IsString()
   @IsOptional()
-  @Matches(/^\+?[1-9]\d{7,14}$/)
+  @Matches(/^\+[1-9]\d{7,14}$/)
   phoneNumber?: string;
-
-  @ApiPropertyOptional({
-    example: 'twilio',
-    description: 'Phone provider to use for the outbound call.',
-  })
-  @IsString()
-  @IsOptional()
-  provider?: string;
-
-  @ApiPropertyOptional({
-    example: '+15557654321',
-    description: 'Override the default caller ID.',
-  })
-  @IsString()
-  @IsOptional()
-  @Matches(/^\+?[1-9]\d{7,14}$/)
-  fromNumber?: string;
 }
 
 export class PhoneCallResponseDto {
@@ -41,7 +25,7 @@ export class PhoneCallResponseDto {
   @IsString()
   callId: string;
 
-  @ApiProperty({ example: 'twilio' })
+  @ApiProperty({ example: 'vapi' })
   @IsString()
   provider: string;
 

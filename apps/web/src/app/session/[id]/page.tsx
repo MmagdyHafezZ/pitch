@@ -12,7 +12,6 @@ import {
   ActionIcon,
   Badge,
   TextInput,
-  Select,
   ScrollArea,
   Loader,
   Modal,
@@ -47,6 +46,17 @@ interface AvatarVideoState {
   error: string | null
   jobId: string | null
   playbackToken: string | null
+}
+
+interface PhoneVerificationState {
+  verified: boolean
+  phoneNumber?: string | null
+  verifiedAt?: string | null
+  pendingPhoneNumber?: string | null
+  pendingExpiresAt?: string | null
+  resendAvailableAt?: string | null
+  remainingAttempts?: number
+  remainingSends?: number
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -168,10 +178,13 @@ export default function LiveSessionPage() {
   const [timelineEnabled, setTimelineEnabled] = useState(false)
   const [callStarted, setCallStarted] = useState(false)
   const [phoneNumber, setPhoneNumber] = useState('')
-  const [callProvider, setCallProvider] = useState('twilio')
   const [callModalOpen, setCallModalOpen] = useState(false)
   const [callLoading, setCallLoading] = useState(false)
   const [callError, setCallError] = useState<string | null>(null)
+  const [phoneVerification, setPhoneVerification] = useState<PhoneVerificationState | null>(null)
+  const [phoneVerificationLoading, setPhoneVerificationLoading] = useState(false)
+  const [phoneVerificationActionLoading, setPhoneVerificationActionLoading] = useState(false)
+  const [verificationCode, setVerificationCode] = useState('')
   const [avatarVideoUrl, setAvatarVideoUrl] = useState<string | null>(null)
   const [avatarVideoStatus, setAvatarVideoStatus] = useState<AvatarVideoStatus>('idle')
   const [avatarVideoProvider, setAvatarVideoProvider] = useState<string | null>(null)
@@ -370,18 +383,29 @@ export default function LiveSessionPage() {
     setAvatarVideoError(avatarState.error)
     setAvatarVideoJobId(avatarState.jobId)
     setAvatarVideoUrl(nextAvatarVideoUrl)
-
-    const resolvedProvider =
-      typeof config.phoneProvider === 'string'
-        ? config.phoneProvider
-        : typeof config.phone?.provider === 'string'
-          ? config.phone.provider
-          : 'twilio'
-
-    setCallProvider(
-      resolvedProvider === 'vapi' || resolvedProvider === 'twilio' ? resolvedProvider : 'twilio'
-    )
     setCallModalOpen(session?.type === 'phone' && session?.status !== 'ended')
+  }, [])
+
+  const loadPhoneVerificationStatus = useCallback(async () => {
+    setPhoneVerificationLoading(true)
+    try {
+      const status = (await api.users.getMyPhoneVerification()) as PhoneVerificationState
+      setPhoneVerification(status)
+      if (status.phoneNumber) {
+        setPhoneNumber(status.phoneNumber)
+      } else if (status.pendingPhoneNumber) {
+        setPhoneNumber(status.pendingPhoneNumber)
+      }
+      setCallError(null)
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'Unable to load your phone verification status right now.'
+      setCallError(message)
+    } finally {
+      setPhoneVerificationLoading(false)
+    }
   }, [])
 
   useEffect(() => {
@@ -456,6 +480,11 @@ export default function LiveSessionPage() {
       cancelled = true
     }
   }, [sessionId, syncSessionState])
+
+  useEffect(() => {
+    if (sessionType !== 'phone' || sessionStatus === 'ended') return
+    void loadPhoneVerificationStatus()
+  }, [sessionType, sessionStatus, loadPhoneVerificationStatus])
 
   const handleResumeSession = useCallback(() => {
     setResumePromptOpen(false)
@@ -552,17 +581,106 @@ export default function LiveSessionPage() {
     }
   }, [isVideoSession, visualEnabled, isConnected, sessionType])
 
+  const handleRequestPhoneVerification = async () => {
+    const nextPhoneNumber = phoneNumber.trim()
+    if (!nextPhoneNumber) {
+      setCallError('Enter the phone number you want us to call.')
+      return
+    }
+
+    setPhoneVerificationActionLoading(true)
+    setCallError(null)
+    try {
+      const status = (await api.users.requestPhoneVerification({
+        phoneNumber: nextPhoneNumber,
+      })) as PhoneVerificationState
+      setPhoneVerification(status)
+      setVerificationCode('')
+      notifications.show({
+        title: 'Verification call sent',
+        message: `We’re calling ${status.pendingPhoneNumber ?? nextPhoneNumber} with your verification code.`,
+        color: 'blue',
+      })
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Unable to send the verification challenge.'
+      setCallError(message)
+      notifications.show({
+        title: 'Verification failed',
+        message,
+        color: 'red',
+      })
+    } finally {
+      setPhoneVerificationActionLoading(false)
+    }
+  }
+
+  const handleResendPhoneVerification = async () => {
+    setPhoneVerificationActionLoading(true)
+    setCallError(null)
+    try {
+      const status = (await api.users.resendPhoneVerification()) as PhoneVerificationState
+      setPhoneVerification(status)
+      setVerificationCode('')
+      notifications.show({
+        title: 'Verification call resent',
+        message: `We’re calling ${status.pendingPhoneNumber ?? phoneNumber} again with a fresh code.`,
+        color: 'blue',
+      })
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Unable to resend the verification challenge.'
+      setCallError(message)
+      notifications.show({
+        title: 'Resend failed',
+        message,
+        color: 'red',
+      })
+    } finally {
+      setPhoneVerificationActionLoading(false)
+    }
+  }
+
+  const handleVerifyPhoneCode = async () => {
+    if (!verificationCode.trim()) {
+      setCallError('Enter the 6-digit verification code from the call.')
+      return
+    }
+
+    setPhoneVerificationActionLoading(true)
+    setCallError(null)
+    try {
+      const status = (await api.users.verifyPhoneVerification({
+        code: verificationCode.trim(),
+      })) as PhoneVerificationState
+      setPhoneVerification(status)
+      setVerificationCode('')
+      if (status.phoneNumber) {
+        setPhoneNumber(status.phoneNumber)
+      }
+      notifications.show({
+        title: 'Phone verified',
+        message: `${status.phoneNumber ?? 'Your phone number'} is now ready for calling sessions.`,
+        color: 'green',
+      })
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Unable to verify that code right now.'
+      setCallError(message)
+      notifications.show({
+        title: 'Verification failed',
+        message,
+        color: 'red',
+      })
+    } finally {
+      setPhoneVerificationActionLoading(false)
+    }
+  }
+
   const handleStartPhoneCall = async () => {
     if (!sessionId) return
-    const normalized = phoneNumber.trim()
-    const requiresPlus = callProvider === 'vapi'
-    const validPattern = requiresPlus ? /^\+[1-9]\d{7,14}$/ : /^\+?[1-9]\d{7,14}$/
-    if (!normalized || !validPattern.test(normalized)) {
-      setCallError(
-        requiresPlus
-          ? 'Enter a valid phone number with + and country code (e.g. +15551234567)'
-          : 'Enter a valid phone number in E.164 format (e.g. +15551234567)'
-      )
+    if (!phoneVerification?.verified || !phoneVerification.phoneNumber) {
+      setCallError('Verify your phone number before starting the call.')
       return
     }
 
@@ -571,12 +689,10 @@ export default function LiveSessionPage() {
     try {
       await api.phoneCalls.start({
         sessionId,
-        phoneNumber: normalized,
-        provider: callProvider,
       })
       notifications.show({
         title: 'Calling now',
-        message: `We’re calling ${normalized}. Answer your phone to begin.`,
+        message: `We’re calling ${phoneVerification.phoneNumber}. Answer your phone to begin.`,
         color: 'green',
       })
       setCallStarted(true)
@@ -891,7 +1007,7 @@ export default function LiveSessionPage() {
     }
   }, [messages.length, sessionId, timelineEnabled])
 
-  const handleHangUp = async () => {
+  const handleHangUp = useCallback(async () => {
     clearSpeechFinalizeState()
     speechBufferRef.current = ''
     if (isListening) {
@@ -906,13 +1022,51 @@ export default function LiveSessionPage() {
 
     hangUp()
     router.push(`/session/${sessionId}/performance`)
-  }
+  }, [hangUp, isListening, router, sessionId, stopListening])
+
+  useEffect(() => {
+    if (!hangupRequest || sessionStatus === 'ended') return
+    clearHangupRequest()
+    void handleHangUp()
+  }, [hangupRequest, sessionStatus, clearHangupRequest, handleHangUp])
 
   useEffect(() => {
     if (sessionType === 'phone' && sessionStatus === 'ended') {
       router.push(`/session/${sessionId}/performance`)
     }
   }, [sessionType, sessionStatus, sessionId, router])
+
+  useEffect(() => {
+    if (sessionType !== 'phone' || !callStarted || sessionStatus === 'ended') return
+
+    let cancelled = false
+    const refreshStatus = async () => {
+      try {
+        const session = await api.sessions.getById(sessionId)
+        if (cancelled) return
+        if (isRecord(session)) {
+          const nextStatus =
+            typeof session.status === 'string' ? session.status : (sessionStatus ?? null)
+          setSessionStatus(nextStatus)
+          if (nextStatus === 'ended') {
+            syncSessionState(session)
+          }
+        }
+      } catch {
+        // Keep polling quietly; transient read failures should not interrupt the call UX.
+      }
+    }
+
+    void refreshStatus()
+    const interval = setInterval(() => {
+      void refreshStatus()
+    }, 3000)
+
+    return () => {
+      cancelled = true
+      clearInterval(interval)
+    }
+  }, [callStarted, sessionId, sessionStatus, sessionType, syncSessionState])
 
   const isTextSession = sessionType === 'text'
   const sttCommitProgress = Math.min(1, Math.max(0, sttCommitRemainingMs / speechFinalizeDelayMs))
@@ -1006,79 +1160,118 @@ export default function LiveSessionPage() {
       <Modal
         opened={callModalOpen && sessionType === 'phone'}
         onClose={() => setCallModalOpen(false)}
-        title="Start phone call"
+        title={phoneVerification?.verified ? 'Start phone call' : 'Verify your phone number'}
         centered
       >
         <Stack gap="md">
-          <Text size="sm" c="dimmed">
-            Enter the destination number now. Phone-call sessions no longer store this during setup.
-          </Text>
-          <TextInput
-            label="Phone number"
-            placeholder="+15551234567"
-            value={phoneNumber}
-            onChange={(event) => {
-              setPhoneNumber(event.currentTarget.value)
-              if (callError) {
-                setCallError(null)
-              }
-            }}
-            error={callError ?? undefined}
-            type="tel"
-            autoComplete="tel"
-          />
-          <Select
-            label="Provider"
-            data={[
-              { value: 'twilio', label: 'Twilio' },
-              { value: 'vapi', label: 'Vapi' },
-            ]}
-            value={callProvider}
-            onChange={(value) => setCallProvider(value ?? 'twilio')}
-            allowDeselect={false}
-          />
-          <Group justify="flex-end">
-            <Button variant="default" onClick={() => setCallModalOpen(false)}>
-              Not now
-            </Button>
-            <Button onClick={handleStartPhoneCall} loading={callLoading}>
-              Start call
-            </Button>
-          </Group>
-        </Stack>
-      </Modal>
-
-      {/* AI Hang-up Confirmation Modal */}
-      <Modal
-        opened={!!hangupRequest}
-        onClose={clearHangupRequest}
-        title="The AI persona wants to hang up"
-        centered
-        size="sm"
-        styles={{
-          header: { background: 'var(--mantine-color-dark-7)' },
-          body: { background: 'var(--mantine-color-dark-7)' },
-        }}
-      >
-        <Stack gap="md">
-          <Text size="sm" c="dimmed">
-            {hangupRequest?.reason}
-          </Text>
-          <Group justify="flex-end" gap="sm">
-            <Button variant="default" onClick={clearHangupRequest}>
-              Continue anyway
-            </Button>
-            <Button
-              color="red"
-              leftSection={<IconPhone size={14} />}
-              onClick={() => {
-                clearHangupRequest()
-                void handleHangUp()
-              }}
-            >
-              Let them hang up
-            </Button>
-          </Group>
+          {phoneVerificationLoading ? (
+            <Group justify="center" py="md">
+              <Loader size="sm" />
+            </Group>
+          ) : phoneVerification?.verified ? (
+            <>
+              <Text size="sm" c="dimmed">
+                Your verified number will be used for this phone session.
+              </Text>
+              <TextInput
+                label="Verified phone number"
+                value={phoneVerification.phoneNumber ?? phoneNumber}
+                readOnly
+                disabled
+              />
+              {callError && (
+                <Text size="sm" c="red">
+                  {callError}
+                </Text>
+              )}
+              <Group justify="flex-end">
+                <Button variant="default" onClick={() => setCallModalOpen(false)}>
+                  Not now
+                </Button>
+                <Button onClick={handleStartPhoneCall} loading={callLoading}>
+                  Start call
+                </Button>
+              </Group>
+            </>
+          ) : (
+            <>
+              <Text size="sm" c="dimmed">
+                Add the phone number you want us to call, then verify it from the automated code
+                call before starting this session.
+              </Text>
+              <TextInput
+                label="Phone number"
+                placeholder="+15551234567"
+                value={phoneNumber}
+                onChange={(event) => {
+                  setPhoneNumber(event.currentTarget.value)
+                  if (callError) {
+                    setCallError(null)
+                  }
+                }}
+                error={callError ?? undefined}
+                type="tel"
+                autoComplete="tel"
+              />
+              {phoneVerification?.pendingPhoneNumber && (
+                <>
+                  <Text size="sm" c="dimmed">
+                    We’ve already sent a verification call to {phoneVerification.pendingPhoneNumber}
+                    .
+                  </Text>
+                  <TextInput
+                    label="Verification code"
+                    placeholder="123456"
+                    value={verificationCode}
+                    onChange={(event) => {
+                      setVerificationCode(event.currentTarget.value)
+                      if (callError) {
+                        setCallError(null)
+                      }
+                    }}
+                    type="tel"
+                    autoComplete="one-time-code"
+                  />
+                </>
+              )}
+              {callError && (
+                <Text size="sm" c="red">
+                  {callError}
+                </Text>
+              )}
+              <Group justify="space-between">
+                <Button variant="default" onClick={() => setCallModalOpen(false)}>
+                  Not now
+                </Button>
+                <Group justify="flex-end">
+                  {phoneVerification?.pendingPhoneNumber ? (
+                    <>
+                      <Button
+                        variant="default"
+                        onClick={handleResendPhoneVerification}
+                        loading={phoneVerificationActionLoading}
+                      >
+                        Resend code
+                      </Button>
+                      <Button
+                        onClick={handleVerifyPhoneCode}
+                        loading={phoneVerificationActionLoading}
+                      >
+                        Verify number
+                      </Button>
+                    </>
+                  ) : (
+                    <Button
+                      onClick={handleRequestPhoneVerification}
+                      loading={phoneVerificationActionLoading}
+                    >
+                      Send verification call
+                    </Button>
+                  )}
+                </Group>
+              </Group>
+            </>
+          )}
         </Stack>
       </Modal>
 
@@ -1171,7 +1364,7 @@ export default function LiveSessionPage() {
                   color="blue"
                   onClick={() => setCallModalOpen(true)}
                 >
-                  Start call
+                  {phoneVerification?.verified ? 'Start call' : 'Verify phone'}
                 </Button>
               )}
               <ActionIcon

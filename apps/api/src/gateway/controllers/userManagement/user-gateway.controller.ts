@@ -104,6 +104,29 @@ export class UserGatewayController {
       );
   }
 
+  @Get('me/phone-verification')
+  @ApiOperation({ summary: 'Get current user phone verification status' })
+  @ApiResponse({
+    status: 200,
+    description: 'Phone verification status retrieved successfully',
+  })
+  getMyPhoneVerification(@UserClaims() userClaims: UserClaimsType) {
+    return this.userService
+      .send(USER_SERVICE_PATTERNS.GET_MY_PHONE_VERIFICATION, {
+        userClaims,
+      })
+      .pipe(
+        timeout(5000),
+        catchError((err: unknown) => {
+          const error = normalizeError(err);
+          const message =
+            error.message ?? 'Failed to get phone verification status';
+          const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
+          return throwError(() => new HttpException(message, status));
+        }),
+      );
+  }
+
   @Get(':userId')
   @ApiOperation({ summary: 'Get user by ID' })
   @ApiResponse({ status: 200, description: 'User retrieved successfully' })
@@ -177,6 +200,82 @@ export class UserGatewayController {
         catchError((err: unknown) => {
           const error = normalizeError(err);
           const message = error.message ?? 'Failed to update user settings';
+          const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
+          return throwError(() => new HttpException(message, status));
+        }),
+      );
+  }
+
+  @Post('me/phone-verification/request')
+  @ApiOperation({ summary: 'Request a phone verification challenge' })
+  @ApiResponse({
+    status: 200,
+    description: 'Phone verification challenge requested successfully',
+  })
+  requestPhoneVerification(
+    @Body() body: { phoneNumber: string },
+    @UserClaims() userClaims: UserClaimsType,
+  ) {
+    return this.userService
+      .send(USER_SERVICE_PATTERNS.REQUEST_PHONE_VERIFICATION, {
+        phoneNumber: body.phoneNumber,
+        userClaims,
+      })
+      .pipe(
+        timeout(10000),
+        catchError((err: unknown) => {
+          const error = normalizeError(err);
+          const message =
+            error.message ?? 'Failed to request phone verification';
+          const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
+          return throwError(() => new HttpException(message, status));
+        }),
+      );
+  }
+
+  @Post('me/phone-verification/resend')
+  @ApiOperation({ summary: 'Resend the pending phone verification challenge' })
+  @ApiResponse({
+    status: 200,
+    description: 'Phone verification challenge resent successfully',
+  })
+  resendPhoneVerification(@UserClaims() userClaims: UserClaimsType) {
+    return this.userService
+      .send(USER_SERVICE_PATTERNS.RESEND_PHONE_VERIFICATION, {
+        userClaims,
+      })
+      .pipe(
+        timeout(10000),
+        catchError((err: unknown) => {
+          const error = normalizeError(err);
+          const message =
+            error.message ?? 'Failed to resend phone verification';
+          const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
+          return throwError(() => new HttpException(message, status));
+        }),
+      );
+  }
+
+  @Post('me/phone-verification/verify')
+  @ApiOperation({ summary: 'Verify the pending phone verification code' })
+  @ApiResponse({
+    status: 200,
+    description: 'Phone number verified successfully',
+  })
+  verifyPhoneVerification(
+    @Body() body: { code: string },
+    @UserClaims() userClaims: UserClaimsType,
+  ) {
+    return this.userService
+      .send(USER_SERVICE_PATTERNS.VERIFY_PHONE_VERIFICATION, {
+        code: body.code,
+        userClaims,
+      })
+      .pipe(
+        timeout(10000),
+        catchError((err: unknown) => {
+          const error = normalizeError(err);
+          const message = error.message ?? 'Failed to verify the phone number';
           const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
           return throwError(() => new HttpException(message, status));
         }),

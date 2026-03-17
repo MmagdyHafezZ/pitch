@@ -340,9 +340,14 @@ export class SessionService {
         );
       }
 
+      const endedSession = await this.sessionRepository.end(
+        existingSession.id,
+        endSessionDto.reason,
+      );
+
       await this.invalidateSessionFullCache(existingSession.id);
       this.logger.log(`Completed iteration for session: ${existingSession.id}`);
-      return this.mapToResponseDto(existingSession);
+      return this.mapToResponseDto(endedSession);
     } catch (error) {
       const err = error as PrismaError;
       if (err.code === 'P2025') {

@@ -1,42 +1,34 @@
 import { HttpException, Injectable } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import {
   PhoneCallRequest,
   PhoneCallResult,
   PhoneProvider,
 } from './phone.provider';
+import { VapiConfigService } from '../vapi-config.service';
 
 @Injectable()
 export class VapiPhoneProvider implements PhoneProvider {
   readonly name = 'vapi';
   readonly description = 'Vapi outbound calling';
 
-  constructor(private readonly configService: ConfigService) {}
+  constructor(private readonly vapiConfig: VapiConfigService) {}
 
   async createCall(request: PhoneCallRequest): Promise<PhoneCallResult> {
-    const apiKey = this.configService.get<string>('VAPI_API_KEY');
-    if (!apiKey) {
-      throw new Error('Vapi API key is not configured');
-    }
+    const apiKey = this.vapiConfig.getApiKey();
 
     const providerConfig = request.providerConfig ?? {};
-    const assistantId =
-      this.resolveString(providerConfig, 'assistantId', 'assistant_id') ??
-      this.configService.get<string>('VAPI_ASSISTANT_ID');
     const phoneNumberId =
       this.resolveString(providerConfig, 'phoneNumberId', 'phone_number_id') ??
-      this.configService.get<string>('VAPI_PHONE_NUMBER_ID');
+      this.vapiConfig.getPhoneNumberId();
     const assistant = this.resolveObject(providerConfig, 'assistant');
+    const assistantId = this.resolveHostedAssistantId(providerConfig);
 
-    if (!assistantId && !assistant) {
-      throw new Error('Vapi assistantId or assistant config is required');
+    if (!assistant && !assistantId) {
+      throw new Error(
+        'Vapi assistant config is required. Hosted assistant fallback is disabled.',
+      );
     }
-
-    if (!phoneNumberId) {
-      throw new Error('Vapi phoneNumberId is required');
-    }
-
     const customerConfig = this.resolveObject(providerConfig, 'customer');
     const customer = {
       ...(customerConfig ?? {}),
@@ -70,6 +62,7 @@ export class VapiPhoneProvider implements PhoneProvider {
           Authorization: `Bearer ${apiKey}`,
           'Content-Type': 'application/json',
         },
+        timeout: 20_000,
       });
     } catch (error) {
       if (axios.isAxiosError(error) && error.response) {
@@ -111,15 +104,21 @@ export class VapiPhoneProvider implements PhoneProvider {
     };
   }
 
-  private resolveCallUrl(): string {
-    const explicitUrl = this.configService.get<string>('VAPI_CALL_URL');
-    if (explicitUrl) {
-      return explicitUrl;
+  private resolveHostedAssistantId(
+    providerConfig: Record<string, unknown>,
+  ): string | undefined {
+    if (!this.vapiConfig.allowHostedAssistantFallback()) {
+      return undefined;
     }
 
-    const baseUrl =
-      this.configService.get<string>('VAPI_BASE_URL') ?? 'https://api.vapi.ai';
-    return new URL('/call/phone', baseUrl).toString();
+    return (
+      this.resolveString(providerConfig, 'assistantId', 'assistant_id') ??
+      this.vapiConfig.getHostedAssistantId()
+    );
+  }
+
+  private resolveCallUrl(): string {
+    return this.vapiConfig.getCallUrl();
   }
 
   private formatErrorMessage(payload: unknown): string | undefined {

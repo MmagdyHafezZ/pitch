@@ -11,12 +11,25 @@ export interface User {
   email: string
   name: string
   avatar?: string | null
+  phoneNumber?: string | null
+  phoneVerifiedAt?: Date | null
   settings?: UserSettings | null
   isActive: boolean
   createdAt: Date
   updatedAt: Date
   oauthAccounts?: OAuthAccount[]
   memberships?: TeamMembership[]
+}
+
+export interface PhoneVerificationStatus {
+  verified: boolean
+  phoneNumber?: string | null
+  verifiedAt?: Date | null
+  pendingPhoneNumber?: string | null
+  pendingExpiresAt?: Date | null
+  resendAvailableAt?: Date | null
+  remainingAttempts?: number
+  remainingSends?: number
 }
 
 export interface UserSettings {
@@ -215,6 +228,14 @@ export interface UpdateUserDto {
   avatar?: string
   isActive?: boolean
   settings?: UserSettings | null
+}
+
+export interface RequestPhoneVerificationDto {
+  phoneNumber: string
+}
+
+export interface VerifyPhoneVerificationDto {
+  code: string
 }
 
 export interface UpdateMySettingsDto {

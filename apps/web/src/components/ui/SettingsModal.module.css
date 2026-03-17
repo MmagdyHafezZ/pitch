@@ -43,3 +43,10 @@
   background: var(--tab-active-bg);
   color: var(--tab-active-text);
 }
+
+.phoneField {
+  background: var(--pitch-input-bg);
+  border: 1px solid var(--pitch-border);
+  border-radius: 8px;
+  padding: 14px 16px;
+}

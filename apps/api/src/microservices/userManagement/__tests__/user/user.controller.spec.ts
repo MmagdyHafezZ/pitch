@@ -1,8 +1,12 @@
 import { UserController } from '../../user/controllers/user.controller';
 import type { UserService } from '../../user/services/user.service';
+import type { PhoneVerificationService } from '../../user/services/phone-verification.service';
 import { toRpcException } from '@pitch/shared-backend/helpers/exceptions';
 import type { OAuthProviderFactory } from '../../auth/factories/oauth-provider.factory';
-import type { User } from '@pitch/shared-backend/interfaces/user.interface';
+import type {
+  PhoneVerificationStatus,
+  User,
+} from '@pitch/shared-backend/interfaces/user.interface';
 import type { MessageWithUserClaims } from '@pitch/shared-backend/interfaces/user-claims.interface';
 
 jest.mock('@pitch/shared-backend/helpers/exceptions', () => ({
@@ -33,6 +37,16 @@ describe('UserController', () => {
         getAllProviders: jest.fn(),
       }) as unknown as jest.Mocked<OAuthProviderFactory>;
 
+  const createPhoneVerificationServiceMock =
+    (): jest.Mocked<PhoneVerificationService> =>
+      ({
+        getStatus: jest.fn(),
+        requestVerification: jest.fn(),
+        resendVerification: jest.fn(),
+        verifyCode: jest.fn(),
+        getVerifiedPhoneNumber: jest.fn(),
+      }) as unknown as jest.Mocked<PhoneVerificationService>;
+
   const basePayload: MessageWithUserClaims = {
     userClaims: {
       id: 'admin-1',
@@ -46,6 +60,8 @@ describe('UserController', () => {
     email: 'user@example.com',
     name: 'Test User',
     avatar: null,
+    phoneNumber: null,
+    phoneVerifiedAt: null,
     settings: null,
     isActive: true,
     createdAt: new Date('2023-01-01T00:00:00.000Z'),
@@ -61,18 +77,28 @@ describe('UserController', () => {
 
   it('returns all users', async () => {
     const service = createServiceMock();
+    const phoneVerificationService = createPhoneVerificationServiceMock();
     const oauthProviderFactory = createOauthProviderFactoryMock();
     service.findAll.mockResolvedValue([user]);
-    const controller = new UserController(service, oauthProviderFactory);
+    const controller = new UserController(
+      service,
+      phoneVerificationService,
+      oauthProviderFactory,
+    );
 
     await expect(controller.getUsers(basePayload)).resolves.toEqual([user]);
   });
 
   it('returns a single user', async () => {
     const service = createServiceMock();
+    const phoneVerificationService = createPhoneVerificationServiceMock();
     const oauthProviderFactory = createOauthProviderFactoryMock();
     service.findOne.mockResolvedValue(user);
-    const controller = new UserController(service, oauthProviderFactory);
+    const controller = new UserController(
+      service,
+      phoneVerificationService,
+      oauthProviderFactory,
+    );
 
     const payload = { userId: 'user-1', ...basePayload };
 
@@ -82,9 +108,14 @@ describe('UserController', () => {
 
   it('touches last seen when user fetches their own profile', async () => {
     const service = createServiceMock();
+    const phoneVerificationService = createPhoneVerificationServiceMock();
     const oauthProviderFactory = createOauthProviderFactoryMock();
     service.touchLastSeen.mockResolvedValue(user);
-    const controller = new UserController(service, oauthProviderFactory);
+    const controller = new UserController(
+      service,
+      phoneVerificationService,
+      oauthProviderFactory,
+    );
 
     const payload = {
       userId: 'admin-1',
@@ -102,9 +133,14 @@ describe('UserController', () => {
 
   it('creates a user after removing user claims from payload', async () => {
     const service = createServiceMock();
+    const phoneVerificationService = createPhoneVerificationServiceMock();
     const oauthProviderFactory = createOauthProviderFactoryMock();
     service.create.mockResolvedValue(user);
-    const controller = new UserController(service, oauthProviderFactory);
+    const controller = new UserController(
+      service,
+      phoneVerificationService,
+      oauthProviderFactory,
+    );
 
     const payload = {
       email: 'user@example.com',
@@ -121,9 +157,14 @@ describe('UserController', () => {
 
   it('strips transport-only __claims field when creating a user', async () => {
     const service = createServiceMock();
+    const phoneVerificationService = createPhoneVerificationServiceMock();
     const oauthProviderFactory = createOauthProviderFactoryMock();
     service.create.mockResolvedValue(user);
-    const controller = new UserController(service, oauthProviderFactory);
+    const controller = new UserController(
+      service,
+      phoneVerificationService,
+      oauthProviderFactory,
+    );
 
     const payload = {
       email: 'user@example.com',
@@ -141,9 +182,14 @@ describe('UserController', () => {
 
   it('updates a user', async () => {
     const service = createServiceMock();
+    const phoneVerificationService = createPhoneVerificationServiceMock();
     const oauthProviderFactory = createOauthProviderFactoryMock();
     service.update.mockResolvedValue(user);
-    const controller = new UserController(service, oauthProviderFactory);
+    const controller = new UserController(
+      service,
+      phoneVerificationService,
+      oauthProviderFactory,
+    );
 
     const payload = {
       userId: 'user-1',
@@ -157,9 +203,14 @@ describe('UserController', () => {
 
   it('strips transport-only __claims field when updating a user', async () => {
     const service = createServiceMock();
+    const phoneVerificationService = createPhoneVerificationServiceMock();
     const oauthProviderFactory = createOauthProviderFactoryMock();
     service.update.mockResolvedValue(user);
-    const controller = new UserController(service, oauthProviderFactory);
+    const controller = new UserController(
+      service,
+      phoneVerificationService,
+      oauthProviderFactory,
+    );
 
     const payload = {
       userId: 'user-1',
@@ -174,11 +225,16 @@ describe('UserController', () => {
 
   it('returns current user settings', async () => {
     const service = createServiceMock();
+    const phoneVerificationService = createPhoneVerificationServiceMock();
     const oauthProviderFactory = createOauthProviderFactoryMock();
     service.getSettings.mockResolvedValue({
       language: { locale: 'English (US)' },
     } as any);
-    const controller = new UserController(service, oauthProviderFactory);
+    const controller = new UserController(
+      service,
+      phoneVerificationService,
+      oauthProviderFactory,
+    );
 
     await expect(controller.getMySettings(basePayload)).resolves.toEqual({
       language: { locale: 'English (US)' },
@@ -188,11 +244,16 @@ describe('UserController', () => {
 
   it('updates current user settings', async () => {
     const service = createServiceMock();
+    const phoneVerificationService = createPhoneVerificationServiceMock();
     const oauthProviderFactory = createOauthProviderFactoryMock();
     service.updateSettings.mockResolvedValue({
       browser: { compactMode: true },
     } as any);
-    const controller = new UserController(service, oauthProviderFactory);
+    const controller = new UserController(
+      service,
+      phoneVerificationService,
+      oauthProviderFactory,
+    );
 
     await expect(
       controller.updateMySettings({
@@ -210,9 +271,14 @@ describe('UserController', () => {
 
   it('deletes a user', async () => {
     const service = createServiceMock();
+    const phoneVerificationService = createPhoneVerificationServiceMock();
     const oauthProviderFactory = createOauthProviderFactoryMock();
     service.remove.mockResolvedValue({ message: 'deleted' });
-    const controller = new UserController(service, oauthProviderFactory);
+    const controller = new UserController(
+      service,
+      phoneVerificationService,
+      oauthProviderFactory,
+    );
 
     await expect(
       controller.deleteUser({ userId: 'user-1', ...basePayload }),
@@ -222,12 +288,17 @@ describe('UserController', () => {
 
   it('transforms errors using toRpcException helper', async () => {
     const service = createServiceMock();
+    const phoneVerificationService = createPhoneVerificationServiceMock();
     const oauthProviderFactory = createOauthProviderFactoryMock();
     const error = new Error('failure');
     const rpcError = new Error('rpc');
     service.findAll.mockRejectedValue(error);
     toRpcExceptionMock.mockReturnValueOnce(rpcError as any);
-    const controller = new UserController(service, oauthProviderFactory);
+    const controller = new UserController(
+      service,
+      phoneVerificationService,
+      oauthProviderFactory,
+    );
 
     await expect(controller.getUsers(basePayload)).rejects.toThrow(rpcError);
     expect(toRpcExceptionMock).toHaveBeenCalledWith(error);
@@ -235,12 +306,17 @@ describe('UserController', () => {
 
   it('wraps errors when retrieving a user', async () => {
     const service = createServiceMock();
+    const phoneVerificationService = createPhoneVerificationServiceMock();
     const oauthProviderFactory = createOauthProviderFactoryMock();
     const error = new Error('failure');
     const rpcError = new Error('rpc');
     service.findOne.mockRejectedValue(error);
     toRpcExceptionMock.mockReturnValueOnce(rpcError as any);
-    const controller = new UserController(service, oauthProviderFactory);
+    const controller = new UserController(
+      service,
+      phoneVerificationService,
+      oauthProviderFactory,
+    );
 
     await expect(
       controller.getUser({ userId: 'user-1', ...basePayload }),
@@ -249,12 +325,17 @@ describe('UserController', () => {
 
   it('wraps errors when creating a user', async () => {
     const service = createServiceMock();
+    const phoneVerificationService = createPhoneVerificationServiceMock();
     const oauthProviderFactory = createOauthProviderFactoryMock();
     const error = new Error('failure');
     const rpcError = new Error('rpc');
     service.create.mockRejectedValue(error);
     toRpcExceptionMock.mockReturnValueOnce(rpcError as any);
-    const controller = new UserController(service, oauthProviderFactory);
+    const controller = new UserController(
+      service,
+      phoneVerificationService,
+      oauthProviderFactory,
+    );
 
     await expect(
       controller.createUser({
@@ -267,12 +348,17 @@ describe('UserController', () => {
 
   it('wraps errors when updating a user', async () => {
     const service = createServiceMock();
+    const phoneVerificationService = createPhoneVerificationServiceMock();
     const oauthProviderFactory = createOauthProviderFactoryMock();
     const error = new Error('failure');
     const rpcError = new Error('rpc');
     service.update.mockRejectedValue(error);
     toRpcExceptionMock.mockReturnValueOnce(rpcError as any);
-    const controller = new UserController(service, oauthProviderFactory);
+    const controller = new UserController(
+      service,
+      phoneVerificationService,
+      oauthProviderFactory,
+    );
 
     await expect(
       controller.updateUser({
@@ -285,12 +371,17 @@ describe('UserController', () => {
 
   it('wraps errors when deleting a user', async () => {
     const service = createServiceMock();
+    const phoneVerificationService = createPhoneVerificationServiceMock();
     const oauthProviderFactory = createOauthProviderFactoryMock();
     const error = new Error('failure');
     const rpcError = new Error('rpc');
     service.remove.mockRejectedValue(error);
     toRpcExceptionMock.mockReturnValueOnce(rpcError as any);
-    const controller = new UserController(service, oauthProviderFactory);
+    const controller = new UserController(
+      service,
+      phoneVerificationService,
+      oauthProviderFactory,
+    );
 
     await expect(
       controller.deleteUser({ userId: 'user-1', ...basePayload }),
@@ -299,15 +390,122 @@ describe('UserController', () => {
 
   it('wraps errors when getting current user settings', async () => {
     const service = createServiceMock();
+    const phoneVerificationService = createPhoneVerificationServiceMock();
     const oauthProviderFactory = createOauthProviderFactoryMock();
     const error = new Error('failure');
     const rpcError = new Error('rpc');
     service.getSettings.mockRejectedValue(error);
     toRpcExceptionMock.mockReturnValueOnce(rpcError as any);
-    const controller = new UserController(service, oauthProviderFactory);
+    const controller = new UserController(
+      service,
+      phoneVerificationService,
+      oauthProviderFactory,
+    );
 
     await expect(controller.getMySettings(basePayload)).rejects.toThrow(
       rpcError,
+    );
+  });
+
+  it('returns current user phone verification status', async () => {
+    const service = createServiceMock();
+    const phoneVerificationService = createPhoneVerificationServiceMock();
+    const oauthProviderFactory = createOauthProviderFactoryMock();
+    const status: PhoneVerificationStatus = {
+      verified: false,
+      pendingPhoneNumber: '+15551234567',
+      remainingAttempts: 5,
+      remainingSends: 2,
+    };
+    phoneVerificationService.getStatus.mockResolvedValue(status);
+    const controller = new UserController(
+      service,
+      phoneVerificationService,
+      oauthProviderFactory,
+    );
+
+    await expect(
+      controller.getMyPhoneVerification(basePayload),
+    ).resolves.toEqual(status);
+    expect(phoneVerificationService.getStatus).toHaveBeenCalledWith('admin-1');
+  });
+
+  it('requests phone verification through the service', async () => {
+    const service = createServiceMock();
+    const phoneVerificationService = createPhoneVerificationServiceMock();
+    const oauthProviderFactory = createOauthProviderFactoryMock();
+    const status: PhoneVerificationStatus = {
+      verified: false,
+      pendingPhoneNumber: '+15551234567',
+    };
+    phoneVerificationService.requestVerification.mockResolvedValue(status);
+    const controller = new UserController(
+      service,
+      phoneVerificationService,
+      oauthProviderFactory,
+    );
+
+    await expect(
+      controller.requestPhoneVerification({
+        phoneNumber: '(555) 123-4567',
+        ...basePayload,
+      }),
+    ).resolves.toEqual(status);
+    expect(phoneVerificationService.requestVerification).toHaveBeenCalledWith(
+      'admin-1',
+      '(555) 123-4567',
+    );
+  });
+
+  it('resends phone verification through the service', async () => {
+    const service = createServiceMock();
+    const phoneVerificationService = createPhoneVerificationServiceMock();
+    const oauthProviderFactory = createOauthProviderFactoryMock();
+    const status: PhoneVerificationStatus = {
+      verified: false,
+      pendingPhoneNumber: '+15551234567',
+      remainingSends: 1,
+    };
+    phoneVerificationService.resendVerification.mockResolvedValue(status);
+    const controller = new UserController(
+      service,
+      phoneVerificationService,
+      oauthProviderFactory,
+    );
+
+    await expect(
+      controller.resendPhoneVerification(basePayload),
+    ).resolves.toEqual(status);
+    expect(phoneVerificationService.resendVerification).toHaveBeenCalledWith(
+      'admin-1',
+    );
+  });
+
+  it('verifies a phone code through the service', async () => {
+    const service = createServiceMock();
+    const phoneVerificationService = createPhoneVerificationServiceMock();
+    const oauthProviderFactory = createOauthProviderFactoryMock();
+    const status: PhoneVerificationStatus = {
+      verified: true,
+      phoneNumber: '+15551234567',
+      verifiedAt: new Date('2024-01-01T00:00:00.000Z'),
+    };
+    phoneVerificationService.verifyCode.mockResolvedValue(status);
+    const controller = new UserController(
+      service,
+      phoneVerificationService,
+      oauthProviderFactory,
+    );
+
+    await expect(
+      controller.verifyPhoneVerification({
+        code: '123456',
+        ...basePayload,
+      }),
+    ).resolves.toEqual(status);
+    expect(phoneVerificationService.verifyCode).toHaveBeenCalledWith(
+      'admin-1',
+      '123456',
     );
   });
 });

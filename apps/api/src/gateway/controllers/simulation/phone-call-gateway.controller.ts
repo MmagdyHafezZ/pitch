@@ -15,14 +15,18 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
-import { catchError, timeout } from 'rxjs/operators';
-import { throwError } from 'rxjs';
-import { SIMULATION_SERVICE_PATTERNS } from '@pitch/shared-backend/interfaces/message-patterns.interface';
+import { lastValueFrom } from 'rxjs';
+import { timeout } from 'rxjs/operators';
+import {
+  SIMULATION_SERVICE_PATTERNS,
+  USER_SERVICE_PATTERNS,
+} from '@pitch/shared-backend/interfaces/message-patterns.interface';
 import { GlobalJwtAuthGuard } from '../../guards/global-jwt-auth.guard';
 import { UserClaimsInterceptor } from '../../interceptors/user-claims.interceptor';
 import { UserClaims } from '../../decorators/user-claims.decorator';
 import type { UserClaims as UserClaimsType } from '@pitch/shared-backend/interfaces/user-claims.interface';
 import { normalizeError } from '@pitch/shared-backend/helpers/exceptions';
+import type { PhoneVerificationStatus } from '@pitch/shared-backend/interfaces/user.interface';
 
 @ApiTags('simulation-phone-calls')
 @Controller({ path: 'simulation/phone-calls', version: '1' })
@@ -31,7 +35,9 @@ import { normalizeError } from '@pitch/shared-backend/helpers/exceptions';
 @ApiBearerAuth('bearer')
 export class PhoneCallGatewayController {
   constructor(
-    @Inject('SIMULATION_SERVICE') private simulationService: ClientProxy,
+    @Inject('SIMULATION_SERVICE')
+    private readonly simulationService: ClientProxy,
+    @Inject('USER_SERVICE') private readonly userService: ClientProxy,
   ) {}
 
   @Post()
@@ -39,20 +45,45 @@ export class PhoneCallGatewayController {
   @ApiResponse({ status: 201, description: 'Call initiated successfully' })
   @ApiResponse({ status: 400, description: 'Invalid input data' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  startCall(@Body() payload: any, @UserClaims() userClaims: UserClaimsType) {
-    return this.simulationService
-      .send(SIMULATION_SERVICE_PATTERNS.PHONE_CALL_START, {
-        ...payload,
-        userClaims,
-      })
-      .pipe(
-        timeout(10000),
-        catchError((err: unknown) => {
-          const error = normalizeError(err);
-          const message = error.message ?? 'Failed to start phone call';
-          const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
-          return throwError(() => new HttpException(message, status));
-        }),
+  @ApiResponse({
+    status: 403,
+    description: 'Phone number must be verified before starting a call',
+  })
+  async startCall(
+    @Body() payload: { sessionId: string },
+    @UserClaims() userClaims: UserClaimsType,
+  ) {
+    try {
+      const verification = await lastValueFrom(
+        this.userService
+          .send<PhoneVerificationStatus>(
+            USER_SERVICE_PATTERNS.GET_MY_PHONE_VERIFICATION,
+            { userClaims },
+          )
+          .pipe(timeout(5000)),
       );
+
+      if (!verification.verified || !verification.phoneNumber) {
+        throw new HttpException(
+          'Verify your phone number before starting a phone call.',
+          HttpStatus.FORBIDDEN,
+        );
+      }
+
+      return await lastValueFrom(
+        this.simulationService
+          .send(SIMULATION_SERVICE_PATTERNS.PHONE_CALL_START, {
+            sessionId: payload.sessionId,
+            phoneNumber: verification.phoneNumber,
+            userClaims,
+          })
+          .pipe(timeout(10000)),
+      );
+    } catch (err: unknown) {
+      const error = normalizeError(err);
+      const message = error.message ?? 'Failed to start phone call';
+      const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
+      throw new HttpException(message, status);
+    }
   }
 }
