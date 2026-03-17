@@ -165,11 +165,21 @@ export class OpenAIProvider implements ILLMProvider {
   stream(
     messages: LLMMessageDto[],
     config: LLMConfigDto,
+    signal?: AbortSignal,
   ): Observable<LLMStreamChunkDto> {
     this.validateConfig(config);
 
     return new Observable((subscriber) => {
       let accumulatedTokens = 0;
+      const abortController = new AbortController();
+      const abortStream = () => {
+        if (!abortController.signal.aborted) {
+          abortController.abort();
+        }
+      };
+      const linkedAbort = () => abortStream();
+
+      signal?.addEventListener('abort', linkedAbort, { once: true });
 
       void (async () => {
         try {
@@ -185,20 +195,25 @@ export class OpenAIProvider implements ILLMProvider {
           );
           const samplingParams = this.buildSamplingParams(config.model, config);
 
-          const stream = await this.client.chat.completions.create({
-            model: config.model,
-            messages: this.convertMessages(messages),
-            ...samplingParams,
-            frequency_penalty: config.frequencyPenalty,
-            presence_penalty: config.presencePenalty,
-            stop: config.stop,
-            tools,
-            tool_choice: toolChoice,
-            stream: true,
-            stream_options: { include_usage: true },
-            ...tokenLimit,
-            ...config.providerOptions,
-          });
+          const stream = await this.client.chat.completions.create(
+            {
+              model: config.model,
+              messages: this.convertMessages(messages),
+              ...samplingParams,
+              frequency_penalty: config.frequencyPenalty,
+              presence_penalty: config.presencePenalty,
+              stop: config.stop,
+              tools,
+              tool_choice: toolChoice,
+              stream: true,
+              stream_options: { include_usage: true },
+              ...tokenLimit,
+              ...config.providerOptions,
+            },
+            {
+              signal: abortController.signal,
+            },
+          );
 
           // Accumulate tool call deltas across chunks (index → partial call)
           const toolCallsAccumulator = new Map<
@@ -288,9 +303,18 @@ export class OpenAIProvider implements ILLMProvider {
 
           subscriber.complete();
         } catch (error) {
+          if (abortController.signal.aborted || signal?.aborted) {
+            subscriber.complete();
+            return;
+          }
           subscriber.error(this.handleError(error));
         }
       })();
+
+      return () => {
+        signal?.removeEventListener('abort', linkedAbort);
+        abortStream();
+      };
     });
   }
 

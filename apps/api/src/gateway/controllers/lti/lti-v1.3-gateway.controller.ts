@@ -16,13 +16,19 @@ import type { Response } from 'express';
 import { firstValueFrom } from 'rxjs';
 import { Public } from '@microservices/userManagement/decorators/public.decorator';
 import { LTI_PATTERNS } from '@microservices/lti/common/constants/lti-patterns.constants';
+import { USER_SERVICE_PATTERNS } from '@pitch/shared-backend/interfaces/message-patterns.interface';
 
 interface V1p3LaunchResult {
   context: {
     sessionId: string;
     platformId: string;
-    user?: { email?: string };
+    user?: { email?: string; name?: string; sub?: string };
   };
+}
+
+interface LtiAuthTokenResult {
+  token: string;
+  refreshToken: string;
 }
 
 interface OidcLoginResult {
@@ -48,7 +54,10 @@ export class LtiV1p3GatewayController {
   private readonly pitchAppUrl =
     process.env.PITCH_APP_URL ?? 'http://localhost:3000';
 
-  constructor(@Inject('LTI_SERVICE') private readonly ltiClient: ClientProxy) {}
+  constructor(
+    @Inject('LTI_SERVICE') private readonly ltiClient: ClientProxy,
+    @Inject('USER_SERVICE') private readonly userClient: ClientProxy,
+  ) {}
 
   /**
    * OIDC Third-Party Initiated Login.
@@ -103,14 +112,52 @@ export class LtiV1p3GatewayController {
         }),
       );
 
-      // Redirect to PITCH app with session context
       const redirectUrl = new URL('/lti/launch', this.pitchAppUrl);
       redirectUrl.searchParams.set('sessionId', result.context.sessionId);
       redirectUrl.searchParams.set('platformId', result.context.platformId);
 
-      // Encode user info for auto-login
-      if (result.context.user?.email) {
-        redirectUrl.searchParams.set('email', result.context.user.email);
+      // Include pitchSessionId if already linked (e.g. configured via Deep Linking)
+      try {
+        const ltiSession = await firstValueFrom<{
+          pitchSessionId?: string | null;
+        }>(
+          this.ltiClient.send(LTI_PATTERNS.SESSION_FIND, {
+            sessionId: result.context.sessionId,
+          }),
+        );
+        if (ltiSession?.pitchSessionId) {
+          redirectUrl.searchParams.set(
+            'pitchSessionId',
+            ltiSession.pitchSessionId,
+          );
+        }
+      } catch {
+        // Non-fatal: we'll just redirect to studio/sessions without a pitchSessionId
+      }
+
+      // Auto-login: find-or-create user from LTI identity claims and include
+      // the token directly in the redirect so the frontend needs no extra round-trip.
+      const userEmail = result.context.user?.email;
+      if (userEmail) {
+        try {
+          const auth = await firstValueFrom(
+            this.userClient.send<LtiAuthTokenResult>(
+              USER_SERVICE_PATTERNS.AUTH_LTI_LOGIN,
+              {
+                email: userEmail,
+                name: result.context.user?.name,
+                sub: result.context.user?.sub ?? result.context.sessionId,
+              },
+            ),
+          );
+          redirectUrl.searchParams.set('token', auth.token);
+          redirectUrl.searchParams.set('refresh_token', auth.refreshToken);
+        } catch (authError) {
+          this.logger.warn(
+            'LTI auto-login failed, redirecting without token',
+            authError,
+          );
+        }
       }
 
       res.redirect(redirectUrl.toString());

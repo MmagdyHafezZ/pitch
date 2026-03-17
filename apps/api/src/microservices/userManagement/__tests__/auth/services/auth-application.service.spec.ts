@@ -341,4 +341,97 @@ describe('AuthApplicationService', () => {
     expect(result.user.avatar).toBeUndefined();
     expect(result.token).toBe('iss-access');
   });
+
+  // ── ltiLogin ──────────────────────────────────────────────────────────────────
+
+  describe('ltiLogin', () => {
+    it('creates a new user when email is not yet registered', async () => {
+      userRepository.findByEmail.mockResolvedValue(null);
+      userRepository.create.mockResolvedValue(baseUser);
+
+      const result = await service.ltiLogin({
+        email: 'learner@university.edu',
+        name: 'Alice Learner',
+        sub: 'lti-sub-1',
+      });
+
+      expect(userRepository.findByEmail).toHaveBeenCalledWith(
+        'learner@university.edu',
+      );
+      expect(userRepository.create).toHaveBeenCalledWith({
+        email: 'learner@university.edu',
+        name: 'Alice Learner',
+      });
+      expect(authRepository.createRefreshToken).toHaveBeenCalled();
+      expect(result).toMatchObject({
+        token: expect.any(String),
+        refreshToken: expect.any(String),
+        user: expect.objectContaining({ id: baseUser.id }),
+      });
+    });
+
+    it('returns tokens for an existing user without creating a new one', async () => {
+      userRepository.findByEmail.mockResolvedValue(baseUser);
+
+      const result = await service.ltiLogin({
+        email: 'user@example.com',
+        name: 'Test User',
+        sub: 'lti-sub-existing',
+      });
+
+      expect(userRepository.create).not.toHaveBeenCalled();
+      expect(result).toMatchObject({
+        user: expect.objectContaining({ id: 'user-1' }),
+      });
+    });
+
+    it('falls back to email prefix when name is empty string', async () => {
+      userRepository.findByEmail.mockResolvedValue(null);
+      userRepository.create.mockResolvedValue(baseUser);
+
+      await service.ltiLogin({
+        email: 'student@school.edu',
+        name: '',
+        sub: 'lti-sub-2',
+      });
+
+      expect(userRepository.create).toHaveBeenCalledWith(
+        expect.objectContaining({ name: 'student' }),
+      );
+    });
+
+    it('falls back to email prefix when name is undefined', async () => {
+      userRepository.findByEmail.mockResolvedValue(null);
+      userRepository.create.mockResolvedValue(baseUser);
+
+      await service.ltiLogin({ email: 'bob@corp.io', sub: 'lti-sub-3' });
+
+      expect(userRepository.create).toHaveBeenCalledWith(
+        expect.objectContaining({ name: 'bob' }),
+      );
+    });
+
+    it('touches lastSeen after issuing tokens', async () => {
+      userRepository.findByEmail.mockResolvedValue(baseUser);
+
+      await service.ltiLogin({ email: 'user@example.com', sub: 'sub-1' });
+
+      expect(userRepository.touchLastSeen).toHaveBeenCalledWith(baseUser.id);
+    });
+
+    it('stores a refresh token with a future expiry date', async () => {
+      userRepository.findByEmail.mockResolvedValue(baseUser);
+
+      await service.ltiLogin({ email: 'user@example.com', sub: 'sub-1' });
+
+      expect(authRepository.createRefreshToken).toHaveBeenCalledWith(
+        baseUser.id,
+        expect.any(String),
+        expect.any(Date),
+      );
+      const expiresAt: Date =
+        authRepository.createRefreshToken.mock.calls[0][2];
+      expect(expiresAt.getTime()).toBeGreaterThan(Date.now());
+    });
+  });
 });

@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Observable, Subject } from 'rxjs';
+import { Observable, Subscriber } from 'rxjs';
 import { SimulationPrismaService } from '../prisma/simulation-prisma.service';
 import { LLMRouterService } from './llm/llm-router.service';
 import { TtsService } from '../tts/tts.service';
@@ -81,6 +81,24 @@ interface StageConfig {
   keywords?: string[];
 }
 
+interface ActiveConversationRequest {
+  requestId: string;
+  sessionId: string;
+  userId: string;
+  abortController: AbortController;
+  cancelled: boolean;
+  finished: boolean;
+  cancellationReason?: string;
+  cancelledAt?: string;
+  fullText: string;
+  iterationId?: string;
+  sessionMemberId?: string;
+  assistantOrder?: number;
+  language?: string;
+  assistantPersisted: boolean;
+  finalizePromise?: Promise<void>;
+}
+
 type SessionWithRelations = Prisma.SessionGetPayload<{
   include: { scenario: true; persona: true };
 }>;
@@ -121,6 +139,13 @@ class Semaphore {
   }
 }
 
+class ConversationCancelledError extends Error {
+  constructor(message = 'Conversation cancelled') {
+    super(message);
+    this.name = 'ConversationCancelledError';
+  }
+}
+
 /**
  * ConversationOrchestrationService
  *
@@ -143,6 +168,10 @@ class Semaphore {
 @Injectable()
 export class ConversationOrchestrationService {
   private readonly logger = new Logger(ConversationOrchestrationService.name);
+  private readonly activeRequests = new Map<
+    string,
+    ActiveConversationRequest
+  >();
 
   constructor(
     private readonly prisma: SimulationPrismaService,
@@ -160,19 +189,66 @@ export class ConversationOrchestrationService {
   stream(
     envelope: WsEnvelope<ConversationStartPayload>,
   ): Observable<ConversationStreamEvent> {
-    const subject = new Subject<ConversationStreamEvent>();
+    return new Observable<ConversationStreamEvent>((subscriber) => {
+      const requestState: ActiveConversationRequest = {
+        requestId: envelope.requestId,
+        sessionId: envelope.sessionId,
+        userId: envelope.userId ?? '',
+        abortController: new AbortController(),
+        cancelled: false,
+        finished: false,
+        fullText: '',
+        assistantPersisted: false,
+      };
 
-    this.process(envelope, subject).catch((error) => {
-      this.logger.error('ConversationOrchestration failed', error);
-      subject.error(error);
+      this.activeRequests.set(envelope.requestId, requestState);
+
+      void this.process(envelope, subscriber, requestState).catch((error) => {
+        if (error instanceof ConversationCancelledError) {
+          this.markRequestFinished(requestState);
+          if (!subscriber.closed) {
+            subscriber.complete();
+          }
+          return;
+        }
+
+        this.logger.error('ConversationOrchestration failed', error);
+        this.markRequestFinished(requestState);
+        if (!subscriber.closed) {
+          subscriber.error(error);
+        }
+      });
+
+      return () => {
+        if (!requestState.finished) {
+          void this.cancel(envelope.requestId, 'subscription_closed');
+        }
+        this.activeRequests.delete(envelope.requestId);
+      };
     });
+  }
 
-    return subject.asObservable();
+  async cancel(requestId: string, reason = 'cancelled'): Promise<boolean> {
+    const request = this.activeRequests.get(requestId);
+    if (!request) {
+      return false;
+    }
+
+    if (!request.cancelled) {
+      request.cancelled = true;
+      request.cancellationReason = reason;
+      request.cancelledAt = new Date().toISOString();
+      request.abortController.abort(reason);
+    }
+
+    await this.finalizeInterruptedRequest(request);
+    return true;
   }
 
   private async process(
     envelope: WsEnvelope<ConversationStartPayload>,
-    subject: Subject<ConversationStreamEvent>,
+    subscriber: Subscriber<ConversationStreamEvent>,
+    requestState: ActiveConversationRequest,
   ): Promise<void> {
     const { sessionId, userId } = envelope;
     const payload = envelope.payload;
@@ -182,24 +258,25 @@ export class ConversationOrchestrationService {
       throw new Error('sessionId and userId are required');
     }
 
-    // ── 1. Load session (cached) ──────────────────────────────────────────────
+    requestState.userId = userId;
+
     const session = await this.getSessionCached(sessionId);
     if (!session) {
       throw new Error(`Session ${sessionId} not found`);
     }
+    this.throwIfCancelled(requestState, subscriber);
 
     const forceNewIteration = session.status === 'ended';
     const sessionConfig = toRecord(session.sessionConfig) as SessionConfig;
     const scenarioConfig = toRecord(session.scenario?.config) as ScenarioConfig;
 
-    // ── 2. Resolve TTS config ─────────────────────────────────────────────────
     let personaData = session.persona;
-
     const resolvedPersonaId = payload.personaId ?? session.personaId;
     if (resolvedPersonaId && resolvedPersonaId !== session.personaId) {
       personaData = await this.prisma.client.persona.findUnique({
         where: { id: resolvedPersonaId },
       });
+      this.throwIfCancelled(requestState, subscriber);
     }
 
     const resolvedTts = resolveTtsConfig({
@@ -214,10 +291,11 @@ export class ConversationOrchestrationService {
             personaData?.traits ? toRecord(personaData.traits) : null,
           )
         : null;
-    // ── 3. Resolve session member + iteration (cached) ────────────────────────
+
     const smCache = forceNewIteration
       ? null
       : await this.redis.getSessionMemberIteration(sessionId, userId);
+    this.throwIfCancelled(requestState, subscriber);
 
     let sessionMemberId: string;
     let iterationId: string;
@@ -228,7 +306,6 @@ export class ConversationOrchestrationService {
       iterationId = smCache.iterationId;
       lastTurnOrder = smCache.lastTurnOrder;
     } else {
-      // Cache miss — hit DB
       const resolved = await this.resolveSessionMemberAndIteration({
         sessionId,
         userId,
@@ -240,7 +317,6 @@ export class ConversationOrchestrationService {
       iterationId = resolved.iterationId;
       lastTurnOrder = resolved.lastTurnOrder;
 
-      // Cache for next turn
       void this.redis
         .setSessionMemberIteration(sessionId, userId, {
           sessionMemberId,
@@ -249,20 +325,23 @@ export class ConversationOrchestrationService {
         })
         .catch(() => {});
 
-      // When a new iteration was forced, the session full cache still holds
-      // status: 'ended'. Evict it so the next request re-reads the now-active session.
       if (forceNewIteration) {
         void this.redis.deleteSessionFull(sessionId).catch(() => {});
       }
     }
 
-    // ── 4. Load history (cached) ──────────────────────────────────────────────
     const historyMessages = await this.getHistoryCached(iterationId);
+    this.throwIfCancelled(requestState, subscriber);
 
     const nextOrder = lastTurnOrder + 1;
+    const assistantOrder = startAsAssistant ? nextOrder : nextOrder + 1;
     const isFirstTurn = lastTurnOrder === 0;
 
-    // ── 5. Persist user turn (fire-and-forget — does not block LLM) ───────────
+    requestState.iterationId = iterationId;
+    requestState.sessionMemberId = sessionMemberId;
+    requestState.assistantOrder = assistantOrder;
+    requestState.language = session.language ?? undefined;
+
     if (!startAsAssistant) {
       void this.persistUserTurn({
         iterationId,
@@ -271,21 +350,19 @@ export class ConversationOrchestrationService {
         language: session.language ?? undefined,
       })
         .then(({ userTurnId }) => {
-          // Append to history cache after write
           void this.redis
             .appendIterationMessage(iterationId, {
               role: 'user',
               content: payload.text ?? '',
             })
             .catch(() => {});
-          // Update lastTurnOrder in cache (user turn is nextOrder)
-          void this.redis
-            .setSessionMemberIteration(sessionId, userId, {
-              sessionMemberId,
-              iterationId,
-              lastTurnOrder: nextOrder,
-            })
-            .catch(() => {});
+          void this.updateSessionMemberIterationCache({
+            sessionId,
+            userId,
+            sessionMemberId,
+            iterationId,
+            lastTurnOrder: nextOrder,
+          }).catch(() => {});
           return userTurnId;
         })
         .catch((err) => {
@@ -293,7 +370,6 @@ export class ConversationOrchestrationService {
         });
     }
 
-    // ── 5.5. RAG retrieval ────────────────────────────────────────────────────
     const isVoiceLike =
       session.type === 'voice' ||
       session.type === 'video' ||
@@ -310,8 +386,8 @@ export class ConversationOrchestrationService {
             })
             .catch(() => [])
         : [];
+    this.throwIfCancelled(requestState, subscriber);
 
-    // Auto-index persona + scenario (idempotent, fire-and-forget)
     if (personaData) {
       void this.ragIndexer
         .maybeIndexPersona(
@@ -348,17 +424,17 @@ export class ConversationOrchestrationService {
             .join('\n')
         : undefined;
 
-    // ── 5.6. Mood context from Redis (set by update_mood tool) ────────────────
     const moodState = await this.redis
       .getMoodState(sessionId)
       .catch(() => null);
+    this.throwIfCancelled(requestState, subscriber);
+
     const moodContext = moodState
       ? `Your current mood is ${moodState.mood} (intensity ${moodState.intensity}/10). ` +
         `This was triggered by: ${moodState.trigger}. ` +
         `Mood set at: ${moodState.setAt}.`
       : undefined;
 
-    // ── 6. Build LLM messages ─────────────────────────────────────────────────
     const systemPrompt = buildConversationSystemPrompt({
       persona: personaData,
       session,
@@ -385,22 +461,18 @@ export class ConversationOrchestrationService {
     ];
 
     const incomingText = payload.text?.trim();
-
-    // Point 2 — proximal context injection right before the user turn
     if (ragContext) {
       messages.push({
         role: 'system',
         content: `[BACKGROUND CONTEXT — use where relevant]\n${ragContext}`,
       });
     }
-
     if (!startAsAssistant && incomingText) {
       const last = messages[messages.length - 1];
       if (!(last?.role === 'user' && last.content === incomingText)) {
         messages.push({ role: 'user', content: incomingText });
       }
     }
-
     if (addStarterPrompt) {
       messages.push({
         role: 'user',
@@ -414,12 +486,9 @@ export class ConversationOrchestrationService {
       sessionConfig,
       session.type,
     );
-
-    // Attach tool definitions so the LLM can call them during generation
     llmConfig.tools = this.conversationTools.getToolDefinitions();
     llmConfig.toolChoice = 'auto';
 
-    // ── 7. LLM stream + per-sentence TTS ──────────────────────────────────────
     let fullText = '';
     let isFirstChunk = true;
     const pendingToolCalls: LLMToolCallDto[] = [];
@@ -439,21 +508,69 @@ export class ConversationOrchestrationService {
         orgId: session.orgId,
         requestId: envelope.requestId,
         purpose: 'conversation_stream',
+        abortSignal: requestState.abortController.signal,
       },
     );
 
     await new Promise<void>((resolve, reject) => {
-      stream$.subscribe({
+      let settled = false;
+      let streamSubscription: import('rxjs').Subscription | undefined;
+
+      const resolveOnce = () => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        requestState.abortController.signal.removeEventListener(
+          'abort',
+          abortHandler,
+        );
+        streamSubscription?.unsubscribe();
+        resolve();
+      };
+
+      const rejectOnce = (error: Error) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        requestState.abortController.signal.removeEventListener(
+          'abort',
+          abortHandler,
+        );
+        streamSubscription?.unsubscribe();
+        reject(error);
+      };
+
+      const abortHandler = () => {
+        resolveOnce();
+      };
+
+      requestState.abortController.signal.addEventListener(
+        'abort',
+        abortHandler,
+        { once: true },
+      );
+
+      streamSubscription = stream$.subscribe({
         next: (chunk) => {
+          if (this.isCancelled(requestState, subscriber)) {
+            resolveOnce();
+            return;
+          }
+
           if (chunk.delta) {
             fullText += chunk.delta;
-            subject.next({
-              type: 'delta',
-              data: { delta: chunk.delta, isFirstChunk },
-            });
+            requestState.fullText = fullText;
+
+            if (!subscriber.closed) {
+              subscriber.next({
+                type: 'delta',
+                data: { delta: chunk.delta, isFirstChunk },
+              });
+            }
             isFirstChunk = false;
 
-            // Detect sentence boundaries and fire TTS for each complete sentence
             const detected = sentenceDetector.addText(chunk.delta);
             for (const sentenceChunk of detected) {
               const idx = sentenceIndex++;
@@ -468,29 +585,36 @@ export class ConversationOrchestrationService {
                   undefined,
                   undefined,
                   ttsSemaphore,
-                  subject,
+                  subscriber,
+                  requestState,
                 ),
               );
             }
           }
+
           if (chunk.done) {
-            // Collect tool calls from the done chunk for post-TTS execution
             if (chunk.toolCalls && chunk.toolCalls.length > 0) {
               pendingToolCalls.push(...chunk.toolCalls);
             }
-            resolve();
+            resolveOnce();
           }
         },
-        error: (err) =>
-          reject(err instanceof Error ? err : new Error(String(err))),
-        complete: () => resolve(),
+        error: (err) => {
+          if (this.isCancelled(requestState, subscriber)) {
+            resolveOnce();
+            return;
+          }
+          rejectOnce(err instanceof Error ? err : new Error(String(err)));
+        },
+        complete: () => {
+          resolveOnce();
+        },
       });
     });
 
+    this.throwIfCancelled(requestState, subscriber);
+
     if (!fullText.trim()) {
-      // When the LLM emits only tool calls (no text deltas), extract displayable
-      // text from tool arguments so the user hears the actual objection/question
-      // rather than the generic fallback.
       const toolTexts = pendingToolCalls
         .flatMap((tc) => {
           try {
@@ -500,10 +624,11 @@ export class ConversationOrchestrationService {
             if (
               tc.name === 'request_clarification' &&
               typeof args.question === 'string'
-            )
+            ) {
               return [args.question];
+            }
           } catch {
-            /* malformed args — skip */
+            return [];
           }
           return [];
         })
@@ -526,7 +651,8 @@ export class ConversationOrchestrationService {
       });
     }
 
-    // Flush remaining text in the sentence detector buffer
+    requestState.fullText = fullText;
+
     const remaining = sentenceDetector.flush();
     if (remaining?.sentence) {
       const idx = sentenceIndex++;
@@ -541,16 +667,13 @@ export class ConversationOrchestrationService {
           undefined,
           undefined,
           ttsSemaphore,
-          subject,
+          subscriber,
+          requestState,
         ),
       );
     }
 
     const totalSentences = sentenceIndex;
-
-    // Start stage detection now (runs in parallel with remaining TTS jobs).
-    // Include the current user turn and generated assistant response so the
-    // classifier sees the full up-to-date conversation, not stale history.
     const plannedStages = this.getPlannedStages(sessionConfig, scenarioConfig);
     const historyForStage: Array<{ role: string; content: string }> = [
       ...historyMessages.map((m) => ({ role: m.role, content: m.content })),
@@ -566,8 +689,7 @@ export class ConversationOrchestrationService {
       userId,
     );
 
-    // ── 8. Persist assistant turn (async — after stream completes) ────────────
-    const assistantOrder = startAsAssistant ? nextOrder : nextOrder + 1;
+    this.throwIfCancelled(requestState, subscriber);
 
     const assistantTurnId = await this.persistAssistantTurn({
       iterationId,
@@ -575,23 +697,24 @@ export class ConversationOrchestrationService {
       order: assistantOrder,
       language: session.language ?? undefined,
     });
+    requestState.assistantPersisted = true;
 
-    // Update history cache + iteration mapping
-    void this.redis
-      .appendIterationMessage(iterationId, {
-        role: 'assistant',
-        content: fullText,
-      })
-      .catch(() => {});
-    void this.redis
-      .setSessionMemberIteration(sessionId, userId, {
+    await Promise.all([
+      this.redis
+        .appendIterationMessage(iterationId, {
+          role: 'assistant',
+          content: fullText,
+        })
+        .catch(() => {}),
+      this.updateSessionMemberIterationCache({
+        sessionId,
+        userId,
         sessionMemberId,
         iterationId,
         lastTurnOrder: assistantOrder,
-      })
-      .catch(() => {});
+      }).catch(() => {}),
+    ]);
 
-    // ── 8.5. Auto-index turns for future RAG retrieval (fire-and-forget) ─────
     if (!startAsAssistant && (payload.text ?? '').trim()) {
       void this.ragIndexer
         .indexTurn({
@@ -613,7 +736,6 @@ export class ConversationOrchestrationService {
       })
       .catch(() => {});
 
-    // ── 9. Assessment (fire-and-forget) ───────────────────────────────────────
     void this.assessmentService
       .enqueueLiveForTurn({ iterationId, sessionId, configVersion: undefined })
       .catch((err) => {
@@ -622,8 +744,8 @@ export class ConversationOrchestrationService {
         );
       });
 
-    // ── 10. Wait for all TTS jobs to complete ─────────────────────────────────
     await Promise.all(sentenceTtsJobs);
+    this.throwIfCancelled(requestState, subscriber);
 
     const progress = this.calculateProgress(
       assistantOrder,
@@ -631,18 +753,20 @@ export class ConversationOrchestrationService {
       scenarioConfig,
     );
 
-    // Emit completed — stage detection is NOT on this critical path
-    subject.next({
-      type: 'completed',
-      data: {
-        fullText,
-        usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
-        totalSentences,
-        progress,
-      },
-    });
+    if (!subscriber.closed) {
+      subscriber.next({
+        type: 'completed',
+        data: {
+          fullText,
+          usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+          totalSentences,
+          progress,
+        },
+      });
+    }
 
-    // ── Execute tool calls collected from the LLM stream ──────────────────────
+    this.throwIfCancelled(requestState, subscriber);
+
     if (pendingToolCalls.length > 0) {
       const toolContext = { sessionId, iterationId, turnId: assistantTurnId };
       const effects = await this.conversationTools
@@ -655,6 +779,10 @@ export class ConversationOrchestrationService {
         });
 
       for (const effect of effects) {
+        if (this.isCancelled(requestState, subscriber)) {
+          break;
+        }
+
         if (effect.streamEventOverride === 'hangup_requested') {
           const rawReason = effect.args.reason;
           const reason =
@@ -666,12 +794,14 @@ export class ConversationOrchestrationService {
           this.logger.log(
             `AI requested hang-up via end_call for session ${sessionId}: ${reason}`,
           );
-          subject.next({
-            type: 'hangup_requested',
-            data: { reason },
-          });
-        } else {
-          subject.next({
+          if (!subscriber.closed) {
+            subscriber.next({
+              type: 'hangup_requested',
+              data: { reason },
+            });
+          }
+        } else if (!subscriber.closed) {
+          subscriber.next({
             type: 'tool_executed',
             data: { tool: effect.tool, args: effect.args },
           });
@@ -679,7 +809,10 @@ export class ConversationOrchestrationService {
       }
     }
 
-    if (videoConfig?.mode === 'rendered') {
+    if (
+      videoConfig?.mode === 'rendered' &&
+      !this.isCancelled(requestState, subscriber)
+    ) {
       void this.videoGeneration
         .queueAssistantVideo({
           sessionId,
@@ -699,7 +832,6 @@ export class ConversationOrchestrationService {
         });
     }
 
-    // Log simulation start event (first turn only)
     if (isFirstTurn) {
       void this.prisma.client.event
         .create({
@@ -712,51 +844,56 @@ export class ConversationOrchestrationService {
         .catch(() => {});
     }
 
-    // ── 11. Stage detection — fire-and-forget with 3s hard timeout ────────────
-    // Emit stage_transition if detected, then close the stream.
-    const stageDetection = await Promise.race([
-      stageDetectionPromise,
-      new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000)),
-    ]).catch(() => null);
+    if (!this.isCancelled(requestState, subscriber)) {
+      const stageDetection = await Promise.race([
+        stageDetectionPromise,
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000)),
+      ]).catch(() => null);
 
-    if (
-      stageDetection?.stageTransition &&
-      stageDetection.previousStageIndex !== undefined
-    ) {
-      const prevStage = plannedStages[stageDetection.previousStageIndex];
-      if (prevStage) {
-        subject.next({
-          type: 'stage_transition',
-          data: {
-            previousStage: prevStage.label,
-            currentStage: stageDetection.currentStage.label,
-            previousStageIndex: stageDetection.previousStageIndex,
-            currentStageIndex: stageDetection.currentStageIndex,
-            confidence: stageDetection.confidence,
-            reasoning: stageDetection.reasoning,
-          },
-        });
-
-        void this.prisma.client.event
-          .create({
-            data: {
-              iterationId,
-              type: 'turn_completed',
-              payload: {
-                assistantTurnId,
-                order: assistantOrder,
-                progress,
-                stageTransition: true,
+      if (
+        stageDetection?.stageTransition &&
+        stageDetection.previousStageIndex !== undefined
+      ) {
+        const prevStage = plannedStages[stageDetection.previousStageIndex];
+        if (prevStage) {
+          if (!subscriber.closed) {
+            subscriber.next({
+              type: 'stage_transition',
+              data: {
                 previousStage: prevStage.label,
                 currentStage: stageDetection.currentStage.label,
+                previousStageIndex: stageDetection.previousStageIndex,
+                currentStageIndex: stageDetection.currentStageIndex,
+                confidence: stageDetection.confidence,
+                reasoning: stageDetection.reasoning,
               },
-            },
-          })
-          .catch(() => {});
+            });
+          }
+
+          void this.prisma.client.event
+            .create({
+              data: {
+                iterationId,
+                type: 'turn_completed',
+                payload: {
+                  assistantTurnId,
+                  order: assistantOrder,
+                  progress,
+                  stageTransition: true,
+                  previousStage: prevStage.label,
+                  currentStage: stageDetection.currentStage.label,
+                },
+              },
+            })
+            .catch(() => {});
+        }
       }
     }
 
-    subject.complete();
+    this.markRequestFinished(requestState);
+    if (!subscriber.closed) {
+      subscriber.complete();
+    }
   }
 
   // ── Private helpers ─────────────────────────────────────────────────────────
@@ -775,10 +912,19 @@ export class ConversationOrchestrationService {
     format: 'mp3' | 'wav' | 'ogg' | 'pcm' | undefined,
     sampleRate: number | undefined,
     semaphore: Semaphore,
-    subject: Subject<ConversationStreamEvent>,
+    subscriber: Subscriber<ConversationStreamEvent>,
+    requestState: ActiveConversationRequest,
   ): Promise<void> {
+    if (this.isCancelled(requestState, subscriber)) {
+      return;
+    }
+
     await semaphore.acquire();
     try {
+      if (this.isCancelled(requestState, subscriber)) {
+        return;
+      }
+
       const options = {
         ...(voice ? { voice } : {}),
         ...(language ? { language } : {}),
@@ -797,8 +943,17 @@ export class ConversationOrchestrationService {
           options,
         );
         const chunks: Uint8Array[] = [];
-        for await (const chunk of streamResult.audioStream) {
-          chunks.push(chunk);
+        const iterator = streamResult.audioStream[Symbol.asyncIterator]();
+        while (!this.isCancelled(requestState, subscriber)) {
+          const chunk = await iterator.next();
+          if (chunk.done) {
+            break;
+          }
+          chunks.push(chunk.value);
+        }
+        if (this.isCancelled(requestState, subscriber)) {
+          await iterator.return?.();
+          return;
         }
         audioBuffer = Buffer.concat(chunks);
         contentType = streamResult.contentType;
@@ -834,25 +989,36 @@ export class ConversationOrchestrationService {
         contentType = pcmFallback.contentType;
       }
 
-      subject.next({
-        type: 'audio_sentence',
-        data: { sentenceIndex: idx, audio: audioBuffer, contentType },
-      });
+      if (!this.isCancelled(requestState, subscriber) && !subscriber.closed) {
+        subscriber.next({
+          type: 'audio_sentence',
+          data: { sentenceIndex: idx, audio: audioBuffer, contentType },
+        });
+      }
     } catch (err) {
+      if (this.isCancelled(requestState, subscriber)) {
+        return;
+      }
+
       // Try melotts fallback
       if (provider !== 'melotts') {
         try {
           const fallback = await this.ttsService.synthesize(text, 'melotts', {
             language,
           });
-          subject.next({
-            type: 'audio_sentence',
-            data: {
-              sentenceIndex: idx,
-              audio: fallback.audioBuffer,
-              contentType: fallback.contentType,
-            },
-          });
+          if (
+            !this.isCancelled(requestState, subscriber) &&
+            !subscriber.closed
+          ) {
+            subscriber.next({
+              type: 'audio_sentence',
+              data: {
+                sentenceIndex: idx,
+                audio: fallback.audioBuffer,
+                contentType: fallback.contentType,
+              },
+            });
+          }
           return;
         } catch {
           // fall through — skip audio for this sentence
@@ -865,6 +1031,126 @@ export class ConversationOrchestrationService {
     } finally {
       semaphore.release();
     }
+  }
+
+  private isCancelled(
+    request: ActiveConversationRequest,
+    subscriber?: Pick<Subscriber<ConversationStreamEvent>, 'closed'>,
+  ): boolean {
+    return request.cancelled || subscriber?.closed === true;
+  }
+
+  private throwIfCancelled(
+    request: ActiveConversationRequest,
+    subscriber?: Pick<Subscriber<ConversationStreamEvent>, 'closed'>,
+  ): void {
+    if (this.isCancelled(request, subscriber)) {
+      throw new ConversationCancelledError(
+        request.cancellationReason ?? 'Conversation cancelled',
+      );
+    }
+  }
+
+  private markRequestFinished(request: ActiveConversationRequest): void {
+    request.finished = true;
+  }
+
+  private async finalizeInterruptedRequest(
+    request: ActiveConversationRequest,
+  ): Promise<void> {
+    if (request.assistantPersisted) {
+      return;
+    }
+
+    if (request.finalizePromise) {
+      await request.finalizePromise;
+      return;
+    }
+
+    request.finalizePromise = (async () => {
+      const text = request.fullText.trim();
+      if (
+        !text ||
+        !request.iterationId ||
+        !request.sessionMemberId ||
+        request.assistantOrder === undefined
+      ) {
+        return;
+      }
+
+      const assistantTurnId = await this.persistAssistantTurn({
+        iterationId: request.iterationId,
+        text: request.fullText,
+        order: request.assistantOrder,
+        language: request.language,
+        metadata: {
+          interrupted: true,
+          reason: request.cancellationReason ?? 'cancelled',
+          requestId: request.requestId,
+          cancelledAt: request.cancelledAt ?? new Date().toISOString(),
+        },
+      });
+
+      request.assistantPersisted = true;
+
+      await Promise.all([
+        this.redis
+          .appendIterationMessage(request.iterationId, {
+            role: 'assistant',
+            content: request.fullText,
+          })
+          .catch(() => {}),
+        this.updateSessionMemberIterationCache({
+          sessionId: request.sessionId,
+          userId: request.userId,
+          sessionMemberId: request.sessionMemberId,
+          iterationId: request.iterationId,
+          lastTurnOrder: request.assistantOrder,
+        }).catch(() => {}),
+      ]);
+
+      void this.prisma.client.event
+        .create({
+          data: {
+            iterationId: request.iterationId,
+            type: 'turn_completed',
+            payload: {
+              assistantTurnId,
+              order: request.assistantOrder,
+              interrupted: true,
+              reason: request.cancellationReason ?? 'cancelled',
+            },
+          },
+        })
+        .catch(() => {});
+    })();
+
+    await request.finalizePromise;
+  }
+
+  private async updateSessionMemberIterationCache(params: {
+    sessionId: string;
+    userId: string;
+    sessionMemberId: string;
+    iterationId: string;
+    lastTurnOrder: number;
+  }): Promise<void> {
+    const cached = await this.redis
+      .getSessionMemberIteration(params.sessionId, params.userId)
+      .catch(() => null);
+
+    await this.redis.setSessionMemberIteration(
+      params.sessionId,
+      params.userId,
+      {
+        sessionMemberId: params.sessionMemberId,
+        iterationId: params.iterationId,
+        lastTurnOrder: Math.max(
+          cached?.lastTurnOrder ?? 0,
+          params.lastTurnOrder,
+        ),
+      },
+    );
   }
 
   private async getSessionCached(
@@ -1049,6 +1335,7 @@ export class ConversationOrchestrationService {
     text: string;
     order: number;
     language?: string;
+    metadata?: Prisma.InputJsonValue | null;
   }): Promise<string> {
     const turn = await this.prisma.client.turn.create({
       data: {
@@ -1056,6 +1343,7 @@ export class ConversationOrchestrationService {
         role: 'assistant',
         text: params.text,
         order: params.order,
+        metadata: params.metadata ?? undefined,
       },
     });
     await this.prisma.client.message.create({

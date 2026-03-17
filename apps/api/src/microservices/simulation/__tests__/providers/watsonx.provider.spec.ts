@@ -299,6 +299,33 @@ describe('WatsonxProvider', () => {
     await errorPromise;
   });
 
+  it('completes streaming requests when the abort signal fires', async () => {
+    const provider = createProvider();
+    const client = (provider as any).client;
+    const stream = new PassThrough();
+    const destroySpy = jest.spyOn(stream, 'destroy');
+    const controller = new AbortController();
+
+    client.post.mockResolvedValue({ data: stream });
+
+    const streamPromise = new Promise<void>((resolve, reject) => {
+      provider
+        .stream(messages, { model: 'granite-13b' } as any, controller.signal)
+        .subscribe({
+          error: reject,
+          complete: () => resolve(),
+        });
+    });
+
+    setImmediate(() => {
+      controller.abort();
+    });
+
+    await streamPromise;
+
+    expect(destroySpy).toHaveBeenCalled();
+  });
+
   it('maps WatsonX API errors', () => {
     const provider = new WatsonxProvider(configService);
 

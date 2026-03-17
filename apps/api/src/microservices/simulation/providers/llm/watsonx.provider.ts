@@ -172,11 +172,35 @@ export class WatsonxProvider implements ILLMProvider {
   stream(
     messages: LLMMessageDto[],
     config: LLMConfigDto,
+    signal?: AbortSignal,
   ): Observable<LLMStreamChunkDto> {
     this.validateConfig(config);
 
     return new Observable((subscriber) => {
       let accumulatedTokens = 0;
+      let streamRef: NodeJS.ReadableStream | ReadableStream<Uint8Array> | null =
+        null;
+      const abortStream = () => {
+        const nodeStream = streamRef as
+          | (NodeJS.ReadableStream & { destroy?: () => void })
+          | null;
+        if (nodeStream && typeof nodeStream.destroy === 'function') {
+          nodeStream.destroy();
+          return;
+        }
+        const webStream = streamRef as ReadableStream<Uint8Array> | null;
+        if (webStream && typeof webStream.cancel === 'function') {
+          void webStream.cancel().catch(() => {});
+        }
+      };
+      const linkedAbort = () => {
+        abortStream();
+        if (!subscriber.closed) {
+          subscriber.complete();
+        }
+      };
+
+      signal?.addEventListener('abort', linkedAbort, { once: true });
 
       void (async () => {
         try {
@@ -208,6 +232,7 @@ export class WatsonxProvider implements ILLMProvider {
           );
 
           const stream = response.data;
+          streamRef = stream;
 
           stream.on('data', (chunk: Buffer) => {
             const lines = chunk.toString().split('\n');
@@ -287,12 +312,25 @@ export class WatsonxProvider implements ILLMProvider {
           });
 
           stream.on('error', (streamError: unknown) => {
+            if (signal?.aborted) {
+              subscriber.complete();
+              return;
+            }
             subscriber.error(this.handleError(streamError));
           });
         } catch (error) {
+          if (signal?.aborted) {
+            subscriber.complete();
+            return;
+          }
           subscriber.error(this.handleError(error));
         }
       })();
+
+      return () => {
+        signal?.removeEventListener('abort', linkedAbort);
+        abortStream();
+      };
     });
   }
 

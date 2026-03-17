@@ -38,6 +38,7 @@ export const USER_SERVICE_PATTERNS = {
   DELETE_PLAN: 'delete_plan',
   GET_PLANS: 'get_plans',
   GET_PLAN: 'get_plan',
+  AUTH_LTI_LOGIN: 'auth.lti.login',
 } as const
 
 export const S3_SERVICE_PATTERNS = {
@@ -73,6 +74,7 @@ export const SIMULATION_SERVICE_PATTERNS = {
   CREATE_SESSION: 'simulation.session.create',
   GET_SESSION: 'simulation.session.get',
   END_SESSION: 'simulation.session.end',
+  RESTART_SESSION: 'simulation.session.restart',
   UPDATE_SESSION: 'simulation.session.update',
   DELETE_SESSION: 'simulation.session.delete',
   LIST_SESSIONS: 'simulation.session.list',
