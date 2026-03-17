@@ -182,12 +182,12 @@ describe('AuthApplicationService', () => {
     });
   });
 
-  it('throws unauthorized when refresh token user mismatches jwt payload', async () => {
+  it('throws a specific unauthorized error when refresh token user mismatches jwt payload', async () => {
     jwtService.verify.mockReturnValue({ sub: 'other-user' } as any);
     authRepository.findUserByRefreshToken.mockResolvedValue(baseUser);
 
     await expect(service.refreshToken('refresh-token')).rejects.toThrow(
-      new UnauthorizedException('Invalid or expired refresh token'),
+      new UnauthorizedException('Token user mismatch'),
     );
   });
 
