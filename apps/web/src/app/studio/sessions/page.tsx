@@ -247,7 +247,7 @@ function SessionsPageInner() {
             alignItems: 'center',
             height: '100%',
             width: '100%',
-            paddingTop: '10em',
+            paddingTop: 'clamp(2rem, 10vh, 5rem)',
           }}
         >
           <Title order={3} c="dimmed" mb="md">

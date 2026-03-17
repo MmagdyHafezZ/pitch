@@ -90,20 +90,46 @@ export class ConversationService {
     this.socket.emit(WsMessageType.CONVERSATION_VISUAL_STATE, { sessionId, state })
   }
 
-  cancelConversation(sessionId: string, requestId?: string) {
+  cancelConversation(sessionId: string, requestId?: string): Promise<void> {
     if (!this.socket?.connected) {
-      return
+      return Promise.resolve()
     }
+
+    const socket = this.socket
+    const cancelRequestId = requestId || `cancel_${Date.now()}`
 
     const envelope = {
       type: WsMessageType.CONVERSATION_CANCEL,
-      requestId: requestId || `cancel_${Date.now()}`,
+      requestId: cancelRequestId,
       sessionId,
       payload: {},
       timestamp: new Date().toISOString(),
     }
 
-    this.socket.emit(WsMessageType.CONVERSATION_CANCEL, envelope)
+    return new Promise((resolve) => {
+      let settled = false
+      const cleanup = () => {
+        socket.off(WsMessageType.CONVERSATION_CANCEL, handleAck)
+        if (timeoutId) {
+          clearTimeout(timeoutId)
+        }
+      }
+      const resolveOnce = () => {
+        if (settled) return
+        settled = true
+        cleanup()
+        resolve()
+      }
+      const handleAck = (data: { requestId?: string }) => {
+        if (data.requestId === cancelRequestId) {
+          resolveOnce()
+        }
+      }
+      const timeoutId = setTimeout(resolveOnce, 1500)
+
+      socket.on(WsMessageType.CONVERSATION_CANCEL, handleAck)
+      socket.emit(WsMessageType.CONVERSATION_CANCEL, envelope)
+    })
   }
 
   onConversationText(callback: (data: WsEnvelope<ConversationTextPayload>) => void) {

@@ -13,10 +13,8 @@ import {
   TextInput,
   ActionIcon,
   Avatar,
-  SimpleGrid,
   ThemeIcon,
   Progress,
-  Card,
   Paper,
 } from '@mantine/core'
 import {
@@ -40,6 +38,7 @@ import type { TtsProvider } from '@/features/tts'
 import { CreatePersonaModal } from './CreatePersonaModal'
 import { notifications } from '@mantine/notifications'
 import { api } from '@/lib/client'
+import { PersonaProfileCard } from './PersonaProfileCard'
 
 export const metricIconMap: Record<string, ReactNode> = {
   empathy: <IconHeart size={12} />,
@@ -120,6 +119,7 @@ export function PersonaStep({
   const [createModalOpen, setCreateModalOpen] = useState(false)
   const [previewLoadingPersonaId, setPreviewLoadingPersonaId] = useState<string | null>(null)
   const [playingPersonaId, setPlayingPersonaId] = useState<string | null>(null)
+  const [infoPersonaId, setInfoPersonaId] = useState<string | null>(null)
   const previewAudioRef = useRef<HTMLAudioElement | null>(null)
   const previewUrlRef = useRef<string | null>(null)
   const visiblePersonas = filteredPersonas.filter((persona) => persona.id !== selectedPersona)
@@ -293,7 +293,6 @@ export function PersonaStep({
                     const archetype = traits.archetype ?? traits.role ?? 'Persona'
                     const rarity = traits.rarity ?? 'Standard'
                     const rarityColor = getRarityColor(rarity, traits.rarityColor)
-                    const miniMetrics = metrics.slice(0, 2)
                     const avatarUrl = resolvePersonaAvatarUrl(traits)
                     const isPreviewLoading = previewLoadingPersonaId === persona.id
                     const isPreviewPlaying = playingPersonaId === persona.id
@@ -307,122 +306,33 @@ export function PersonaStep({
                         exit={{ opacity: 0, y: 12, scale: 0.96 }}
                         transition={{ duration: 0.24, ease: 'easeOut' }}
                         style={{ flexShrink: 0 }}
+                        data-tour-id="create-session-persona-item"
                       >
-                        <Card
-                          withBorder
-                          padding="md"
-                          radius="xl"
-                          data-selected="false"
-                          data-tour-id="create-session-persona-item"
-                          className={`${classes.selectionCard} ${classes.personaCard}`}
-                          onClick={() => {
+                        <PersonaProfileCard
+                          persona={persona}
+                          avatarUrl={avatarUrl}
+                          archetype={archetype}
+                          rarity={rarity}
+                          rarityColor={rarityColor}
+                          voiceProfile={voiceProfile}
+                          metrics={metrics}
+                          signatureTraits={signatureTraits}
+                          isPreviewLoading={isPreviewLoading}
+                          isPreviewPlaying={isPreviewPlaying}
+                          infoOpen={infoPersonaId === persona.id}
+                          onInfoToggle={() => {
+                            setInfoPersonaId((current) =>
+                              current === persona.id ? null : persona.id
+                            )
+                          }}
+                          onPreviewAudio={() => {
+                            void handlePreviewAudio(persona)
+                          }}
+                          onSelect={() => {
+                            setInfoPersonaId(null)
                             setSelectedPersona(persona.id)
                           }}
-                          style={{ height: '100%', overflow: 'hidden' }}
-                        >
-                          <Stack gap="sm" className={classes.personaStack}>
-                            <Group
-                              justify="space-between"
-                              align="flex-start"
-                              className={classes.personaHeader}
-                            >
-                              <Group gap="sm">
-                                <Box pos="relative">
-                                  <Avatar size={64} radius="md" src={avatarUrl}>
-                                    <IconUser size={30} />
-                                  </Avatar>
-                                </Box>
-                                <Stack gap={2}>
-                                  <Text fw={700} size="sm">
-                                    {persona.name}
-                                  </Text>
-                                  <Text size="xs" c="dimmed">
-                                    {traits.role ?? 'AI Persona'} · {traits.level ?? 'Expert'}
-                                  </Text>
-                                </Stack>
-                              </Group>
-                              <Stack gap={4} align="flex-end">
-                                <ActionIcon
-                                  size="sm"
-                                  variant="light"
-                                  color={isPreviewPlaying ? 'red' : 'brand'}
-                                  loading={isPreviewLoading}
-                                  onClick={(event) => {
-                                    event.stopPropagation()
-                                    void handlePreviewAudio(persona)
-                                  }}
-                                  title={
-                                    isPreviewPlaying
-                                      ? 'Pause persona preview audio'
-                                      : 'Play persona preview audio'
-                                  }
-                                >
-                                  {isPreviewPlaying ? (
-                                    <IconPlayerPause size={14} />
-                                  ) : (
-                                    <IconPlayerPlay size={14} />
-                                  )}
-                                </ActionIcon>
-                                <Badge size="xs" variant="light">
-                                  {archetype}
-                                </Badge>
-                                <Badge size="xs" variant="outline" color={rarityColor}>
-                                  {rarity}
-                                </Badge>
-                              </Stack>
-                            </Group>
-
-                            {traits.personality && (
-                              <Text size="xs" c="dimmed" className={classes.personaFlavorClamp}>
-                                {traits.personality}
-                              </Text>
-                            )}
-
-                            <Group gap="xs" className={classes.personaVoice}>
-                              <Badge size="xs" variant="light">
-                                Voice
-                              </Badge>
-                              <Text size="xs" c="dimmed">
-                                {voiceProfile}
-                              </Text>
-                            </Group>
-
-                            {miniMetrics.length > 0 && (
-                              <SimpleGrid
-                                cols={2}
-                                spacing="xs"
-                                className={classes.personaMiniMetrics}
-                              >
-                                {miniMetrics.map((metric) => (
-                                  <Box key={metric.label} className={classes.personaMetric}>
-                                    <Group justify="space-between" align="center" mb={4}>
-                                      <Group gap={6}>
-                                        <ThemeIcon size="xs" variant="light">
-                                          {getMetricIcon(metric.label) ?? <IconStar size={12} />}
-                                        </ThemeIcon>
-                                        <Text size="xs">{metric.label}</Text>
-                                      </Group>
-                                      <Text size="xs" c="dimmed">
-                                        {metric.value}
-                                      </Text>
-                                    </Group>
-                                    <Progress value={metric.value} size="xs" radius="xl" />
-                                  </Box>
-                                ))}
-                              </SimpleGrid>
-                            )}
-
-                            {signatureTraits.length > 0 && (
-                              <Group gap={6} className={classes.personaTraits}>
-                                {signatureTraits.slice(0, 2).map((trait) => (
-                                  <Badge key={trait} size="xs" variant="light" color="gray">
-                                    {trait}
-                                  </Badge>
-                                ))}
-                              </Group>
-                            )}
-                          </Stack>
-                        </Card>
+                        />
                       </motion.div>
                     )
                   })

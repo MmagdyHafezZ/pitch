@@ -92,6 +92,11 @@ const normalizeFaceBlendshapeFrame = (frame: unknown): FaceBlendshape[] => {
  *
  * Replaces calling usePoseLandmarker + useFaceLandmarker separately.
  */
+const IS_DEV = process.env.NODE_ENV === 'development'
+
+// Dev-only detection log throttle: print ~1 per second
+const DEV_LOG_INTERVAL_MS = 1000
+
 export function useCameraDetection({
   videoRef,
   enabled = true,
@@ -106,6 +111,10 @@ export function useCameraDetection({
   const rafIdRef = useRef<number | null>(null)
   const lastPoseMsRef = useRef(0)
   const lastFaceMsRef = useRef(0)
+  const lastDevLogMsRef = useRef(0)
+  const devFrameCountRef = useRef(0)
+  const devPersonPresentRef = useRef(false)
+  const devLastEmotionRef = useRef<string>('—')
 
   // Stable callback refs — updated on every render without recreating runLoop.
   const onPoseRef = useRef(onPoseLandmarks)
@@ -162,14 +171,21 @@ export function useCameraDetection({
         if (poseResult.status === 'fulfilled') {
           poseLandmarkerRef.current = poseResult.value
           setPoseReady(true)
+          if (IS_DEV) console.log('[BodyDetect] ✅ Pose model loaded')
         } else {
           console.error('[useCameraDetection] Pose model failed:', poseResult.reason)
         }
         if (faceResult.status === 'fulfilled') {
           faceLandmarkerRef.current = faceResult.value
           setFaceReady(true)
+          if (IS_DEV) console.log('[BodyDetect] ✅ Face model loaded')
         } else {
           console.error('[useCameraDetection] Face model failed:', faceResult.reason)
+        }
+        if (IS_DEV) {
+          const poseOk = poseResult.status === 'fulfilled'
+          const faceOk = faceResult.status === 'fulfilled'
+          console.log(`[BodyDetect] Models ready — pose:${poseOk} face:${faceOk}`)
         }
       } catch (err) {
         if (!cancelled) console.error('[useCameraDetection] Initialisation error:', err)
@@ -211,8 +227,16 @@ export function useCameraDetection({
           result.landmarks[0] as PoseLandmark[],
           (result.worldLandmarks?.[0] ?? []) as WorldLandmark[]
         )
+        if (IS_DEV) {
+          devPersonPresentRef.current = true
+          devFrameCountRef.current++
+        }
       } else {
         onPoseRef.current?.(null, null)
+        if (IS_DEV) {
+          devPersonPresentRef.current = false
+          devFrameCountRef.current++
+        }
       }
     }
 
@@ -223,9 +247,26 @@ export function useCameraDetection({
       if (result.faceBlendshapes?.length > 0) {
         const normalizedBlendshapes = normalizeFaceBlendshapeFrame(result.faceBlendshapes[0])
         onFaceRef.current?.(normalizedBlendshapes.length > 0 ? normalizedBlendshapes : null)
+        if (IS_DEV) devLastEmotionRef.current = 'detected'
       } else {
         onFaceRef.current?.(null)
+        if (IS_DEV) devLastEmotionRef.current = 'no-face'
       }
+    }
+
+    // Dev-only: print summary ~1/sec
+    if (IS_DEV && nowMs - lastDevLogMsRef.current >= DEV_LOG_INTERVAL_MS) {
+      lastDevLogMsRef.current = nowMs
+      const v = video
+      console.debug(
+        `[BodyDetect] person:${devPersonPresentRef.current ? '✅' : '❌'}  ` +
+          `face:${devLastEmotionRef.current}  ` +
+          `frames:${devFrameCountRef.current}  ` +
+          `video:${v.videoWidth}×${v.videoHeight}  ` +
+          `ready:${v.readyState}  ` +
+          `srcObject:${v.srcObject ? '✅' : '❌'}`
+      )
+      devFrameCountRef.current = 0
     }
   }, [videoRef])
 
