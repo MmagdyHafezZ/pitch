@@ -5,11 +5,13 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { Container, Paper, Text, Loader, Alert, Stack, Button } from '@mantine/core'
 import { IconCheck, IconX } from '@tabler/icons-react'
 import { notifications } from '@mantine/notifications'
+import { api } from '@/lib/client'
+import { useAuthStore } from '@/features/auth'
+import { parseOAuthCallback, storeOAuthTokens } from '@/features/auth/utils/oauth.utils'
 import {
-  parseOAuthCallback,
-  handleOAuthSuccess,
-  handleOAuthError,
-} from '@/features/auth/utils/oauth.utils'
+  clearTeamInviteContext,
+  getTeamInviteContext,
+} from '@/features/teams/utils/team-invite-context'
 
 export default function AuthCallbackPage() {
   return (
@@ -22,16 +24,25 @@ export default function AuthCallbackPage() {
 function AuthCallbackContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const setToken = useAuthStore((state) => state.setToken)
+  const setUser = useAuthStore((state) => state.setUser)
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading')
   const [errorMessage, setErrorMessage] = useState('')
 
   useEffect(() => {
+    const destination = (() => {
+      const next = searchParams.get('next') ?? searchParams.get('redirect') ?? '/studio/home'
+      if (!next.startsWith('/') || next.startsWith('//')) return '/studio/home'
+      return next
+    })()
+
+    let redirectTimer: ReturnType<typeof setTimeout> | null = null
+
     const handleAuthCallback = async () => {
       try {
         const { token, refresh_token, error } = parseOAuthCallback(searchParams)
 
         if (error) {
-          handleOAuthError(error)
           setErrorMessage(decodeURIComponent(error))
           setStatus('error')
           return
@@ -39,17 +50,40 @@ function AuthCallbackContent() {
 
         if (!token) {
           const errorMsg = 'No authentication token received'
-          handleOAuthError(errorMsg)
           setErrorMessage(errorMsg)
           setStatus('error')
           return
         }
 
         // Handle successful OAuth
-        handleOAuthSuccess({
+        setToken(token)
+        storeOAuthTokens({
           access_token: token,
           refresh_token,
         })
+
+        try {
+          const me = await api.auth.me()
+          setUser(me)
+        } catch {
+          // Non-fatal: token is already set and user can still proceed.
+        }
+
+        const inviteContext = getTeamInviteContext()
+        if (inviteContext?.teamId) {
+          try {
+            await api.teams.claimInvite(inviteContext.teamId)
+            clearTeamInviteContext()
+            notifications.show({
+              title: 'Team invitation accepted',
+              message: 'You were added to the invited team.',
+              color: 'teal',
+              icon: <IconCheck size={16} />,
+            })
+          } catch (claimError) {
+            console.error('Failed to claim team invite:', claimError)
+          }
+        }
 
         setStatus('success')
 
@@ -61,20 +95,25 @@ function AuthCallbackContent() {
           icon: <IconCheck size={16} />,
         })
 
-        // Redirect to home after a brief delay
-        setTimeout(() => {
-          router.push('/studio/home')
-        }, 2000)
+        // Redirect after a brief delay
+        redirectTimer = setTimeout(() => {
+          router.replace(destination)
+        }, 1500)
       } catch (error) {
         console.error('Auth callback error:', error)
         const errorMsg = 'An unexpected error occurred during authentication'
-        handleOAuthError(errorMsg)
         setErrorMessage(errorMsg)
         setStatus('error')
       }
     }
 
     handleAuthCallback()
+
+    return () => {
+      if (redirectTimer) {
+        clearTimeout(redirectTimer)
+      }
+    }
   }, [searchParams, router])
 
   const handleRetry = () => {

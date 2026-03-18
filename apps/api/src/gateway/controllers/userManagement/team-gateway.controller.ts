@@ -31,6 +31,8 @@ import type { UserClaims as UserClaimsType } from '@pitch/shared-backend/interfa
 import { normalizeError } from '@pitch/shared-backend/helpers/exceptions';
 import {
   CreateTeamRequestDto,
+  InviteMemberRequestDTO,
+  SendTeamSignupInviteRequestDto,
   UpdateTeamRequestDto,
   AddMemberRequestDTO,
   UpdateMemberRequestDto,
@@ -217,6 +219,32 @@ export class TeamGatewayController {
       );
   }
 
+  @Post(':teamId/invitations')
+  @ApiOperation({ summary: 'Invite a user to a team (pending until accepted)' })
+  @ApiResponse({ status: 201, description: 'Team invitation created' })
+  @ApiResponse({ status: 403, description: 'Not authorized to invite members' })
+  inviteTeamMember(
+    @Param('teamId') teamId: string,
+    @Body() inviteDto: InviteMemberRequestDTO,
+    @UserClaims() userClaims: UserClaimsType,
+  ) {
+    return this.teamService
+      .send(USER_SERVICE_PATTERNS.INVITE_TEAM_MEMBER, {
+        teamId,
+        ...inviteDto,
+        userClaims,
+      })
+      .pipe(
+        timeout(5000),
+        catchError((err: unknown) => {
+          const error = normalizeError(err);
+          const message = error.message ?? 'Failed to invite team member';
+          const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
+          return throwError(() => new HttpException(message, status));
+        }),
+      );
+  }
+
   @Put(':teamId/members/:userId')
   @ApiOperation({ summary: 'Update a member in a team' })
   @ApiResponse({ status: 200, description: 'Team member updated' })
@@ -267,6 +295,80 @@ export class TeamGatewayController {
         catchError((err: unknown) => {
           const error = normalizeError(err);
           const message = error.message ?? 'Failed to remove member from team';
+          const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
+          return throwError(() => new HttpException(message, status));
+        }),
+      );
+  }
+
+  @Post(':teamId/invitations/signup')
+  @ApiOperation({ summary: 'Send signup invitation email for a team' })
+  @ApiResponse({ status: 200, description: 'Signup invitation email sent' })
+  @ApiResponse({ status: 403, description: 'Not authorized to invite users' })
+  sendTeamSignupInvite(
+    @Param('teamId') teamId: string,
+    @Body() dto: SendTeamSignupInviteRequestDto,
+    @UserClaims() userClaims: UserClaimsType,
+  ) {
+    return this.teamService
+      .send(USER_SERVICE_PATTERNS.SEND_TEAM_SIGNUP_INVITE, {
+        teamId,
+        ...dto,
+        userClaims,
+      })
+      .pipe(
+        timeout(5000),
+        catchError((err: unknown) => {
+          const error = normalizeError(err);
+          const message = error.message ?? 'Failed to send signup invite';
+          const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
+          return throwError(() => new HttpException(message, status));
+        }),
+      );
+  }
+
+  @Post(':teamId/invitations/accept')
+  @ApiOperation({ summary: 'Accept a pending team invitation' })
+  @ApiResponse({ status: 200, description: 'Team invitation accepted' })
+  acceptTeamInvite(
+    @Param('teamId') teamId: string,
+    @UserClaims() userClaims: UserClaimsType,
+  ) {
+    return this.teamService
+      .send(USER_SERVICE_PATTERNS.ACCEPT_TEAM_INVITE, {
+        teamId,
+        userClaims,
+      })
+      .pipe(
+        timeout(5000),
+        catchError((err: unknown) => {
+          const error = normalizeError(err);
+          const message = error.message ?? 'Failed to accept team invitation';
+          const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
+          return throwError(() => new HttpException(message, status));
+        }),
+      );
+  }
+
+  @Post(':teamId/invitations/claim')
+  @ApiOperation({
+    summary: 'Claim a pending email signup invite for the authenticated user',
+  })
+  @ApiResponse({ status: 200, description: 'Team signup invite claimed' })
+  claimTeamSignupInvite(
+    @Param('teamId') teamId: string,
+    @UserClaims() userClaims: UserClaimsType,
+  ) {
+    return this.teamService
+      .send(USER_SERVICE_PATTERNS.CLAIM_TEAM_SIGNUP_INVITE, {
+        teamId,
+        userClaims,
+      })
+      .pipe(
+        timeout(5000),
+        catchError((err: unknown) => {
+          const error = normalizeError(err);
+          const message = error.message ?? 'Failed to claim signup invite';
           const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
           return throwError(() => new HttpException(message, status));
         }),

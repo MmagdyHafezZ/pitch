@@ -736,6 +736,66 @@ model AssessmentSummary {
 }
 
 /**
+ * =================== Public Challenges ===================
+ */
+
+enum ChallengePeriod {
+  DAILY
+  WEEKLY
+  MONTHLY
+}
+
+enum ChallengeDifficulty {
+  BEGINNER
+  INTERMEDIATE
+  EXPERT
+  MASTER
+}
+
+enum ChallengeStatus {
+  UPCOMING
+  ACTIVE
+  EXPIRED
+}
+
+model Challenge {
+  id                     String              @id @default(cuid())
+  period                 ChallengePeriod
+  difficulty             ChallengeDifficulty
+  status                 ChallengeStatus     @default(UPCOMING)
+  title                  String
+  description            String
+  topic                  String
+  scenarioPrompt         String              @db.Text
+  evaluatorPersonaPrompt String              @db.Text
+  startsAt               DateTime
+  expiresAt              DateTime
+  createdAt              DateTime            @default(now())
+  updatedAt              DateTime            @updatedAt
+
+  participations ChallengeParticipation[]
+
+  @@index([status, period])
+  @@index([startsAt, expiresAt])
+}
+
+model ChallengeParticipation {
+  id          String     @id @default(cuid())
+  challengeId String
+  challenge   Challenge  @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  userId      String
+  sessionId   String?
+  score       Float?
+  completedAt DateTime?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@unique([challengeId, userId])
+  @@index([userId])
+  @@index([challengeId, score])
+}
+
+/**
  * =================== Reports ===================
  */
 

@@ -4,6 +4,8 @@ import { JwtModule, type JwtSignOptions } from '@nestjs/jwt';
 import { UserGatewayController } from './controllers/userManagement/user-gateway.controller';
 import { AuthGatewayController } from './controllers/userManagement/auth-gateway.controller';
 import { TeamGatewayController } from './controllers/userManagement/team-gateway.controller';
+import { PlanGatewayController } from './controllers/userManagement/plans.controller';
+import { SubscriptionGatewayController } from './controllers/userManagement/subscription.controller';
 import { SalesforceGatewayController } from './controllers/crm/salesforce-gateway.controller';
 import { SessionGatewayController } from './controllers/simulation/session-gateway.controller';
 import { InvitationGatewayController } from './controllers/simulation/invitation-gateway.controller';
@@ -31,6 +33,10 @@ import { APP_GUARD } from '@nestjs/core';
 import { SimulationWsGateway } from './controllers/simulation/simulation-ws.gateway';
 import { SimulationModule } from '@microservices/simulation/simulation.module';
 import { RagController } from '@microservices/simulation/rag/rag.controller';
+import { ChallengesGatewayController } from './controllers/challenges/challenges-gateway.controller';
+import { SupportChatGatewayController } from './controllers/support/support-chat-gateway.controller';
+import { SupportAttachmentGatewayController } from './controllers/support/support-attachment-gateway.controller';
+import { CoachStreamService } from './controllers/support/coach-stream.service';
 
 @Module({
   imports: [
@@ -57,6 +63,8 @@ import { RagController } from '@microservices/simulation/rag/rag.controller';
     UserGatewayController,
     AuthGatewayController,
     TeamGatewayController,
+    PlanGatewayController,
+    SubscriptionGatewayController,
     SalesforceGatewayController,
     TtsGatewayController,
     SessionGatewayController,
@@ -70,11 +78,15 @@ import { RagController } from '@microservices/simulation/rag/rag.controller';
     LtiAdvantageGatewayController,
     LtiManagementGatewayController,
     RagController,
+    ChallengesGatewayController,
+    SupportChatGatewayController,
+    SupportAttachmentGatewayController,
   ],
   providers: [
     { provide: APP_GUARD, useClass: GlobalJwtAuthGuard },
     UserClaimsInterceptor,
     SimulationWsGateway,
+    CoachStreamService,
   ],
 })
 export class GatewayModule {}

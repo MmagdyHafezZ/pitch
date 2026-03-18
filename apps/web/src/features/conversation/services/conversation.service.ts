@@ -9,6 +9,8 @@ import {
   ConversationAudioReadyPayload,
   ConversationAudioChunkPayload,
   ConversationErrorPayload,
+  ConversationHangupRequestedPayload,
+  ConversationToolExecutedPayload,
 } from '../types/conversation.types'
 import type { VisualState } from '../types/visual-state.types'
 
@@ -197,6 +199,30 @@ export class ConversationService {
   offConversationCancel() {
     if (!this.socket) return
     this.socket.off(WsMessageType.CONVERSATION_CANCEL)
+  }
+
+  onConversationHangupRequested(
+    callback: (data: WsEnvelope<ConversationHangupRequestedPayload>) => void
+  ) {
+    if (!this.socket) return
+    this.socket.on(WsMessageType.CONVERSATION_HANGUP_REQUESTED, callback)
+  }
+
+  offConversationHangupRequested() {
+    if (!this.socket) return
+    this.socket.off(WsMessageType.CONVERSATION_HANGUP_REQUESTED)
+  }
+
+  onConversationToolExecuted(
+    callback: (data: WsEnvelope<ConversationToolExecutedPayload>) => void
+  ) {
+    if (!this.socket) return
+    this.socket.on(WsMessageType.CONVERSATION_TOOL_EXECUTED, callback)
+  }
+
+  offConversationToolExecuted() {
+    if (!this.socket) return
+    this.socket.off(WsMessageType.CONVERSATION_TOOL_EXECUTED)
   }
 
   isConnected(): boolean {

@@ -32,6 +32,27 @@ interface UseVisualStateOptions {
 const MOTION_WINDOW = 20 // ~1 s of nose history at 20 fps (nod/shake detection)
 const ATTENTION_WINDOW = 200 // ~10 s of gaze history at 20 fps
 
+const isFaceBlendshape = (value: unknown): value is FaceBlendshape => {
+  if (!value || typeof value !== 'object') return false
+  const record = value as Record<string, unknown>
+  return typeof record.categoryName === 'string' && typeof record.score === 'number'
+}
+
+const normalizeBlendshapes = (input: unknown): FaceBlendshape[] => {
+  if (Array.isArray(input) && input.every(isFaceBlendshape)) {
+    return input
+  }
+
+  if (input && typeof input === 'object') {
+    const categories = (input as { categories?: unknown }).categories
+    if (Array.isArray(categories) && categories.every(isFaceBlendshape)) {
+      return categories
+    }
+  }
+
+  return []
+}
+
 export function useVisualState({
   sessionId,
   videoRef,
@@ -224,7 +245,9 @@ export function useVisualState({
     // Face not detected — don't overwrite the window; let last known emotion
     // persist until the 15-frame window naturally fills with new classifications.
     if (!blendshapes) return
-    const raw = classifyEmotion(blendshapes)
+    const normalizedBlendshapes = normalizeBlendshapes(blendshapes)
+    if (normalizedBlendshapes.length === 0) return
+    const raw = classifyEmotion(normalizedBlendshapes)
     const win = emotionWindowRef.current
     win.push(raw)
     if (win.length > 15) win.shift()
@@ -499,6 +522,11 @@ function majority<T extends string>(arr: T[], fallback: T): T {
  */
 let blendshapeIndexMap: Map<string, number> | null = null
 function bsScore(shapes: FaceBlendshape[], name: string): number {
+  if (!Array.isArray(shapes) || shapes.length === 0) {
+    blendshapeIndexMap = null
+    return 0
+  }
+
   if (!blendshapeIndexMap) {
     blendshapeIndexMap = new Map(shapes.map((s, i) => [s.categoryName, i]))
   }

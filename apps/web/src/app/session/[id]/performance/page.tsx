@@ -14,13 +14,15 @@ import {
   Loader,
   Paper,
   Progress,
+  RingProgress,
   SimpleGrid,
   Stack,
+  Tabs,
   Text,
   ThemeIcon,
   Title,
 } from '@mantine/core'
-import { BarChart, DonutChart, LineChart } from '@mantine/charts'
+import { BarChart } from '@mantine/charts'
 import {
   IconAlertTriangle,
   IconArrowLeft,
@@ -30,8 +32,21 @@ import {
   IconRefresh,
   IconTargetArrow,
   IconTrendingUp,
-  IconTrophy,
 } from '@tabler/icons-react'
+import {
+  Area,
+  AreaChart,
+  Bar,
+  BarChart as RechartsBarChart,
+  CartesianGrid,
+  Cell,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip as RechartsTooltip,
+  XAxis,
+  YAxis,
+} from 'recharts'
 import { api } from '@/lib/client'
 
 type AssessmentSummary = {
@@ -89,9 +104,10 @@ type AssessmentReport = {
   }>
 }
 
+type TurnAnnotation = NonNullable<AssessmentReport['turnAnnotations']>[number]
+type MoveGrade = 'brilliant' | 'good' | 'neutral' | 'miss' | 'inaccuracy' | 'mistake' | 'blunder'
+
 const POLL_INTERVAL_MS = 2500
-const POSITIVE_LABELS = new Set(['PositiveExample', 'ObjectiveMet', 'InsightfulQuestion'])
-const NEGATIVE_LABELS = new Set(['NegativeExample', 'ObjectiveNotMet', 'MissedOpportunity'])
 
 const LABEL_COPY: Record<string, string> = {
   PositiveExample: 'Positive Example',
@@ -113,11 +129,100 @@ const LABEL_COLORS: Record<string, string> = {
   MissedOpportunity: 'pink',
 }
 
+const CHART_COLORS = {
+  cyan: '#22d3ee',
+  blue: '#3b82f6',
+  teal: '#14b8a6',
+  lime: '#84cc16',
+  green: '#22c55e',
+  yellow: '#eab308',
+  red: '#ef4444',
+  orange: '#f59e0b',
+  gray: '#94a3b8',
+  slateGrid: '#334155',
+  slateAxis: '#94a3b8',
+}
+
+const MOVE_GRADE_ORDER: MoveGrade[] = [
+  'brilliant',
+  'good',
+  'neutral',
+  'miss',
+  'inaccuracy',
+  'mistake',
+  'blunder',
+]
+
+const MOVE_GRADE_META: Record<
+  MoveGrade,
+  {
+    label: string
+    notation: string
+    badgeColor: string
+    chartColor: string
+    description: string
+  }
+> = {
+  brilliant: {
+    label: 'Brilliant Move',
+    notation: '!!',
+    badgeColor: 'lime',
+    chartColor: CHART_COLORS.lime,
+    description: 'High-impact response with strong relevance and execution.',
+  },
+  good: {
+    label: 'Good Move',
+    notation: '!',
+    badgeColor: 'teal',
+    chartColor: CHART_COLORS.teal,
+    description: 'Solid response that advances the objective clearly.',
+  },
+  neutral: {
+    label: 'Neutral Move',
+    notation: '=',
+    badgeColor: 'gray',
+    chartColor: CHART_COLORS.gray,
+    description: 'Acceptable move with limited impact on the outcome.',
+  },
+  miss: {
+    label: 'Miss',
+    notation: '?!',
+    badgeColor: 'yellow',
+    chartColor: CHART_COLORS.yellow,
+    description: 'A key opportunity was available but not fully used.',
+  },
+  inaccuracy: {
+    label: 'Inaccuracy',
+    notation: '?!',
+    badgeColor: 'orange',
+    chartColor: CHART_COLORS.orange,
+    description: 'Minor quality loss from vague or partially off-target wording.',
+  },
+  mistake: {
+    label: 'Mistake',
+    notation: '?',
+    badgeColor: 'red',
+    chartColor: CHART_COLORS.red,
+    description: 'Clear quality drop that weakens persuasion or fit.',
+  },
+  blunder: {
+    label: 'Blunder',
+    notation: '??',
+    badgeColor: 'red',
+    chartColor: '#b91c1c',
+    description: 'Severe move that materially hurts objective attainment.',
+  },
+}
+
+const NEEDS_WORK_GRADES = new Set<MoveGrade>(['miss', 'inaccuracy', 'mistake', 'blunder'])
+
 const toGrade = (score: number) => {
-  if (score >= 90) return { letter: 'A', color: 'green' as const }
-  if (score >= 80) return { letter: 'B', color: 'teal' as const }
-  if (score >= 70) return { letter: 'C', color: 'yellow' as const }
-  if (score >= 60) return { letter: 'D', color: 'orange' as const }
+  // Thresholds calibrated so that a majority-positive session scores B/A.
+  // At 9 turns, all-PositiveExample (+2 each) normalises to ~75 % → A.
+  if (score >= 73) return { letter: 'A', color: 'green' as const }
+  if (score >= 60) return { letter: 'B', color: 'teal' as const }
+  if (score >= 47) return { letter: 'C', color: 'yellow' as const }
+  if (score >= 35) return { letter: 'D', color: 'orange' as const }
   return { letter: 'F', color: 'red' as const }
 }
 
@@ -164,6 +269,24 @@ const buildRecommendation = (item: {
   return 'Keep this pattern: concise response with explicit relevance to stakeholder goals.'
 }
 
+const getMoveGrade = (
+  item: Pick<TurnAnnotation, 'label' | 'scoreDelta' | 'reasonSummary'>
+): MoveGrade => {
+  const delta = item.scoreDelta ?? 0
+  const reason = `${item.label} ${item.reasonSummary ?? ''}`.toLowerCase()
+
+  if (item.label === 'MissedOpportunity' || reason.includes('missed opportunity')) return 'miss'
+  if (delta >= 2.2) return 'brilliant'
+  if (delta >= 0.6) return 'good'
+  if (delta <= -2.6) return 'blunder'
+  if (delta <= -1.4) return 'mistake'
+  if (delta < 0) return 'inaccuracy'
+  if (item.label === 'NegativeExample' || item.label === 'ObjectiveNotMet') return 'mistake'
+  if (item.label === 'PositiveExample' || item.label === 'ObjectiveMet') return 'good'
+  if (item.label === 'InsightfulQuestion') return 'brilliant'
+  return 'neutral'
+}
+
 export default function SessionPerformancePage() {
   const router = useRouter()
   const params = useParams()
@@ -177,6 +300,8 @@ export default function SessionPerformancePage() {
   const [reportLoadedForRunId, setReportLoadedForRunId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [hasRequestedLiveRun, setHasRequestedLiveRun] = useState(false)
+  const [recalculating, setRecalculating] = useState(false)
 
   const rawScore = assessment?.summary?.totalScore ?? report?.totalScore ?? assessment?.totalScore
   const score = typeof rawScore === 'number' ? rawScore : null
@@ -207,23 +332,37 @@ export default function SessionPerformancePage() {
 
   const grade = normalizedScore === null ? null : toGrade(normalizedScore)
 
-  const positiveTurns = useMemo(
-    () =>
-      turnAnnotations.filter(
-        (item) => POSITIVE_LABELS.has(item.label) || (item.scoreDelta ?? 0) > 0
-      ).length,
-    [turnAnnotations]
-  )
+  const annotationByTurnId = useMemo(() => {
+    const map = new Map<string, TurnAnnotation>()
+    turnAnnotations.forEach((item) => {
+      map.set(item.turnId, item)
+    })
+    return map
+  }, [turnAnnotations])
 
-  const negativeTurns = useMemo(
-    () =>
-      turnAnnotations.filter(
-        (item) => NEGATIVE_LABELS.has(item.label) || (item.scoreDelta ?? 0) < 0
-      ).length,
-    [turnAnnotations]
-  )
+  const moveGradeCounts = useMemo(() => {
+    const counts: Record<MoveGrade, number> = {
+      brilliant: 0,
+      good: 0,
+      neutral: 0,
+      miss: 0,
+      inaccuracy: 0,
+      mistake: 0,
+      blunder: 0,
+    }
+    turnAnnotations.forEach((item) => {
+      const grade = getMoveGrade(item)
+      counts[grade] += 1
+    })
+    return counts
+  }, [turnAnnotations])
 
-  const neutralTurns = Math.max(0, evaluatedTurnCount - positiveTurns - negativeTurns)
+  const strongTurns = moveGradeCounts.brilliant + moveGradeCounts.good
+  const needsWorkTurns =
+    moveGradeCounts.miss +
+    moveGradeCounts.inaccuracy +
+    moveGradeCounts.mistake +
+    moveGradeCounts.blunder
 
   const avgConfidence = useMemo(() => {
     const samples = turnAnnotations
@@ -239,50 +378,35 @@ export default function SessionPerformancePage() {
     [turnAnnotations]
   )
 
-  const labelCountData = useMemo(() => {
-    const counts = new Map<string, number>()
-    turnAnnotations.forEach((item) => {
-      counts.set(item.label, (counts.get(item.label) ?? 0) + 1)
-    })
-    return Array.from(counts.entries())
-      .sort((a, b) => b[1] - a[1])
-      .map(([label, value]) => ({
-        name: labelTitle(label),
-        value,
-        color: LABEL_COLORS[label] ?? 'blue',
-      }))
-  }, [turnAnnotations])
-
-  const sentimentDonutData = useMemo(
+  const moveGradeSummaryData = useMemo(
     () =>
-      [
-        { name: 'Strong', value: positiveTurns, color: 'teal' },
-        { name: 'Neutral', value: neutralTurns, color: 'gray' },
-        { name: 'Needs work', value: negativeTurns, color: 'red' },
-      ].filter((item) => item.value > 0),
-    [negativeTurns, neutralTurns, positiveTurns]
+      MOVE_GRADE_ORDER.map((grade) => ({
+        name: `${MOVE_GRADE_META[grade].notation} ${MOVE_GRADE_META[grade].label}`,
+        value: moveGradeCounts[grade],
+        color: MOVE_GRADE_META[grade].badgeColor,
+      })).filter((item) => item.value > 0),
+    [moveGradeCounts]
   )
 
-  const breakdownChartData = useMemo(
-    () =>
-      Object.entries(scoreBreakdown).map(([label, value]) => ({
+  // Sum the actual scoreDelta per label type so the chart shows real score
+  // contribution (+14 for 7 PositiveExamples) rather than a raw count (7).
+  const breakdownChartData = useMemo(() => {
+    const impactByLabel = new Map<string, number>()
+    for (const item of turnAnnotations) {
+      const delta = item.scoreDelta ?? 0
+      impactByLabel.set(item.label, (impactByLabel.get(item.label) ?? 0) + delta)
+    }
+    if (impactByLabel.size === 0) {
+      // No turn annotations yet — fall back to showing counts from scoreBreakdown
+      return Object.entries(scoreBreakdown).map(([label, count]) => ({
         label: labelTitle(label),
-        impact: Number(value),
-      })),
-    [scoreBreakdown]
-  )
-
-  const confidenceTrendData = useMemo(() => {
-    let cumulative = 0
-    return turnAnnotations.map((item, index) => {
-      cumulative += item.scoreDelta ?? 0
-      return {
-        turn: `T${index + 1}`,
-        confidence: Math.round((item.confidence ?? 0) * 100),
-        cumulative,
-      }
-    })
-  }, [turnAnnotations])
+        impact: Number(count),
+      }))
+    }
+    return Array.from(impactByLabel.entries())
+      .sort((a, b) => b[1] - a[1])
+      .map(([label, totalImpact]) => ({ label: labelTitle(label), impact: totalImpact }))
+  }, [scoreBreakdown, turnAnnotations])
 
   const highlights = useMemo(() => {
     return [...turnAnnotations]
@@ -298,8 +422,7 @@ export default function SessionPerformancePage() {
   const improvements = useMemo(() => {
     return [...turnAnnotations]
       .filter((item) => {
-        if (NEGATIVE_LABELS.has(item.label)) return true
-        if ((item.scoreDelta ?? 0) < 0) return true
+        if (NEEDS_WORK_GRADES.has(getMoveGrade(item))) return true
         return item.label === 'Neutral' && Boolean(item.reasonSummary || item.evidence || item.text)
       })
       .sort((a, b) => {
@@ -331,11 +454,7 @@ export default function SessionPerformancePage() {
 
   const showAnalyticsLoadingScreen =
     !error &&
-    (loading ||
-      !assessment ||
-      assessment.status === 'queued' ||
-      assessment.status === 'running' ||
-      (assessment.status === 'completed' && reportLoadedForRunId !== assessment.runId))
+    (loading || !assessment || assessment.status === 'queued' || assessment.status === 'running')
 
   const loadingTitle = useMemo(() => {
     if (!assessment || loading) return 'Preparing your analytics'
@@ -361,6 +480,45 @@ export default function SessionPerformancePage() {
     return 'Loading assessment data.'
   }, [assessment, loading])
 
+  const signalMixData = useMemo(
+    () =>
+      MOVE_GRADE_ORDER.map((grade) => ({
+        name: `${MOVE_GRADE_META[grade].notation} ${MOVE_GRADE_META[grade].label}`,
+        value: moveGradeCounts[grade],
+        color: MOVE_GRADE_META[grade].chartColor,
+      })).filter((item) => item.value > 0),
+    [moveGradeCounts]
+  )
+
+  // Per-turn data for the "Score per turn" bar chart.
+  const turnScoreData = useMemo(
+    () =>
+      turnAnnotations.map((item, index) => {
+        const moveGrade = getMoveGrade(item)
+        return {
+          turn: `T${index + 1}`,
+          delta: item.scoreDelta ?? 0,
+          label: labelTitle(item.label),
+          moveLabel: `${MOVE_GRADE_META[moveGrade].notation} ${MOVE_GRADE_META[moveGrade].label}`,
+          fill: MOVE_GRADE_META[moveGrade].chartColor,
+        }
+      }),
+    [turnAnnotations]
+  )
+
+  const momentumData = useMemo(() => {
+    let cumulative = 0
+    return turnAnnotations.map((item, index) => {
+      cumulative += item.scoreDelta ?? 0
+      return {
+        turn: `T${index + 1}`,
+        confidence: Math.round((item.confidence ?? 0) * 100),
+        cumulative,
+        delta: item.scoreDelta ?? 0,
+      }
+    })
+  }, [turnAnnotations])
+
   const loadReport = useCallback(async (runId: string) => {
     try {
       const reportResponse = await api.assessments.getReport(runId)
@@ -371,6 +529,38 @@ export default function SessionPerformancePage() {
       setReportLoadedForRunId(runId)
     }
   }, [])
+
+  const handleRecalculate = useCallback(async () => {
+    setRecalculating(true)
+    setLoading(true)
+    setReport(null)
+    setReportLoadedForRunId(null)
+    setAssessment(null)
+    setError(null)
+    try {
+      const run = await api.assessments.run({
+        sessionId,
+        mode: 'final',
+        forceRecalculate: true,
+      })
+      if (run?.runId) {
+        const newRunId = run.runId as string
+        setActiveRunId(newRunId)
+        setHasRequestedLiveRun(false)
+        // Persist the new runId in the URL so a page refresh lands on the same run
+        window.history.replaceState(
+          null,
+          '',
+          `/session/${sessionId}/performance?runId=${encodeURIComponent(newRunId)}`
+        )
+      }
+    } catch {
+      setError('Failed to start a new assessment run.')
+      setLoading(false)
+    } finally {
+      setRecalculating(false)
+    }
+  }, [sessionId])
 
   const pollAssessment = useCallback(async () => {
     try {
@@ -399,13 +589,38 @@ export default function SessionPerformancePage() {
 
       setLoading(false)
       const status = result?.status
-      if (status && ['completed', 'failed', 'cancelled'].includes(status)) {
+      if (status === 'completed') {
+        const mode = (result?.mode ?? '').toLowerCase()
+        if (!runIdFromQuery && mode === 'live') {
+          setActiveRunId(null)
+          return false
+        }
+        return true
+      }
+      if (status && ['failed', 'cancelled'].includes(status)) {
+        if (!runIdFromQuery && activeRunId) {
+          setActiveRunId(null)
+          return false
+        }
         return true
       }
     } catch (err: any) {
       const status = err?.response?.status
       if (status === 404) {
-        // Keep polling without synthetic placeholder data.
+        if (!activeRunId && !hasRequestedLiveRun) {
+          try {
+            const run = await api.assessments.run({
+              sessionId,
+              mode: 'live',
+            })
+            if (run?.runId) {
+              setActiveRunId(run.runId as string)
+              setHasRequestedLiveRun(true)
+            }
+          } catch {
+            // Keep polling for eventual backend-generated runs.
+          }
+        }
         setAssessment((prev) => prev ?? null)
         setLoading(true)
       } else {
@@ -416,34 +631,20 @@ export default function SessionPerformancePage() {
     }
 
     return false
-  }, [activeRunId, loadReport, reportLoadedForRunId, sessionId])
+  }, [
+    activeRunId,
+    hasRequestedLiveRun,
+    loadReport,
+    reportLoadedForRunId,
+    runIdFromQuery,
+    sessionId,
+  ])
 
   useEffect(() => {
     if (runIdFromQuery) {
       setActiveRunId(runIdFromQuery)
-      return
     }
-
-    let cancelled = false
-    const requestFinalRun = async () => {
-      try {
-        const run = await api.assessments.run({
-          sessionId,
-          mode: 'final',
-        })
-        if (!cancelled && run?.runId) {
-          setActiveRunId(run.runId as string)
-        }
-      } catch {
-        // Fallback to latest-completed polling if final run request fails.
-      }
-    }
-
-    void requestFinalRun()
-    return () => {
-      cancelled = true
-    }
-  }, [runIdFromQuery, sessionId])
+  }, [runIdFromQuery])
 
   useEffect(() => {
     let active = true
@@ -474,7 +675,7 @@ export default function SessionPerformancePage() {
           'radial-gradient(circle at 0% 0%, rgba(56, 189, 248, 0.14) 0, transparent 36%), radial-gradient(circle at 100% 20%, rgba(16, 185, 129, 0.12) 0, transparent 30%), var(--pitch-app-bg)',
       }}
     >
-      <Stack gap="lg">
+      <Stack gap="lg" w="100%" maw={1200} mx="auto">
         <Group justify="space-between" align="center">
           <Group>
             <Button
@@ -497,14 +698,10 @@ export default function SessionPerformancePage() {
             <Button
               variant="light"
               leftSection={<IconRefresh size={16} />}
-              onClick={() => {
-                setLoading(true)
-                setReport(null)
-                setReportLoadedForRunId(null)
-                void pollAssessment()
-              }}
+              loading={recalculating}
+              onClick={() => void handleRecalculate()}
             >
-              Refresh
+              Recalculate
             </Button>
           </Group>
         </Group>
@@ -532,6 +729,11 @@ export default function SessionPerformancePage() {
               <Badge color={assessment?.status === 'completed' ? 'green' : 'blue'}>
                 {statusLabel}
               </Badge>
+              {assessment?.mode && (
+                <Badge color={assessment.mode === 'live' ? 'cyan' : 'violet'} variant="light">
+                  {assessment.mode === 'live' ? 'Live assessment' : 'Final assessment'}
+                </Badge>
+              )}
               {assessment?.progress?.percent !== undefined && (
                 <Group gap="xs">
                   <Text size="sm" style={{ opacity: 0.85 }}>
@@ -607,115 +809,106 @@ export default function SessionPerformancePage() {
 
         {!showAnalyticsLoadingScreen && assessment?.status === 'completed' && (
           <Stack gap="lg">
-            <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} spacing="md">
-              <Card radius="lg" p="lg" withBorder>
-                <Group justify="space-between" mb={4}>
-                  <Text c="dimmed" size="sm">
-                    Total score
-                  </Text>
-                  <ThemeIcon color="blue" variant="light" radius="xl">
-                    <IconTrophy size={16} />
-                  </ThemeIcon>
-                </Group>
-                <Text fw={800} size="2rem" style={{ lineHeight: 1 }}>
-                  {score ?? '—'}
-                </Text>
-                <Text size="xs" c="dimmed" mt={6}>
-                  Score delta across {evaluatedTurnCount} evaluated turns
-                </Text>
-              </Card>
-
-              <Card radius="lg" p="lg" withBorder>
-                <Group justify="space-between" mb={4}>
-                  <Text c="dimmed" size="sm">
-                    Performance grade
-                  </Text>
-                  <ThemeIcon color={grade?.color ?? 'gray'} variant="light" radius="xl">
-                    <IconTargetArrow size={16} />
-                  </ThemeIcon>
-                </Group>
-                <Group gap="xs" align="flex-end">
-                  <Text fw={800} size="2rem" style={{ lineHeight: 1 }}>
-                    {grade?.letter ?? '—'}
-                  </Text>
-                  <Text c="dimmed" size="sm" mb={2}>
-                    {normalizedScore !== null ? `${Math.round(normalizedScore)} / 100` : 'No data'}
-                  </Text>
-                </Group>
-                <Progress value={normalizedScore ?? 0} color={grade?.color ?? 'gray'} mt="sm" />
-              </Card>
-
-              <Card radius="lg" p="lg" withBorder>
-                <Group justify="space-between" mb={4}>
-                  <Text c="dimmed" size="sm">
-                    Average confidence
-                  </Text>
-                  <ThemeIcon color="cyan" variant="light" radius="xl">
-                    <IconBrain size={16} />
-                  </ThemeIcon>
-                </Group>
-                <Text fw={800} size="2rem" style={{ lineHeight: 1 }}>
-                  {avgConfidence !== null ? `${avgConfidence}%` : '—'}
-                </Text>
-                <Text size="xs" c="dimmed" mt={6}>
-                  Mean judge confidence across labeled turns
-                </Text>
-              </Card>
-
-              <Card radius="lg" p="lg" withBorder>
-                <Group justify="space-between" mb={4}>
-                  <Text c="dimmed" size="sm">
-                    Strong turn ratio
-                  </Text>
-                  <ThemeIcon color="teal" variant="light" radius="xl">
-                    <IconTrendingUp size={16} />
-                  </ThemeIcon>
-                </Group>
-                <Text fw={800} size="2rem" style={{ lineHeight: 1 }}>
-                  {percent(positiveTurns, evaluatedTurnCount)}%
-                </Text>
-                <Text size="xs" c="dimmed" mt={6}>
-                  {positiveTurns} positive signals vs {negativeTurns} negative
-                </Text>
-              </Card>
-            </SimpleGrid>
-
             <Grid gutter="md">
-              <Grid.Col span={{ base: 12, md: 4 }}>
-                <Card radius="lg" p="lg" withBorder h="100%">
-                  <Group justify="space-between" mb="sm">
-                    <Text fw={700}>Turn quality mix</Text>
-                    <Badge color="gray" variant="light">
-                      {evaluatedTurnCount} turns
-                    </Badge>
-                  </Group>
-                  {sentimentDonutData.length > 0 ? (
-                    <DonutChart
-                      data={sentimentDonutData}
-                      chartLabel={`${percent(positiveTurns, evaluatedTurnCount)}% strong`}
-                      thickness={24}
-                      size={220}
-                      h={260}
-                    />
-                  ) : (
-                    <Text size="sm" c="dimmed">
-                      Turn-level report is not available yet.
-                    </Text>
-                  )}
-                  <Divider my="sm" />
-                  <Stack gap={6}>
-                    {labelCountData.slice(0, 5).map((item) => (
-                      <Group key={item.name} justify="space-between">
-                        <Text size="sm">{item.name}</Text>
-                        <Badge color={item.color} variant="light">
-                          {item.value}
+              <Grid.Col span={{ base: 12, md: 8 }}>
+                <Card
+                  radius="lg"
+                  p="lg"
+                  withBorder
+                  style={{
+                    background:
+                      'linear-gradient(120deg, rgba(17,24,39,0.95) 0%, rgba(30,41,59,0.92) 45%, rgba(8,47,73,0.9) 100%)',
+                  }}
+                >
+                  <Group justify="space-between" align="flex-start" wrap="nowrap">
+                    <Stack gap={4}>
+                      <Text c="dimmed" size="sm">
+                        Overall performance score
+                      </Text>
+                      <Group gap="xs" align="flex-end">
+                        <Text fw={900} size="3rem" c="white" style={{ lineHeight: 1 }}>
+                          {score ?? '—'}
+                        </Text>
+                        <Badge color={grade?.color ?? 'gray'} variant="light" size="lg">
+                          Grade {grade?.letter ?? '—'}
                         </Badge>
                       </Group>
-                    ))}
-                  </Stack>
+                      <Text size="sm" c="gray.3">
+                        {evaluatedTurnCount} evaluated turns, {strongTurns} strong (
+                        {moveGradeCounts.brilliant} brilliant), {needsWorkTurns} needs work
+                      </Text>
+                    </Stack>
+                    <RingProgress
+                      size={130}
+                      thickness={14}
+                      roundCaps
+                      sections={[
+                        {
+                          value: normalizedScore ?? 0,
+                          color:
+                            grade?.color === 'green'
+                              ? 'green'
+                              : grade?.color === 'teal'
+                                ? 'teal'
+                                : grade?.color === 'yellow'
+                                  ? 'yellow'
+                                  : grade?.color === 'orange'
+                                    ? 'orange'
+                                    : 'red',
+                        },
+                      ]}
+                      label={
+                        <Stack gap={0} align="center">
+                          <Text size="lg" fw={700} c="white">
+                            {normalizedScore !== null ? `${Math.round(normalizedScore)}%` : '—'}
+                          </Text>
+                          <Text size="xs" c="dimmed">
+                            normalized
+                          </Text>
+                        </Stack>
+                      }
+                    />
+                  </Group>
                 </Card>
               </Grid.Col>
+              <Grid.Col span={{ base: 12, md: 4 }}>
+                <SimpleGrid cols={{ base: 2, md: 1 }} spacing="md">
+                  <Card radius="lg" p="md" withBorder>
+                    <Group justify="space-between" mb={4}>
+                      <Text c="dimmed" size="xs" tt="uppercase" fw={700}>
+                        Avg confidence
+                      </Text>
+                      <ThemeIcon color="cyan" variant="light" radius="xl" size="sm">
+                        <IconBrain size={14} />
+                      </ThemeIcon>
+                    </Group>
+                    <Text fw={800} size="xl">
+                      {avgConfidence !== null ? `${avgConfidence}%` : '—'}
+                    </Text>
+                  </Card>
+                  <Card radius="lg" p="md" withBorder>
+                    <Group justify="space-between" mb={4}>
+                      <Text c="dimmed" size="xs" tt="uppercase" fw={700}>
+                        Net momentum
+                      </Text>
+                      <ThemeIcon
+                        color={totalDelta >= 0 ? 'teal' : 'red'}
+                        variant="light"
+                        radius="xl"
+                        size="sm"
+                      >
+                        <IconTrendingUp size={14} />
+                      </ThemeIcon>
+                    </Group>
+                    <Text fw={800} size="xl">
+                      {formatSigned(totalDelta)}
+                    </Text>
+                  </Card>
+                </SimpleGrid>
+              </Grid.Col>
+            </Grid>
 
+            <Grid gutter="md">
               <Grid.Col span={{ base: 12, md: 8 }}>
                 <Card radius="lg" p="lg" withBorder h="100%">
                   <Group justify="space-between" mb="sm">
@@ -743,125 +936,355 @@ export default function SessionPerformancePage() {
                 </Card>
               </Grid.Col>
 
-              <Grid.Col span={12}>
-                <Card radius="lg" p="lg" withBorder>
+              <Grid.Col span={{ base: 12, md: 4 }}>
+                <Card radius="lg" p="lg" withBorder h="100%">
                   <Group justify="space-between" mb="sm">
-                    <Text fw={700}>Conversation confidence trend</Text>
-                    <Badge color="cyan" variant="light">
-                      Turn-by-turn quality signal
+                    <Text fw={700}>Move grades</Text>
+                    <Badge color="gray" variant="light">
+                      {evaluatedTurnCount} turns
                     </Badge>
                   </Group>
-                  {confidenceTrendData.length > 0 ? (
-                    <LineChart
-                      h={260}
-                      data={confidenceTrendData}
-                      dataKey="turn"
-                      series={[
-                        { name: 'confidence', color: 'cyan' },
-                        { name: 'cumulative', color: 'grape' },
-                      ]}
-                      valueFormatter={(value) => Number(value).toFixed(0)}
-                      withDots={false}
-                      tickLine="none"
-                      gridAxis="y"
-                    />
+                  {signalMixData.length > 0 ? (
+                    <Box style={{ width: '100%', height: 220 }}>
+                      <ResponsiveContainer>
+                        <PieChart>
+                          <Pie
+                            data={signalMixData}
+                            dataKey="value"
+                            nameKey="name"
+                            innerRadius={48}
+                            outerRadius={80}
+                            paddingAngle={4}
+                          >
+                            {signalMixData.map((entry) => (
+                              <Cell key={entry.name} fill={entry.color} />
+                            ))}
+                          </Pie>
+                          <RechartsTooltip
+                            formatter={(value: number) => [`${value} turns`, 'Count']}
+                            contentStyle={{
+                              borderRadius: 10,
+                              border: `1px solid ${CHART_COLORS.slateGrid}`,
+                              backgroundColor: '#0f172a',
+                            }}
+                            labelStyle={{ color: '#e2e8f0' }}
+                          />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </Box>
                   ) : (
                     <Text size="sm" c="dimmed">
-                      Report details are still processing. Refresh in a moment.
+                      Turn-level signal mix is not available yet.
+                    </Text>
+                  )}
+                  <Divider my="sm" />
+                  <Stack gap={8}>
+                    {moveGradeSummaryData.map((item) => (
+                      <Group key={item.name} justify="space-between">
+                        <Text size="sm">{item.name}</Text>
+                        <Badge color={item.color} variant="light">
+                          {item.value}
+                        </Badge>
+                      </Group>
+                    ))}
+                  </Stack>
+                </Card>
+              </Grid.Col>
+            </Grid>
+
+            <Grid gutter="md">
+              <Grid.Col span={{ base: 12, md: 6 }}>
+                <Card radius="lg" p="lg" withBorder>
+                  <Group justify="space-between" mb="sm">
+                    <Text fw={700}>Score per turn</Text>
+                    <ThemeIcon color="blue" variant="light" radius="xl">
+                      <IconTargetArrow size={16} />
+                    </ThemeIcon>
+                  </Group>
+                  {turnScoreData.length > 0 ? (
+                    <Box style={{ width: '100%', height: 280 }}>
+                      <ResponsiveContainer>
+                        <RechartsBarChart data={turnScoreData} barCategoryGap="28%">
+                          <CartesianGrid strokeDasharray="3 3" stroke={CHART_COLORS.slateGrid} />
+                          <XAxis
+                            dataKey="turn"
+                            tick={{ fill: CHART_COLORS.slateAxis, fontSize: 12 }}
+                          />
+                          <YAxis tick={{ fill: CHART_COLORS.slateAxis, fontSize: 12 }} />
+                          <RechartsTooltip
+                            formatter={(value: number, _name, item) => [
+                              `${formatSigned(value)} pts`,
+                              (item?.payload as { moveLabel?: string; label?: string })
+                                ?.moveLabel ??
+                                (item?.payload as { label?: string })?.label ??
+                                '',
+                            ]}
+                            contentStyle={{
+                              borderRadius: 10,
+                              border: `1px solid ${CHART_COLORS.slateGrid}`,
+                              backgroundColor: '#0f172a',
+                            }}
+                            labelStyle={{ color: '#e2e8f0' }}
+                          />
+                          <Bar dataKey="delta" radius={[4, 4, 0, 0]}>
+                            {turnScoreData.map((entry, index) => (
+                              <Cell key={`cell-${index}`} fill={entry.fill} />
+                            ))}
+                          </Bar>
+                        </RechartsBarChart>
+                      </ResponsiveContainer>
+                    </Box>
+                  ) : (
+                    <Text size="sm" c="dimmed">
+                      Turn scores appear once annotations are available.
+                    </Text>
+                  )}
+                </Card>
+              </Grid.Col>
+              <Grid.Col span={{ base: 12, md: 6 }}>
+                <Card radius="lg" p="lg" withBorder>
+                  <Group justify="space-between" mb="sm">
+                    <Text fw={700}>Turn momentum</Text>
+                    <ThemeIcon color="teal" variant="light" radius="xl">
+                      <IconTrendingUp size={16} />
+                    </ThemeIcon>
+                  </Group>
+                  {momentumData.length > 0 ? (
+                    <Box style={{ width: '100%', height: 280 }}>
+                      <ResponsiveContainer>
+                        <AreaChart data={momentumData}>
+                          <defs>
+                            <linearGradient id="confidenceGradient" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor={CHART_COLORS.cyan} stopOpacity={0.45} />
+                              <stop offset="95%" stopColor={CHART_COLORS.cyan} stopOpacity={0.05} />
+                            </linearGradient>
+                          </defs>
+                          <CartesianGrid strokeDasharray="3 3" stroke={CHART_COLORS.slateGrid} />
+                          <XAxis
+                            dataKey="turn"
+                            tick={{ fill: CHART_COLORS.slateAxis, fontSize: 12 }}
+                          />
+                          <YAxis tick={{ fill: CHART_COLORS.slateAxis, fontSize: 12 }} />
+                          <RechartsTooltip
+                            contentStyle={{
+                              borderRadius: 10,
+                              border: `1px solid ${CHART_COLORS.slateGrid}`,
+                              backgroundColor: '#0f172a',
+                            }}
+                            labelStyle={{ color: '#e2e8f0' }}
+                          />
+                          <Area
+                            type="monotone"
+                            dataKey="confidence"
+                            stroke={CHART_COLORS.cyan}
+                            fill="url(#confidenceGradient)"
+                            strokeWidth={2}
+                            name="Confidence %"
+                          />
+                          <Area
+                            type="monotone"
+                            dataKey="cumulative"
+                            stroke={CHART_COLORS.teal}
+                            fillOpacity={0}
+                            strokeWidth={2}
+                            name="Cumulative score"
+                          />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    </Box>
+                  ) : (
+                    <Text size="sm" c="dimmed">
+                      Momentum analytics appear once turn-level annotations are available.
                     </Text>
                   )}
                 </Card>
               </Grid.Col>
             </Grid>
 
-            <SimpleGrid cols={{ base: 1, lg: 2 }} spacing="md">
-              <Card radius="lg" p="lg" withBorder>
-                <Group justify="space-between" mb="sm">
-                  <Text fw={700}>Top strengths</Text>
-                  <ThemeIcon color="teal" variant="light" radius="xl">
-                    <IconCircleCheck size={16} />
-                  </ThemeIcon>
-                </Group>
-                {highlights.length > 0 ? (
-                  <Stack gap="sm">
-                    {highlights.map((item, index) => (
-                      <Paper key={`strength-${item.turnId}-${index}`} radius="md" withBorder p="sm">
-                        <Group justify="space-between" mb={6}>
-                          <Badge color={LABEL_COLORS[item.label] ?? 'teal'} variant="light">
-                            {labelTitle(item.label)}
-                          </Badge>
-                          <Text size="xs" c="dimmed">
-                            {(item.scoreDelta ?? 0) >= 0 ? '+' : ''}
-                            {item.scoreDelta ?? 0}
-                            {typeof item.confidence === 'number'
-                              ? ` • ${Math.round(item.confidence * 100)}%`
-                              : ''}
-                          </Text>
-                        </Group>
-                        {item.reasonSummary && (
-                          <Text size="sm" mb={4}>
-                            {item.reasonSummary}
-                          </Text>
-                        )}
-                        {(item.evidence || item.text) && (
-                          <Text size="xs" c="dimmed">
-                            {shorten(item.evidence || item.text)}
-                          </Text>
-                        )}
-                      </Paper>
-                    ))}
-                  </Stack>
-                ) : (
-                  <Text size="sm" c="dimmed">
-                    Strength highlights will appear when detailed labels are available.
-                  </Text>
-                )}
-              </Card>
+            <Tabs defaultValue="conversation" variant="pills" radius="md">
+              <Tabs.List>
+                <Tabs.Tab value="conversation" leftSection={<IconHistory size={14} />}>
+                  Conversation
+                </Tabs.Tab>
+                <Tabs.Tab value="strengths" leftSection={<IconCircleCheck size={14} />}>
+                  Strengths
+                </Tabs.Tab>
+                <Tabs.Tab value="plan" leftSection={<IconTargetArrow size={14} />}>
+                  Improvement Plan
+                </Tabs.Tab>
+              </Tabs.List>
 
-              <Card radius="lg" p="lg" withBorder>
-                <Group justify="space-between" mb="sm">
-                  <Text fw={700}>Improvement plan</Text>
-                  <ThemeIcon color="orange" variant="light" radius="xl">
-                    <IconTargetArrow size={16} />
-                  </ThemeIcon>
-                </Group>
-                {improvements.length > 0 ? (
-                  <Stack gap="sm">
-                    {improvements.map((item, index) => (
-                      <Paper key={`improve-${item.turnId}-${index}`} radius="md" withBorder p="sm">
-                        <Group justify="space-between" mb={6}>
-                          <Badge
-                            color={(item.scoreDelta ?? 0) < 0 ? 'red' : 'orange'}
-                            variant="light"
+              <Tabs.Panel value="strengths" pt="md">
+                <Card radius="lg" p="lg" withBorder>
+                  {highlights.length > 0 ? (
+                    <Stack gap="sm">
+                      {highlights.map((item, index) => {
+                        const moveGrade = getMoveGrade(item)
+                        const moveMeta = MOVE_GRADE_META[moveGrade]
+                        return (
+                          <Paper
+                            key={`strength-${item.turnId}-${index}`}
+                            radius="md"
+                            withBorder
+                            p="sm"
                           >
-                            {labelTitle(item.label)}
-                          </Badge>
-                          <Text size="xs" c="dimmed">
-                            {(item.scoreDelta ?? 0) >= 0 ? '+' : ''}
-                            {item.scoreDelta ?? 0}
-                          </Text>
-                        </Group>
-                        {item.reasonSummary && (
-                          <Text size="sm" mb={4}>
-                            {item.reasonSummary}
-                          </Text>
-                        )}
-                        <Text size="sm" fw={600}>
-                          Try this:
-                        </Text>
-                        <Text size="sm" c="dimmed">
-                          {buildRecommendation(item)}
-                        </Text>
-                      </Paper>
-                    ))}
-                  </Stack>
-                ) : (
-                  <Text size="sm" c="dimmed">
-                    No major improvement gaps identified in this run.
-                  </Text>
-                )}
-              </Card>
-            </SimpleGrid>
+                            <Group justify="space-between" mb={6}>
+                              <Group gap="xs">
+                                <Badge color={moveMeta.badgeColor} variant="light">
+                                  {moveMeta.notation} {moveMeta.label}
+                                </Badge>
+                                <Badge color={LABEL_COLORS[item.label] ?? 'gray'} variant="outline">
+                                  {labelTitle(item.label)}
+                                </Badge>
+                              </Group>
+                              <Text size="xs" c="dimmed">
+                                {(item.scoreDelta ?? 0) >= 0 ? '+' : ''}
+                                {item.scoreDelta ?? 0}
+                                {typeof item.confidence === 'number'
+                                  ? ` • ${Math.round(item.confidence * 100)}%`
+                                  : ''}
+                              </Text>
+                            </Group>
+                            {item.reasonSummary && (
+                              <Text size="sm" mb={4}>
+                                {item.reasonSummary}
+                              </Text>
+                            )}
+                            {(item.evidence || item.text) && (
+                              <Text size="xs" c="dimmed">
+                                {shorten(item.evidence || item.text)}
+                              </Text>
+                            )}
+                          </Paper>
+                        )
+                      })}
+                    </Stack>
+                  ) : (
+                    <Text size="sm" c="dimmed">
+                      Strength highlights will appear when detailed labels are available.
+                    </Text>
+                  )}
+                </Card>
+              </Tabs.Panel>
+
+              <Tabs.Panel value="plan" pt="md">
+                <Card radius="lg" p="lg" withBorder>
+                  {improvements.length > 0 ? (
+                    <Stack gap="sm">
+                      {improvements.map((item, index) => {
+                        const moveGrade = getMoveGrade(item)
+                        const moveMeta = MOVE_GRADE_META[moveGrade]
+                        return (
+                          <Paper
+                            key={`improve-${item.turnId}-${index}`}
+                            radius="md"
+                            withBorder
+                            p="sm"
+                          >
+                            <Group justify="space-between" mb={6}>
+                              <Group gap="xs">
+                                <Badge color={moveMeta.badgeColor} variant="light">
+                                  {moveMeta.notation} {moveMeta.label}
+                                </Badge>
+                                <Badge color={LABEL_COLORS[item.label] ?? 'gray'} variant="outline">
+                                  {labelTitle(item.label)}
+                                </Badge>
+                              </Group>
+                              <Text size="xs" c="dimmed">
+                                {(item.scoreDelta ?? 0) >= 0 ? '+' : ''}
+                                {item.scoreDelta ?? 0}
+                              </Text>
+                            </Group>
+                            {item.reasonSummary && (
+                              <Text size="sm" mb={4}>
+                                {item.reasonSummary}
+                              </Text>
+                            )}
+                            <Text size="sm" fw={600}>
+                              Try this:
+                            </Text>
+                            <Text size="sm" c="dimmed">
+                              {buildRecommendation(item)}
+                            </Text>
+                          </Paper>
+                        )
+                      })}
+                    </Stack>
+                  ) : (
+                    <Text size="sm" c="dimmed">
+                      No major improvement gaps identified in this run.
+                    </Text>
+                  )}
+                </Card>
+              </Tabs.Panel>
+
+              <Tabs.Panel value="conversation" pt="md">
+                <Card radius="lg" p="lg" withBorder>
+                  <Group justify="space-between" mb="sm">
+                    <Text fw={700}>Conversation history</Text>
+                    <Badge color="gray" variant="light">
+                      {conversationHistory.length} turns
+                    </Badge>
+                  </Group>
+                  {conversationHistory.length > 0 ? (
+                    <Stack gap="sm">
+                      {conversationHistory.map((turn, index) => {
+                        const isUser = turn.role === 'user'
+                        const annotation = annotationByTurnId.get(turn.turnId)
+                        const moveGrade = annotation ? getMoveGrade(annotation) : null
+                        const moveMeta = moveGrade ? MOVE_GRADE_META[moveGrade] : null
+                        const roleLabel = isUser
+                          ? 'You'
+                          : turn.role === 'assistant'
+                            ? 'AI'
+                            : turn.role || 'Turn'
+                        return (
+                          <Paper key={`${turn.turnId}-${index}`} radius="md" withBorder p="sm">
+                            <Group justify="space-between" mb={6}>
+                              <Group gap="xs">
+                                <Badge color={isUser ? 'blue' : 'teal'} variant="light">
+                                  {roleLabel}
+                                </Badge>
+                                {isUser && moveMeta && (
+                                  <Badge color={moveMeta.badgeColor} variant="light">
+                                    {moveMeta.notation} {moveMeta.label}
+                                  </Badge>
+                                )}
+                                {isUser && !moveMeta && (
+                                  <Badge color="gray" variant="outline">
+                                    Move Pending
+                                  </Badge>
+                                )}
+                              </Group>
+                              <Text size="xs" c="dimmed">
+                                {turn.createdAt
+                                  ? new Date(turn.createdAt).toLocaleTimeString()
+                                  : `Turn ${index + 1}`}
+                              </Text>
+                            </Group>
+                            {isUser && moveMeta && (
+                              <Text size="xs" mb={6} c="dimmed">
+                                {moveMeta.description}
+                                {annotation?.reasonSummary
+                                  ? ` • ${shorten(annotation.reasonSummary, 120)}`
+                                  : ''}
+                              </Text>
+                            )}
+                            <Text size="sm" c="dimmed">
+                              {turn.text?.trim() ? turn.text : 'No text captured for this turn.'}
+                            </Text>
+                          </Paper>
+                        )
+                      })}
+                    </Stack>
+                  ) : (
+                    <Text size="sm" c="dimmed">
+                      Full turn-by-turn conversation history is not available for this run yet.
+                    </Text>
+                  )}
+                </Card>
+              </Tabs.Panel>
+            </Tabs>
 
             <Card radius="lg" p="lg" withBorder>
               <Group justify="space-between" mb="sm">
@@ -892,48 +1315,6 @@ export default function SessionPerformancePage() {
                     </Text>
                   ))}
                 </Stack>
-              )}
-            </Card>
-
-            <Card radius="lg" p="lg" withBorder>
-              <Group justify="space-between" mb="sm">
-                <Text fw={700}>Conversation history</Text>
-                <Badge color="gray" variant="light">
-                  {conversationHistory.length} turns
-                </Badge>
-              </Group>
-              {conversationHistory.length > 0 ? (
-                <Stack gap="sm">
-                  {conversationHistory.map((turn, index) => {
-                    const isUser = turn.role === 'user'
-                    const roleLabel = isUser
-                      ? 'You'
-                      : turn.role === 'assistant'
-                        ? 'AI'
-                        : turn.role || 'Turn'
-                    return (
-                      <Paper key={`${turn.turnId}-${index}`} radius="md" withBorder p="sm">
-                        <Group justify="space-between" mb={6}>
-                          <Badge color={isUser ? 'blue' : 'teal'} variant="light">
-                            {roleLabel}
-                          </Badge>
-                          <Text size="xs" c="dimmed">
-                            {turn.createdAt
-                              ? new Date(turn.createdAt).toLocaleTimeString()
-                              : `Turn ${index + 1}`}
-                          </Text>
-                        </Group>
-                        <Text size="sm" c="dimmed">
-                          {turn.text?.trim() ? turn.text : 'No text captured for this turn.'}
-                        </Text>
-                      </Paper>
-                    )
-                  })}
-                </Stack>
-              ) : (
-                <Text size="sm" c="dimmed">
-                  Full turn-by-turn conversation history is not available for this run yet.
-                </Text>
               )}
             </Card>
 

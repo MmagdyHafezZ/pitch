@@ -15,7 +15,12 @@ import { Prisma } from '@prisma/simulation-client';
 import type { TtsResult } from '../tts/providers/tts.provider';
 import { Observable, Subject } from 'rxjs';
 import { StreamEvent, TextStreamChunk } from '../dto/text-stream.dto';
-import { buildConversationSystemPrompt } from '../prompts/conversation.prompt';
+import {
+  buildConversationFallbackResponse,
+  buildConversationSystemPrompt,
+  isDisallowedGenericFallbackReply,
+} from '../prompts/conversation.prompt';
+import { resolveTtsConfig } from '../utils/tts-config';
 
 type JsonRecord = Record<string, unknown>;
 
@@ -45,6 +50,16 @@ interface SessionConfig extends JsonRecord {
   stages?: unknown;
   systemPrompt?: string;
   customPrompt?: string;
+  ttsProvider?: string;
+  ttsVoice?: string;
+  ttsModel?: string;
+  voice?: {
+    provider?: string;
+    voice?: string;
+    voiceName?: string;
+    language?: string;
+    model?: string;
+  };
 }
 
 interface ScenarioRole {
@@ -158,9 +173,6 @@ export class ConversationController {
 
       // Get TTS configuration
       let personaData: PersonaData | null = session.persona;
-      let ttsProvider = 'elevenlabs';
-      let ttsVoice: string | undefined;
-      let ttsLanguage: string | undefined;
 
       const resolvedPersonaId = payload.personaId ?? session.personaId;
       if (resolvedPersonaId && resolvedPersonaId !== session.personaId) {
@@ -169,19 +181,13 @@ export class ConversationController {
           where: { id: resolvedPersonaId },
         });
       }
-
-      if (personaData?.traits) {
-        const traits = toRecord(personaData.traits);
-        const voice = traits.voice;
-        if (isRecord(voice)) {
-          ttsProvider = (voice.provider as string) ?? ttsProvider;
-          ttsVoice = voice.voiceName as string;
-          ttsLanguage = voice.language as string;
-        }
-      }
-
-      if (payload.ttsConfig?.provider) ttsProvider = payload.ttsConfig.provider;
-      if (payload.ttsConfig?.voice) ttsVoice = payload.ttsConfig.voice;
+      const resolvedTts = resolveTtsConfig({
+        sessionConfig,
+        personaTraits: personaData?.traits
+          ? toRecord(personaData.traits)
+          : null,
+        override: payload.ttsConfig,
+      });
 
       // Create session member if doesn't exist
       const sessionMember =
@@ -358,10 +364,13 @@ export class ConversationController {
       });
 
       // If no text was generated, use fallback
-      if (!fullText.trim()) {
-        fullText = startAsAssistant
-          ? "Hello! Thanks for joining. Let's dive into today's scenario whenever you're ready."
-          : 'Got it. Could you say a bit more so I can respond properly?';
+      if (!fullText.trim() || isDisallowedGenericFallbackReply(fullText)) {
+        fullText = buildConversationFallbackResponse({
+          startAsAssistant,
+          persona: personaData,
+          sessionConfig,
+          scenarioConfig,
+        });
       }
 
       // Save assistant turn
@@ -409,9 +418,10 @@ export class ConversationController {
       // Start TTS synthesis in parallel with stage detection to reduce end-to-end latency
       const ttsPromise = this.synthesizeWithFallback({
         text: fullText,
-        provider: ttsProvider,
-        voice: ttsVoice,
-        language: ttsLanguage,
+        provider: resolvedTts.provider,
+        voice: resolvedTts.voice,
+        language: resolvedTts.language,
+        model: resolvedTts.model,
       });
 
       // Detect stage transitions
@@ -702,10 +712,6 @@ export class ConversationController {
       }
 
       let personaData: PersonaData | null = null;
-      let ttsProvider = 'elevenlabs';
-      let ttsVoice: string | undefined = undefined;
-      let ttsLanguage: string | undefined = undefined;
-
       const resolvedPersonaId =
         payload.personaId ?? session.personaId ?? undefined;
 
@@ -714,30 +720,14 @@ export class ConversationController {
           where: { id: resolvedPersonaId },
         });
         personaData = persona;
-
-        if (personaData?.traits) {
-          const traits = toRecord(personaData.traits);
-          const voice = traits.voice;
-          if (isRecord(voice)) {
-            if (typeof voice.provider === 'string') {
-              ttsProvider = voice.provider;
-            }
-            if (typeof voice.voiceName === 'string') {
-              ttsVoice = voice.voiceName;
-            }
-            if (typeof voice.language === 'string') {
-              ttsLanguage = voice.language;
-            }
-          }
-        }
       }
-
-      if (payload.ttsConfig?.provider) {
-        ttsProvider = payload.ttsConfig.provider;
-      }
-      if (payload.ttsConfig?.voice) {
-        ttsVoice = payload.ttsConfig.voice;
-      }
+      const resolvedTts = resolveTtsConfig({
+        sessionConfig,
+        personaTraits: personaData?.traits
+          ? toRecord(personaData.traits)
+          : null,
+        override: payload.ttsConfig,
+      });
 
       const iterationFromEnvelopeRaw = envelope.iterationId
         ? await this.prisma.client.iteration.findUnique({
@@ -925,10 +915,16 @@ export class ConversationController {
         responseText = retryResponse.response.content || '';
       }
 
-      if (!responseText.trim()) {
-        responseText = startAsAssistant
-          ? 'Hello! Thanks for joining. Let’s dive into today’s scenario whenever you’re ready.'
-          : 'Got it. Could you say a bit more so I can respond properly?';
+      if (
+        !responseText.trim() ||
+        isDisallowedGenericFallbackReply(responseText)
+      ) {
+        responseText = buildConversationFallbackResponse({
+          startAsAssistant,
+          persona: personaData,
+          sessionConfig,
+          scenarioConfig,
+        });
       }
 
       const assistantOrder = startAsAssistant ? nextOrder : nextOrder + 1;
@@ -1002,9 +998,10 @@ export class ConversationController {
 
       const ttsResult = await this.synthesizeWithFallback({
         text: responseText,
-        provider: ttsProvider,
-        voice: ttsVoice,
-        language: ttsLanguage,
+        provider: resolvedTts.provider,
+        voice: resolvedTts.voice,
+        language: resolvedTts.language,
+        model: resolvedTts.model,
       });
       if (ttsResult) {
         audioBase64 = ttsResult.audioBuffer.toString('base64');
@@ -1032,11 +1029,12 @@ export class ConversationController {
     provider?: string;
     voice?: string;
     language?: string;
+    model?: string;
   }): Promise<TtsResult | null> {
     const provider = input.provider ?? 'elevenlabs';
     const options = input.voice
-      ? { voice: input.voice, language: input.language }
-      : { language: input.language };
+      ? { voice: input.voice, language: input.language, model: input.model }
+      : { language: input.language, model: input.model };
 
     try {
       return await this.synthesizeUsingStreamWhenAvailable({
@@ -1078,7 +1076,7 @@ export class ConversationController {
   private async synthesizeUsingStreamWhenAvailable(input: {
     text: string;
     provider: string;
-    options: { voice?: string; language?: string };
+    options: { voice?: string; language?: string; model?: string };
   }): Promise<TtsResult> {
     try {
       const streamResult = await this.withTimeout(

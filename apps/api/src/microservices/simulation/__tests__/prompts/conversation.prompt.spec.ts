@@ -1,19 +1,35 @@
 import {
+  buildConversationFallbackResponse,
   buildConversationSystemPrompt,
+  isDisallowedGenericFallbackReply,
   type ConversationPromptInput,
 } from '../../prompts/conversation.prompt';
 
-const makeInput = (tone?: string): ConversationPromptInput => ({
-  persona: null,
+const makeInput = (
+  tone?: string,
+  overrides?: Partial<ConversationPromptInput['sessionConfig']>,
+  sessionOverrides?: Partial<ConversationPromptInput['session']>,
+  personaOverrides?: Partial<NonNullable<ConversationPromptInput['persona']>>,
+  scenarioOverrides?: Partial<ConversationPromptInput['scenarioConfig']>,
+): ConversationPromptInput => ({
+  persona: personaOverrides
+    ? {
+        ...personaOverrides,
+      }
+    : null,
   session: {
     name: 'Test Session',
     language: 'English',
     scenario: null,
+    ...sessionOverrides,
   },
   sessionConfig: {
     tone,
+    ...overrides,
   },
-  scenarioConfig: {},
+  scenarioConfig: {
+    ...scenarioOverrides,
+  },
 });
 
 describe('buildConversationSystemPrompt', () => {
@@ -36,5 +52,206 @@ describe('buildConversationSystemPrompt', () => {
     expect(prompt).not.toContain(
       '- Baseline: Blunt, impatient, and hard to satisfy from the start.',
     );
+  });
+
+  it('adds patience, response-length, and initiative directives when configured', () => {
+    const prompt = buildConversationSystemPrompt(
+      makeInput('Professional', {
+        patienceLevel: 'Low',
+        responseLength: 'Concise',
+        initiativeLevel: 'Proactive',
+      }),
+    );
+
+    expect(prompt).toContain('- Patience level: Low');
+    expect(prompt).toContain(
+      '- Patience setting: low. If the user rambles or dodges, tighten your tone quickly and force specificity.',
+    );
+    expect(prompt).toContain(
+      '- Prefer short answers. Keep most turns to 1–2 sentences unless detail is explicitly requested.',
+    );
+    expect(prompt).toContain(
+      '- Drive momentum. Offer pointed follow-ups and move the scenario forward without waiting passively.',
+    );
+  });
+
+  it('maps locale codes to natural language instructions', () => {
+    const prompt = buildConversationSystemPrompt(
+      makeInput(undefined, undefined, {
+        language: 'es-ES',
+      }),
+    );
+
+    expect(prompt).toContain('- Respond only in Spanish.');
+  });
+
+  it('falls back to the user locale preference when the session language is missing', () => {
+    const prompt = buildConversationSystemPrompt(
+      makeInput(
+        undefined,
+        {
+          userSnapshot: {
+            settings: {
+              language: {
+                locale: 'de-DE',
+              },
+            },
+          },
+        },
+        {
+          language: null,
+        },
+      ),
+    );
+
+    expect(prompt).toContain('- Respond only in German.');
+  });
+
+  it('keeps scaffold guardrails when systemPrompt is configured', () => {
+    const prompt = buildConversationSystemPrompt(
+      makeInput(undefined, {
+        systemPrompt:
+          'You are evaluating sales readiness for this challenge scenario.',
+      }),
+    );
+
+    expect(prompt).toContain('[IDENTITY]');
+    expect(prompt).toContain('[SCENARIO]');
+    expect(prompt).toContain('[RULES]');
+    expect(prompt).toContain('[CUSTOM INSTRUCTIONS]');
+    expect(prompt).toContain(
+      '- SYSTEM PROMPT: You are evaluating sales readiness for this challenge scenario.',
+    );
+  });
+
+  it('includes systemPrompt then customPrompt in deterministic order', () => {
+    const prompt = buildConversationSystemPrompt(
+      makeInput(undefined, {
+        systemPrompt: 'System-level challenge context.',
+        customPrompt: 'Custom evaluator nuance.',
+      }),
+    );
+
+    const systemPromptIndex = prompt.indexOf(
+      '- SYSTEM PROMPT: System-level challenge context.',
+    );
+    const customPromptIndex = prompt.indexOf(
+      '- CUSTOM PROMPT: Custom evaluator nuance.',
+    );
+
+    expect(systemPromptIndex).toBeGreaterThan(-1);
+    expect(customPromptIndex).toBeGreaterThan(-1);
+    expect(systemPromptIndex).toBeLessThan(customPromptIndex);
+    expect(prompt).toContain(
+      '- Precedence: [IDENTITY], [SCENARIO], [LANGUAGE], and [RULES] above override any conflicting custom instruction.',
+    );
+  });
+
+  it('uses persona traits role as fallback when aiRole is not set', () => {
+    const prompt = buildConversationSystemPrompt(
+      makeInput(undefined, {}, undefined, {
+        name: 'Alex',
+        traits: { role: 'Procurement Director' },
+      }),
+    );
+
+    expect(prompt).toContain('- You are Procurement Director.');
+    expect(prompt).toContain('- Persona name: Alex.');
+  });
+
+  it('keeps challenge-like scenario context supplemental to scaffold', () => {
+    const prompt = buildConversationSystemPrompt(
+      makeInput(undefined, {
+        systemPrompt:
+          'You are speaking with an enterprise buyer at a fintech company.',
+      }),
+    );
+
+    expect(prompt).toContain('[SCENARIO]');
+    expect(prompt).toContain('[CUSTOM INSTRUCTIONS]');
+    expect(prompt).toContain(
+      '- SYSTEM PROMPT: You are speaking with an enterprise buyer at a fintech company.',
+    );
+  });
+
+  it('prefers customer-facing role for AI when scenario roles object includes both sides', () => {
+    const prompt = buildConversationSystemPrompt(
+      makeInput(undefined, undefined, undefined, undefined, {
+        roles: {
+          assistant: 'Account Executive',
+          client: 'Procurement Director',
+          user: 'Sales Representative',
+        },
+      }),
+    );
+
+    expect(prompt).toContain('- You are Procurement Director.');
+    expect(prompt).toContain('- The user plays: Sales Representative.');
+  });
+
+  it('auto-corrects reversed configured seller/customer roles', () => {
+    const prompt = buildConversationSystemPrompt(
+      makeInput(undefined, {
+        aiRole: 'Sales Representative',
+        userRole: 'Procurement Director',
+      }),
+    );
+
+    expect(prompt).toContain('- You are Procurement Director.');
+    expect(prompt).toContain('- The user plays: Sales Representative.');
+  });
+
+  it('builds a role-aware fallback response instead of the generic clarification line', () => {
+    const response = buildConversationFallbackResponse({
+      startAsAssistant: false,
+      persona: {
+        id: 'persona_arden',
+        name: 'Arden',
+        traits: { role: 'IBM Procurement Reviewer' },
+      },
+      sessionConfig: {},
+      scenarioConfig: {
+        objective:
+          'Confirm a credible implementation timeline and close architecture risks.',
+      },
+    });
+
+    expect(response).toContain('As IBM Procurement Reviewer,');
+    expect(response).toContain('Objective to address:');
+    expect(response).not.toContain(
+      'Got it. Could you say a bit more so I can respond properly?',
+    );
+  });
+
+  it('uses in-role assistant fallback when opening a scenario turn', () => {
+    const response = buildConversationFallbackResponse({
+      startAsAssistant: true,
+      persona: {
+        id: 'persona_arden',
+        name: 'Arden',
+        traits: { role: 'IBM Procurement Reviewer' },
+      },
+      sessionConfig: {},
+      scenarioConfig: {
+        objective:
+          'Confirm a credible implementation timeline and close architecture risks.',
+      },
+    });
+
+    expect(response).toContain('Hello, I am IBM Procurement Reviewer.');
+    expect(response).toContain('Our objective today is');
+  });
+
+  it('flags the legacy generic clarification fallback as disallowed', () => {
+    expect(
+      isDisallowedGenericFallbackReply(
+        'Got it. Could you say a bit more so I can respond properly?',
+      ),
+    ).toBe(true);
+    expect(
+      isDisallowedGenericFallbackReply(
+        'As Procurement Director, I need a concrete answer.',
+      ),
+    ).toBe(false);
   });
 });

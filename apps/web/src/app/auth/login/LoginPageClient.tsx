@@ -1,12 +1,27 @@
 'use client'
 
-import { useRouter } from 'next/navigation'
+import { useEffect } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Box, Container, Stack, Text, Title } from '@mantine/core'
 import { LoginForm } from '@/features/auth/components/LoginForm'
+import {
+  persistTeamInviteContext,
+  readTeamInviteContextFromSearch,
+} from '@/features/teams/utils/team-invite-context'
 import styles from '../auth-layout.module.css'
 
 export function LoginPageClient() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+
+  useEffect(() => {
+    const inviteContext = readTeamInviteContextFromSearch(
+      new URLSearchParams(searchParams.toString())
+    )
+    if (inviteContext) {
+      persistTeamInviteContext(inviteContext)
+    }
+  }, [searchParams])
 
   return (
     <Box
@@ -52,7 +67,12 @@ export function LoginPageClient() {
 
       <Box className={`${styles.column} ${styles.columnRight}`}>
         <Container size={440} w="100%" className={`${styles.formShift} ${styles.formPanel}`}>
-          <LoginForm onSwitchToRegister={() => router.push('/auth/register')} />
+          <LoginForm
+            onSwitchToRegister={() => {
+              const query = searchParams.toString()
+              router.push(query ? `/auth/register?${query}` : '/auth/register')
+            }}
+          />
         </Container>
       </Box>
     </Box>

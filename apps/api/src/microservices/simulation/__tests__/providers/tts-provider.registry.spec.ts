@@ -19,8 +19,13 @@ describe('TtsProviderFactory', () => {
     expect(factory.getProvider()).toBe(primary);
     expect(factory.getProvider('melo')).toBe(secondary);
     expect(factory.listProviders()).toEqual([
-      { name: 'elevenlabs', description: undefined, voices: ['Ada'] },
-      { name: 'melo', description: 'MeloTTS', voices: [] },
+      {
+        name: 'elevenlabs',
+        description: undefined,
+        voices: ['Ada'],
+        models: [],
+      },
+      { name: 'melo', description: 'MeloTTS', voices: [], models: [] },
     ]);
     expect(factory.getVoices('elevenlabs')).toEqual(['Ada']);
     expect(factory.getVoices('melo')).toEqual([]);

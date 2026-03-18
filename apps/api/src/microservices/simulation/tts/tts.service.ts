@@ -44,4 +44,8 @@ export class TtsService {
   getVoices(providerName: string): string[] {
     return this.providerFactory.getVoices(providerName);
   }
+
+  getModels(providerName: string): string[] {
+    return this.providerFactory.getModels(providerName);
+  }
 }

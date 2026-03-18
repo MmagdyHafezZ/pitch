@@ -8,6 +8,8 @@ import type {
   CreateTeamInput,
   UpdateTeamInput,
   AddMemberInput,
+  InviteMemberInput,
+  SendSignupInviteInput,
   UpdateMemberInput,
 } from '../types/teams.types'
 
@@ -26,6 +28,9 @@ type TeamsState = {
   deleteTeam: (id: string) => Promise<void>
 
   addMember: (teamId: string, input: AddMemberInput) => Promise<void>
+  inviteMember: (teamId: string, input: InviteMemberInput) => Promise<void>
+  sendSignupInvite: (teamId: string, input: SendSignupInviteInput) => Promise<void>
+  acceptInvite: (teamId: string) => Promise<void>
   updateMember: (teamId: string, userId: string, input: UpdateMemberInput) => Promise<void>
   deleteMember: (teamId: string, userId: string) => Promise<void>
   leaveTeam: (teamId: string, userId: string) => Promise<void>
@@ -222,6 +227,66 @@ export const useTeamsStore = create<TeamsState>()(
           set({
             loading: false,
             error: err instanceof Error ? err.message : 'Failed to add team member',
+          })
+          throw err
+        }
+      },
+
+      inviteMember: async (teamId: string, input: InviteMemberInput) => {
+        set({ loading: true, error: null })
+        try {
+          await TeamService.inviteMember(teamId, input)
+
+          const team = await TeamService.getById(teamId)
+
+          set((state) => ({
+            loading: false,
+            currentTeam:
+              state.currentTeam && state.currentTeam.id === teamId ? team : state.currentTeam,
+            teams: state.teams.some((t) => t.id === teamId)
+              ? state.teams.map((t) => (t.id === teamId ? team : t))
+              : [...state.teams, team],
+          }))
+        } catch (err) {
+          set({
+            loading: false,
+            error: err instanceof Error ? err.message : 'Failed to invite team member',
+          })
+          throw err
+        }
+      },
+
+      sendSignupInvite: async (teamId: string, input: SendSignupInviteInput) => {
+        set({ loading: true, error: null })
+        try {
+          await TeamService.sendSignupInvite(teamId, input)
+          set({ loading: false })
+        } catch (err) {
+          set({
+            loading: false,
+            error: err instanceof Error ? err.message : 'Failed to send signup invitation',
+          })
+          throw err
+        }
+      },
+
+      acceptInvite: async (teamId: string) => {
+        set({ loading: true, error: null })
+        try {
+          await TeamService.acceptInvite(teamId)
+          const team = await TeamService.getById(teamId)
+          set((state) => ({
+            loading: false,
+            currentTeam:
+              state.currentTeam && state.currentTeam.id === teamId ? team : state.currentTeam,
+            teams: state.teams.some((t) => t.id === teamId)
+              ? state.teams.map((t) => (t.id === teamId ? team : t))
+              : [...state.teams, team],
+          }))
+        } catch (err) {
+          set({
+            loading: false,
+            error: err instanceof Error ? err.message : 'Failed to accept invite',
           })
           throw err
         }

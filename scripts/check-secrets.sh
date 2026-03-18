@@ -1,13 +1,20 @@
-#!/bin/sh
+#!/usr/bin/env bash
 set -euo pipefail
+
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+# shellcheck source=/dev/null
+. "$REPO_ROOT/scripts/install-detect-secrets.sh"
+
+run_detect_secrets() {
+  "${DETECT_SECRETS_CMD[@]}" "$@"
+}
 
 echo "🔍 Scanning for secrets (staged files only)..."
 
 # Ensure detect-secrets (IBM fork by default) is available
-if ! command -v detect-secrets >/dev/null 2>&1; then
+if ! resolve_detect_secrets_cmd; then
   echo "⚠️  detect-secrets not found. Installing IBM fork..."
-  pip install --quiet --no-input --no-cache-dir \
-    git+https://github.com/IBM/detect-secrets.git@0.13.1+ibm.62.dss
+  ensure_detect_secrets_installed
 fi
 
 # Collect staged files (Added/Copied/Modified/Renamed/Typechanged)
@@ -30,14 +37,13 @@ done
 find "$TMPDIR" -type f | grep -q . || { echo "✅ No scannable staged files."; exit 0; }
 
 # Choose scan syntax (Yelp supports --config; IBM fork does not)
-SCAN_CMD="detect-secrets scan --suppress-unscannable-file-warnings"
-if detect-secrets scan --help 2>&1 | grep -q -- ' --config '; then
-  [ -f .secrets.yaml ] && SCAN_CMD="detect-secrets scan --config .secrets.yaml --suppress-unscannable-file-warnings"
+TMP_SCAN="$(mktemp)"
+SCAN_ARGS=(scan --suppress-unscannable-file-warnings)
+if run_detect_secrets scan --help 2>&1 | grep -q -- ' --config '; then
+  [ -f .secrets.yaml ] && SCAN_ARGS=(scan --config .secrets.yaml --suppress-unscannable-file-warnings)
 fi
 
-TMP_SCAN="$(mktemp)"
-# shellcheck disable=SC2086
-$SCAN_CMD "$TMPDIR" > "$TMP_SCAN"
+run_detect_secrets "${SCAN_ARGS[@]}" "$TMPDIR" > "$TMP_SCAN"
 
 # Python post-process: diff vs baseline and pretty-print file:line + snippet
 python3 - "$TMP_SCAN" ".secrets.baseline" <<'PY'

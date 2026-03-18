@@ -13,6 +13,23 @@ export interface Session {
   sessionConfig?: Record<string, unknown> | null
   scenarioId?: string | null
   personaId?: string | null
+  scenario?: {
+    id: string
+    orgId?: string
+    name?: string | null
+    description?: string | null
+    config?: Record<string, unknown> | null
+    createdAt?: string
+    updatedAt?: string
+  } | null
+  persona?: {
+    id: string
+    orgId?: string
+    name?: string | null
+    traits?: Record<string, unknown> | null
+    createdAt?: string
+    updatedAt?: string
+  } | null
   language?: string | null
   crmContextId?: string | null
   status: SessionStatus
@@ -120,6 +137,7 @@ export interface LLMConfig {
 export interface VoiceConfig {
   provider: string
   voice: string
+  model?: string
   speed?: number
   stability?: number
 }
@@ -128,13 +146,39 @@ export interface PhoneConfig {
   number: string
 }
 
+export interface VideoRuntimeConfig {
+  status?: 'idle' | 'queued' | 'rendering' | 'ready' | 'failed' | string
+  provider?: string
+  activeJobId?: string
+  playbackToken?: string
+  requestId?: string
+  providerJobId?: string
+  assetUrl?: string
+  lastError?: string
+  submittedAt?: string
+  completedAt?: string
+  updatedAt?: string
+  textPreview?: string
+  fallbackUsed?: boolean
+}
+
+export interface VideoConfig {
+  mode?: 'rendered' | string
+  provider?: string
+  runtime?: VideoRuntimeConfig
+}
+
 export interface SessionConfigData {
   llm?: LLMConfig
   voice?: VoiceConfig
   phone?: PhoneConfig
+  video?: VideoConfig
   multiTurnEnabled?: boolean
   tone?: string
   speechRate?: string
+  responseLength?: string
+  patienceLevel?: string
+  initiativeLevel?: string
   accent?: string
   difficulty?: number
   aiRole?: string

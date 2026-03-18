@@ -42,4 +42,18 @@ export type ConversationStreamEvent =
         audio: Buffer;
         contentType: string;
       };
+    }
+  | {
+      type: 'hangup_requested';
+      data: {
+        reason: string;
+      };
+    }
+  | {
+      type: 'tool_executed';
+      data: {
+        tool: string;
+        args: Record<string, unknown>;
+        effect?: Record<string, unknown>;
+      };
     };

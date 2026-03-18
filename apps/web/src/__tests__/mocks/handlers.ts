@@ -206,6 +206,23 @@ export const handlers = [
     })
   }),
 
+  http.post(`${API_BASE_URL}/simulation/personas`, async ({ request }) => {
+    const body = (await request.json()) as {
+      orgId: string
+      name: string
+      traits?: Record<string, unknown>
+    }
+
+    return HttpResponse.json({
+      id: 'persona_created',
+      orgId: body.orgId,
+      name: body.name,
+      traits: body.traits ?? null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    })
+  }),
+
   // Scenarios endpoint
   http.get(`${API_BASE_URL}/simulation/scenarios`, () => {
     return HttpResponse.json({
@@ -231,11 +248,19 @@ export const handlers = [
         name: 'elevenlabs',
         description: 'ElevenLabs',
         voices: ['Rachel', 'Adam', 'Sarah'],
+        models: [],
       },
       {
         name: 'melotts',
         description: 'MeloTTS',
         voices: ['EN-US-1', 'EN-GB-1'],
+        models: [],
+      },
+      {
+        name: 'openai',
+        description: 'OpenAI text-to-speech',
+        voices: ['alloy', 'ash', 'coral'],
+        models: ['gpt-4o-mini-tts', 'tts-1', 'tts-1-hd'],
       },
     ])
   }),

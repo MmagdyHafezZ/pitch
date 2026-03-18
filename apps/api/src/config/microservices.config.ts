@@ -13,6 +13,7 @@ export const MICROSERVICES_CONFIG: MicroserviceConfig[] = [
   { name: 'LTI_SERVICE', queue: 'lti_queue' },
   { name: 'S3_SERVICE', queue: 's3_queue' },
   { name: 'CRM_SERVICE', queue: 'crm_queue' },
+  { name: 'JOBS_SERVICE', queue: 'jobs_queue' },
   { name: 'GATEWAY_SERVICE', queue: 'gateway_queue' },
 ];
 

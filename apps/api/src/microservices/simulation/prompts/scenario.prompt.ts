@@ -1,4 +1,5 @@
 import { PromptTemplate } from '@langchain/core/prompts';
+import { resolveLanguageLabel } from '../utils/language';
 
 const SCENARIO_SYSTEM_PROMPT_TEMPLATE = PromptTemplate.fromTemplate(
   [
@@ -17,10 +18,13 @@ const SCENARIO_SYSTEM_PROMPT_TEMPLATE = PromptTemplate.fromTemplate(
     '- Keep fields concise but specific.',
     '- roles.user is the human learner; roles.assistant is the AI counterparty.',
     '- description should be neutral and third-person; avoid second-person "you".',
+    '- {languageDirective}',
   ].join('\n'),
 );
 
-export async function buildScenarioSystemPrompt(): Promise<string> {
+export async function buildScenarioSystemPrompt(
+  requestedLanguage?: string,
+): Promise<string> {
   const outputSchema = JSON.stringify(
     {
       name: 'Scenario name',
@@ -46,5 +50,10 @@ export async function buildScenarioSystemPrompt(): Promise<string> {
     2,
   );
 
-  return await SCENARIO_SYSTEM_PROMPT_TEMPLATE.format({ outputSchema });
+  const languageLabel = resolveLanguageLabel(requestedLanguage);
+
+  return await SCENARIO_SYSTEM_PROMPT_TEMPLATE.format({
+    outputSchema,
+    languageDirective: `Write all user-facing scenario content in ${languageLabel}.`,
+  });
 }

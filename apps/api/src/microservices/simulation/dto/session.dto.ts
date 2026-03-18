@@ -362,6 +362,28 @@ export class SessionResponseDto {
   @ApiPropertyOptional({ example: 'persona_101' })
   personaId?: string;
 
+  @ApiPropertyOptional({
+    example: {
+      id: 'scenario_789',
+      name: 'Enterprise Renewal',
+      config: { difficulty: 6 },
+    },
+  })
+  scenario?: Record<string, any>;
+
+  @ApiPropertyOptional({
+    example: {
+      id: 'persona_101',
+      name: 'Arden - Skeptical CTO',
+      traits: {
+        avatar: {
+          imageUrl: 'https://example.com/avatar.webp',
+        },
+      },
+    },
+  })
+  persona?: Record<string, any>;
+
   @ApiPropertyOptional({ example: 'en-US' })
   language?: string;
 

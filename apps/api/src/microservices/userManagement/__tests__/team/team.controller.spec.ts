@@ -21,6 +21,9 @@ describe('TeamController', () => {
       addMember: jest.fn(),
       updateMember: jest.fn(),
       removeTeamMember: jest.fn(),
+      inviteMember: jest.fn(),
+      acceptInvite: jest.fn(),
+      sendSignupInvite: jest.fn(),
       findAll: jest.fn(),
       findById: jest.fn(),
       findUserTeams: jest.fn(),
@@ -310,6 +313,88 @@ describe('TeamController', () => {
     );
   });
 
+  it('sends a team signup invite with expected payload', async () => {
+    const service = createServiceMock();
+    service.sendSignupInvite.mockResolvedValue({
+      message: 'Signup invite sent to new-user@example.com',
+    });
+    const controller = new TeamController(service);
+
+    const payload = {
+      teamId: 'team-1',
+      email: 'new-user@example.com',
+      signupUrl: 'https://app.pitch.ai/signup?invite=abc123',
+      ...basePayload,
+    };
+
+    await expect(
+      controller.sendTeamSignupInvite(payload as any),
+    ).resolves.toEqual({
+      message: 'Signup invite sent to new-user@example.com',
+    });
+
+    expect(service.sendSignupInvite).toHaveBeenCalledWith({
+      teamId: 'team-1',
+      email: 'new-user@example.com',
+      requesterId: basePayload.userClaims.id,
+      inviterName: basePayload.userClaims.name,
+      signupUrl: 'https://app.pitch.ai/signup?invite=abc123',
+    });
+  });
+
+  it('invites a user and passes correct DTO and requester', async () => {
+    const service = createServiceMock();
+    service.inviteMember.mockResolvedValue(membership);
+    const controller = new TeamController(service);
+
+    const payload = {
+      teamId: 'team-1',
+      userId: 'user-2',
+      role: 'MEMBER',
+      tokenLimit: 0,
+      ...basePayload,
+    };
+
+    await expect(controller.inviteTeamMember(payload as any)).resolves.toEqual(
+      membership,
+    );
+
+    expect(service.inviteMember).toHaveBeenCalledWith(
+      {
+        teamId: 'team-1',
+        userId: 'user-2',
+        role: 'MEMBER',
+        tokenLimit: 0,
+        invitedByUserId: basePayload.userClaims.id,
+      },
+      {
+        id: basePayload.userClaims.id,
+        name: basePayload.userClaims.name,
+      },
+    );
+  });
+
+  it('accepts a team invite for current user claims', async () => {
+    const service = createServiceMock();
+    service.acceptInvite.mockResolvedValue({
+      message: 'Invitation accepted',
+      membership,
+    } as any);
+    const controller = new TeamController(service);
+
+    await expect(
+      controller.acceptTeamInvite({ teamId: 'team-1', ...basePayload } as any),
+    ).resolves.toEqual({
+      message: 'Invitation accepted',
+      membership,
+    });
+
+    expect(service.acceptInvite).toHaveBeenCalledWith(
+      'team-1',
+      basePayload.userClaims.id,
+    );
+  });
+
   // ---------- error wrapping ----------
 
   it('wraps errors in createTeam with toRpcException', async () => {
@@ -465,6 +550,60 @@ describe('TeamController', () => {
         userId: 'user-1',
         ...basePayload,
       } as any),
+    ).rejects.toThrow(rpcError);
+  });
+
+  it('wraps errors in sendTeamSignupInvite with toRpcException', async () => {
+    const service = createServiceMock();
+    const error = new Error('failure');
+    const rpcError = new RpcException('rpc');
+
+    service.sendSignupInvite.mockRejectedValue(error);
+    toRpcExceptionMock.mockReturnValueOnce(rpcError as any);
+
+    const controller = new TeamController(service);
+
+    await expect(
+      controller.sendTeamSignupInvite({
+        teamId: 'team-1',
+        email: 'new-user@example.com',
+        ...basePayload,
+      } as any),
+    ).rejects.toThrow(rpcError);
+  });
+
+  it('wraps errors in inviteTeamMember with toRpcException', async () => {
+    const service = createServiceMock();
+    const error = new Error('failure');
+    const rpcError = new RpcException('rpc');
+
+    service.inviteMember.mockRejectedValue(error);
+    toRpcExceptionMock.mockReturnValueOnce(rpcError as any);
+
+    const controller = new TeamController(service);
+
+    await expect(
+      controller.inviteTeamMember({
+        teamId: 'team-1',
+        userId: 'user-2',
+        role: 'MEMBER',
+        ...basePayload,
+      } as any),
+    ).rejects.toThrow(rpcError);
+  });
+
+  it('wraps errors in acceptTeamInvite with toRpcException', async () => {
+    const service = createServiceMock();
+    const error = new Error('failure');
+    const rpcError = new RpcException('rpc');
+
+    service.acceptInvite.mockRejectedValue(error);
+    toRpcExceptionMock.mockReturnValueOnce(rpcError as any);
+
+    const controller = new TeamController(service);
+
+    await expect(
+      controller.acceptTeamInvite({ teamId: 'team-1', ...basePayload } as any),
     ).rejects.toThrow(rpcError);
   });
 });

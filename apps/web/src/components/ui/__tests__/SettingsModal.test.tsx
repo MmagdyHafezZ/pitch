@@ -112,4 +112,18 @@ describe('SettingsModal', () => {
     render(<SettingsModal opened onClose={jest.fn()} />)
     expect(await screen.findByText('Delete Account')).toBeInTheDocument()
   })
+
+  it('renders the persisted language settings section', async () => {
+    const user = userEvent.setup()
+
+    render(<SettingsModal opened onClose={jest.fn()} />)
+    await user.click(await screen.findByText('Language'))
+
+    expect(
+      await screen.findByText(
+        'Choose the language used across PITCH and as the default for new training sessions.'
+      )
+    ).toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: 'Platform language' })).toBeInTheDocument()
+  })
 })

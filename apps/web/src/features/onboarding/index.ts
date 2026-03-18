@@ -1,4 +1,5 @@
 import { useCallback } from 'react'
+import type { ReactElement } from 'react'
 
 export type TourScreen =
   | 'home'
@@ -10,6 +11,10 @@ export type TourScreen =
 
 type StartTourOptions = {
   mode?: 'full'
+}
+
+export function OnboardingWizard(): ReactElement | null {
+  return null
 }
 
 export function useTour() {

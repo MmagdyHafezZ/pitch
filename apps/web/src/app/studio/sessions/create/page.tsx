@@ -26,7 +26,7 @@ import {
   IconChecklist,
   IconDatabase,
 } from '@tabler/icons-react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuth } from '@/features/auth'
 import { useTeams } from '@/features/teams'
 import { useSessions, type SessionType, type CreateSessionInput } from '@/features/sessions'
@@ -45,7 +45,10 @@ import { CrmStep } from './components/CrmStep'
 import { StyleStep } from './components/StyleStep'
 import { ReviewStep } from './components/ReviewStep'
 import { SessionConfigForm, Persona, PersonaTraits } from './lib/types'
+import { getBrainCompatibleModels, getPreferredBrainModel } from './lib/brain-models'
 import { useCrm } from '@/features/crm'
+import { useI18n } from '@/features/i18n'
+import { useTour } from '@/features/onboarding'
 import {
   getSavedCrmConnections,
   getSavedCrmSessionConnections,
@@ -64,9 +67,137 @@ const fraunces = Fraunces({ subsets: ['latin'], display: 'swap' })
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
 
+const COUNTERPART_ROLE_PATTERN =
+  /client|customer|buyer|prospect|stakeholder|procurement|decision maker|decision-maker|economic buyer|cto|cfo|cio|vp/i
+
+const PITCHER_ROLE_PATTERN =
+  /sales|seller|pitch|account executive|account manager|sales rep|representative|bdr|sdr|business development|founder|consultant/i
+
+const pickString = (value: unknown): string | undefined =>
+  typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined
+
+const normalizeRole = (value: string | undefined): string | undefined =>
+  value ? value.trim().replace(/\s+/g, ' ').toLowerCase() : undefined
+
+const pickCounterpartRole = (candidates: Array<string | undefined>): string | undefined =>
+  candidates.find((candidate) => {
+    const role = pickString(candidate)
+    return !!role && COUNTERPART_ROLE_PATTERN.test(role.toLowerCase())
+  })
+
+const pickPitcherRole = (candidates: Array<string | undefined>): string | undefined =>
+  candidates.find((candidate) => {
+    const role = pickString(candidate)
+    return !!role && PITCHER_ROLE_PATTERN.test(role.toLowerCase())
+  })
+
+const pickFirstDifferentRole = (
+  candidates: Array<string | undefined>,
+  exclude?: string
+): string | undefined => {
+  const normalizedExclude = normalizeRole(exclude)
+  return candidates.find((candidate) => {
+    const role = pickString(candidate)
+    return !!role && normalizeRole(role) !== normalizedExclude
+  })
+}
+
+const alignPitchRolePair = (
+  aiRole?: string,
+  userRole?: string
+): { aiRole?: string; userRole?: string } => {
+  let resolvedAiRole = pickString(aiRole)
+  let resolvedUserRole = pickString(userRole)
+
+  if (
+    resolvedAiRole &&
+    resolvedUserRole &&
+    PITCHER_ROLE_PATTERN.test(resolvedAiRole.toLowerCase()) &&
+    COUNTERPART_ROLE_PATTERN.test(resolvedUserRole.toLowerCase())
+  ) {
+    const previousAiRole = resolvedAiRole
+    resolvedAiRole = resolvedUserRole
+    resolvedUserRole = previousAiRole
+  }
+
+  if (
+    resolvedAiRole &&
+    resolvedUserRole &&
+    normalizeRole(resolvedAiRole) === normalizeRole(resolvedUserRole)
+  ) {
+    resolvedAiRole = undefined
+  }
+
+  return {
+    aiRole: resolvedAiRole,
+    userRole: resolvedUserRole,
+  }
+}
+
+const scrollTrackByCard = (container: HTMLDivElement, direction: 'left' | 'right') => {
+  const items = Array.from(container.children).filter(
+    (element): element is HTMLElement => element instanceof HTMLElement && element.clientWidth > 0
+  )
+  if (items.length === 0) {
+    return
+  }
+
+  const maxScrollLeft = Math.max(0, container.scrollWidth - container.clientWidth)
+  if (maxScrollLeft <= 0) {
+    return
+  }
+
+  const targets = Array.from(
+    new Set(items.map((item) => Math.min(Math.max(0, item.offsetLeft), maxScrollLeft)))
+  ).sort((a, b) => a - b)
+  if (targets.length === 0) {
+    return
+  }
+
+  const current = container.scrollLeft
+  const epsilon = 8
+  const lastIndex = targets.length - 1
+  let nextIndex = 0
+
+  if (direction === 'right') {
+    let baseIndex = 0
+    for (let index = 0; index <= lastIndex; index += 1) {
+      if ((targets[index] ?? 0) <= current + epsilon) {
+        baseIndex = index
+      }
+    }
+    nextIndex = Math.min(baseIndex + 1, lastIndex)
+  } else {
+    let baseIndex = lastIndex
+    for (let index = 0; index <= lastIndex; index += 1) {
+      if ((targets[index] ?? 0) >= current - epsilon) {
+        baseIndex = index
+        break
+      }
+    }
+    nextIndex = Math.max(baseIndex - 1, 0)
+  }
+
+  const target = targets[nextIndex] ?? current
+
+  if (Math.abs(target - current) < 2) {
+    const fallbackAmount = container.clientWidth * 0.8
+    container.scrollBy({
+      left: direction === 'left' ? -fallbackAmount : fallbackAmount,
+      behavior: 'smooth',
+    })
+    return
+  }
+
+  container.scrollTo({ left: target, behavior: 'smooth' })
+}
+
 export default function CreateSessionPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { user } = useAuth()
+  const { locale } = useI18n()
+  const { startTour } = useTour()
   const { teams, activeTeamId, fetchUserTeams, loading: teamsLoading } = useTeams()
   const { createSession, loading, error } = useSessions()
   const { providers: ttsProviders, loading: ttsLoading } = useTtsProviders()
@@ -79,7 +210,6 @@ export default function CreateSessionPage() {
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null)
   const [sessionName, setSessionName] = useState('')
   const [sessionType, setSessionType] = useState<SessionType | null>(null)
-  const [phoneNumber, setPhoneNumber] = useState('')
   const [tags, setTags] = useState<string[]>([])
   const [language, setLanguage] = useState('en-US')
   const [durationMinutes, setDurationMinutes] = useState(30)
@@ -93,7 +223,7 @@ export default function CreateSessionPage() {
   const [aiRole, setAiRole] = useState('')
   const [userRole, setUserRole] = useState('')
   const [scenarioGenerating, setScenarioGenerating] = useState(false)
-  const [scenarioCount, setScenarioCount] = useState(3)
+  const [scenarioCount, setScenarioCount] = useState(1)
 
   const [llmProvider, setLlmProvider] = useState<string | null>(null)
   const [llmModel, setLlmModel] = useState<string | null>(null)
@@ -107,9 +237,13 @@ export default function CreateSessionPage() {
   const [multiTurnEnabled, setMultiTurnEnabled] = useState(true)
   const [ttsProvider, setTtsProvider] = useState('elevenlabs')
   const [ttsVoice, setTtsVoice] = useState('Rachel')
+  const [ttsModel, setTtsModel] = useState<string | null>(null)
   const [accent, setAccent] = useState('Persona-based')
   const [tone, setTone] = useState('Formal')
-  const [speechRate, setSpeechRate] = useState('Normal')
+  const [speechRate, setSpeechRate] = useState('Conversational')
+  const [responseLength, setResponseLength] = useState('Balanced')
+  const [patienceLevel, setPatienceLevel] = useState('Medium')
+  const [initiativeLevel, setInitiativeLevel] = useState('Balanced')
   const [difficulty, setDifficulty] = useState(5)
   const [modelSearch, setModelSearch] = useState('')
 
@@ -138,8 +272,42 @@ export default function CreateSessionPage() {
 
   const [errors, setErrors] = useState<Record<string, string>>({})
 
+  const autoStartedTourKeyRef = useRef<string | null>(null)
   const personaScrollRef = useRef<HTMLDivElement | null>(null)
   const modelScrollRef = useRef<HTMLDivElement | null>(null)
+  const languageTouchedRef = useRef(false)
+
+  useEffect(() => {
+    const startTourParam = searchParams.get('startTour')
+    const tourScreenParam = searchParams.get('tourScreen')
+    const key = `${startTourParam ?? ''}:${tourScreenParam ?? ''}`
+
+    if (autoStartedTourKeyRef.current === key) {
+      return
+    }
+
+    if (startTourParam === 'create-session') {
+      const timer = setTimeout(() => {
+        autoStartedTourKeyRef.current = key
+        void startTour('create-session')
+      }, 800)
+      return () => clearTimeout(timer)
+    }
+
+    if (startTourParam === 'full' && tourScreenParam === 'create-session') {
+      const timer = setTimeout(() => {
+        autoStartedTourKeyRef.current = key
+        void startTour('create-session', { mode: 'full' })
+      }, 800)
+      return () => clearTimeout(timer)
+    }
+  }, [searchParams, startTour])
+
+  useEffect(() => {
+    if (!languageTouchedRef.current) {
+      setLanguage(locale)
+    }
+  }, [locale])
 
   useEffect(() => {
     if (user?.id) {
@@ -197,13 +365,30 @@ export default function CreateSessionPage() {
   }, [selectedTeamId, user?.id])
 
   useEffect(() => {
-    if (!ttsLoading && ttsProviders.length > 0 && !ttsVoice) {
-      const provider = ttsProviders.find((p) => p.name === ttsProvider)
-      if (provider && provider.voices.length > 0) {
-        setTtsVoice(provider.voices[0])
-      }
+    if (ttsLoading || ttsProviders.length === 0) {
+      return
     }
-  }, [ttsLoading, ttsProviders, ttsProvider, ttsVoice])
+
+    const provider = ttsProviders.find((entry) => entry.name === ttsProvider) ?? ttsProviders[0]
+    if (provider.name !== ttsProvider) {
+      setTtsProvider(provider.name)
+    }
+
+    if (!ttsVoice || !provider.voices.includes(ttsVoice)) {
+      setTtsVoice(provider.voices[0] ?? '')
+    }
+
+    if ((provider.models?.length ?? 0) > 0) {
+      if (!ttsModel || !provider.models?.includes(ttsModel)) {
+        setTtsModel(provider.models?.[0] ?? null)
+      }
+      return
+    }
+
+    if (ttsModel) {
+      setTtsModel(null)
+    }
+  }, [ttsLoading, ttsProviders, ttsProvider, ttsVoice, ttsModel])
 
   useEffect(() => {
     if (!selectedPersonaData?.traits) {
@@ -216,6 +401,9 @@ export default function CreateSessionPage() {
     }
     if (traits.voice?.voiceName) {
       setTtsVoice(traits.voice.voiceName)
+    }
+    if (traits.voice?.model) {
+      setTtsModel(traits.voice.model)
     }
     const derivedAccent = traits.voice?.language || traits.voiceProfile || 'Persona-based'
     setAccent(derivedAccent)
@@ -251,31 +439,42 @@ export default function CreateSessionPage() {
             : undefined
       const clientRole = typeof rolesObj.client === 'string' ? rolesObj.client : undefined
       const userRole = typeof rolesObj.user === 'string' ? rolesObj.user : undefined
-      aiRoleFromRoles = assistantRole ?? clientRole
-      userRoleFromRoles = userRole
+      aiRoleFromRoles =
+        pickCounterpartRole([clientRole, assistantRole, userRole]) ??
+        assistantRole ??
+        clientRole ??
+        userRole
+      userRoleFromRoles =
+        userRole ??
+        pickPitcherRole([assistantRole, clientRole]) ??
+        pickFirstDifferentRole([assistantRole, clientRole, userRole], aiRoleFromRoles)
     } else if (Array.isArray(scenarioConfig.roles)) {
       const rolesArray = scenarioConfig.roles as Array<{ name?: string }>
       const preferredAiRole =
-        rolesArray.find((role) =>
-          String(role?.name || '')
-            .toLowerCase()
-            .match(/client|customer|partner|buyer|prospect|stakeholder|cto|cfo|vp|lead/i)
-        )?.name ?? rolesArray[0]?.name
+        pickCounterpartRole(rolesArray.map((role) => role?.name)) ?? rolesArray[0]?.name
       aiRoleFromRoles = preferredAiRole
-      userRoleFromRoles = rolesArray.find(
-        (role) => role?.name && role.name !== preferredAiRole
-      )?.name
+      userRoleFromRoles =
+        pickPitcherRole(
+          rolesArray
+            .map((role) => role?.name)
+            .filter((name) => normalizeRole(name) !== normalizeRole(preferredAiRole))
+        ) ?? rolesArray.find((role) => role?.name && role.name !== preferredAiRole)?.name
     }
 
+    const alignedInferredRoles = alignPitchRolePair(
+      aiRoleFromSessionConfig ?? aiRoleFromRoles,
+      userRoleFromSessionConfig ?? userRoleFromRoles
+    )
+
     if (!aiRole.trim()) {
-      const nextAiRole = aiRoleFromSessionConfig ?? aiRoleFromRoles
+      const nextAiRole = alignedInferredRoles.aiRole
       if (nextAiRole) {
         setAiRole(nextAiRole)
       }
     }
 
     if (!userRole.trim()) {
-      const nextUserRole = userRoleFromSessionConfig ?? userRoleFromRoles
+      const nextUserRole = alignedInferredRoles.userRole
       if (nextUserRole) {
         setUserRole(nextUserRole)
       }
@@ -300,27 +499,38 @@ export default function CreateSessionPage() {
       const firstEnabledProvider = llmProvidersData.providers.find((p) => p.enabled)
       if (firstEnabledProvider) {
         setLlmProvider(firstEnabledProvider.name)
-        if (firstEnabledProvider.modelDetails.length > 0) {
-          const preferredModel = firstEnabledProvider.modelDetails.find(
-            (m) => m.name === 'gpt-4o-mini'
-          )
-          setLlmModel(preferredModel?.name || firstEnabledProvider.modelDetails[0].name)
+        const preferredModel = getPreferredBrainModel(firstEnabledProvider)
+        if (preferredModel) {
+          setLlmModel(preferredModel.name)
         }
       }
     }
   }, [llmProvidersLoading, llmProvidersData, llmProvider])
 
   useEffect(() => {
+    if (!llmProvidersData || !llmProvider) {
+      return
+    }
+
+    const provider = llmProvidersData.providers.find((entry) => entry.name === llmProvider)
+    const compatibleModels = getBrainCompatibleModels(provider)
+    if (compatibleModels.length === 0) {
+      return
+    }
+
+    if (!llmModel || !compatibleModels.some((model) => model.name === llmModel)) {
+      const preferredModel = getPreferredBrainModel(provider)
+      if (preferredModel) {
+        setLlmModel(preferredModel.name)
+      }
+    }
+  }, [llmProvidersData, llmProvider, llmModel])
+
+  useEffect(() => {
     if (sessionType && errors.sessionType) {
       setErrors(({ sessionType: _sessionType, ...rest }) => rest)
     }
   }, [sessionType, errors.sessionType])
-
-  useEffect(() => {
-    if (phoneNumber.trim() && errors.phoneNumber) {
-      setErrors(({ phoneNumber: _phoneNumber, ...rest }) => rest)
-    }
-  }, [phoneNumber, errors.phoneNumber])
 
   useEffect(() => {
     if (selectedPersona && errors.persona) {
@@ -391,24 +601,16 @@ export default function CreateSessionPage() {
     )
   }, [crmStatus?.providerEmail])
 
-  const validateStep = (step: number): boolean => {
+  const getStepErrors = (step: number): Record<string, string> => {
     const newErrors: Record<string, string> = {}
 
     if (step === 0) {
       if (!sessionType) newErrors.sessionType = 'Session type is required'
-      if (sessionType === 'phone') {
-        const normalized = phoneNumber.trim()
-        if (!normalized) {
-          newErrors.phoneNumber = 'Phone number is required for phone calls'
-        } else if (!/^\+?[1-9]\d{7,14}$/.test(normalized)) {
-          newErrors.phoneNumber = 'Use E.164 format (e.g. +15551234567)'
-        }
-      }
     }
 
     if (step === 1) {
-      if (!durationMinutes || durationMinutes <= 0) {
-        newErrors.durationMinutes = 'Session length must be greater than 0'
+      if (!durationMinutes || durationMinutes < 5 || durationMinutes > 180) {
+        newErrors.durationMinutes = 'Session length must be between 5 and 180 minutes'
       }
     }
 
@@ -421,8 +623,47 @@ export default function CreateSessionPage() {
       if (!llmModel) newErrors.llmModel = 'LLM model is required'
     }
 
+    return newErrors
+  }
+
+  const validateStep = (step: number): boolean => {
+    const newErrors = getStepErrors(step)
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
+  }
+
+  const attemptStepChange = (targetStep: number) => {
+    if (targetStep <= active) {
+      setErrors({})
+      setActive(targetStep)
+      return
+    }
+
+    for (let step = active; step < targetStep; step += 1) {
+      const stepErrors = getStepErrors(step)
+      if (Object.keys(stepErrors).length > 0) {
+        setErrors(stepErrors)
+        setActive(step)
+        return
+      }
+    }
+
+    setErrors({})
+    setActive(targetStep)
+  }
+
+  const validateAllSteps = () => {
+    for (let step = 0; step <= 3; step += 1) {
+      const stepErrors = getStepErrors(step)
+      if (Object.keys(stepErrors).length > 0) {
+        setErrors(stepErrors)
+        setActive(step)
+        return false
+      }
+    }
+
+    setErrors({})
+    return true
   }
 
   const nextStep = () => {
@@ -447,43 +688,10 @@ export default function CreateSessionPage() {
       return
     }
 
-    if (!sessionType) {
+    if (!validateAllSteps()) {
       notifications.show({
-        title: 'Error',
-        message: 'Session type is required',
-        color: 'red',
-        icon: <IconAlertCircle />,
-      })
-      return
-    }
-
-    if (sessionType === 'phone') {
-      const normalized = phoneNumber.trim()
-      if (!normalized || !/^\+?[1-9]\d{7,14}$/.test(normalized)) {
-        notifications.show({
-          title: 'Error',
-          message: 'Enter a valid phone number in E.164 format (e.g. +15551234567)',
-          color: 'red',
-          icon: <IconAlertCircle />,
-        })
-        return
-      }
-    }
-
-    if (!selectedPersona) {
-      notifications.show({
-        title: 'Error',
-        message: 'Please select a persona before creating a session',
-        color: 'red',
-        icon: <IconAlertCircle />,
-      })
-      return
-    }
-
-    if (!llmProvider || !llmModel) {
-      notifications.show({
-        title: 'Error',
-        message: 'Please select an AI provider and model',
+        title: 'Fix highlighted fields',
+        message: 'Complete the required fields before creating the session.',
         color: 'red',
         icon: <IconAlertCircle />,
       })
@@ -542,10 +750,12 @@ export default function CreateSessionPage() {
         accent,
         tone,
         speechRate,
+        responseLength,
+        patienceLevel,
+        initiativeLevel,
         difficulty,
         durationMinutes,
-        aiRole: aiRole.trim() || undefined,
-        userRole: userRole.trim() || undefined,
+        ...alignPitchRolePair(aiRole, userRole),
       }
 
       if (llmProvider && llmModel) {
@@ -579,22 +789,32 @@ export default function CreateSessionPage() {
       if (sessionType === 'voice' || sessionType === 'video' || sessionType === 'phone') {
         sessionConfig.ttsProvider = ttsProvider
         sessionConfig.ttsVoice = ttsVoice
+        sessionConfig.ttsModel = ttsModel ?? undefined
         sessionConfig.voice = {
           provider: ttsProvider,
           voice: ttsVoice,
+          ...(ttsModel ? { model: ttsModel } : {}),
         }
       }
 
-      if (sessionType === 'phone') {
-        sessionConfig.phone = {
-          number: phoneNumber.trim(),
-        }
+      if (sessionType === 'video') {
+        sessionConfig.video = { mode: 'rendered' }
       }
 
       const sessionData: CreateSessionInput = {
         orgId: selectedTeamId || user.id,
+        userSnapshot: {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          settings: {
+            language: {
+              locale,
+            },
+          },
+        },
         name: sessionName.trim() || undefined,
-        type: sessionType,
+        type: sessionType as SessionType,
         tags: tags.length > 0 ? tags : undefined,
         language: language || undefined,
         personaId: selectedPersona ?? undefined,
@@ -627,15 +847,13 @@ export default function CreateSessionPage() {
   const scrollPersona = (direction: 'left' | 'right') => {
     const container = personaScrollRef.current
     if (!container) return
-    const amount = container.clientWidth * 0.8
-    container.scrollBy({ left: direction === 'left' ? -amount : amount, behavior: 'smooth' })
+    scrollTrackByCard(container, direction)
   }
 
   const scrollModels = (direction: 'left' | 'right') => {
     const container = modelScrollRef.current
     if (!container) return
-    const amount = container.clientWidth * 0.8
-    container.scrollBy({ left: direction === 'left' ? -amount : amount, behavior: 'smooth' })
+    scrollTrackByCard(container, direction)
   }
 
   const handleGenerateScenario = async () => {
@@ -668,12 +886,22 @@ export default function CreateSessionPage() {
         sessionConfig: {
           difficulty,
           durationMinutes,
-          aiRole: aiRole.trim() || undefined,
-          userRole: userRole.trim() || undefined,
+          ...alignPitchRolePair(aiRole, userRole),
         },
         personaId: selectedPersona || undefined,
         crmContextId: undefined,
-        userSnapshot: user ? { id: user.id, email: user.email, name: user.name } : undefined,
+        userSnapshot: user
+          ? {
+              id: user.id,
+              email: user.email,
+              name: user.name,
+              settings: {
+                language: {
+                  locale,
+                },
+              },
+            }
+          : undefined,
         orgSnapshot: undefined,
         objective: scenarioObjective,
         context: scenarioContext,
@@ -707,6 +935,33 @@ export default function CreateSessionPage() {
     } finally {
       setScenarioGenerating(false)
     }
+  }
+
+  const handleCreatePersona = async (input: { name: string; traits: PersonaTraits }) => {
+    const orgId = selectedTeamId || user?.id
+    if (!orgId) {
+      throw new Error('Select a team or sign in before creating a persona.')
+    }
+
+    const createdPersona = (await api.personas.create({
+      orgId,
+      name: input.name,
+      traits: input.traits as Record<string, unknown>,
+    })) as Persona
+
+    setPersonas((current) =>
+      [...current, createdPersona].sort((left, right) => left.name.localeCompare(right.name))
+    )
+    setSelectedPersona(createdPersona.id)
+    setPersonaSearch('')
+
+    notifications.show({
+      title: 'Persona created',
+      message: `${createdPersona.name} is ready to use in this session.`,
+      color: 'green',
+    })
+
+    return createdPersona
   }
 
   const handleCrmConnect = async () => {
@@ -797,14 +1052,15 @@ export default function CreateSessionPage() {
           errors={errors}
           sessionName={sessionName}
           setSessionName={setSessionName}
-          phoneNumber={phoneNumber}
-          setPhoneNumber={setPhoneNumber}
           teamsLoading={teamsLoading}
           selectedTeamId={selectedTeamId}
           setSelectedTeamId={setSelectedTeamId}
           teams={teams}
           language={language}
-          setLanguage={setLanguage}
+          setLanguage={(value) => {
+            languageTouchedRef.current = true
+            setLanguage(value)
+          }}
           tags={tags}
           setTags={setTags}
         />
@@ -857,6 +1113,11 @@ export default function CreateSessionPage() {
           setSelectedPersona={setSelectedPersona}
           errors={errors}
           selectedPersonaData={selectedPersonaData}
+          ttsProviders={ttsProviders}
+          onCreatePersona={handleCreatePersona}
+          createDisabledReason={
+            user?.id ? null : 'You need to be signed in before creating a persona.'
+          }
         />
       ),
     },
@@ -927,6 +1188,12 @@ export default function CreateSessionPage() {
           setTone={setTone}
           speechRate={speechRate}
           setSpeechRate={setSpeechRate}
+          responseLength={responseLength}
+          setResponseLength={setResponseLength}
+          patienceLevel={patienceLevel}
+          setPatienceLevel={setPatienceLevel}
+          initiativeLevel={initiativeLevel}
+          setInitiativeLevel={setInitiativeLevel}
           difficulty={difficulty}
           setDifficulty={setDifficulty}
           multiTurnEnabled={multiTurnEnabled}
@@ -944,7 +1211,6 @@ export default function CreateSessionPage() {
           selectedTeamId={selectedTeamId}
           teams={teams}
           sessionType={sessionType}
-          phoneNumber={phoneNumber}
           language={language}
           tags={tags}
           selectedPersona={selectedPersona}
@@ -971,6 +1237,9 @@ export default function CreateSessionPage() {
           llmProvidersData={llmProvidersData}
           tone={tone}
           speechRate={speechRate}
+          responseLength={responseLength}
+          patienceLevel={patienceLevel}
+          initiativeLevel={initiativeLevel}
           difficulty={difficulty}
           multiTurnEnabled={multiTurnEnabled}
         />
@@ -983,21 +1252,22 @@ export default function CreateSessionPage() {
       <Container size="xl" py="xl">
         <Group
           style={{
-            width: '100vw',
+            width: '100%',
           }}
           py="md"
           className={classes.hero}
         >
           <Group
             style={{
-              width: '80.6em',
+              width: '100%',
+              maxWidth: '80.6em',
             }}
             align="flex-start"
           >
             <ActionIcon variant="subtle" size="lg" onClick={() => router.push('/studio/sessions')}>
               <IconArrowLeft size={20} />
             </ActionIcon>
-            <Paper className={classes.heroCard}>
+            <Paper data-tour-id="create-session-hero" className={classes.heroCard}>
               <Badge variant="light" color="blue" radius="md" mb={10}>
                 New Session Wizard
               </Badge>
@@ -1017,13 +1287,13 @@ export default function CreateSessionPage() {
           </Alert>
         )}
 
-        <Grid gutter="xl">
+        <Grid gutter={isStepperCompact ? 'md' : 'xl'}>
           <Grid.Col span={{ base: 12, md: 3 }}>
             <Box className={classes.stepPanel}>
-              <Paper className={classes.stepPanelCard} p="md">
+              <Paper data-tour-id="create-session-stepper" className={classes.stepPanelCard} p="md">
                 <Stepper
                   active={active}
-                  onStepClick={setActive}
+                  onStepClick={attemptStepChange}
                   orientation={isStepperCompact ? 'horizontal' : 'vertical'}
                   size="sm"
                   color="blue"
@@ -1043,17 +1313,29 @@ export default function CreateSessionPage() {
           </Grid.Col>
 
           <Grid.Col span={{ base: 12, md: 9 }}>
-            <Paper className={classes.contentCard} p="xl">
+            <Paper
+              data-tour-id="create-session-content"
+              className={classes.contentCard}
+              p={isStepperCompact ? 'md' : 'xl'}
+            >
               {steps[active]?.content}
             </Paper>
 
-            <Group justify="space-between" mt="xl">
+            <Group
+              data-tour-id="create-session-nav"
+              justify="space-between"
+              mt="xl"
+              gap="sm"
+              wrap="wrap"
+            >
               <Button variant="default" onClick={prevStep} disabled={active === 0}>
                 Back
               </Button>
 
               {active < steps.length - 1 ? (
-                <Button onClick={nextStep}>Next</Button>
+                <Button data-tour-id="create-session-next" onClick={nextStep}>
+                  Next
+                </Button>
               ) : (
                 <Button
                   onClick={handleSubmit}

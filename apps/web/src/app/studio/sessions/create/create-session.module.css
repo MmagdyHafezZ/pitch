@@ -294,6 +294,11 @@
   padding: 10px 12px;
 }
 
+.personaComposerSection {
+  background: color-mix(in srgb, var(--mantine-color-dark-8) 94%, transparent);
+  border: 1px solid color-mix(in srgb, var(--mantine-color-dark-4) 40%, transparent);
+}
+
 .personaPreviewBio {
   line-height: 1.5;
 }
@@ -349,6 +354,17 @@
   background: color-mix(in srgb, var(--mantine-color-dark-8) 94%, transparent);
   border: 1px solid color-mix(in srgb, var(--mantine-color-dark-4) 40%, transparent);
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--mantine-color-blue-6) 8%, transparent);
+}
+
+.inlineInfoCard {
+  background: color-mix(in srgb, var(--mantine-color-dark-8) 96%, transparent);
+  border: 1px solid color-mix(in srgb, var(--mantine-color-blue-6) 22%, transparent);
+}
+
+.inlineInfoIcon {
+  color: var(--mantine-color-blue-4);
+  flex-shrink: 0;
+  margin-top: 2px;
 }
 
 .brainShell {

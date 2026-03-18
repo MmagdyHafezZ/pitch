@@ -1,6 +1,18 @@
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+. "$REPO_ROOT/scripts/setup-hook-env.sh"
+
 # Run detect-secrets to prevent committing secrets
-./scripts/check-secrets.sh
+"$REPO_ROOT/scripts/check-secrets.sh"
 
 # Run linting
-# pnpm test
-pnpm lint-staged
+if [ -x "$REPO_ROOT/node_modules/.bin/lint-staged" ]; then
+  "$REPO_ROOT/node_modules/.bin/lint-staged"
+elif command -v pnpm >/dev/null 2>&1; then
+  pnpm exec lint-staged
+else
+  echo "lint-staged not found. Run pnpm install." >&2
+  exit 127
+fi

@@ -1,6 +1,6 @@
 'use client'
 
-import { Stack, Group, Box, Title, Text, Paper, SimpleGrid, ThemeIcon, Slider } from '@mantine/core'
+import { Stack, Group, Box, Title, Text, Paper, SimpleGrid, ThemeIcon } from '@mantine/core'
 import {
   IconAdjustments,
   IconBriefcase,
@@ -12,6 +12,12 @@ import {
   IconMountain,
   IconFlame,
   IconCrown,
+  IconPlayerTrackNext,
+  IconClockHour4,
+  IconClockHour8,
+  IconArrowsHorizontal,
+  IconArrowRight,
+  IconBolt,
 } from '@tabler/icons-react'
 import classes from '../create-session.module.css'
 
@@ -20,6 +26,12 @@ interface StyleStepProps {
   setTone: (value: string) => void
   speechRate: string
   setSpeechRate: (value: string) => void
+  responseLength: string
+  setResponseLength: (value: string) => void
+  patienceLevel: string
+  setPatienceLevel: (value: string) => void
+  initiativeLevel: string
+  setInitiativeLevel: (value: string) => void
   difficulty: number
   setDifficulty: (value: number) => void
   multiTurnEnabled: boolean
@@ -59,6 +71,90 @@ const toneOptions = [
   },
 ]
 
+const speechPaceOptions = [
+  {
+    value: 'Measured',
+    label: 'Measured',
+    description: 'Slow down, leave pauses, and sound deliberate.',
+    icon: <IconClockHour4 size={18} />,
+  },
+  {
+    value: 'Conversational',
+    label: 'Conversational',
+    description: 'Balanced pacing for natural back-and-forth.',
+    icon: <IconArrowsHorizontal size={18} />,
+  },
+  {
+    value: 'Fast',
+    label: 'Fast',
+    description: 'Sharper, quicker replies with tighter cadence.',
+    icon: <IconBolt size={18} />,
+  },
+]
+
+const responseLengthOptions = [
+  {
+    value: 'Concise',
+    label: 'Concise',
+    description: 'Short replies that keep the user talking.',
+    icon: <IconClockHour4 size={18} />,
+  },
+  {
+    value: 'Balanced',
+    label: 'Balanced',
+    description: 'Moderate detail with clear explanations.',
+    icon: <IconClockHour8 size={18} />,
+  },
+  {
+    value: 'Detailed',
+    label: 'Detailed',
+    description: 'Longer responses when depth matters.',
+    icon: <IconPlayerTrackNext size={18} />,
+  },
+]
+
+const patienceOptions = [
+  {
+    value: 'Low',
+    label: 'Low patience',
+    description: 'The persona gets frustrated quickly with vague answers.',
+    icon: <IconFlame size={18} />,
+  },
+  {
+    value: 'Medium',
+    label: 'Balanced patience',
+    description: 'Pushes back, but gives the user room to recover.',
+    icon: <IconMountain size={18} />,
+  },
+  {
+    value: 'High',
+    label: 'High patience',
+    description: 'Stays calm and gives the user more runway.',
+    icon: <IconLeaf size={18} />,
+  },
+]
+
+const initiativeOptions = [
+  {
+    value: 'Reactive',
+    label: 'Reactive',
+    description: 'Waits for the user and answers directly.',
+    icon: <IconArrowRight size={18} />,
+  },
+  {
+    value: 'Balanced',
+    label: 'Balanced',
+    description: 'Mixes answers with targeted follow-up questions.',
+    icon: <IconArrowsHorizontal size={18} />,
+  },
+  {
+    value: 'Proactive',
+    label: 'Proactive',
+    description: 'Drives the conversation forward with initiative.',
+    icon: <IconPlayerTrackNext size={18} />,
+  },
+]
+
 const difficultyOptions = [
   {
     label: 'Warm-up',
@@ -95,13 +191,17 @@ export function StyleStep({
   setTone,
   speechRate,
   setSpeechRate,
+  responseLength,
+  setResponseLength,
+  patienceLevel,
+  setPatienceLevel,
+  initiativeLevel,
+  setInitiativeLevel,
   difficulty,
   setDifficulty,
   multiTurnEnabled,
   setMultiTurnEnabled,
 }: StyleStepProps) {
-  const speechRateValue = speechRate === 'Slow' ? 0 : speechRate === 'Fast' ? 100 : 50
-
   return (
     <Stack gap="lg">
       <Group>
@@ -136,6 +236,7 @@ export function StyleStep({
                   withBorder
                   p="md"
                   radius="lg"
+                  data-tour-id={`style-tone-${option.value.toLowerCase().replace(/\s+/g, '-')}`}
                   className={`${classes.optionCard} ${isSelected ? classes.optionCardSelected : ''}`}
                   onClick={() => setTone(option.value)}
                 >
@@ -158,30 +259,150 @@ export function StyleStep({
           <Box>
             <Text fw={600}>Speech pace</Text>
             <Text size="sm" c="dimmed">
-              Set the cadence for responses.
+              Choose a cadence directly instead of dragging a slider.
             </Text>
           </Box>
-          <Paper withBorder p="md" radius="lg" className={classes.speechRateCard}>
-            <Slider
-              value={speechRateValue}
-              onChange={(value) => {
-                const next = value <= 25 ? 'Slow' : value >= 75 ? 'Fast' : 'Normal'
-                setSpeechRate(next)
-              }}
-              min={0}
-              max={100}
-              step={25}
-              marks={[
-                { value: 0, label: 'Slow' },
-                { value: 50, label: 'Normal' },
-                { value: 100, label: 'Fast' },
-              ]}
-              color="blue"
-            />
-            <Text size="xs" c="dimmed" mt="sm">
-              Current pace: {speechRate}
+          <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md">
+            {speechPaceOptions.map((option) => {
+              const isSelected = speechRate === option.value
+              return (
+                <Paper
+                  key={option.value}
+                  withBorder
+                  p="md"
+                  radius="lg"
+                  data-tour-id={`style-pace-${option.value.toLowerCase()}`}
+                  className={`${classes.optionCard} ${
+                    isSelected ? classes.optionCardSelected : ''
+                  }`}
+                  onClick={() => setSpeechRate(option.value)}
+                >
+                  <Group align="center" gap="sm">
+                    <ThemeIcon size="lg" radius="md" variant="light" color="blue">
+                      {option.icon}
+                    </ThemeIcon>
+                    <Stack gap={2}>
+                      <Text fw={700}>{option.label}</Text>
+                      <Text size="xs" c="dimmed">
+                        {option.description}
+                      </Text>
+                    </Stack>
+                  </Group>
+                </Paper>
+              )
+            })}
+          </SimpleGrid>
+
+          <Box>
+            <Text fw={600}>Response length</Text>
+            <Text size="sm" c="dimmed">
+              Control how much detail the AI gives before handing the floor back.
             </Text>
-          </Paper>
+          </Box>
+          <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md">
+            {responseLengthOptions.map((option) => {
+              const isSelected = responseLength === option.value
+              return (
+                <Paper
+                  key={option.value}
+                  withBorder
+                  p="md"
+                  radius="lg"
+                  data-tour-id={`style-length-${option.value.toLowerCase()}`}
+                  className={`${classes.optionCard} ${
+                    isSelected ? classes.optionCardSelected : ''
+                  }`}
+                  onClick={() => setResponseLength(option.value)}
+                >
+                  <Group align="center" gap="sm">
+                    <ThemeIcon size="lg" radius="md" variant="light" color="blue">
+                      {option.icon}
+                    </ThemeIcon>
+                    <Stack gap={2}>
+                      <Text fw={700}>{option.label}</Text>
+                      <Text size="xs" c="dimmed">
+                        {option.description}
+                      </Text>
+                    </Stack>
+                  </Group>
+                </Paper>
+              )
+            })}
+          </SimpleGrid>
+
+          <Box>
+            <Text fw={600}>Patience</Text>
+            <Text size="sm" c="dimmed">
+              Decide how forgiving the persona should be when the learner struggles.
+            </Text>
+          </Box>
+          <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md">
+            {patienceOptions.map((option) => {
+              const isSelected = patienceLevel === option.value
+              return (
+                <Paper
+                  key={option.value}
+                  withBorder
+                  p="md"
+                  radius="lg"
+                  data-tour-id={`style-patience-${option.value.toLowerCase()}`}
+                  className={`${classes.optionCard} ${
+                    isSelected ? classes.optionCardSelected : ''
+                  }`}
+                  onClick={() => setPatienceLevel(option.value)}
+                >
+                  <Group align="center" gap="sm">
+                    <ThemeIcon size="lg" radius="md" variant="light" color="blue">
+                      {option.icon}
+                    </ThemeIcon>
+                    <Stack gap={2}>
+                      <Text fw={700}>{option.label}</Text>
+                      <Text size="xs" c="dimmed">
+                        {option.description}
+                      </Text>
+                    </Stack>
+                  </Group>
+                </Paper>
+              )
+            })}
+          </SimpleGrid>
+
+          <Box>
+            <Text fw={600}>Initiative</Text>
+            <Text size="sm" c="dimmed">
+              Choose how strongly the AI drives follow-ups and next steps.
+            </Text>
+          </Box>
+          <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md">
+            {initiativeOptions.map((option) => {
+              const isSelected = initiativeLevel === option.value
+              return (
+                <Paper
+                  key={option.value}
+                  withBorder
+                  p="md"
+                  radius="lg"
+                  data-tour-id={`style-initiative-${option.value.toLowerCase()}`}
+                  className={`${classes.optionCard} ${
+                    isSelected ? classes.optionCardSelected : ''
+                  }`}
+                  onClick={() => setInitiativeLevel(option.value)}
+                >
+                  <Group align="center" gap="sm">
+                    <ThemeIcon size="lg" radius="md" variant="light" color="blue">
+                      {option.icon}
+                    </ThemeIcon>
+                    <Stack gap={2}>
+                      <Text fw={700}>{option.label}</Text>
+                      <Text size="xs" c="dimmed">
+                        {option.description}
+                      </Text>
+                    </Stack>
+                  </Group>
+                </Paper>
+              )
+            })}
+          </SimpleGrid>
 
           <Box>
             <Text fw={600}>Difficulty</Text>
@@ -198,6 +419,7 @@ export function StyleStep({
                   withBorder
                   p="md"
                   radius="lg"
+                  data-tour-id={`style-difficulty-${option.label.toLowerCase().replace(/\s+/g, '-')}`}
                   className={`${classes.optionCard} ${
                     isSelected ? classes.optionCardSelected : ''
                   }`}

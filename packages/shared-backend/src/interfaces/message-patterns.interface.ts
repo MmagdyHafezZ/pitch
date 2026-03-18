@@ -19,9 +19,13 @@ export const USER_SERVICE_PATTERNS = {
   GET_TEAM: 'get_team',
   GET_TEAMS: 'get_teams',
   GET_USER_TEAMS: 'get_user_teams',
+  INVITE_TEAM_MEMBER: 'invite_team_member',
+  ACCEPT_TEAM_INVITE: 'accept_team_invite',
+  CLAIM_TEAM_SIGNUP_INVITE: 'claim_team_signup_invite',
   ADD_TEAM_MEMBER: 'add_team_member',
   UPDATE_TEAM_MEMBER: 'update_team_member',
   DELETE_TEAM_MEMBER: 'delete_team_member',
+  SEND_TEAM_SIGNUP_INVITE: 'send_team_signup_invite',
   CREATE_SUBSCRIPTION: 'create_subscription',
   UPDATE_SUBSCRIPTION: 'update_subscription',
   UPGRADE_SUBSCRIPTION: 'upgrade_subscription',
@@ -153,6 +157,13 @@ export const SIMULATION_SERVICE_PATTERNS = {
   PHONE_CALL_START: 'simulation.phone.call.start',
 
   ANALYTICS_DASHBOARD: 'analytics.dashboard',
+
+  CHALLENGE_LIST: 'simulation.challenge.list',
+  CHALLENGE_GET: 'simulation.challenge.get',
+  CHALLENGE_PARTICIPATE: 'simulation.challenge.participate',
+  CHALLENGE_SUBMIT_SCORE: 'simulation.challenge.submitScore',
+  CHALLENGE_LEADERBOARD: 'simulation.challenge.leaderboard',
+  CHALLENGE_TRIGGER_GENERATE: 'simulation.challenge.triggerGenerate',
 } as const
 
 export type UserServicePattern = (typeof USER_SERVICE_PATTERNS)[keyof typeof USER_SERVICE_PATTERNS]
@@ -164,6 +175,8 @@ export type SimulationServicePattern =
   (typeof SIMULATION_SERVICE_PATTERNS)[keyof typeof SIMULATION_SERVICE_PATTERNS]
 export const SUPPORT_SERVICE_PATTERNS = {
   EMAIL_SEND_VERIFICATION_CODE: 'support.email.sendVerificationCode',
+  CHAT: 'support.chat',
+  EMAIL_SEND_TEMPLATE: 'support.email.sendTemplate',
 } as const
 export const TTS_SERVICE_PATTERNS = {
   SPEAK: 'tts.speak',

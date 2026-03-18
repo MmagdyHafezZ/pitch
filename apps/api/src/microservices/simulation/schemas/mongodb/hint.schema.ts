@@ -151,7 +151,6 @@ export const HintSchema = new Schema<IHintDocument>(
 HintSchema.index({ sessionId: 1, generatedAt: -1 });
 HintSchema.index({ userId: 1, generatedAt: -1 });
 HintSchema.index({ orgId: 1, generatedAt: -1 });
-HintSchema.index({ turnId: 1 });
 HintSchema.index({ 'hints.type': 1 });
 
 export const HintModel = 'HintDocument';

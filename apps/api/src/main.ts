@@ -1,5 +1,6 @@
 /* eslint-disable */
 import 'dotenv/config';
+import { json, urlencoded } from 'express';
 import { NestFactory } from '@nestjs/core';
 import {
   ArgumentsHost,
@@ -99,8 +100,15 @@ async function bootstrap() {
     process.exit(1);
   }
 
-  const app = await NestFactory.create(AppModule, { bufferLogs: true });
+  const app = await NestFactory.create(AppModule, {
+    bufferLogs: true,
+    bodyParser: false,
+  });
   app.useLogger(logger);
+
+  // Increase body-parser limits: images can be a few MB inline; PDFs go via multipart.
+  app.use(json({ limit: '5mb' }));
+  app.use(urlencoded({ extended: true, limit: '5mb' }));
 
   app.use(helmet());
   app.use(compression());
@@ -114,7 +122,7 @@ async function bootstrap() {
       process.env.FRONTEND_URL || 'http://localhost:3000',
     ],
     credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
   });
 

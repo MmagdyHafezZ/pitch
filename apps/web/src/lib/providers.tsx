@@ -15,6 +15,7 @@ import { queryClient } from './client'
 import { useEffect, useMemo, useState } from 'react'
 import { generateColors } from '@mantine/colors-generator'
 import { useAppearanceStore } from '@/lib/stores/appearance.store'
+import { I18nProvider } from '@/features/i18n'
 import {
   getAccentStrong,
   getReadableMutedColor,
@@ -436,12 +437,14 @@ export function Providers({ children }: ProvidersProps) {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <MantineProvider theme={theme} forceColorScheme={resolvedScheme}>
-        <ModalsProvider>
-          <Notifications />
-          {children}
-        </ModalsProvider>
-      </MantineProvider>
+      <I18nProvider>
+        <MantineProvider theme={theme} forceColorScheme={resolvedScheme}>
+          <ModalsProvider>
+            <Notifications />
+            {children}
+          </ModalsProvider>
+        </MantineProvider>
+      </I18nProvider>
       <ReactQueryDevtools initialIsOpen={false} />
     </QueryClientProvider>
   )

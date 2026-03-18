@@ -6,8 +6,17 @@ import { TtsService } from '../tts/tts.service';
 import { StageDetectorService } from './stage-detector.service';
 import { AssessmentService } from '../assessment/assessment.service';
 import { SimulationRedisService } from './redis/redis.service';
-import { buildConversationSystemPrompt } from '../prompts/conversation.prompt';
-import type { LLMConfigDto, LLMMessageDto } from '../dto/llm.dto';
+import {
+  buildConversationFallbackResponse,
+  buildConversationSystemPrompt,
+  isDisallowedGenericFallbackReply,
+} from '../prompts/conversation.prompt';
+import { ConversationToolsService } from './conversation-tools.service';
+import type {
+  LLMConfigDto,
+  LLMMessageDto,
+  LLMToolCallDto,
+} from '../dto/llm.dto';
 import type {
   WsEnvelope,
   ConversationStartPayload,
@@ -17,6 +26,8 @@ import { Prisma } from '@prisma/simulation-client';
 import { SentenceDetector } from '../utils/sentence-detector';
 import { RagService } from '../rag/rag.service';
 import { RagIndexerService } from '../rag/rag-indexer.service';
+import { resolveTtsConfig } from '../utils/tts-config';
+import { VideoGenerationService } from './video-generation.service';
 
 type JsonRecord = Record<string, unknown>;
 
@@ -33,6 +44,7 @@ interface SessionConfig extends JsonRecord {
   model?: string;
   temperature?: number;
   maxTokens?: number;
+  responseLength?: string;
   durationMinutes?: number;
   duration?: number;
   aiRole?: string;
@@ -41,6 +53,16 @@ interface SessionConfig extends JsonRecord {
   customPrompt?: string;
   userSnapshot?: Prisma.InputJsonValue;
   stages?: unknown;
+  ttsProvider?: string;
+  ttsVoice?: string;
+  ttsModel?: string;
+  voice?: {
+    provider?: string;
+    voice?: string;
+    voiceName?: string;
+    language?: string;
+    model?: string;
+  };
 }
 
 interface ScenarioConfig extends JsonRecord {
@@ -131,6 +153,8 @@ export class ConversationOrchestrationService {
     private readonly redis: SimulationRedisService,
     private readonly ragService: RagService,
     private readonly ragIndexer: RagIndexerService,
+    private readonly videoGeneration: VideoGenerationService,
+    private readonly conversationTools: ConversationToolsService,
   ) {}
 
   stream(
@@ -170,9 +194,6 @@ export class ConversationOrchestrationService {
 
     // ── 2. Resolve TTS config ─────────────────────────────────────────────────
     let personaData = session.persona;
-    let ttsProvider = 'elevenlabs';
-    let ttsVoice: string | undefined;
-    let ttsLanguage: string | undefined;
 
     const resolvedPersonaId = payload.personaId ?? session.personaId;
     if (resolvedPersonaId && resolvedPersonaId !== session.personaId) {
@@ -181,19 +202,18 @@ export class ConversationOrchestrationService {
       });
     }
 
-    if (personaData?.traits) {
-      const traits = toRecord(personaData.traits);
-      const voice = traits.voice;
-      if (isRecord(voice)) {
-        ttsProvider = (voice.provider as string) ?? ttsProvider;
-        ttsVoice = voice.voiceName as string;
-        ttsLanguage = voice.language as string;
-      }
-    }
-
-    if (payload.ttsConfig?.provider) ttsProvider = payload.ttsConfig.provider;
-    if (payload.ttsConfig?.voice) ttsVoice = payload.ttsConfig.voice;
-
+    const resolvedTts = resolveTtsConfig({
+      sessionConfig,
+      personaTraits: personaData?.traits ? toRecord(personaData.traits) : null,
+      override: payload.ttsConfig,
+    });
+    const videoConfig =
+      session.type === 'video'
+        ? this.videoGeneration.resolveVideoConfig(
+            sessionConfig,
+            personaData?.traits ? toRecord(personaData.traits) : null,
+          )
+        : null;
     // ── 3. Resolve session member + iteration (cached) ────────────────────────
     const smCache = forceNewIteration
       ? null
@@ -328,6 +348,16 @@ export class ConversationOrchestrationService {
             .join('\n')
         : undefined;
 
+    // ── 5.6. Mood context from Redis (set by update_mood tool) ────────────────
+    const moodState = await this.redis
+      .getMoodState(sessionId)
+      .catch(() => null);
+    const moodContext = moodState
+      ? `Your current mood is ${moodState.mood} (intensity ${moodState.intensity}/10). ` +
+        `This was triggered by: ${moodState.trigger}. ` +
+        `Mood set at: ${moodState.setAt}.`
+      : undefined;
+
     // ── 6. Build LLM messages ─────────────────────────────────────────────────
     const systemPrompt = buildConversationSystemPrompt({
       persona: personaData,
@@ -336,6 +366,7 @@ export class ConversationOrchestrationService {
       scenarioConfig,
       ragContext,
       visualContext: payload.visualContext,
+      moodContext,
     });
 
     const historyForPrompt = startAsAssistant
@@ -384,9 +415,14 @@ export class ConversationOrchestrationService {
       session.type,
     );
 
+    // Attach tool definitions so the LLM can call them during generation
+    llmConfig.tools = this.conversationTools.getToolDefinitions();
+    llmConfig.toolChoice = 'auto';
+
     // ── 7. LLM stream + per-sentence TTS ──────────────────────────────────────
     let fullText = '';
     let isFirstChunk = true;
+    const pendingToolCalls: LLMToolCallDto[] = [];
 
     const sentenceDetector = new SentenceDetector({
       minWords: 3,
@@ -425,16 +461,25 @@ export class ConversationOrchestrationService {
                 this.processSentenceTts(
                   idx,
                   sentenceChunk.sentence,
-                  ttsProvider,
-                  ttsVoice,
-                  ttsLanguage,
+                  resolvedTts.provider,
+                  resolvedTts.voice,
+                  resolvedTts.language,
+                  resolvedTts.model,
+                  undefined,
+                  undefined,
                   ttsSemaphore,
                   subject,
                 ),
               );
             }
           }
-          if (chunk.done) resolve();
+          if (chunk.done) {
+            // Collect tool calls from the done chunk for post-TTS execution
+            if (chunk.toolCalls && chunk.toolCalls.length > 0) {
+              pendingToolCalls.push(...chunk.toolCalls);
+            }
+            resolve();
+          }
         },
         error: (err) =>
           reject(err instanceof Error ? err : new Error(String(err))),
@@ -443,22 +488,58 @@ export class ConversationOrchestrationService {
     });
 
     if (!fullText.trim()) {
-      fullText = startAsAssistant
-        ? "Hello! Thanks for joining. Let's dive into today's scenario whenever you're ready."
-        : 'Got it. Could you say a bit more so I can respond properly?';
+      // When the LLM emits only tool calls (no text deltas), extract displayable
+      // text from tool arguments so the user hears the actual objection/question
+      // rather than the generic fallback.
+      const toolTexts = pendingToolCalls
+        .flatMap((tc) => {
+          try {
+            const args = JSON.parse(tc.arguments) as Record<string, unknown>;
+            if (tc.name === 'raise_objection' && typeof args.text === 'string')
+              return [args.text];
+            if (
+              tc.name === 'request_clarification' &&
+              typeof args.question === 'string'
+            )
+              return [args.question];
+          } catch {
+            /* malformed args — skip */
+          }
+          return [];
+        })
+        .join(' ');
+
+      fullText =
+        toolTexts ||
+        buildConversationFallbackResponse({
+          startAsAssistant,
+          persona: personaData,
+          sessionConfig,
+          scenarioConfig,
+        });
+    } else if (isDisallowedGenericFallbackReply(fullText)) {
+      fullText = buildConversationFallbackResponse({
+        startAsAssistant,
+        persona: personaData,
+        sessionConfig,
+        scenarioConfig,
+      });
     }
 
     // Flush remaining text in the sentence detector buffer
     const remaining = sentenceDetector.flush();
-    if (remaining) {
+    if (remaining?.sentence) {
       const idx = sentenceIndex++;
       sentenceTtsJobs.push(
         this.processSentenceTts(
           idx,
           remaining.sentence,
-          ttsProvider,
-          ttsVoice,
-          ttsLanguage,
+          resolvedTts.provider,
+          resolvedTts.voice,
+          resolvedTts.language,
+          resolvedTts.model,
+          undefined,
+          undefined,
           ttsSemaphore,
           subject,
         ),
@@ -561,6 +642,63 @@ export class ConversationOrchestrationService {
       },
     });
 
+    // ── Execute tool calls collected from the LLM stream ──────────────────────
+    if (pendingToolCalls.length > 0) {
+      const toolContext = { sessionId, iterationId, turnId: assistantTurnId };
+      const effects = await this.conversationTools
+        .execute(pendingToolCalls, toolContext)
+        .catch((err) => {
+          this.logger.warn(
+            `Tool execution failed: ${(err as Error)?.message ?? err}`,
+          );
+          return [];
+        });
+
+      for (const effect of effects) {
+        if (effect.streamEventOverride === 'hangup_requested') {
+          const rawReason = effect.args.reason;
+          const reason =
+            typeof rawReason === 'string'
+              ? rawReason
+              : typeof rawReason === 'number' || typeof rawReason === 'boolean'
+                ? String(rawReason)
+                : 'Call ended';
+          this.logger.log(
+            `AI requested hang-up via end_call for session ${sessionId}: ${reason}`,
+          );
+          subject.next({
+            type: 'hangup_requested',
+            data: { reason },
+          });
+        } else {
+          subject.next({
+            type: 'tool_executed',
+            data: { tool: effect.tool, args: effect.args },
+          });
+        }
+      }
+    }
+
+    if (videoConfig?.mode === 'rendered') {
+      void this.videoGeneration
+        .queueAssistantVideo({
+          sessionId,
+          requestId: envelope.requestId,
+          text: fullText,
+          language: resolvedTts.language ?? session.language ?? undefined,
+          ttsProvider: resolvedTts.provider,
+          ttsVoice: resolvedTts.voice,
+          ttsModel: resolvedTts.model,
+        })
+        .catch((error) => {
+          this.logger.warn(
+            `Video generation enqueue failed for session ${sessionId}: ${
+              (error as Error)?.message ?? error
+            }`,
+          );
+        });
+    }
+
     // Log simulation start event (first turn only)
     if (isFirstTurn) {
       void this.prisma.client.event
@@ -633,12 +771,21 @@ export class ConversationOrchestrationService {
     provider: string,
     voice: string | undefined,
     language: string | undefined,
+    model: string | undefined,
+    format: 'mp3' | 'wav' | 'ogg' | 'pcm' | undefined,
+    sampleRate: number | undefined,
     semaphore: Semaphore,
     subject: Subject<ConversationStreamEvent>,
   ): Promise<void> {
     await semaphore.acquire();
     try {
-      const options = voice ? { voice, language } : { language };
+      const options = {
+        ...(voice ? { voice } : {}),
+        ...(language ? { language } : {}),
+        ...(model ? { model } : {}),
+        ...(format ? { format } : {}),
+        ...(sampleRate ? { sampleRate } : {}),
+      };
       let audioBuffer: Buffer;
       let contentType: string;
 
@@ -669,6 +816,22 @@ export class ConversationOrchestrationService {
         } else {
           throw streamErr;
         }
+      }
+
+      if (format === 'pcm' && !contentType.startsWith('audio/pcm')) {
+        const pcmFallback = await this.ttsService.synthesize(
+          text,
+          'elevenlabs',
+          {
+            ...(voice ? { voice } : {}),
+            ...(language ? { language } : {}),
+            ...(model ? { model } : {}),
+            format: 'pcm',
+            sampleRate: sampleRate ?? 24000,
+          },
+        );
+        audioBuffer = pcmFallback.audioBuffer;
+        contentType = pcmFallback.contentType;
       }
 
       subject.next({
@@ -921,7 +1084,20 @@ export class ConversationOrchestrationService {
       sessionType === 'voice' ||
       sessionType === 'video' ||
       sessionType === 'phone';
-    const defaultMaxTokens = isVoiceLike ? 120 : 500;
+    const normalizedResponseLength = sessionConfig.responseLength
+      ?.toLowerCase()
+      .trim();
+    const defaultMaxTokens = normalizedResponseLength?.includes('concise')
+      ? isVoiceLike
+        ? 90
+        : 220
+      : normalizedResponseLength?.includes('detailed')
+        ? isVoiceLike
+          ? 220
+          : 700
+        : isVoiceLike
+          ? 140
+          : 420;
 
     return {
       provider: cfg.provider,

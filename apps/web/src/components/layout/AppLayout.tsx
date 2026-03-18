@@ -2,18 +2,26 @@
 
 import { AppShell, Box, rem } from '@mantine/core'
 import { ReactNode } from 'react'
-import { useMediaQuery } from '@mantine/hooks'
+import { useDisclosure, useMediaQuery } from '@mantine/hooks'
 import classes from './app-layout.module.css'
 
-type Props = {
-  header: ReactNode
-  navbar: ReactNode
-  children: ReactNode
-  navbarOpened?: boolean
+type ShellControls = {
+  mobileNavOpened: boolean
+  toggleMobileNav: () => void
+  closeMobileNav: () => void
 }
 
-export function AppLayout({ header, navbar, children, navbarOpened = false }: Props) {
+type ShellSlot = ReactNode | ((controls: ShellControls) => ReactNode)
+
+type Props = {
+  header: ShellSlot
+  navbar: ShellSlot
+  children: ReactNode
+}
+
+export function AppLayout({ header, navbar, children }: Props) {
   const isMobile = useMediaQuery('(max-width: 48em)')
+  const [opened, { toggle, close }] = useDisclosure()
   const currentPage = typeof window !== 'undefined' ? window.location.pathname : ''
   const mobileBaseHeaderHeight =
     currentPage === '/studio/sessions'
@@ -25,12 +33,19 @@ export function AppLayout({ header, navbar, children, navbarOpened = false }: Pr
     ? `calc(${mobileBaseHeaderHeight} + env(safe-area-inset-top, 0px))`
     : rem(60)
   const curveRadius = rem(18)
+  const controls: ShellControls = {
+    mobileNavOpened: opened,
+    toggleMobileNav: toggle,
+    closeMobileNav: close,
+  }
+  const headerNode = typeof header === 'function' ? header(controls) : header
+  const navbarNode = typeof navbar === 'function' ? navbar(controls) : navbar
 
   return (
     <AppShell
       withBorder={false}
       header={{ height: headerHeight }}
-      navbar={{ width: 300, breakpoint: 'md', collapsed: { mobile: !navbarOpened } }}
+      navbar={{ width: 300, breakpoint: 'md', collapsed: { mobile: !opened } }}
       styles={{
         header: {
           background:
@@ -49,8 +64,8 @@ export function AppLayout({ header, navbar, children, navbarOpened = false }: Pr
       }}
       padding={0}
     >
-      <AppShell.Header>{header}</AppShell.Header>
-      <AppShell.Navbar>{navbar}</AppShell.Navbar>
+      <AppShell.Header>{headerNode}</AppShell.Header>
+      <AppShell.Navbar>{navbarNode}</AppShell.Navbar>
       <AppShell.Main>
         <Box className={classes.surface} style={{ ['--studio-shell-radius' as any]: curveRadius }}>
           <div className={classes.mesh} />

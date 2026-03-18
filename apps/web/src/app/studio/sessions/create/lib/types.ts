@@ -3,6 +3,9 @@ export interface SessionConfigForm {
   accent: string
   tone: string
   speechRate: string
+  responseLength?: string
+  patienceLevel?: string
+  initiativeLevel?: string
   difficulty: number
   durationMinutes?: number
   aiRole?: string
@@ -14,11 +17,28 @@ export interface PersonaTraits {
   role?: string
   level?: string
   personality?: string
+  background?: string
+  tone?: string
+  patience?: string
+  communicationStyle?: string
   voiceProfile?: string
   voice?: {
     provider?: string
     voiceName?: string
     language?: string
+    model?: string
+  }
+  avatar?: {
+    label?: string
+    imageUrl?: string
+    previewVideoUrl?: string
+    gender?: 'female' | 'male' | 'neutral' | string
+    track?: string
+  }
+  audioPreview?: {
+    provider?: string
+    voiceName?: string
+    text?: string
   }
   archetype?: string
   rarity?: string

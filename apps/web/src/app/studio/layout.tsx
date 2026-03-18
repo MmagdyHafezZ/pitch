@@ -11,11 +11,10 @@ import { notifications } from '@mantine/notifications'
 import { modals } from '@mantine/modals'
 import { useState, useEffect, useMemo, Suspense } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
-import { useMediaQuery } from '@mantine/hooks'
 
 export default function ClientLayerComponent({ children }: { children: React.ReactNode }) {
   const [active, setActive] = useState<
-    'Home' | 'Sessions' | 'Teams' | 'Analytics' | 'Settings' | 'Team Config'
+    'Home' | 'Sessions' | 'Teams' | 'Analytics' | 'Settings' | 'Team Config' | 'Challenges'
   >('Home')
   const [selectedDate, setSelectedDate] = useState<Date | null>(new Date())
   const {
@@ -30,8 +29,6 @@ export default function ClientLayerComponent({ children }: { children: React.Rea
   const router = useRouter()
   const searchParams = useSearchParams()
   const user = useAuthStore((state) => state.user)
-  const isMobile = useMediaQuery('(max-width: 768px)')
-  const [navbarOpened, setNavbarOpened] = useState(false)
 
   const setSidebarActive = (
     value:
@@ -43,7 +40,14 @@ export default function ClientLayerComponent({ children }: { children: React.Rea
       | 'Team Config'
       | 'Challenges'
       | ((
-          current: 'Home' | 'Sessions' | 'Teams' | 'Analytics' | 'Settings' | 'Team Config'
+          current:
+            | 'Home'
+            | 'Sessions'
+            | 'Teams'
+            | 'Analytics'
+            | 'Settings'
+            | 'Team Config'
+            | 'Challenges'
         ) =>
           | 'Home'
           | 'Sessions'
@@ -58,6 +62,12 @@ export default function ClientLayerComponent({ children }: { children: React.Rea
       return next === 'Challenges' ? current : next
     })
   }
+
+  useEffect(() => {
+    if (user && !user.settings?.onboarding?.completed) {
+      router.replace('/onboarding')
+    }
+  }, [user, router])
 
   const [tabsByPage, setTabsByPage] = useState<
     Record<'Home' | 'Sessions' | 'Teams' | 'Analytics' | 'Challenges' | 'Settings', string>
@@ -87,7 +97,6 @@ export default function ClientLayerComponent({ children }: { children: React.Rea
         params.set('tab', tab)
         router.replace(`${pathname}?${params.toString()}`)
       }
-
       if (page === 'Challenges') {
         const params = new URLSearchParams(searchParams.toString())
         if (tab === 'All') {
@@ -97,12 +106,6 @@ export default function ClientLayerComponent({ children }: { children: React.Rea
         }
         const query = params.toString()
         router.replace(query ? `${pathname}?${query}` : pathname)
-      }
-
-      if (page === 'Teams') {
-        const params = new URLSearchParams(searchParams.toString())
-        params.set('teamView', tab)
-        router.push(`${pathname}?${params.toString()}`)
       }
     }
   }
@@ -124,7 +127,7 @@ export default function ClientLayerComponent({ children }: { children: React.Rea
       return { page: 'Settings' as const, nav: 'Settings' as const }
     }
     if (pathname.startsWith('/studio/challenges')) {
-      return { page: 'Challenges' as const, nav: 'Home' as const }
+      return { page: 'Challenges' as const, nav: 'Challenges' as const }
     }
     return { page: 'Home' as const, nav: 'Home' as const }
   }, [pathname])
@@ -135,7 +138,6 @@ export default function ClientLayerComponent({ children }: { children: React.Rea
   const challengesPeriod = challengesPeriodRaw
     ? challengesPeriodRaw.charAt(0).toUpperCase() + challengesPeriodRaw.slice(1).toLowerCase()
     : 'All'
-  const teamView = searchParams.get('teamView') ?? 'All'
 
   let selectedTab: string
   if (pageInfo.page === 'Sessions') {
@@ -144,8 +146,6 @@ export default function ClientLayerComponent({ children }: { children: React.Rea
     selectedTab = analyticsTab
   } else if (pageInfo.page === 'Challenges') {
     selectedTab = challengesPeriod
-  } else if (pageInfo.page === 'Teams') {
-    selectedTab = teamView
   } else {
     selectedTab = tabsByPage[pageInfo.page]
   }
@@ -154,7 +154,6 @@ export default function ClientLayerComponent({ children }: { children: React.Rea
     () => teams.find((t) => t.id === activeTeamId) ?? null,
     [teams, activeTeamId]
   )
-
   const teamsForSidebar = useMemo(() => {
     return teams.map((team) => {
       const membership = team.memberships?.find((member) => member.userId === user?.id)
@@ -169,19 +168,11 @@ export default function ClientLayerComponent({ children }: { children: React.Rea
       }
     })
   }, [teams, user?.id])
-
   const canAccessTeamConfig = useMemo(() => {
     if (!user?.id) return false
     const membership = activeTeam?.memberships?.find((m) => m.userId === user.id)
     return membership?.role === 'OWNER' || membership?.role === 'ADMIN'
   }, [activeTeam?.memberships, user?.id])
-
-  const closeNavbar = () => {
-    if (isMobile) {
-      setNavbarOpened(false)
-    }
-  }
-
   const handleLeaveTeam = (team: { id: string; name: string; canLeave?: boolean }) => {
     if (!user?.id) return
     modals.openConfirmModal({
@@ -213,13 +204,9 @@ export default function ClientLayerComponent({ children }: { children: React.Rea
   }
 
   const handleSelectTeam = (teamId: string) => {
-    if (teamId === activeTeamId) {
-      closeNavbar()
-      return
-    }
+    if (teamId === activeTeamId) return
 
     setActiveTeamId(teamId)
-    closeNavbar()
     const nextTeam = teamsForSidebar.find((team) => team.id === teamId)
     if (!nextTeam) return
 
@@ -249,17 +236,10 @@ export default function ClientLayerComponent({ children }: { children: React.Rea
     }
   }, [activeTeam, canAccessTeamConfig, pathname, router, teamsLoading])
 
-  useEffect(() => {
-    if (!isMobile) {
-      setNavbarOpened(false)
-    }
-  }, [isMobile])
-
   return (
     <>
       <AppLayout
-        navbarOpened={navbarOpened}
-        header={
+        header={({ toggleMobileNav, mobileNavOpened }) => (
           <Suspense fallback={<Box style={{ height: '100%' }} />}>
             <AppTopBar
               currentPage={pageInfo.page}
@@ -267,33 +247,30 @@ export default function ClientLayerComponent({ children }: { children: React.Rea
               teamName={activeTeam?.name ?? 'PITCH'}
               selectedTab={selectedTab}
               onTabChange={handleTabChange(pageInfo.page)}
-              mobileNavOpened={navbarOpened}
-              onToggleMobileNav={() => setNavbarOpened((opened) => !opened)}
+              onToggleMobileNav={toggleMobileNav}
+              mobileNavOpened={mobileNavOpened}
             />
           </Suspense>
-        }
-        navbar={
+        )}
+        navbar={({ closeMobileNav }) => (
           <Box h="100%" style={{ display: 'flex', flexDirection: 'row' }}>
             <TeamSideBar
               teams={teamsForSidebar}
               activeTeamId={activeTeamId}
               onSelectTeam={handleSelectTeam}
               onLeaveTeam={handleLeaveTeam}
-              onNavigate={closeNavbar}
+              onNavigate={closeMobileNav}
             />
             <AppSidebar
               active={active}
-              setActive={(value) => {
-                setSidebarActive(value)
-                closeNavbar()
-              }}
+              setActive={setSidebarActive}
               selectedDate={selectedDate}
               setSelectedDate={setSelectedDate}
               showTeamConfig={canAccessTeamConfig}
-              onNavigate={closeNavbar}
+              onNavigate={closeMobileNav}
             />
           </Box>
-        }
+        )}
       >
         {children}
       </AppLayout>

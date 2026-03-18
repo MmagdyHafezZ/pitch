@@ -430,6 +430,24 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(data),
       }),
+    inviteMember: (id: string, data: any) =>
+      apiRequest<any>(`/teams/${id}/invitations`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    sendSignupInvite: (id: string, data: { email: string; signupUrl?: string; role?: string }) =>
+      apiRequest<any>(`/teams/${id}/invitations/signup`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    claimInvite: (id: string) =>
+      apiRequest<any>(`/teams/${id}/invitations/claim`, {
+        method: 'POST',
+      }),
+    acceptInvite: (id: string) =>
+      apiRequest<any>(`/teams/${id}/invitations/accept`, {
+        method: 'POST',
+      }),
     updateMember: (id: string, userId: string, data: any) =>
       apiRequest<any>(`/teams/${id}/members/${userId}`, {
         method: 'PUT',
@@ -554,6 +572,7 @@ export const api = {
       iterationId?: string
       sessionMemberId?: string
       mode: 'live' | 'final'
+      forceRecalculate?: boolean
       configVersion?: string
       requestedBy?: string
     }) =>
@@ -575,6 +594,34 @@ export const api = {
         `/simulation/sessions/${sessionId}/assessments/latest${queryString ? `?${queryString}` : ''}`
       )
     },
+  },
+
+  lti: {
+    getCredentials: () =>
+      apiRequest<{
+        v13: {
+          launchUrl: string
+          oidcLoginUrl: string
+          jwksUrl: string
+          redirectUri: string
+          publicKeyPem: string | null
+        }
+        v11: { launchUrl: string }
+      }>('/lti/platforms/credentials'),
+
+    registerPlatform: (body: {
+      name: string
+      issuer: string
+      clientId: string
+      authLoginUrl: string
+      authTokenUrl: string
+      keysetUrl: string
+      deploymentId: string
+    }) =>
+      apiRequest<{ id: string }>('/lti/platforms', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
   },
 
   scenarios: {
@@ -667,10 +714,20 @@ export const api = {
   },
 
   tts: {
-    listProviders: () => apiRequest<any[]>('/tts/providers'),
+    listProviders: () =>
+      apiRequest<
+        Array<{ name: string; description?: string; voices: string[]; models?: string[] }>
+      >('/tts/providers'),
     getVoices: (provider: string) =>
-      apiRequest<{ provider: string; voices: string[] }>(`/tts/voices?provider=${provider}`),
-    speak: async (data: { text: string; provider: string; voice: string }): Promise<Blob> => {
+      apiRequest<{ provider: string; voices: string[]; models?: string[] }>(
+        `/tts/voices?provider=${provider}`
+      ),
+    speak: async (data: {
+      text: string
+      provider: string
+      voice: string
+      model?: string
+    }): Promise<Blob> => {
       const url = `${API_CONFIG.baseURL}/tts/speak`
       const token = getAccessToken()
 
@@ -702,7 +759,75 @@ export const api = {
         `/simulation/personas${queryString ? `?${queryString}` : ''}`
       )
     },
+    create: (data: { orgId: string; name: string; traits?: Record<string, unknown> }) =>
+      apiRequest<any>('/simulation/personas', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
     getById: (id: string) => apiRequest<any>(`/simulation/personas/${id}`),
+    getPreviewAudio: async (id: string): Promise<Blob> => {
+      const url = `${API_CONFIG.baseURL}/simulation/personas/${id}/preview-audio`
+      const token = getAccessToken()
+
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        credentials: 'include',
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.message || `HTTP ${response.status}: ${response.statusText}`)
+      }
+
+      return await response.blob()
+    },
+  },
+
+  challenges: {
+    list: (params?: { period?: string; difficulty?: string; limit?: number; offset?: number }) => {
+      const query = new URLSearchParams()
+      if (params?.period) query.set('period', params.period)
+      if (params?.difficulty) query.set('difficulty', params.difficulty)
+      if (params?.limit) query.set('limit', params.limit.toString())
+      if (params?.offset) query.set('offset', params.offset.toString())
+      const qs = query.toString()
+      return apiRequest<any>(`/challenges${qs ? `?${qs}` : ''}`)
+    },
+    get: (id: string) => apiRequest<any>(`/challenges/${id}`),
+    participate: (challengeId: string) =>
+      apiRequest<any>(`/challenges/${challengeId}/participate`, { method: 'POST' }),
+    submitScore: (challengeId: string, sessionId: string, score: number) =>
+      apiRequest<any>(`/challenges/${challengeId}/score`, {
+        method: 'PUT',
+        body: JSON.stringify({ sessionId, score }),
+      }),
+    challengeLeaderboard: (challengeId: string, limit?: number) =>
+      apiRequest<any>(`/challenges/${challengeId}/leaderboard${limit ? `?limit=${limit}` : ''}`),
+    globalLeaderboard: (limit?: number) =>
+      apiRequest<any>(`/challenges/leaderboard${limit ? `?limit=${limit}` : ''}`),
+    adminGenerate: (period: 'DAILY' | 'WEEKLY' | 'MONTHLY') =>
+      apiRequest<any>('/challenges/admin/generate', {
+        method: 'POST',
+        body: JSON.stringify({ period }),
+        timeoutMs: 60000,
+      }),
+  },
+
+  support: {
+    chat: (req: {
+      messages: Array<{ role: 'user' | 'assistant'; content: string }>
+      context?: {
+        page?: string
+        sessionId?: string
+        recentTurns?: Array<{ role: string; text: string }>
+      }
+    }) =>
+      apiRequest<{ reply: string }>('/support/chat', {
+        method: 'POST',
+        body: JSON.stringify(req),
+        timeoutMs: 30000,
+      }),
   },
 
   analytics: {

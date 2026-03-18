@@ -1,3 +1,29 @@
+export interface UserOnboardingSettings {
+  completed?: boolean
+  tutorialCompleted?: boolean
+  role?: 'MANAGER' | 'EMPLOYEE'
+  careerInfo?: {
+    jobTitle?: string
+    yearsOfExperience?: number
+    industry?: string
+    linkedIn?: string
+  }
+}
+
+export interface UserSettings {
+  onboarding?: UserOnboardingSettings
+  crm?: {
+    connected?: boolean
+    provider?: string | null
+    name?: string | null
+    providerEmail?: string | null
+  }
+  language?: {
+    locale?: string
+  }
+  [key: string]: unknown
+}
+
 export interface User {
   id: string
   email: string
@@ -6,6 +32,7 @@ export interface User {
   isActive: boolean
   createdAt: string
   updatedAt: string
+  settings?: UserSettings | null
 }
 
 export interface AuthState {

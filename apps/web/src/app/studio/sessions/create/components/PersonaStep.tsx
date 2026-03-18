@@ -7,6 +7,7 @@ import {
   Title,
   Text,
   Badge,
+  Button,
   Loader,
   Alert,
   TextInput,
@@ -27,12 +28,18 @@ import {
   IconBolt,
   IconSparkles,
   IconStar,
+  IconPlayerPlay,
+  IconPlayerPause,
 } from '@tabler/icons-react'
 import { motion, AnimatePresence, LayoutGroup } from 'framer-motion'
 import { Persona, PersonaTraits } from '../lib/types'
 import { normalizeMetrics, getVoiceProfile, getRarityColor } from '../lib/helpers'
 import classes from '../create-session.module.css'
-import { ReactNode, RefObject } from 'react'
+import { ReactNode, RefObject, useEffect, useRef, useState } from 'react'
+import type { TtsProvider } from '@/features/tts'
+import { CreatePersonaModal } from './CreatePersonaModal'
+import { notifications } from '@mantine/notifications'
+import { api } from '@/lib/client'
 
 export const metricIconMap: Record<string, ReactNode> = {
   empathy: <IconHeart size={12} />,
@@ -67,6 +74,16 @@ const resolveSignatureTraits = (traits: PersonaTraits | Record<string, unknown>)
   return []
 }
 
+const resolvePersonaAvatarUrl = (
+  traits: PersonaTraits | Record<string, unknown>
+): string | undefined => {
+  const personaTraits = traits as Partial<PersonaTraits>
+  const avatar = personaTraits.avatar
+  return typeof avatar?.imageUrl === 'string' && avatar.imageUrl.trim().length > 0
+    ? avatar.imageUrl
+    : undefined
+}
+
 interface PersonaStepProps {
   personasLoading: boolean
   personas: Persona[]
@@ -79,6 +96,9 @@ interface PersonaStepProps {
   setSelectedPersona: (id: string | null) => void
   errors: Record<string, string>
   selectedPersonaData: Persona | null
+  ttsProviders: TtsProvider[]
+  onCreatePersona: (input: { name: string; traits: PersonaTraits }) => Promise<Persona>
+  createDisabledReason?: string | null
 }
 
 export function PersonaStep({
@@ -93,7 +113,86 @@ export function PersonaStep({
   setSelectedPersona,
   errors,
   selectedPersonaData,
+  ttsProviders,
+  onCreatePersona,
+  createDisabledReason,
 }: PersonaStepProps) {
+  const [createModalOpen, setCreateModalOpen] = useState(false)
+  const [previewLoadingPersonaId, setPreviewLoadingPersonaId] = useState<string | null>(null)
+  const [playingPersonaId, setPlayingPersonaId] = useState<string | null>(null)
+  const previewAudioRef = useRef<HTMLAudioElement | null>(null)
+  const previewUrlRef = useRef<string | null>(null)
+  const visiblePersonas = filteredPersonas.filter((persona) => persona.id !== selectedPersona)
+
+  const clearPreviewUrl = () => {
+    if (previewUrlRef.current) {
+      URL.revokeObjectURL(previewUrlRef.current)
+      previewUrlRef.current = null
+    }
+  }
+
+  const stopPreviewAudio = () => {
+    if (previewAudioRef.current) {
+      previewAudioRef.current.pause()
+      previewAudioRef.current.src = ''
+      previewAudioRef.current = null
+    }
+    clearPreviewUrl()
+    setPlayingPersonaId(null)
+  }
+
+  useEffect(() => {
+    return () => {
+      if (previewAudioRef.current) {
+        previewAudioRef.current.pause()
+        previewAudioRef.current.src = ''
+        previewAudioRef.current = null
+      }
+      if (previewUrlRef.current) {
+        URL.revokeObjectURL(previewUrlRef.current)
+        previewUrlRef.current = null
+      }
+    }
+  }, [])
+
+  const handlePreviewAudio = async (persona: Persona) => {
+    if (playingPersonaId === persona.id) {
+      stopPreviewAudio()
+      return
+    }
+
+    setPreviewLoadingPersonaId(persona.id)
+    stopPreviewAudio()
+
+    try {
+      const audioBlob = await api.personas.getPreviewAudio(persona.id)
+      const objectUrl = URL.createObjectURL(audioBlob)
+      previewUrlRef.current = objectUrl
+
+      const audio = new Audio(objectUrl)
+      previewAudioRef.current = audio
+      audio.onended = () => {
+        setPlayingPersonaId(null)
+        clearPreviewUrl()
+      }
+      audio.onerror = () => {
+        setPlayingPersonaId(null)
+        clearPreviewUrl()
+      }
+
+      await audio.play()
+      setPlayingPersonaId(persona.id)
+    } catch (error) {
+      notifications.show({
+        title: 'Preview unavailable',
+        message: error instanceof Error ? error.message : 'Unable to load persona preview audio.',
+        color: 'red',
+      })
+    } finally {
+      setPreviewLoadingPersonaId((current) => (current === persona.id ? null : current))
+    }
+  }
+
   if (personasLoading) {
     return (
       <Group justify="center" p="xl">
@@ -105,9 +204,25 @@ export function PersonaStep({
 
   if (personas.length === 0) {
     return (
-      <Alert color="yellow" title="No personas available">
-        No personas found. Please contact support or try again later.
-      </Alert>
+      <Stack gap="md">
+        <Alert color="yellow" title="No personas available">
+          No personas found yet. Create one to continue.
+        </Alert>
+        <Button
+          variant="light"
+          onClick={() => setCreateModalOpen(true)}
+          disabled={Boolean(createDisabledReason)}
+        >
+          Create Persona Here
+        </Button>
+        <CreatePersonaModal
+          opened={createModalOpen}
+          onClose={() => setCreateModalOpen(false)}
+          onCreatePersona={onCreatePersona}
+          ttsProviders={ttsProviders}
+          createDisabledReason={createDisabledReason}
+        />
+      </Stack>
     )
   }
 
@@ -121,11 +236,16 @@ export function PersonaStep({
               Match the persona to your training scenario.
             </Text>
           </Box>
-          {selectedPersona && (
-            <Badge size="lg" variant="light">
-              Persona selected
-            </Badge>
-          )}
+          <Group gap="sm">
+            {selectedPersona && (
+              <Badge size="lg" variant="light">
+                Persona selected
+              </Badge>
+            )}
+            <Button variant="light" onClick={() => setCreateModalOpen(true)}>
+              Create Persona Here
+            </Button>
+          </Group>
         </Group>
 
         <Stack gap="lg">
@@ -155,16 +275,17 @@ export function PersonaStep({
               <IconChevronRight size={18} />
             </ActionIcon>
             <div ref={personaScrollRef} className={classes.personaTrack}>
-              <AnimatePresence>
-                {filteredPersonas.length === 0 ? (
+              <AnimatePresence mode="popLayout">
+                {visiblePersonas.length === 0 ? (
                   <Box className={classes.personaEmptyInline}>
                     <Text size="sm" c="dimmed">
-                      No personas match your search.
+                      {selectedPersonaData
+                        ? 'Your selected persona is shown below. Adjust the search or create another persona to compare more options.'
+                        : 'No personas match your search.'}
                     </Text>
                   </Box>
                 ) : (
-                  filteredPersonas.map((persona) => {
-                    const isSelected = selectedPersona === persona.id
+                  visiblePersonas.map((persona) => {
                     const traits = persona.traits ?? {}
                     const metrics = normalizeMetrics(traits)
                     const signatureTraits = resolveSignatureTraits(traits)
@@ -173,29 +294,26 @@ export function PersonaStep({
                     const rarity = traits.rarity ?? 'Standard'
                     const rarityColor = getRarityColor(rarity, traits.rarityColor)
                     const miniMetrics = metrics.slice(0, 2)
+                    const avatarUrl = resolvePersonaAvatarUrl(traits)
+                    const isPreviewLoading = previewLoadingPersonaId === persona.id
+                    const isPreviewPlaying = playingPersonaId === persona.id
 
                     return (
                       <motion.div
                         key={persona.id}
-                        layoutId={persona.id}
-                        initial={{ opacity: 1 }}
-                        animate={{
-                          opacity: 1,
-                          width: isSelected ? 0 : 300,
-                          marginRight: isSelected ? 0 : 16,
-                        }}
-                        exit={{ opacity: 1 }}
-                        transition={{ duration: 0.35, ease: 'easeInOut' }}
-                        style={{
-                          flexShrink: 0,
-                          pointerEvents: isSelected ? 'none' : 'auto',
-                        }}
+                        layout
+                        initial={{ opacity: 0, y: 16, scale: 0.98 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: 12, scale: 0.96 }}
+                        transition={{ duration: 0.24, ease: 'easeOut' }}
+                        style={{ flexShrink: 0 }}
                       >
                         <Card
                           withBorder
                           padding="md"
                           radius="xl"
-                          data-selected={isSelected ? 'true' : 'false'}
+                          data-selected="false"
+                          data-tour-id="create-session-persona-item"
                           className={`${classes.selectionCard} ${classes.personaCard}`}
                           onClick={() => {
                             setSelectedPersona(persona.id)
@@ -210,7 +328,7 @@ export function PersonaStep({
                             >
                               <Group gap="sm">
                                 <Box pos="relative">
-                                  <Avatar size={64} radius="md">
+                                  <Avatar size={64} radius="md" src={avatarUrl}>
                                     <IconUser size={30} />
                                   </Avatar>
                                 </Box>
@@ -224,6 +342,27 @@ export function PersonaStep({
                                 </Stack>
                               </Group>
                               <Stack gap={4} align="flex-end">
+                                <ActionIcon
+                                  size="sm"
+                                  variant="light"
+                                  color={isPreviewPlaying ? 'red' : 'brand'}
+                                  loading={isPreviewLoading}
+                                  onClick={(event) => {
+                                    event.stopPropagation()
+                                    void handlePreviewAudio(persona)
+                                  }}
+                                  title={
+                                    isPreviewPlaying
+                                      ? 'Pause persona preview audio'
+                                      : 'Play persona preview audio'
+                                  }
+                                >
+                                  {isPreviewPlaying ? (
+                                    <IconPlayerPause size={14} />
+                                  ) : (
+                                    <IconPlayerPlay size={14} />
+                                  )}
+                                </ActionIcon>
                                 <Badge size="xs" variant="light">
                                   {archetype}
                                 </Badge>
@@ -303,6 +442,9 @@ export function PersonaStep({
                   const archetype = traits.archetype ?? traits.role ?? 'Persona'
                   const rarity = traits.rarity ?? 'Standard'
                   const rarityColor = getRarityColor(rarity, traits.rarityColor)
+                  const avatarUrl = resolvePersonaAvatarUrl(traits)
+                  const isPreviewLoading = previewLoadingPersonaId === selectedPersonaData.id
+                  const isPreviewPlaying = playingPersonaId === selectedPersonaData.id
 
                   return (
                     <Paper
@@ -314,7 +456,7 @@ export function PersonaStep({
                     >
                       <Stack gap="md">
                         <Group align="center" className={classes.personaPreviewHeader}>
-                          <Avatar size={72} radius="lg">
+                          <Avatar size={72} radius="lg" src={avatarUrl}>
                             <IconUser size={34} />
                           </Avatar>
                           <Stack gap={2}>
@@ -329,6 +471,25 @@ export function PersonaStep({
                               <Badge size="xs" variant="outline" color={rarityColor}>
                                 {rarity}
                               </Badge>
+                              <Button
+                                size="xs"
+                                variant={isPreviewPlaying ? 'filled' : 'light'}
+                                color={isPreviewPlaying ? 'red' : 'brand'}
+                                loading={isPreviewLoading}
+                                leftSection={
+                                  isPreviewPlaying ? (
+                                    <IconPlayerPause size={14} />
+                                  ) : (
+                                    <IconPlayerPlay size={14} />
+                                  )
+                                }
+                                onClick={(event) => {
+                                  event.stopPropagation()
+                                  void handlePreviewAudio(selectedPersonaData)
+                                }}
+                              >
+                                {isPreviewPlaying ? 'Stop voice' : 'Play voice'}
+                              </Button>
                             </Group>
                           </Stack>
                         </Group>
@@ -435,6 +596,13 @@ export function PersonaStep({
             </Text>
           )}
         </Stack>
+        <CreatePersonaModal
+          opened={createModalOpen}
+          onClose={() => setCreateModalOpen(false)}
+          onCreatePersona={onCreatePersona}
+          ttsProviders={ttsProviders}
+          createDisabledReason={createDisabledReason}
+        />
       </Stack>
     </LayoutGroup>
   )

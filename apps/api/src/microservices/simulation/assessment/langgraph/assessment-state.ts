@@ -122,6 +122,8 @@ export const AssessmentState = Annotation.Root({
   sessionId: Annotation<string>(),
   sessionMemberId: Annotation<string>(),
   userId: Annotation<string | null>(),
+  /** Brief description of the session objective/scenario injected into the judge prompt. */
+  sessionContext: Annotation<string | undefined>(),
   turnsRaw: Annotation<RawTurn[]>(),
   turns: Annotation<NormalizedTurn[]>(),
   chunks: Annotation<AssessmentChunk[]>(),

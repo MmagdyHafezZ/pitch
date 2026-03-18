@@ -3,6 +3,7 @@ import {
   IsOptional,
   IsString,
   IsNumber,
+  IsBoolean,
   ValidateIf,
   IsArray,
   IsObject,
@@ -61,6 +62,15 @@ export class AssessmentRunRequestDto {
   @ApiProperty({ enum: AssessmentModeDto, example: AssessmentModeDto.final })
   @IsEnum(AssessmentModeDto)
   mode: AssessmentModeDto;
+
+  @ApiPropertyOptional({
+    example: true,
+    description:
+      'When true, bypass idempotent input-hash reuse and create a brand-new run.',
+  })
+  @IsBoolean()
+  @IsOptional()
+  forceRecalculate?: boolean;
 
   @ApiPropertyOptional({
     example: 'v1',

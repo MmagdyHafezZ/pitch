@@ -49,6 +49,8 @@ export enum WsMessageType {
   CONVERSATION_COMPLETE = 'conversation.complete',
 
   CONVERSATION_VISUAL_STATE = 'conversation.visual_state',
+  CONVERSATION_HANGUP_REQUESTED = 'conversation.hangup_requested',
+  CONVERSATION_TOOL_EXECUTED = 'conversation.tool_executed',
 
   PING = 'ping',
   PONG = 'pong',
@@ -345,6 +347,7 @@ export class ConversationStartPayload {
   ttsConfig?: {
     provider?: string;
     voice?: string;
+    model?: string;
   };
 
   /**
@@ -645,6 +648,31 @@ export class ConversationCompletePayload {
 
   @IsOptional()
   timestamp?: number;
+}
+
+/**
+ * Conversation Hangup Requested Payload
+ * Emitted when the AI persona signals it wants to end the conversation
+ */
+export class ConversationHangupRequestedPayload {
+  @IsString()
+  reason: string;
+}
+
+/**
+ * Conversation Tool Executed Payload
+ * Emitted when the AI persona executes a conversation tool (except end_call)
+ */
+export class ConversationToolExecutedPayload {
+  @IsString()
+  tool: string;
+
+  @IsObject()
+  args: Record<string, unknown>;
+
+  @IsObject()
+  @IsOptional()
+  effect?: Record<string, unknown>;
 }
 
 /**

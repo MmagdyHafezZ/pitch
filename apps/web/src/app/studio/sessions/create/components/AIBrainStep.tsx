@@ -28,6 +28,7 @@ import { RefObject } from 'react'
 import { LLMProviderSelector } from './LLMProviderSelector'
 import { CostEstimator } from './CostEstimator'
 import { LLMProvider } from '@/features/sessions/hooks/useLLMProviders'
+import { getBrainCompatibleModels, getPreferredBrainModel } from '../lib/brain-models'
 import classes from '../create-session.module.css'
 
 interface AIBrainStepProps {
@@ -113,11 +114,9 @@ export function AIBrainStep({
                 setLlmModel(null)
                 setModelSearch('')
                 const selectedProv = llmProvidersData.providers.find((p) => p.name === provider)
-                if (selectedProv && selectedProv.modelDetails.length > 0) {
-                  const preferredModel = selectedProv.modelDetails.find(
-                    (m) => m.name === 'gpt-4o-mini'
-                  )
-                  setLlmModel(preferredModel?.name || selectedProv.modelDetails[0].name)
+                const preferredModel = getPreferredBrainModel(selectedProv)
+                if (preferredModel) {
+                  setLlmModel(preferredModel.name)
                 }
               }}
             />
@@ -128,10 +127,12 @@ export function AIBrainStep({
               const selectedProvider = llmProvidersData.providers.find(
                 (p) => p.name === llmProvider
               )
-              const modelDetails = selectedProvider?.modelDetails ?? []
-              const filteredModels = modelDetails.filter((model) =>
+              const compatibleModels = getBrainCompatibleModels(selectedProvider)
+              const filteredModels = compatibleModels.filter((model) =>
                 model.name.toLowerCase().includes(modelSearch.trim().toLowerCase())
               )
+              const hiddenModelCount =
+                (selectedProvider?.modelDetails.length ?? 0) - compatibleModels.length
 
               return (
                 <Paper className={classes.brainCard} radius="lg" p="md" withBorder>
@@ -149,13 +150,19 @@ export function AIBrainStep({
                   <TextInput
                     value={modelSearch}
                     onChange={(event) => setModelSearch(event.currentTarget.value)}
-                    placeholder="Search models"
+                    placeholder="Search text-generation models"
                     leftSection={<IconSearch size={16} />}
                     mb="md"
                   />
+                  {hiddenModelCount > 0 && (
+                    <Text size="xs" c="dimmed" mb="sm">
+                      {hiddenModelCount} audio, TTS, realtime, or transcription models are hidden
+                      from this deck.
+                    </Text>
+                  )}
                   {filteredModels.length === 0 ? (
                     <Text size="sm" c="dimmed">
-                      No matching models for this provider.
+                      No matching text-generation models for this provider.
                     </Text>
                   ) : (
                     <Box className={classes.modelCarousel}>
@@ -186,6 +193,7 @@ export function AIBrainStep({
                               withBorder
                               radius="lg"
                               p="md"
+                              {...(!isSelected && { 'data-tour-id': 'create-session-model-item' })}
                               className={`${classes.modelCard} ${
                                 isSelected ? classes.modelCardSelected : ''
                               }`}

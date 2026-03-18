@@ -30,6 +30,16 @@ export class OpenAIProvider implements ILLMProvider {
   readonly name = 'openai';
   private readonly logger = new Logger(OpenAIProvider.name);
   private client: OpenAI;
+  private readonly excludedModelPatterns = [
+    /audio/i,
+    /realtime/i,
+    /transcribe/i,
+    /tts/i,
+    /speech/i,
+    /whisper/i,
+    /embedding/i,
+    /moderation/i,
+  ];
 
   private readonly contentPartGuard = (
     part: OpenAIContentPart | null,
@@ -53,10 +63,21 @@ export class OpenAIProvider implements ILLMProvider {
 
   supportsModel(model: string): boolean {
     const modelLower = model.toLowerCase();
+    if (this.isExcludedModel(modelLower)) {
+      return false;
+    }
+
     return (
+      modelLower.startsWith('gpt-5') ||
+      modelLower.startsWith('gpt-4.1') ||
       modelLower.startsWith('gpt-4') ||
       modelLower.startsWith('gpt-3.5') ||
+      modelLower === 'o1' ||
       modelLower.startsWith('o1-') ||
+      modelLower === 'o3' ||
+      modelLower.startsWith('o3-') ||
+      modelLower === 'o4-mini' ||
+      modelLower.startsWith('o4-mini') ||
       modelLower.startsWith('gpt-4o')
     );
   }
@@ -76,19 +97,23 @@ export class OpenAIProvider implements ILLMProvider {
       const toolChoice = config.toolChoice as
         | OpenAI.Chat.ChatCompletionToolChoiceOption
         | undefined;
+      const tokenLimit = this.buildTokenLimitParam(
+        config.model,
+        config.maxTokens,
+      );
+      const samplingParams = this.buildSamplingParams(config.model, config);
 
       const response = await this.client.chat.completions.create({
         model: config.model,
         messages: this.convertMessages(messages),
-        temperature: config.temperature,
-        max_tokens: config.maxTokens,
-        top_p: config.topP,
+        ...samplingParams,
         frequency_penalty: config.frequencyPenalty,
         presence_penalty: config.presencePenalty,
         stop: config.stop,
         tools,
         tool_choice: toolChoice,
         stream: false,
+        ...tokenLimit,
         ...config.providerOptions,
       });
 
@@ -154,13 +179,16 @@ export class OpenAIProvider implements ILLMProvider {
           const toolChoice = config.toolChoice as
             | OpenAI.Chat.ChatCompletionToolChoiceOption
             | undefined;
+          const tokenLimit = this.buildTokenLimitParam(
+            config.model,
+            config.maxTokens,
+          );
+          const samplingParams = this.buildSamplingParams(config.model, config);
 
           const stream = await this.client.chat.completions.create({
             model: config.model,
             messages: this.convertMessages(messages),
-            temperature: config.temperature,
-            max_tokens: config.maxTokens,
-            top_p: config.topP,
+            ...samplingParams,
             frequency_penalty: config.frequencyPenalty,
             presence_penalty: config.presencePenalty,
             stop: config.stop,
@@ -168,8 +196,15 @@ export class OpenAIProvider implements ILLMProvider {
             tool_choice: toolChoice,
             stream: true,
             stream_options: { include_usage: true },
+            ...tokenLimit,
             ...config.providerOptions,
           });
+
+          // Accumulate tool call deltas across chunks (index → partial call)
+          const toolCallsAccumulator = new Map<
+            number,
+            { id: string; name: string; arguments: string }
+          >();
 
           for await (const chunk of stream) {
             const delta = chunk.choices[0]?.delta;
@@ -182,6 +217,21 @@ export class OpenAIProvider implements ILLMProvider {
                 delta: delta.content,
                 done: false,
               });
+            }
+
+            // Accumulate tool call fragments streamed across multiple chunks
+            if (delta?.tool_calls) {
+              for (const tc of delta.tool_calls) {
+                const acc = toolCallsAccumulator.get(tc.index) ?? {
+                  id: '',
+                  name: '',
+                  arguments: '',
+                };
+                acc.id ||= tc.id ?? '';
+                acc.name += tc.function?.name ?? '';
+                acc.arguments += tc.function?.arguments ?? '';
+                toolCallsAccumulator.set(tc.index, acc);
+              }
             }
 
             if (finishReason || chunk.usage) {
@@ -210,10 +260,25 @@ export class OpenAIProvider implements ILLMProvider {
                     estimated: true,
                   };
 
+              // Build assembled tool calls array for the done chunk
+              const assembledToolCalls =
+                toolCallsAccumulator.size > 0
+                  ? Array.from(toolCallsAccumulator.entries())
+                      .sort(([a], [b]) => a - b)
+                      .map(([, tc]) => ({
+                        id: tc.id,
+                        name: tc.name,
+                        arguments: tc.arguments,
+                      }))
+                  : undefined;
+
               subscriber.next({
                 done: true,
                 usage,
                 finishReason: finishReason || 'stop',
+                ...(assembledToolCalls
+                  ? { toolCalls: assembledToolCalls }
+                  : {}),
               });
 
               subscriber.complete();
@@ -261,6 +326,35 @@ export class OpenAIProvider implements ILLMProvider {
 
   getModelCapabilities(model: string): ModelCapabilities {
     const modelLower = model.toLowerCase();
+
+    if (
+      modelLower.includes('gpt-5.2-pro') ||
+      modelLower.includes('gpt-5-pro')
+    ) {
+      return {
+        maxTokens: 400000,
+        maxOutputTokens: 128000,
+        supportsStreaming: true,
+        supportsTools: true,
+        supportsVision: true,
+        supportsAudio: false,
+        supportedModalities: ['text', 'image'],
+        pricing: this.buildPricing(model),
+      };
+    }
+
+    if (modelLower.startsWith('gpt-5.2') || modelLower.startsWith('gpt-5')) {
+      return {
+        maxTokens: 400000,
+        maxOutputTokens: 128000,
+        supportsStreaming: true,
+        supportsTools: true,
+        supportsVision: true,
+        supportsAudio: false,
+        supportedModalities: ['text', 'image'],
+        pricing: this.buildPricing(model),
+      };
+    }
 
     if (modelLower.includes('gpt-4.1-nano')) {
       return {
@@ -367,15 +461,25 @@ export class OpenAIProvider implements ILLMProvider {
       };
     }
 
-    if (modelLower.startsWith('o1-')) {
+    if (
+      modelLower === 'o1' ||
+      modelLower.startsWith('o1-') ||
+      modelLower === 'o3' ||
+      modelLower.startsWith('o3-') ||
+      modelLower === 'o4-mini' ||
+      modelLower.startsWith('o4-mini')
+    ) {
       return {
         maxTokens: 128000,
         maxOutputTokens: 32768,
-        supportsStreaming: false,
-        supportsTools: false,
-        supportsVision: false,
+        supportsStreaming: true,
+        supportsTools: true,
+        supportsVision: modelLower !== 'o1' && !modelLower.startsWith('o1-'),
         supportsAudio: false,
-        supportedModalities: ['text'],
+        supportedModalities:
+          modelLower !== 'o1' && !modelLower.startsWith('o1-')
+            ? ['text', 'image']
+            : ['text'],
         pricing: this.buildPricing(model),
       };
     }
@@ -390,6 +494,118 @@ export class OpenAIProvider implements ILLMProvider {
       supportedModalities: ['text'],
       pricing: this.buildPricing(model),
     };
+  }
+
+  private isExcludedModel(modelLower: string): boolean {
+    return this.excludedModelPatterns.some((pattern) =>
+      pattern.test(modelLower),
+    );
+  }
+
+  private buildTokenLimitParam(
+    model: string,
+    maxTokens?: number,
+  ): Record<string, number> {
+    if (maxTokens === undefined) {
+      return {};
+    }
+
+    return this.requiresMaxCompletionTokens(model)
+      ? { max_completion_tokens: maxTokens }
+      : { max_tokens: maxTokens };
+  }
+
+  private buildSamplingParams(
+    model: string,
+    config: LLMConfigDto,
+  ): Record<string, number> {
+    if (!this.supportsSamplingParams(model, config.providerOptions)) {
+      return {};
+    }
+
+    const params: Record<string, number> = {};
+    if (config.temperature !== undefined) {
+      params.temperature = config.temperature;
+    }
+    if (config.topP !== undefined) {
+      params.top_p = config.topP;
+    }
+
+    return params;
+  }
+
+  private requiresMaxCompletionTokens(model: string): boolean {
+    const modelLower = model.toLowerCase();
+
+    return (
+      modelLower.startsWith('gpt-5') ||
+      modelLower === 'o1' ||
+      modelLower.startsWith('o1-') ||
+      modelLower === 'o3' ||
+      modelLower.startsWith('o3-') ||
+      modelLower === 'o4-mini' ||
+      modelLower.startsWith('o4-mini')
+    );
+  }
+
+  private supportsSamplingParams(
+    model: string,
+    providerOptions?: Record<string, unknown>,
+  ): boolean {
+    const modelLower = model.toLowerCase();
+
+    if (
+      modelLower === 'gpt-5' ||
+      modelLower.startsWith('gpt-5-') ||
+      modelLower.startsWith('gpt-5-mini') ||
+      modelLower.startsWith('gpt-5-nano')
+    ) {
+      return false;
+    }
+
+    if (modelLower.startsWith('gpt-5.1') || modelLower.startsWith('gpt-5.2')) {
+      const reasoningEffort = this.getReasoningEffort(providerOptions);
+      return reasoningEffort === 'none';
+    }
+
+    if (
+      modelLower === 'o1' ||
+      modelLower.startsWith('o1-') ||
+      modelLower === 'o3' ||
+      modelLower.startsWith('o3-') ||
+      modelLower === 'o4-mini' ||
+      modelLower.startsWith('o4-mini')
+    ) {
+      return false;
+    }
+
+    return true;
+  }
+
+  private getReasoningEffort(
+    providerOptions?: Record<string, unknown>,
+  ): string | undefined {
+    if (!providerOptions) {
+      return undefined;
+    }
+
+    const direct = providerOptions.reasoning_effort;
+    if (typeof direct === 'string') {
+      return direct.trim().toLowerCase();
+    }
+
+    const nested = providerOptions.reasoning;
+    if (
+      nested &&
+      typeof nested === 'object' &&
+      typeof (nested as Record<string, unknown>).effort === 'string'
+    ) {
+      return String((nested as Record<string, unknown>).effort)
+        .trim()
+        .toLowerCase();
+    }
+
+    return undefined;
   }
 
   private buildPricing(
