@@ -56,14 +56,14 @@ export type HeaderProps = {
   searchPlaceholder?: string
   rightSlot?: ReactNode
   teamName?: string
-  currentPage?: 'Home' | 'Sessions' | 'Teams' | 'Analytics' | 'Challenges' | 'Settings'
+  currentPage?: 'Home' | 'Sessions' | 'Teams' | 'Analytics' | 'Challenges' | 'Calendar' | 'Settings'
   selectedTab?: string
   onTabChange?: (tab: string) => void
   onToggleMobileNav?: () => void
   mobileNavOpened?: boolean
 }
 
-type PageKey = 'Home' | 'Sessions' | 'Teams' | 'Analytics' | 'Challenges' | 'Settings'
+type PageKey = 'Home' | 'Sessions' | 'Teams' | 'Analytics' | 'Challenges' | 'Calendar' | 'Settings'
 type ActionBarProps = {
   actionButtons?: ReactNode
   leadingAction?: ReactNode
@@ -712,9 +712,7 @@ export function AppTopBar({
           })
           return
         }
-      } catch {
-        // Fall through to the original error toast.
-      }
+      } catch {}
 
       notifications.show({
         title: 'Failed to accept invitation',

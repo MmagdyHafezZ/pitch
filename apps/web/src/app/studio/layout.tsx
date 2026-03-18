@@ -14,7 +14,14 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 
 export default function ClientLayerComponent({ children }: { children: React.ReactNode }) {
   const [active, setActive] = useState<
-    'Home' | 'Sessions' | 'Teams' | 'Analytics' | 'Settings' | 'Team Config' | 'Challenges'
+    | 'Home'
+    | 'Sessions'
+    | 'Teams'
+    | 'Analytics'
+    | 'Settings'
+    | 'Team Config'
+    | 'Challenges'
+    | 'Calendar'
   >('Home')
   const [selectedDate, setSelectedDate] = useState<Date | null>(new Date())
   const {
@@ -30,7 +37,6 @@ export default function ClientLayerComponent({ children }: { children: React.Rea
   const searchParams = useSearchParams()
   const user = useAuthStore((state) => state.user)
 
-  // Guard: redirect to onboarding if user is loaded but hasn't completed it
   useEffect(() => {
     if (user && !user.settings?.onboarding?.completed) {
       router.replace('/onboarding')
@@ -38,18 +44,22 @@ export default function ClientLayerComponent({ children }: { children: React.Rea
   }, [user, router])
 
   const [tabsByPage, setTabsByPage] = useState<
-    Record<'Home' | 'Sessions' | 'Teams' | 'Analytics' | 'Challenges' | 'Settings', string>
+    Record<
+      'Home' | 'Sessions' | 'Teams' | 'Analytics' | 'Challenges' | 'Calendar' | 'Settings',
+      string
+    >
   >({
     Home: 'All',
     Sessions: 'All',
     Teams: 'All',
     Analytics: 'Overview',
     Challenges: '',
+    Calendar: '',
     Settings: '',
   })
 
   const handleTabChange = (
-    page: 'Home' | 'Sessions' | 'Teams' | 'Analytics' | 'Challenges' | 'Settings'
+    page: 'Home' | 'Sessions' | 'Teams' | 'Analytics' | 'Challenges' | 'Calendar' | 'Settings'
   ) => {
     return (tab: string) => {
       setTabsByPage((prev) => ({ ...prev, [page]: tab }))
@@ -95,6 +105,9 @@ export default function ClientLayerComponent({ children }: { children: React.Rea
     if (pathname.startsWith('/studio/challenges')) {
       return { page: 'Challenges' as const, nav: 'Challenges' as const }
     }
+    if (pathname.startsWith('/studio/calendar')) {
+      return { page: 'Calendar' as const, nav: 'Calendar' as const }
+    }
     return { page: 'Home' as const, nav: 'Home' as const }
   }, [pathname])
 
@@ -112,8 +125,10 @@ export default function ClientLayerComponent({ children }: { children: React.Rea
     selectedTab = analyticsTab
   } else if (pageInfo.page === 'Challenges') {
     selectedTab = challengesPeriod
+  } else if (pageInfo.page === 'Calendar') {
+    selectedTab = tabsByPage['Calendar']
   } else {
-    selectedTab = tabsByPage[pageInfo.page]
+    selectedTab = tabsByPage[pageInfo.page as keyof typeof tabsByPage] ?? ''
   }
 
   const activeTeam = useMemo(

@@ -144,7 +144,6 @@ export async function apiRequest<T>(
 
     throw resolvedError instanceof Error ? resolvedError : new Error('Request failed')
   } finally {
-    // no-op
   }
 }
 
@@ -682,6 +681,52 @@ export const api = {
         apiRequestRoot<any>('/crm/salesforce/search', {
           method: 'POST',
           body: JSON.stringify({ query }),
+        }),
+    },
+  },
+
+  calendar: {
+    google: {
+      connect: () => apiRequestRoot<{ authUrl: string }>('/calendar/google/connect'),
+      status: () => apiRequestRoot<any>('/calendar/google/status'),
+      disconnect: () =>
+        apiRequestRoot<{ success: boolean }>('/calendar/google/disconnect', { method: 'DELETE' }),
+      events: (params?: { from?: string; to?: string; maxResults?: number }) => {
+        const query = new URLSearchParams()
+        if (params?.from) query.set('from', params.from)
+        if (params?.to) query.set('to', params.to)
+        if (params?.maxResults) query.set('maxResults', String(params.maxResults))
+        const qs = query.toString()
+        return apiRequestRoot<any[]>(`/calendar/google/events${qs ? `?${qs}` : ''}`)
+      },
+    },
+    microsoft: {
+      connect: () => apiRequestRoot<{ authUrl: string }>('/calendar/microsoft/connect'),
+      status: () => apiRequestRoot<any>('/calendar/microsoft/status'),
+      disconnect: () =>
+        apiRequestRoot<{ success: boolean }>('/calendar/microsoft/disconnect', {
+          method: 'DELETE',
+        }),
+      events: (params?: { from?: string; to?: string; maxResults?: number }) => {
+        const query = new URLSearchParams()
+        if (params?.from) query.set('from', params.from)
+        if (params?.to) query.set('to', params.to)
+        if (params?.maxResults) query.set('maxResults', String(params.maxResults))
+        const qs = query.toString()
+        return apiRequestRoot<any[]>(`/calendar/microsoft/events${qs ? `?${qs}` : ''}`)
+      },
+    },
+    upcoming: (lookAheadDays?: number) =>
+      apiRequestRoot<any[]>(
+        `/calendar/upcoming${lookAheadDays ? `?lookAheadDays=${lookAheadDays}` : ''}`
+      ),
+    suggestions: {
+      list: () => apiRequestRoot<any[]>('/calendar/suggestions'),
+      accept: (sessionId: string) =>
+        apiRequestRoot<any>(`/calendar/suggestions/${sessionId}/accept`, { method: 'POST' }),
+      dismiss: (sessionId: string) =>
+        apiRequestRoot<{ success: boolean }>(`/calendar/suggestions/${sessionId}`, {
+          method: 'DELETE',
         }),
     },
   },
