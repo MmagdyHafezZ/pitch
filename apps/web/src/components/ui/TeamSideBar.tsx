@@ -1,5 +1,6 @@
 'use client'
 import { ActionIcon, Box, Menu, Stack, Tooltip, Text } from '@mantine/core'
+import { useMediaQuery } from '@mantine/hooks'
 import { useRouter } from 'next/navigation'
 import { useRef, useState } from 'react'
 import classes from './TeamSideBar.module.css'
@@ -42,9 +43,11 @@ export function TeamSideBar({
   onNavigate,
 }: TeamSideBarProps) {
   const router = useRouter()
+  const isMobile = useMediaQuery('(max-width: 48em)')
   const [menuTeamId, setMenuTeamId] = useState<string | null>(null)
   const [hoveredTeamId, setHoveredTeamId] = useState<string | null>(null)
   const allowContextOpenRef = useRef(false)
+  const teamButtonSize = isMobile ? 32 : 36
 
   const handleTeamClick = (id: string) => {
     setMenuTeamId(null)
@@ -61,7 +64,7 @@ export function TeamSideBar({
     <Box className={classes.shell}>
       {/* Scrollable content area (teams + plus) */}
       <Box className={classes.scrollArea}>
-        <Stack gap={6} className={classes.stack}>
+        <Stack gap={isMobile ? 4 : 6} className={classes.stack}>
           {teams.map((team) => {
             const isActive = team.id === activeTeamId
             const showContextHint = team.canLeave && hoveredTeamId === team.id
@@ -112,8 +115,8 @@ export function TeamSideBar({
                           setMenuTeamId(team.id)
                         }}
                         style={{
-                          width: 36,
-                          height: 36,
+                          width: teamButtonSize,
+                          height: teamButtonSize,
                           cursor: team.canLeave ? 'context-menu' : 'pointer',
                           boxShadow: showContextHint
                             ? '0 0 0 2px color-mix(in srgb, var(--pitch-accent-strong) 40%, transparent)'
@@ -172,8 +175,8 @@ export function TeamSideBar({
             variant="subtle"
             className={`${classes.teamButton} ${classes.createButton}`}
             style={{
-              width: 36,
-              height: 36,
+              width: teamButtonSize,
+              height: teamButtonSize,
             }}
             onClick={handleCreateTeam}
           >

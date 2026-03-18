@@ -15,7 +15,6 @@ import {
   Group,
   Loader,
   Progress,
-  SegmentedControl,
   SimpleGrid,
   Stack,
   Text,
@@ -298,7 +297,6 @@ export default function DashboardHome() {
     }
   }, [searchParams, startTour])
   const isMobile = useMediaQuery('(max-width: 768px)')
-  const [homeView, setHomeView] = useState<'All' | 'Favorites' | 'Archived'>('All')
 
   const [userSessions, setUserSessions] = useState<Session[]>([])
   const [teamSessionMap, setTeamSessionMap] = useState<Record<string, Session[]>>({})
@@ -561,45 +559,6 @@ export default function DashboardHome() {
           </Group>
         </Group>
       </Card>
-
-      {isMobile ? (
-        <Group justify="flex-start">
-          <SegmentedControl
-            value={homeView}
-            onChange={(value) => setHomeView(value as 'All' | 'Favorites' | 'Archived')}
-            data={[
-              { label: 'All', value: 'All' },
-              { label: 'Favorites', value: 'Favorites' },
-              { label: 'Archived', value: 'Archived' },
-            ]}
-            size="sm"
-            radius="xl"
-            styles={{
-              root: {
-                background:
-                  'var(--pitch-card-bg-subtle, var(--pitch-card-bg, var(--pitch-surface-bg, var(--mantine-color-body))))',
-                border:
-                  '1px solid var(--pitch-card-border, var(--pitch-border, var(--mantine-color-default-border)))',
-                padding: 4,
-              },
-              control: {
-                border: 'none',
-              },
-              indicator: {
-                background:
-                  'linear-gradient(180deg, var(--pitch-accent-strong), color-mix(in srgb, var(--pitch-accent-strong) 78%, black))',
-                boxShadow:
-                  '0 8px 18px color-mix(in srgb, var(--pitch-accent-strong) 18%, transparent)',
-              },
-              label: {
-                color: 'var(--pitch-surface-text)',
-                fontWeight: 600,
-                minWidth: 84,
-              },
-            }}
-          />
-        </Group>
-      ) : null}
 
       {error && (
         <Alert

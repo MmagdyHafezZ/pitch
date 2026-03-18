@@ -1,6 +1,7 @@
 'use client'
 
 import { Box, Stack, NavLink, Text, Divider, rem, Group } from '@mantine/core'
+import { useMediaQuery } from '@mantine/hooks'
 import {
   IconHome,
   IconCalendar,
@@ -52,6 +53,7 @@ export function AppSidebar({
   onNavigate,
 }: Props) {
   const router = useRouter()
+  const isMobile = useMediaQuery('(max-width: 48em)')
   const [settingsOpened, setSettingsOpened] = useState(false)
   const resolvedMainLinks = showTeamConfig
     ? mainLinks
@@ -74,15 +76,15 @@ export function AppSidebar({
             borderTopLeftRadius: 0,
             borderTopRightRadius: 0,
             borderBottomLeftRadius: 0,
-            padding: rem(10),
+            padding: rem(isMobile ? 8 : 10),
             display: 'flex',
             flexDirection: 'column',
-            gap: rem(8),
+            gap: rem(isMobile ? 6 : 8),
             width: '100%',
             height: '100%',
           }}
         >
-          <Stack gap={6} mt="xs" flex={1}>
+          <Stack gap={isMobile ? 4 : 6} mt={isMobile ? 4 : 'xs'} flex={1}>
             {resolvedMainLinks.map(({ icon: Icon, label }) => (
               <NavLink
                 key={label}
@@ -110,9 +112,9 @@ export function AppSidebar({
             <Box
               className={classes.calendarShell}
               mt="auto"
-              pt="lg"
+              pt={isMobile ? 'md' : 'lg'}
               mx="0"
-              pb={10}
+              pb={isMobile ? 6 : 10}
               style={{
                 width: '100%',
                 background: 'var(--pitch-nav-bg, var(--mantine-color-nav-9))',

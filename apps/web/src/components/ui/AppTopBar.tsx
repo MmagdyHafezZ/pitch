@@ -353,8 +353,6 @@ function ActionConfig({
 
   const tabLabels: Record<string, string> = {
     All: t('tabs.all'),
-    Favorites: t('tabs.favorites'),
-    Archived: t('tabs.archived'),
     Created: t('tabs.created'),
     Shared: t('tabs.shared'),
     'My Teams': t('tabs.myTeams'),
@@ -368,7 +366,7 @@ function ActionConfig({
         <ActionBar
           enableSearch={false}
           searchPlaceholder={t('common.search')}
-          availableTabs={['All', 'Favorites', 'Archived']}
+          availableTabs={[]}
           selectedTab={selectedTab}
           onTabChange={onTabChange}
           value={value}
@@ -1031,9 +1029,9 @@ export function AppTopBar({
         }}
       >
         {isMobile ? (
-          <Stack gap={rem(8)} w="100%">
+          <Stack gap={rem(6)} w="100%">
             <Group justify="space-between" align="center" w="100%" wrap="nowrap">
-              <Group align="center" gap={rem(8)} style={{ minWidth: 0 }} wrap="nowrap">
+              <Group align="center" gap={rem(6)} style={{ minWidth: 0 }} wrap="nowrap">
                 {navToggleHandler ? (
                   <ActionIcon
                     aria-label={mobileNavOpened ? 'Close navigation menu' : 'Open navigation menu'}
@@ -1094,7 +1092,7 @@ export function AppTopBar({
                   </ActionIcon>
                 ) : null}
                 <Text
-                  px={rem(isNarrow ? 4 : 10)}
+                  px={rem(isNarrow ? 2 : 6)}
                   size={rem(isNarrow ? 20 : 22)}
                   fw={700}
                   c="var(--pitch-accent-strong)"

@@ -89,3 +89,18 @@
 .createLabel {
   color: var(--pitch-nav-text);
 }
+
+@media (max-width: 48em) {
+  .shell {
+    width: 52px;
+    padding: 6px 3px;
+  }
+
+  .scrollArea {
+    padding-top: 6px;
+  }
+
+  .createButton {
+    margin-top: 6px;
+  }
+}
