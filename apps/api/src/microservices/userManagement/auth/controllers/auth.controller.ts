@@ -128,6 +128,23 @@ export class AuthController {
   }
 
   /**
+   * LTI Login — find-or-create user from LTI identity and return tokens.
+   * Pattern: auth.lti.login
+   */
+  @MessagePattern(USER_SERVICE_PATTERNS.AUTH_LTI_LOGIN)
+  async ltiLogin(
+    @Payload() data: { email: string; name?: string; sub: string },
+  ) {
+    try {
+      this.logger.log(`LTI login request for: ${data.email}`);
+      return await this.authApplicationService.ltiLogin(data);
+    } catch (error) {
+      this.logger.error(`LTI login failed for ${data.email}`, error);
+      throw toRpcException(error);
+    }
+  }
+
+  /**
    * Check if email exists and return associated OAuth provider
    * Pattern: auth.checkEmail
    */

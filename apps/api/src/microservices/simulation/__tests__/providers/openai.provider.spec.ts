@@ -387,6 +387,9 @@ describe('OpenAIProvider', () => {
         stream: true,
         max_completion_tokens: 222,
       }),
+      expect.objectContaining({
+        signal: expect.any(Object),
+      }),
     );
     expect(
       client.chat.completions.create.mock.calls[0][0].max_tokens,
@@ -455,6 +458,39 @@ describe('OpenAIProvider', () => {
 
     const final = chunks.find((chunk) => chunk.done);
     expect(final?.usage?.estimated).toBe(true);
+  });
+
+  it('completes streaming requests when the abort signal fires', async () => {
+    const provider = createProvider();
+    const client = (provider as any).client;
+    const controller = new AbortController();
+    let forwardedSignal: AbortSignal | undefined;
+
+    client.chat.completions.create.mockImplementation(
+      async (_body: unknown, options: { signal: AbortSignal }) => {
+        forwardedSignal = options.signal;
+        await new Promise<void>((resolve) => {
+          options.signal.addEventListener('abort', () => resolve(), {
+            once: true,
+          });
+        });
+        throw new Error('aborted');
+      },
+    );
+
+    const streamPromise = new Promise<void>((resolve, reject) => {
+      provider
+        .stream(messages, { model: 'gpt-4o' } as any, controller.signal)
+        .subscribe({
+          error: reject,
+          complete: () => resolve(),
+        });
+    });
+
+    controller.abort();
+    await streamPromise;
+
+    expect(forwardedSignal?.aborted).toBe(true);
   });
 
   it('completes streams without final usage when finish reason is missing', async () => {

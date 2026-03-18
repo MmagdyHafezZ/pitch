@@ -29,6 +29,7 @@ import {
   CreateSessionDto,
   UpdateSessionDto,
   EndSessionDto,
+  RestartSessionDto,
   ListSessionsQueryDto,
   SessionResponseDto,
   SessionListResponseDto,
@@ -286,6 +287,55 @@ export class SessionHttpController {
         this.logger.warn(`Cannot end session: ${id} - ${error.message}`);
       } else {
         this.logger.error(`Failed to end session: ${id}`, error);
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Restart a session by creating a new iteration on the same session
+   *
+   * POST /simulation/sessions/:id/restart
+   */
+  @Post(':id/restart')
+  @ApiOperation({ summary: 'Restart a session with a fresh iteration' })
+  @ApiOkResponse({ type: SessionResponseDto })
+  @ApiNotFoundResponse({
+    type: HttpErrorResponseDto,
+    description: 'Session not found.',
+  })
+  @ApiBadRequestResponse({
+    type: HttpErrorResponseDto,
+    description: 'Invalid request data.',
+  })
+  @ApiInternalServerErrorResponse({
+    type: HttpErrorResponseDto,
+    description: 'Unexpected error.',
+  })
+  async restartSession(
+    @Param('id') id: string,
+    @Body() restartSessionDto: RestartSessionDto,
+    @Query('userId') userId?: string,
+  ): Promise<SessionResponseDto> {
+    this.logger.log(
+      `Restarting session: ${id} with reason: ${restartSessionDto.reason}`,
+    );
+
+    try {
+      const session = await this.sessionService.restart(
+        id,
+        restartSessionDto,
+        userId || 'test-user-http-endpoint',
+      );
+      this.logger.log(`Restarted session: ${session.id}`);
+      return session;
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        this.logger.warn(`Session not found: ${id}`);
+      } else if (error instanceof BadRequestException) {
+        this.logger.warn(`Cannot restart session: ${id} - ${error.message}`);
+      } else {
+        this.logger.error(`Failed to restart session: ${id}`, error);
       }
       throw error;
     }

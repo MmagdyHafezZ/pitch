@@ -39,6 +39,7 @@ describe('SessionService cache invalidation', () => {
     create: jest.fn(),
     findById: jest.fn(),
     update: jest.fn(),
+    end: jest.fn(),
     delete: jest.fn(),
   };
 
@@ -56,6 +57,13 @@ describe('SessionService cache invalidation', () => {
       iteration: {
         findFirst: jest.fn(),
         update: jest.fn(),
+        create: jest.fn(),
+      },
+      turn: {
+        count: jest.fn(),
+      },
+      session: {
+        update: jest.fn(),
       },
     },
   };
@@ -66,6 +74,7 @@ describe('SessionService cache invalidation', () => {
 
   const redis = {
     deleteSessionFull: jest.fn(),
+    setSessionMemberIteration: jest.fn(),
   };
 
   const service = new SessionService(
@@ -118,8 +127,84 @@ describe('SessionService cache invalidation', () => {
     expect(redis.deleteSessionFull).toHaveBeenCalledWith('session-1');
   });
 
+  it('allows updating an ended session without forcing a restart', async () => {
+    sessionRepository.findById.mockResolvedValue({
+      ...baseSession,
+      status: 'ended',
+      endedReason: 'completed',
+      endedAt: now,
+    });
+    sessionRepository.update.mockResolvedValue({
+      ...baseSession,
+      status: 'ended',
+      endedReason: 'completed',
+      endedAt: now,
+      name: 'Updated Ended Session',
+    });
+    redis.deleteSessionFull.mockResolvedValue(undefined);
+
+    await service.update(
+      'session-1',
+      {
+        name: 'Updated Ended Session',
+      } as never,
+      'owner-1',
+    );
+
+    expect(sessionRepository.update).toHaveBeenCalledWith(
+      'session-1',
+      expect.objectContaining({
+        name: 'Updated Ended Session',
+        status: undefined,
+        endedReason: undefined,
+        endedAt: undefined,
+      }),
+    );
+    expect(redis.deleteSessionFull).toHaveBeenCalledWith('session-1');
+  });
+
+  it('reopens an ended session cleanly when status is set back to active', async () => {
+    sessionRepository.findById.mockResolvedValue({
+      ...baseSession,
+      status: 'ended',
+      endedReason: 'completed',
+      endedAt: now,
+    });
+    sessionRepository.update.mockResolvedValue({
+      ...baseSession,
+      status: 'active',
+      endedReason: null,
+      endedAt: null,
+    });
+    redis.deleteSessionFull.mockResolvedValue(undefined);
+
+    await service.update(
+      'session-1',
+      {
+        status: 'active',
+      } as never,
+      'owner-1',
+    );
+
+    expect(sessionRepository.update).toHaveBeenCalledWith(
+      'session-1',
+      expect.objectContaining({
+        status: 'active',
+        endedReason: null,
+        endedAt: null,
+      }),
+    );
+    expect(redis.deleteSessionFull).toHaveBeenCalledWith('session-1');
+  });
+
   it('invalidates full-session cache on end', async () => {
     sessionRepository.findById.mockResolvedValue(baseSession);
+    sessionRepository.end.mockResolvedValue({
+      ...baseSession,
+      status: 'ended',
+      endedReason: 'user_ended',
+      endedAt: now,
+    });
     prisma.client.iteration.findFirst.mockResolvedValue(null);
     assessmentService.requestRun.mockResolvedValue(undefined);
     redis.deleteSessionFull.mockResolvedValue(undefined);
@@ -134,6 +219,10 @@ describe('SessionService cache invalidation', () => {
 
     expect(redis.deleteSessionFull).toHaveBeenCalledTimes(1);
     expect(redis.deleteSessionFull).toHaveBeenCalledWith('session-1');
+    expect(sessionRepository.end).toHaveBeenCalledWith(
+      'session-1',
+      'user_ended',
+    );
   });
 
   it('invalidates full-session cache on delete', async () => {
@@ -145,5 +234,73 @@ describe('SessionService cache invalidation', () => {
 
     expect(redis.deleteSessionFull).toHaveBeenCalledTimes(1);
     expect(redis.deleteSessionFull).toHaveBeenCalledWith('session-1');
+  });
+
+  it('restarts the current session by creating a new iteration instead of a new session', async () => {
+    sessionRepository.findById
+      .mockResolvedValueOnce(baseSession)
+      .mockResolvedValueOnce(baseSession);
+    prisma.client.iteration.findFirst.mockResolvedValue({
+      id: 'iteration-1',
+      iterationNumber: 1,
+      status: 'active',
+    });
+    prisma.client.iteration.update.mockResolvedValue(undefined);
+    prisma.client.turn.count.mockResolvedValue(3);
+    assessmentService.requestRun.mockResolvedValue(undefined);
+    prisma.client.iteration.create.mockResolvedValue({ id: 'iteration-2' });
+    prisma.client.session.update.mockResolvedValue(undefined);
+    redis.setSessionMemberIteration.mockResolvedValue(undefined);
+    redis.deleteSessionFull.mockResolvedValue(undefined);
+
+    await service.restart(
+      'session-1',
+      {
+        reason: 'restart_from_scratch',
+      } as never,
+      'owner-1',
+    );
+
+    expect(prisma.client.iteration.update).toHaveBeenCalledWith({
+      where: { id: 'iteration-1' },
+      data: expect.objectContaining({
+        status: 'completed',
+        endedReason: 'restart_from_scratch',
+      }),
+    });
+    expect(prisma.client.iteration.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        sessionId: 'session-1',
+        sessionMemberId: 'member-owner',
+        iterationNumber: 2,
+        status: 'active',
+      }),
+      select: { id: true },
+    });
+    expect(prisma.client.session.update).toHaveBeenCalledWith({
+      where: { id: 'session-1' },
+      data: {
+        status: 'active',
+        endedReason: null,
+        endedAt: null,
+      },
+    });
+    expect(assessmentService.requestRun).toHaveBeenCalledWith({
+      iterationId: 'iteration-1',
+      sessionId: 'session-1',
+      mode: 'final',
+      requestedBy: 'owner-1',
+    });
+    expect(redis.setSessionMemberIteration).toHaveBeenCalledWith(
+      'session-1',
+      'owner-1',
+      {
+        sessionMemberId: 'member-owner',
+        iterationId: 'iteration-2',
+        lastTurnOrder: 0,
+      },
+    );
+    expect(redis.deleteSessionFull).toHaveBeenCalledWith('session-1');
+    expect(sessionRepository.create).not.toHaveBeenCalled();
   });
 });

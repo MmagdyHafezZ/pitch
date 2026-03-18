@@ -134,7 +134,7 @@ export class LLMRouterService {
 
           provider.validateConfig(effectiveConfig);
           currentSubscription = provider
-            .stream(request.messages, effectiveConfig)
+            .stream(request.messages, effectiveConfig, context?.abortSignal)
             .subscribe({
               next: (chunk) => {
                 if (chunk.delta) {

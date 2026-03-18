@@ -6,6 +6,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { SessionRepository } from '../repositories/session.repository';
+import { Prisma } from '@prisma/simulation-client';
 import type { SessionMember } from '@prisma/simulation-client';
 import type { PrismaError } from '@pitch/shared-backend/interfaces/error.interface';
 import {
@@ -16,6 +17,7 @@ import {
   SessionListResponseDto,
   DeleteSessionResponseDto,
   EndSessionDto,
+  RestartSessionDto,
   SessionType,
 } from '../dto/session.dto';
 import { SessionMemberRepository } from '../repositories/session-member.repository';
@@ -247,13 +249,15 @@ export class SessionService {
         throw new NotFoundException(`Session with ID ${id} not found`);
       }
 
-      if (existingSession.status === 'ended') {
-        throw new BadRequestException(
-          `Cannot update session ${id} because it has already ended`,
-        );
-      }
-
       this.assertOwner(existingSession, requesterUserId);
+
+      const normalizedStatus =
+        typeof updateSessionDto.status === 'string' &&
+        updateSessionDto.status.trim().length > 0
+          ? updateSessionDto.status.trim().toLowerCase()
+          : undefined;
+      const reopenEndedSession =
+        existingSession.status === 'ended' && normalizedStatus === 'active';
 
       const session = await this.sessionRepository.update(id, {
         orgId: updateSessionDto.orgId,
@@ -266,8 +270,9 @@ export class SessionService {
         personaId: updateSessionDto.personaId,
         language: updateSessionDto.language,
         crmContextId: updateSessionDto.crmContextId,
-        status: updateSessionDto.status,
-        endedReason: updateSessionDto.endedReason,
+        status: normalizedStatus,
+        endedReason: reopenEndedSession ? null : updateSessionDto.endedReason,
+        endedAt: reopenEndedSession ? null : undefined,
       });
 
       await this.invalidateSessionFullCache(session.id);
@@ -340,9 +345,14 @@ export class SessionService {
         );
       }
 
+      const endedSession = await this.sessionRepository.end(
+        existingSession.id,
+        endSessionDto.reason,
+      );
+
       await this.invalidateSessionFullCache(existingSession.id);
       this.logger.log(`Completed iteration for session: ${existingSession.id}`);
-      return this.mapToResponseDto(existingSession);
+      return this.mapToResponseDto(endedSession);
     } catch (error) {
       const err = error as PrismaError;
       if (err.code === 'P2025') {
@@ -350,6 +360,126 @@ export class SessionService {
       }
       throw error;
     }
+  }
+
+  /**
+   * Restart a session by closing the current iteration and creating a fresh one
+   * on the same session record.
+   */
+  async restart(
+    id: string,
+    restartSessionDto: RestartSessionDto,
+    requesterUserId?: string,
+  ): Promise<SessionResponseDto> {
+    const restartReason =
+      restartSessionDto.reason?.trim() || 'restart_from_scratch';
+    this.logger.log(`Restarting session: ${id} with reason: ${restartReason}`);
+
+    const existingSession = await this.sessionRepository.findById(id);
+    if (!existingSession) {
+      throw new NotFoundException(`Session with ID ${id} not found`);
+    }
+
+    this.assertOwner(existingSession, requesterUserId);
+
+    const ownerMember =
+      this.getOwnerMember(existingSession) ||
+      (await this.sessionMemberRepository.findOwner(id));
+    if (!ownerMember) {
+      throw new NotFoundException('No session owner found for session');
+    }
+
+    const latestIteration = await this.prisma.client.iteration.findFirst({
+      where: { sessionMemberId: ownerMember.id },
+      orderBy: { iterationNumber: 'desc' },
+      select: { id: true, iterationNumber: true, status: true },
+    });
+
+    if (latestIteration?.status === 'active') {
+      await this.prisma.client.iteration.update({
+        where: { id: latestIteration.id },
+        data: {
+          status: 'completed',
+          endedReason: restartReason,
+          endedAt: new Date(),
+        },
+      });
+
+      const turnCount = await this.prisma.client.turn.count({
+        where: { iterationId: latestIteration.id },
+      });
+
+      if (turnCount > 0) {
+        try {
+          await this.assessmentService.requestRun({
+            iterationId: latestIteration.id,
+            sessionId: existingSession.id,
+            mode: AssessmentModeDto.final,
+            requestedBy: requesterUserId,
+          });
+        } catch (error) {
+          this.logger.warn(
+            `Failed to enqueue assessment for restarted session ${existingSession.id}: ${
+              (error as Error)?.message ?? error
+            }`,
+          );
+        }
+      }
+    }
+
+    const nextIteration = await this.prisma.client.iteration.create({
+      data: {
+        sessionId: existingSession.id,
+        sessionMemberId: ownerMember.id,
+        iterationNumber: (latestIteration?.iterationNumber ?? 0) + 1,
+        status: 'active',
+        userSnapshot:
+          (ownerMember.userSnapshot as Prisma.InputJsonValue | null) ??
+          Prisma.JsonNull,
+      },
+      select: { id: true },
+    });
+
+    await this.prisma.client.session.update({
+      where: { id: existingSession.id },
+      data: {
+        status: 'active',
+        endedReason: null,
+        endedAt: null,
+      },
+    });
+
+    try {
+      await this.redis.setSessionMemberIteration(
+        existingSession.id,
+        ownerMember.userId,
+        {
+          sessionMemberId: ownerMember.id,
+          iterationId: nextIteration.id,
+          lastTurnOrder: 0,
+        },
+      );
+    } catch (error) {
+      this.logger.warn(
+        `Failed to update session-member iteration cache for ${existingSession.id}: ${
+          (error as Error)?.message ?? error
+        }`,
+      );
+    }
+
+    await this.invalidateSessionFullCache(existingSession.id);
+
+    const refreshedSession = await this.sessionRepository.findById(
+      existingSession.id,
+    );
+    if (!refreshedSession) {
+      throw new NotFoundException(
+        `Session with ID ${existingSession.id} not found after restart`,
+      );
+    }
+
+    this.logger.log(`Restarted session: ${existingSession.id}`);
+    return this.mapToResponseDto(refreshedSession);
   }
 
   /**

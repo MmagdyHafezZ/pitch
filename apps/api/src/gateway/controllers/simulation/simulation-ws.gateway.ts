@@ -102,6 +102,10 @@ export class SimulationWsGateway
     for (const [requestId, handle] of this.activeStreams.entries()) {
       if (handle.socketId === client.id) {
         handle.subscription.unsubscribe();
+        void this.conversationOrchestration.cancel(
+          requestId,
+          'client_disconnected',
+        );
         if (handle.timeoutId) {
           clearTimeout(handle.timeoutId);
         }
@@ -288,6 +292,7 @@ export class SimulationWsGateway
       const active = this.activeStreams.get(requestId);
       if (active) {
         active.subscription.unsubscribe();
+        void this.conversationOrchestration.cancel(requestId, 'timeout');
         this.activeStreams.delete(requestId);
 
         const errorPayload: ConversationErrorPayload = {
@@ -469,7 +474,7 @@ export class SimulationWsGateway
   }
 
   @SubscribeMessage(WsMessageType.CONVERSATION_CANCEL)
-  handleConversationCancel(
+  async handleConversationCancel(
     @ConnectedSocket() client: SimulationSocket,
     @MessageBody() payload: { requestId: string; sessionId: string },
   ) {
@@ -481,6 +486,7 @@ export class SimulationWsGateway
       active.subscription.unsubscribe();
       this.activeStreams.delete(requestId);
     }
+    await this.conversationOrchestration.cancel(requestId, 'user_interrupt');
 
     // Acknowledge cancellation to client
     client.emit(WsMessageType.CONVERSATION_CANCEL, {

@@ -182,6 +182,9 @@ export function useSpeechToText(options: UseSpeechToTextOptions = {}) {
     }
 
     recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
+      // no-speech is a normal browser timeout — not an actionable error for the user
+      if (event.error === 'no-speech') return
+
       const code = event.error || 'Unknown error occurred'
       const errorMessage = mapSpeechError(code)
       setErrorCode(code)
@@ -193,7 +196,7 @@ export function useSpeechToText(options: UseSpeechToTextOptions = {}) {
         shouldAutoRestartRef.current = false
       }
 
-      if (event.error === 'no-speech' || event.error === 'audio-capture') {
+      if (event.error === 'audio-capture') {
         return
       }
 

@@ -4,6 +4,7 @@ import {
   ConflictException,
   NotFoundException,
   Logger,
+  HttpException,
 } from '@nestjs/common';
 import { JwtService, type JwtSignOptions } from '@nestjs/jwt';
 import { UserRepository } from '../../user/repositories/user.repository';
@@ -227,7 +228,10 @@ export class AuthApplicationService {
       this.logger.log(`Token refreshed successfully for user: ${user.id}`);
       return tokens;
     } catch (error) {
-      this.logger.error('Token refresh failed', error);
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      this.logger.error('Token refresh failed unexpectedly', error);
       throw new UnauthorizedException('Invalid or expired refresh token');
     }
   }
@@ -277,6 +281,32 @@ export class AuthApplicationService {
       requiresOAuth: true,
       message: `Please continue with ${primaryProvider.provider} to sign in`,
     };
+  }
+
+  /**
+   * LTI Login — find-or-create a user from LTI identity claims and issue tokens.
+   * No OAuth account record is required; the validated LTI JWT is the trust boundary.
+   */
+  async ltiLogin(dto: {
+    email: string;
+    name?: string;
+    sub: string;
+  }): Promise<AuthResponseDto> {
+    this.logger.log(`LTI login for: ${dto.email}`);
+
+    let user = await this.userRepository.findByEmail(dto.email);
+
+    if (!user) {
+      user = await this.userRepository.create({
+        email: dto.email,
+        name: dto.name?.trim() || dto.email.split('@')[0],
+      });
+      this.logger.log(`Created new user via LTI: ${user.id}`);
+    } else {
+      this.logger.log(`Found existing user via LTI: ${user.id}`);
+    }
+
+    return this.issueTokensForUser(user);
   }
 
   /**
