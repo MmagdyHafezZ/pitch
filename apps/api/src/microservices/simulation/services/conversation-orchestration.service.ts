@@ -131,7 +131,6 @@ class Semaphore {
   release(): void {
     const next = this.queue.shift();
     if (next) {
-      // Hand the permit directly to the waiter — do NOT increment
       next();
     } else {
       this.permits++;
@@ -767,7 +766,12 @@ export class ConversationOrchestrationService {
     this.throwIfCancelled(requestState, subscriber);
 
     if (pendingToolCalls.length > 0) {
-      const toolContext = { sessionId, iterationId, turnId: assistantTurnId };
+      const toolContext = {
+        sessionId,
+        iterationId,
+        turnId: assistantTurnId,
+        userId,
+      };
       const effects = await this.conversationTools
         .execute(pendingToolCalls, toolContext)
         .catch((err) => {
@@ -895,8 +899,6 @@ export class ConversationOrchestrationService {
     }
   }
 
-  // ── Private helpers ─────────────────────────────────────────────────────────
-
   /**
    * Synthesise audio for a single sentence and emit an audio_sentence event.
    * Errors are caught per-sentence so one failed synthesis doesn't abort the stream.
@@ -935,7 +937,6 @@ export class ConversationOrchestrationService {
       let contentType: string;
 
       try {
-        // Try streaming synthesis first — collect chunks into a single Buffer
         const streamResult = await this.ttsService.synthesizeStream(
           text,
           provider,
@@ -959,7 +960,6 @@ export class ConversationOrchestrationService {
       } catch (streamErr) {
         const msg = (streamErr as Error)?.message ?? '';
         if (msg.includes('does not support streaming')) {
-          // Provider doesn't support streaming — fall back to blocking synthesis
           const result = await this.ttsService.synthesize(
             text,
             provider,
@@ -999,7 +999,6 @@ export class ConversationOrchestrationService {
         return;
       }
 
-      // Try melotts fallback
       if (provider !== 'melotts') {
         try {
           const fallback = await this.ttsService.synthesize(text, 'melotts', {
@@ -1020,13 +1019,15 @@ export class ConversationOrchestrationService {
           }
           return;
         } catch {
-          // fall through — skip audio for this sentence
+          // If the fallback also fails, we'll log the original error below and skip audio for this sentence.
+          this.logger.warn(
+            `TTS failed for sentence ${idx}: ${(err as Error)?.message ?? err}`,
+          );
         }
       }
       this.logger.warn(
         `TTS failed for sentence ${idx}: ${(err as Error)?.message ?? err}`,
       );
-      // Do not throw — a failed sentence must not abort the stream
     } finally {
       semaphore.release();
     }
@@ -1366,7 +1367,6 @@ export class ConversationOrchestrationService {
     const cfg: LlmConfigOverride =
       sessionConfig.llm ?? sessionConfig.llmConfig ?? {};
 
-    // Cap token length for voice-like sessions to reduce generation + TTS time
     const isVoiceLike =
       sessionType === 'voice' ||
       sessionType === 'video' ||

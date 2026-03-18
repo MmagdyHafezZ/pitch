@@ -1,8 +1,12 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Inject, Optional } from '@nestjs/common';
 import type { Prisma } from '@prisma/simulation-client';
 import { SimulationPrismaService } from '../prisma/simulation-prisma.service';
 import { SimulationRedisService } from './redis/redis.service';
 import type { LLMToolDto, LLMToolCallDto } from '../dto/llm.dto';
+import type { ClientProxy } from '@nestjs/microservices';
+import { firstValueFrom, timeout } from 'rxjs';
+import { CRM_SERVICE_PATTERNS } from '@pitch/shared-backend/interfaces/message-patterns.interface';
+import type { CalendarEvent } from '@microservices/crm/services/google-calendar-integration.service';
 
 export interface IMoodState {
   mood:
@@ -12,9 +16,9 @@ export interface IMoodState {
     | 'impatient'
     | 'frustrated'
     | 'satisfied';
-  intensity: number; // 1–10
+  intensity: number;
   trigger: string;
-  setAt: string; // ISO
+  setAt: string;
 }
 
 export interface ToolEffect {
@@ -27,6 +31,7 @@ export interface ToolContext {
   sessionId: string;
   iterationId: string;
   turnId?: string;
+  userId?: string;
 }
 
 @Injectable()
@@ -36,6 +41,9 @@ export class ConversationToolsService {
   constructor(
     private readonly prisma: SimulationPrismaService,
     private readonly redis: SimulationRedisService,
+    @Optional()
+    @Inject('CRM_SERVICE')
+    private readonly crmClient: ClientProxy | null,
   ) {}
 
   getToolDefinitions(): LLMToolDto[] {
@@ -201,6 +209,27 @@ export class ConversationToolsService {
           },
         },
       },
+      {
+        type: 'function',
+        function: {
+          name: 'get_calendar_events',
+          description:
+            "Retrieve the user's upcoming calendar events to help them prepare for meetings. Use when the user asks about their schedule, upcoming meetings, or wants to prepare for a specific meeting.",
+          parameters: {
+            type: 'object',
+            properties: {
+              look_ahead_days: {
+                type: 'number',
+                minimum: 1,
+                maximum: 30,
+                description:
+                  'Number of days ahead to look for events (default: 7).',
+              },
+            },
+            required: [],
+          },
+        },
+      },
     ];
   }
 
@@ -245,6 +274,9 @@ export class ConversationToolsService {
             break;
           case 'request_clarification':
             this.executeRequestClarification(args, context);
+            break;
+          case 'get_calendar_events':
+            await this.executeGetCalendarEvents(args, context);
             break;
           default:
             this.logger.warn(`Unknown tool: ${call.name}`);
@@ -322,6 +354,47 @@ export class ConversationToolsService {
     this.logger.log(
       `request_clarification [${String(args.topic)}]: ${String(args.question)}`,
     );
+  }
+
+  private async executeGetCalendarEvents(
+    args: Record<string, unknown>,
+    context: ToolContext,
+  ): Promise<CalendarEvent[]> {
+    const lookAheadDays = Math.min(
+      30,
+      Math.max(1, Number(args.look_ahead_days ?? 7)),
+    );
+    const userId = context.userId;
+
+    if (!userId) {
+      this.logger.warn('get_calendar_events: no userId in ToolContext');
+      return [];
+    }
+
+    if (!this.crmClient) {
+      this.logger.warn('get_calendar_events: CRM_SERVICE not injected');
+      return [];
+    }
+
+    try {
+      const events = await firstValueFrom<CalendarEvent[]>(
+        this.crmClient
+          .send<CalendarEvent[]>(CRM_SERVICE_PATTERNS.CALENDAR_GET_UPCOMING, {
+            userId,
+            lookAheadDays,
+          })
+          .pipe(timeout(8000)),
+      );
+      this.logger.log(
+        `get_calendar_events: fetched ${events.length} events for user ${userId}`,
+      );
+      return events;
+    } catch (err) {
+      this.logger.warn(
+        `get_calendar_events failed: ${(err as Error)?.message ?? err}`,
+      );
+      return [];
+    }
   }
 
   private persistToolCall(

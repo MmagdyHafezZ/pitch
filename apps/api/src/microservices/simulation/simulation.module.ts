@@ -1,5 +1,6 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { ClientsModule, Transport } from '@nestjs/microservices';
 import { ChatController } from './controllers/chat.controller';
 import { LLMRoutingController } from './controllers/llm-routing.controller';
 import { LLMTestController } from './controllers/llm-test.controller';
@@ -14,6 +15,8 @@ import { ScenarioHttpController } from './controllers/scenario-http.controller';
 import { HintsController } from './controllers/hints.controller';
 import { TimelineController } from './controllers/timeline.controller';
 import { ChallengeController } from './controllers/challenge.controller';
+import { CalendarSessionController } from './controllers/calendar-session.controller';
+import { CalendarSessionService } from './services/calendar-session.service';
 import { SimulationPrismaService } from './prisma/simulation-prisma.service';
 import { MongoConnectionService } from './services/mongo/mongo-connection.service';
 import { LLMService } from './services/llm/llm.service';
@@ -53,6 +56,10 @@ import { TtsModule } from './tts/tts.module';
 import { AssessmentModule } from './assessment/assessment.module';
 import { PhoneModule } from './phone/phone.module';
 import { RagModule } from './rag/rag.module';
+import {
+  getRabbitMQUrl,
+  getQueueOptions,
+} from '../../config/microservices.config';
 
 @Module({
   imports: [
@@ -64,6 +71,21 @@ import { RagModule } from './rag/rag.module';
       }),
       inject: [ConfigService],
     }),
+    ClientsModule.registerAsync([
+      {
+        name: 'CRM_SERVICE',
+        imports: [ConfigModule],
+        useFactory: (_configService: ConfigService) => ({
+          transport: Transport.RMQ,
+          options: {
+            urls: [getRabbitMQUrl()],
+            queue: 'crm_queue',
+            queueOptions: getQueueOptions(),
+          },
+        }),
+        inject: [ConfigService],
+      },
+    ]),
     TtsModule,
     PhoneModule,
     RagModule,
@@ -84,6 +106,7 @@ import { RagModule } from './rag/rag.module';
     HintsController,
     TimelineController,
     ChallengeController,
+    CalendarSessionController,
   ],
   providers: [
     SimulationPrismaService,
@@ -133,6 +156,7 @@ import { RagModule } from './rag/rag.module';
     StreamingConversationService,
     ConversationToolsService,
     ConversationOrchestrationService,
+    CalendarSessionService,
   ],
   exports: [
     LLMService,
