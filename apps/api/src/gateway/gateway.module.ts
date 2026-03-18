@@ -34,6 +34,7 @@ import { SimulationWsGateway } from './controllers/simulation/simulation-ws.gate
 import { SimulationModule } from '@microservices/simulation/simulation.module';
 import { RagController } from '@microservices/simulation/rag/rag.controller';
 import { ChallengesGatewayController } from './controllers/challenges/challenges-gateway.controller';
+import { CalendarGatewayController } from './controllers/calendar/calendar-gateway.controller';
 import { SupportChatGatewayController } from './controllers/support/support-chat-gateway.controller';
 import { SupportAttachmentGatewayController } from './controllers/support/support-attachment-gateway.controller';
 import { CoachStreamService } from './controllers/support/coach-stream.service';
@@ -79,6 +80,7 @@ import { CoachStreamService } from './controllers/support/coach-stream.service';
     LtiManagementGatewayController,
     RagController,
     ChallengesGatewayController,
+    CalendarGatewayController,
     SupportChatGatewayController,
     SupportAttachmentGatewayController,
   ],

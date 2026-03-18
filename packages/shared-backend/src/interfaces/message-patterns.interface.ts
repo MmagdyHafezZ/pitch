@@ -69,6 +69,21 @@ export const CRM_SERVICE_PATTERNS = {
   SALESFORCE_QUERY: 'salesforce.query',
   SALESFORCE_SEARCH: 'salesforce.search',
   SALESFORCE_DISCONNECT: 'salesforce.disconnect',
+
+  GOOGLE_CALENDAR_CONNECT: 'calendar.google.connect',
+  GOOGLE_CALENDAR_CALLBACK: 'calendar.google.callback',
+  GOOGLE_CALENDAR_STATUS: 'calendar.google.status',
+  GOOGLE_CALENDAR_DISCONNECT: 'calendar.google.disconnect',
+  GOOGLE_CALENDAR_GET_EVENTS: 'calendar.google.getEvents',
+
+  MICROSOFT_CALENDAR_CONNECT: 'calendar.microsoft.connect',
+  MICROSOFT_CALENDAR_CALLBACK: 'calendar.microsoft.callback',
+  MICROSOFT_CALENDAR_STATUS: 'calendar.microsoft.status',
+  MICROSOFT_CALENDAR_DISCONNECT: 'calendar.microsoft.disconnect',
+  MICROSOFT_CALENDAR_GET_EVENTS: 'calendar.microsoft.getEvents',
+
+  CALENDAR_GET_UPCOMING: 'calendar.getUpcoming',
+  CALENDAR_LIST_ALL_CONNECTED: 'calendar.listAllConnected',
 } as const
 export const SIMULATION_SERVICE_PATTERNS = {
   CREATE_SESSION: 'simulation.session.create',
@@ -166,6 +181,11 @@ export const SIMULATION_SERVICE_PATTERNS = {
   CHALLENGE_SUBMIT_SCORE: 'simulation.challenge.submitScore',
   CHALLENGE_LEADERBOARD: 'simulation.challenge.leaderboard',
   CHALLENGE_TRIGGER_GENERATE: 'simulation.challenge.triggerGenerate',
+
+  SESSION_FIND_BY_CALENDAR_EVENT: 'simulation.session.findByCalendarEvent',
+  CALENDAR_SESSION_SUGGESTIONS_LIST: 'simulation.calendar.suggestions.list',
+  CALENDAR_SESSION_SUGGESTIONS_ACCEPT: 'simulation.calendar.suggestions.accept',
+  CALENDAR_SESSION_SUGGESTIONS_DISMISS: 'simulation.calendar.suggestions.dismiss',
 } as const
 
 export type UserServicePattern = (typeof USER_SERVICE_PATTERNS)[keyof typeof USER_SERVICE_PATTERNS]
