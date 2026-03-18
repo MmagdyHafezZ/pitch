@@ -249,6 +249,38 @@ export class SessionGatewayController {
   }
 
   /**
+   * Restart a session by creating a new iteration on the same session record
+   *
+   * POST /v1/simulation/sessions/:id/restart
+   */
+  @Post(':id/restart')
+  @ApiOperation({ summary: 'Restart a session with a fresh iteration' })
+  @ApiResponse({ status: 200, description: 'Session restarted successfully' })
+  @ApiResponse({ status: 404, description: 'Session not found' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  restartSession(
+    @Param('id') id: string,
+    @Body() restartSessionDto: any,
+    @UserClaims() userClaims: UserClaimsType,
+  ) {
+    return this.simulationService
+      .send(SIMULATION_SERVICE_PATTERNS.RESTART_SESSION, {
+        id,
+        ...restartSessionDto,
+        userClaims,
+      })
+      .pipe(
+        timeout(5000),
+        catchError((err: unknown) => {
+          const error = normalizeError(err);
+          const message = error.message ?? 'Failed to restart session';
+          const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
+          return throwError(() => new HttpException(message, status));
+        }),
+      );
+  }
+
+  /**
    * Delete a session
    *
    * DELETE /v1/simulation/sessions/:id

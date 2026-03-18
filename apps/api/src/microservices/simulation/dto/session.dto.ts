@@ -240,6 +240,21 @@ export class EndSessionDto {
 }
 
 /**
+ * Restart Session DTO
+ *
+ * Used to close the current iteration and create a fresh one on the same session.
+ */
+export class RestartSessionDto {
+  @ApiPropertyOptional({
+    example: 'restart_from_scratch',
+    description: 'Reason for ending the current iteration before restarting',
+  })
+  @IsString()
+  @IsOptional()
+  reason?: string;
+}
+
+/**
  * List Sessions Query DTO
  *
  * Used to filter and paginate sessions

@@ -1,0 +1,60 @@
+.container {
+  position: relative;
+  display: inline-block;
+  overflow: hidden;
+  border-radius: 20px;
+}
+
+.gradientBottom {
+  position: absolute;
+  right: -250%;
+  bottom: -12px;
+  z-index: 0;
+  width: 300%;
+  height: 50%;
+  opacity: 0.7;
+  border-radius: 50%;
+  animation: starMovementBottom linear infinite alternate;
+}
+
+.gradientTop {
+  position: absolute;
+  top: -12px;
+  left: -250%;
+  z-index: 0;
+  width: 300%;
+  height: 50%;
+  opacity: 0.7;
+  border-radius: 50%;
+  animation: starMovementTop linear infinite alternate;
+}
+
+.inner {
+  position: relative;
+  z-index: 1;
+  border-radius: 20px;
+}
+
+@keyframes starMovementBottom {
+  0% {
+    transform: translateX(0%);
+    opacity: 1;
+  }
+
+  100% {
+    transform: translateX(-100%);
+    opacity: 0;
+  }
+}
+
+@keyframes starMovementTop {
+  0% {
+    transform: translateX(0%);
+    opacity: 1;
+  }
+
+  100% {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+}

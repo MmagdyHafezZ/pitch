@@ -72,6 +72,10 @@ export interface EndSessionInput {
   reason?: string
 }
 
+export interface RestartSessionInput {
+  reason?: string
+}
+
 export interface ListSessionsParams {
   userId?: string
   orgId?: string

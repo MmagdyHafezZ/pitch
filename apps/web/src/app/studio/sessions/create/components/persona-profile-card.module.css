@@ -1,0 +1,499 @@
+.cardWrapper {
+  --pc-pointer-x: 50%;
+  --pc-pointer-y: 50%;
+  --pc-rotate-x: 0deg;
+  --pc-rotate-y: 0deg;
+  --pc-shift-x: 0px;
+  --pc-shift-y: 0px;
+  --pc-accent: var(--mantine-color-blue-5);
+  --pc-accent-glow: var(--mantine-color-cyan-4);
+  position: relative;
+  width: 320px;
+  height: 420px;
+  flex: 0 0 320px;
+  perspective: 900px;
+  border-radius: 32px;
+  outline: none;
+  cursor: pointer;
+}
+
+.cardWrapper:focus-visible {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--pc-accent) 75%, white 10%);
+}
+
+.behindGlow {
+  position: absolute;
+  inset: 20px 18px 14px;
+  border-radius: 28px;
+  background: radial-gradient(
+    circle at var(--pc-pointer-x) var(--pc-pointer-y),
+    color-mix(in srgb, var(--pc-accent-glow) 58%, transparent),
+    transparent 58%
+  );
+  filter: blur(36px) saturate(1.15);
+  opacity: 0.5;
+  transition: opacity 180ms ease;
+  pointer-events: none;
+}
+
+.cardWrapper:hover .behindGlow,
+.cardWrapper[data-open='true'] .behindGlow,
+.cardWrapper[data-active='true'] .behindGlow {
+  opacity: 0.95;
+}
+
+.cardShell {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+}
+
+.card {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border-radius: 30px;
+  transform-style: preserve-3d;
+  transform: rotateX(var(--pc-rotate-x)) rotateY(var(--pc-rotate-y));
+  transition:
+    transform 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease;
+  border: 1px solid color-mix(in srgb, var(--pc-accent) 38%, rgba(255, 255, 255, 0.08));
+  background:
+    radial-gradient(circle at 18% 18%, color-mix(in srgb, var(--pc-accent) 22%, transparent), transparent 32%),
+    radial-gradient(circle at 78% 14%, color-mix(in srgb, var(--pc-accent-glow) 20%, transparent), transparent 30%),
+    linear-gradient(165deg, rgba(7, 14, 28, 0.98) 0%, rgba(10, 17, 35, 0.94) 42%, rgba(4, 7, 18, 0.98) 100%);
+  box-shadow:
+    0 28px 60px color-mix(in srgb, var(--mantine-color-dark-9) 70%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.cardWrapper:hover .card,
+.cardWrapper[data-open='true'] .card,
+.cardWrapper[data-active='true'] .card {
+  box-shadow:
+    0 30px 70px color-mix(in srgb, var(--pc-accent) 18%, rgba(0, 0, 0, 0.62)),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+.cardBackdrop,
+.cardGrid,
+.cardShine,
+.cardGlare {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.cardBackdrop {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.08), transparent 26%),
+    linear-gradient(180deg, transparent 48%, rgba(2, 6, 16, 0.82) 100%);
+  z-index: 0;
+}
+
+.cardGrid {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+  background-size: 22px 22px;
+  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.45), transparent 72%);
+  opacity: 0.28;
+  z-index: 0;
+}
+
+.cardShine {
+  z-index: 1;
+  background:
+    radial-gradient(
+      circle at var(--pc-pointer-x) var(--pc-pointer-y),
+      rgba(255, 255, 255, 0.22),
+      transparent 26%
+    ),
+    linear-gradient(
+      135deg,
+      transparent 18%,
+      color-mix(in srgb, var(--pc-accent) 22%, rgba(255, 255, 255, 0.08)) 42%,
+      transparent 68%
+    );
+  mix-blend-mode: screen;
+  opacity: 0.7;
+}
+
+.cardGlare {
+  z-index: 2;
+  background:
+    radial-gradient(
+      circle at var(--pc-pointer-x) var(--pc-pointer-y),
+      color-mix(in srgb, var(--pc-accent-glow) 26%, rgba(255, 255, 255, 0.12)),
+      transparent 34%
+    );
+  mix-blend-mode: overlay;
+  opacity: 0.7;
+}
+
+.badgeRail {
+  position: absolute;
+  top: 18px;
+  left: 18px;
+  z-index: 6;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.infoButton {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 8;
+  backdrop-filter: blur(12px);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.28);
+}
+
+.avatarStage {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.avatarHalo {
+  position: absolute;
+  inset: 28% 12% auto;
+  height: 180px;
+  border-radius: 999px;
+  background: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--pc-accent-glow) 22%, transparent),
+    transparent 72%
+  );
+  filter: blur(30px);
+  opacity: 0.9;
+}
+
+.avatarImage {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 22%;
+  opacity: 0.94;
+  transform: scale(1.08) translate3d(var(--pc-shift-x), calc(var(--pc-shift-y) * 0.8), 0);
+  transition: transform 140ms ease;
+  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.95) 40%, transparent 96%);
+}
+
+.avatarFallback {
+  position: absolute;
+  inset: auto 28px 84px;
+  height: 220px;
+  border-radius: 28px;
+  display: grid;
+  place-items: center;
+  color: color-mix(in srgb, var(--pc-accent-glow) 78%, white 12%);
+  border: 1px solid color-mix(in srgb, var(--pc-accent) 28%, rgba(255, 255, 255, 0.08));
+  background:
+    radial-gradient(circle at center, color-mix(in srgb, var(--pc-accent) 20%, transparent), transparent 68%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02));
+  backdrop-filter: blur(20px);
+}
+
+.titleBlock {
+  position: absolute;
+  top: 54px;
+  left: 20px;
+  right: 20px;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transform: translate3d(calc(var(--pc-shift-x) * -0.55), calc(var(--pc-shift-y) * -0.55), 0);
+  transition: transform 140ms ease;
+}
+
+.titleEyebrow {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: rgba(229, 236, 255, 0.68);
+}
+
+.titleText {
+  margin: 0;
+  font-size: clamp(28px, 3vw, 34px);
+  line-height: 0.96;
+  letter-spacing: -0.05em;
+  color: #f7fbff;
+  text-shadow: 0 16px 30px rgba(0, 0, 0, 0.5);
+}
+
+.titleSub {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: rgba(216, 225, 247, 0.82);
+}
+
+.traitRail {
+  position: absolute;
+  left: 18px;
+  right: 18px;
+  bottom: 84px;
+  z-index: 6;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  pointer-events: none;
+}
+
+.traitPill {
+  display: inline-flex;
+  align-items: center;
+  padding: 7px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(245, 248, 255, 0.86);
+  background: rgba(9, 17, 34, 0.52);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(14px);
+}
+
+.infoRail {
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  bottom: 16px;
+  z-index: 8;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.08));
+  backdrop-filter: blur(18px);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.3);
+}
+
+.infoIdentity {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+}
+
+.infoText {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.infoPrimary,
+.infoSecondary {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.infoPrimary {
+  font-size: 13px;
+  font-weight: 700;
+  color: #f7fbff;
+}
+
+.infoSecondary {
+  font-size: 11px;
+  color: rgba(219, 229, 250, 0.72);
+}
+
+.previewButton {
+  flex-shrink: 0;
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.infoOverlay {
+  position: absolute;
+  inset: 12px;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px;
+  border-radius: 24px;
+  border: 1px solid color-mix(in srgb, var(--pc-accent) 30%, rgba(255, 255, 255, 0.1));
+  background:
+    radial-gradient(circle at top right, color-mix(in srgb, var(--pc-accent) 18%, transparent), transparent 28%),
+    linear-gradient(180deg, rgba(7, 15, 30, 0.94), rgba(4, 8, 18, 0.97));
+  backdrop-filter: blur(22px);
+  box-shadow:
+    0 20px 56px rgba(0, 0, 0, 0.44),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.overlayHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.overlayEyebrow {
+  margin: 0 0 4px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(212, 223, 248, 0.68);
+}
+
+.overlayTitle {
+  margin: 0;
+  font-size: 22px;
+  line-height: 1;
+  letter-spacing: -0.04em;
+  color: #f8fbff;
+}
+
+.overlaySummary {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: rgba(221, 230, 250, 0.82);
+}
+
+.overlayDetails {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.overlayDetailCard {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 11px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.overlayLabel {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(196, 210, 239, 0.64);
+}
+
+.overlayValue {
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(247, 250, 255, 0.9);
+}
+
+.overlaySection {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.overlaySectionLabel {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(210, 220, 244, 0.66);
+}
+
+.overlayTraitRail {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.overlayTraitPill {
+  display: inline-flex;
+  align-items: center;
+  padding: 7px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(244, 248, 255, 0.88);
+  background: color-mix(in srgb, var(--pc-accent) 14%, rgba(255, 255, 255, 0.05));
+  border: 1px solid color-mix(in srgb, var(--pc-accent) 18%, rgba(255, 255, 255, 0.08));
+}
+
+.metricStack {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.metricRow {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.metricHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(236, 243, 255, 0.86);
+}
+
+.metricTrack {
+  position: relative;
+  overflow: hidden;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.09);
+}
+
+.metricFill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--pc-accent) 56%, white 4%),
+    color-mix(in srgb, var(--pc-accent-glow) 72%, white 6%)
+  );
+  box-shadow: 0 0 16px color-mix(in srgb, var(--pc-accent-glow) 34%, transparent);
+}
+
+@media (max-width: 768px) {
+  .cardWrapper {
+    width: 300px;
+    height: 396px;
+    flex-basis: 300px;
+  }
+
+  .titleText {
+    font-size: 30px;
+  }
+
+  .infoOverlay {
+    inset: 10px;
+    padding: 16px;
+  }
+}

@@ -143,4 +143,46 @@ describe('AuthController', () => {
     expect(() => controller.getOAuthProviders()).toThrow(wrapped);
     expect(toRpcExceptionMock).toHaveBeenCalledWith(error);
   });
+
+  // ── ltiLogin ──────────────────────────────────────────────────────────────────
+
+  describe('ltiLogin', () => {
+    const ltiPayload = {
+      email: 'learner@university.edu',
+      name: 'Alice',
+      sub: 'sub-1',
+    };
+    const authResponse = {
+      token: 'access-jwt',
+      refreshToken: 'refresh-jwt',
+      user: { id: 'user-1', email: 'learner@university.edu', name: 'Alice' },
+    };
+
+    it('delegates to authApplicationService.ltiLogin and returns the result', async () => {
+      const authApp = createAuthApplicationServiceMock();
+      const factory = createOauthProviderFactoryMock();
+      (authApp as any).ltiLogin = jest.fn().mockResolvedValue(authResponse);
+      const controller = new AuthController(authApp, factory);
+
+      const result = await (controller as any).ltiLogin(ltiPayload);
+
+      expect((authApp as any).ltiLogin).toHaveBeenCalledWith(ltiPayload);
+      expect(result).toEqual(authResponse);
+    });
+
+    it('wraps ltiLogin errors with toRpcException', async () => {
+      const authApp = createAuthApplicationServiceMock();
+      const factory = createOauthProviderFactoryMock();
+      const error = new Error('db failure');
+      const wrapped = new Error('rpc wrapped');
+      (authApp as any).ltiLogin = jest.fn().mockRejectedValue(error);
+      toRpcExceptionMock.mockReturnValueOnce(wrapped as any);
+      const controller = new AuthController(authApp, factory);
+
+      await expect((controller as any).ltiLogin(ltiPayload)).rejects.toThrow(
+        wrapped,
+      );
+      expect(toRpcExceptionMock).toHaveBeenCalledWith(error);
+    });
+  });
 });

@@ -222,6 +222,7 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
         <Box
           style={{
             width: isMobile ? '100%' : 280,
+            flexShrink: 0,
             backgroundColor: navBackground,
             padding: rem(isMobile ? 14 : 24),
             position: 'relative',
@@ -422,7 +423,7 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
         </Box>
 
         {/* Right Content */}
-        <ScrollArea style={{ flex: 1, height: '100%' }}>
+        <ScrollArea style={{ flex: 1, minHeight: 0 }}>
           <Box
             style={{
               minHeight: isMobile ? 'calc(100vh - 88px)' : '100%',

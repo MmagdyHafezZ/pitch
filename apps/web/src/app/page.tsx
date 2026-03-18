@@ -12,7 +12,6 @@ import {
   ExternalLink,
   Github,
   GraduationCap,
-  Layers3,
   LineChart,
   Rocket,
   ShieldCheck,
@@ -23,12 +22,16 @@ import {
   Workflow,
   Zap,
 } from 'lucide-react'
+import { Counter } from '@/components/marketing/Counter'
+import { PillNav } from '@/components/marketing/PillNav'
+import { StarBorder } from '@/components/marketing/StarBorder'
+import { LandingBackground } from './LandingBackground'
 import styles from './page.module.css'
 
 export const metadata: Metadata = {
   title: 'PITCH | IBM-Sponsored Capstone',
   description:
-    'PITCH is an IBM-sponsored University of Calgary capstone project built by six students to help clients improve sales readiness through AI-powered pitch rehearsal.',
+    'PITCH is an IBM-sponsored University of Calgary capstone focused on AI-powered sales rehearsal, coaching, and readiness analytics.',
 }
 
 const headingFont = Space_Grotesk({
@@ -48,36 +51,44 @@ const GITHUB_ISSUES_URL = 'https://github.com/MmagdyHafezZ/PITCH/issues'
 
 const navLinks = [
   { href: '#overview', label: 'Overview' },
-  { href: '#problem', label: 'Client Pain' },
+  { href: '#problem', label: 'Problem' },
   { href: '#solution', label: 'Solution' },
   { href: '#analytics', label: 'Analytics' },
-  { href: '#screens', label: 'Screens' },
-  { href: '#capstone', label: 'Capstone' },
-  { href: '#team', label: 'Team' },
+  { href: '#examples', label: 'Examples' },
+  { href: '#team', label: 'The Team' },
   { href: '#github', label: 'GitHub' },
 ]
 
 const heroStats = [
-  { label: 'Conversation Simulations', value: '1.2M+' },
-  { label: 'Faster Ramp Time', value: '38%' },
-  { label: 'Win-Confidence Lift', value: '24%' },
-  { label: 'Coach Satisfaction', value: '4.9/5' },
+  { label: 'Active users', value: 1284, suffix: '+' },
+  { label: 'Live sessions', value: 86 },
+  { label: 'Team workspaces', value: 24 },
+  { label: 'Rehearsals this week', value: 3127, suffix: '+' },
+]
+
+const heroSignals = [
+  'Realistic buyer personas',
+  'Live coaching insights',
+  'Manager-ready reporting',
 ]
 
 const clientPain = [
   {
-    title: 'Slow Onboarding',
-    description: 'New reps take too long to reach confident, customer-ready performance.',
+    title: 'Ramp-up takes too long',
+    description:
+      'New reps need repeated practice before they can handle objections and buying pressure with confidence.',
     icon: Rocket,
   },
   {
-    title: 'Inconsistent Coaching',
-    description: 'Feedback quality varies by manager and is hard to scale across teams.',
+    title: 'Coaching quality varies',
+    description:
+      'Every manager runs practice differently, so feedback becomes difficult to standardize across the team.',
     icon: Users,
   },
   {
-    title: 'No Readiness Signal',
-    description: 'Leaders lack measurable evidence that reps are prepared for high-stakes calls.',
+    title: 'Readiness is hard to prove',
+    description:
+      'Leaders can see activity, but they still lack a clear signal that a rep is ready for a high-stakes conversation.',
     icon: LineChart,
   },
 ]
@@ -86,60 +97,60 @@ const outcomes = [
   {
     title: 'Client Impact',
     points: [
-      'Shorter time-to-readiness for new sales hires',
-      'Standardized coaching quality across managers',
-      'Clear dashboards for leadership decisions',
+      'Faster ramp time for new sellers',
+      'More consistent coaching across managers',
+      'Clearer readiness signals before customer calls',
     ],
   },
   {
     title: 'Business Value',
     points: [
-      'Lower enablement cost per rep',
-      'More consistent customer conversation quality',
-      'Better confidence before live revenue calls',
+      'Less manual effort for enablement teams',
+      'Higher-quality practice at scale',
+      'Better visibility into where coaching is paying off',
     ],
   },
 ]
 
 const solutionPillars = [
   {
-    title: 'AI Persona Simulations',
+    title: 'Realistic AI buyer personas',
     description:
-      'Practice against realistic buyer personalities that challenge value messaging, objection handling, and deal strategy.',
+      'Give reps a believable environment to practice discovery, objection handling, and deal positioning before a live call.',
     icon: BrainCircuit,
   },
   {
-    title: 'Real-Time Coaching Signals',
+    title: 'Live coaching signals',
     description:
-      'Track talk ratio, narrative clarity, and objection handling quality while the conversation is still in progress.',
+      'Measure talk balance, clarity, and objection handling while the session is happening, not hours later.',
     icon: Zap,
   },
   {
-    title: 'Manager Analytics Layer',
+    title: 'Manager-ready analytics',
     description:
-      'View readiness trends, rep-level gaps, and team-wide progress with actionable coaching recommendations.',
+      'Surface readiness trends, skill gaps, and coaching opportunities in a format leaders can actually use.',
     icon: BarChart3,
   },
   {
-    title: 'Secure Team Operations',
+    title: 'Structured team workflows',
     description:
-      'Support role controls, structured workflows, and auditable simulation history suitable for client environments.',
+      'Support reusable scenarios, clear operating controls, and auditable session history for client teams.',
     icon: ShieldCheck,
   },
 ]
 
 const workflowSteps = [
   {
-    title: 'Define Scenario',
-    text: 'Configure sales stage, buyer pressure, and evaluation rubric to mirror real client conversations.',
+    title: 'Set the scenario',
+    text: 'Choose the buyer, stage, pressure, and rubric so the practice session matches a real customer conversation.',
   },
   {
-    title: 'Run Rehearsal',
-    text: 'Reps practice live while PITCH tracks communication quality and coaching opportunities.',
+    title: 'Run the rehearsal',
+    text: 'Reps practice live while PITCH tracks communication quality and surfaces coaching signals in real time.',
   },
   {
-    title: 'Coach and Improve',
-    text: 'Managers review metrics, assign targeted drills, and measure improvement over time.',
+    title: 'Review and coach',
+    text: 'Managers review metrics, assign targeted follow-up, and measure improvement over time.',
   },
 ]
 
@@ -158,78 +169,70 @@ const improvementBars = [
   { label: 'Objection Handling', before: 46, after: 81 },
 ]
 
-const screenshotCards = [
+const exampleCards = [
   {
-    title: 'Executive Dashboard',
-    detail: 'A clear view of team readiness, progress velocity, and coaching priorities.',
+    title: 'Leadership dashboard',
+    detail:
+      'A quick view of readiness, improvement velocity, and the coaching priorities that matter most.',
   },
   {
-    title: 'Live Rehearsal Studio',
-    detail: 'Interactive simulation with AI coach feedback and transcript intelligence.',
+    title: 'Live practice session',
+    detail:
+      'An interactive simulation with AI feedback, transcript context, and in-the-moment coaching prompts.',
   },
   {
-    title: 'Scenario Builder',
-    detail: 'Configure role-specific training journeys and standardized quality checkpoints.',
+    title: 'Scenario setup',
+    detail:
+      'Configure buyer context, pressure, and evaluation criteria for repeatable team-wide practice.',
   },
 ]
 
-const capstoneFacts = [
+const teamHighlights = [
   {
     title: 'IBM Sponsored',
-    detail: 'Developed with IBM-backed capstone support and industry-aligned mentorship.',
+    detail: 'Built with IBM-backed sponsorship and mentorship around a real coaching workflow.',
     icon: Building2,
   },
   {
     title: 'University of Calgary',
-    detail: 'Built as a multidisciplinary capstone at the University of Calgary in 2026.',
+    detail: 'Delivered as a multidisciplinary University of Calgary capstone in 2026.',
     icon: GraduationCap,
   },
   {
     title: '6-Student Delivery Team',
-    detail: 'A focused product team covering UX, frontend, backend, AI, data, and testing.',
+    detail: 'A focused team spanning product, frontend, backend, AI, analytics, and QA.',
     icon: Users,
-  },
-]
-
-const goToMarket = [
-  {
-    title: 'Client Discovery',
-    text: 'Align with client goals, sales process maturity, and current coaching constraints.',
-  },
-  {
-    title: 'Pilot Execution',
-    text: 'Run a guided pilot with selected teams and track readiness uplift metrics.',
-  },
-  {
-    title: 'Scale Adoption',
-    text: 'Expand with playbook templates, manager enablement, and ongoing analytics review.',
   },
 ]
 
 const teamPods = [
   {
     role: 'Product Strategy',
-    focus: 'Client outcomes, roadmap alignment, and business-value positioning.',
+    focus: 'Translate client needs into roadmap priorities, positioning, and measurable outcomes.',
   },
   {
     role: 'Frontend Experience',
-    focus: 'High-fidelity UI system and responsive interaction design.',
+    focus:
+      'Design and build the interface system across the landing site, studio, and rehearsal flows.',
   },
   {
     role: 'Backend Architecture',
-    focus: 'Service orchestration, API reliability, and platform scalability.',
+    focus:
+      'Own APIs, orchestration, and reliability for the platform’s real-time simulation features.',
   },
   {
     role: 'AI and Prompt Systems',
-    focus: 'Persona behavior quality and coaching-feedback relevance.',
+    focus:
+      'Shape persona behavior, guidance logic, and response quality inside live practice sessions.',
   },
   {
     role: 'Data and Analytics',
-    focus: 'Signal modeling, score interpretation, and trend visibility.',
+    focus: 'Define metrics, scoring, and reporting patterns for reps, managers, and stakeholders.',
   },
   {
     role: 'QA and DevOps',
-    focus: 'Test automation, deployment stability, and release confidence.',
+    focus:
+      'Cover release confidence, test automation, and the path from local build to deployed product.',
   },
 ]
 
@@ -270,27 +273,30 @@ export default function Home() {
 
   return (
     <main className={`${styles.page} ${headingFont.variable} ${bodyFont.variable}`}>
+      <LandingBackground />
       <div className={styles.container}>
         <header className={styles.header}>
           <Link href="/" className={styles.brand}>
             PITCH<span className={styles.brandDot}>.</span>
           </Link>
 
-          <nav className={styles.nav}>
-            {navLinks.map((link) => (
-              <a key={link.href} href={link.href}>
-                {link.label}
-              </a>
-            ))}
-          </nav>
+          <PillNav items={navLinks} className={styles.headerPillNav} />
 
           <div className={styles.headerActions}>
             <Link href={GITHUB_URL} target="_blank" rel="noreferrer" className={styles.headerGhost}>
               <Github size={15} /> GitHub
             </Link>
-            <Link href="/auth/register" className={styles.headerPrimary}>
+            <StarBorder
+              as={Link}
+              href="/auth/register"
+              color="rgba(150, 221, 255, 0.95)"
+              speed="4.8s"
+              thickness={1.2}
+              className={styles.headerStarCta}
+              innerClassName={styles.headerStarInner}
+            >
               Try it out
-            </Link>
+            </StarBorder>
           </div>
         </header>
 
@@ -299,19 +305,19 @@ export default function Home() {
             <div className={styles.heroGrid}>
               <div className={`${styles.heroCopy} ${styles.reveal}`} style={withDelay('0.08s')}>
                 <p className={styles.kicker}>
-                  IBM Sponsored • UCalgary Capstone • 6 Student Builders
+                  IBM-sponsored capstone • University of Calgary • Built by 6 students
                 </p>
                 <h1 className={styles.heroTitle}>
-                  An AI rehearsal platform that helps clients coach sales teams with confidence.
+                  AI sales rehearsal for teams that need consistent coaching.
                 </h1>
                 <p className={styles.heroText}>
-                  PITCH is a capstone product designed to help clients improve rep readiness,
-                  standardize coaching quality, and gain measurable performance signals before live
-                  customer calls.
+                  PITCH helps teams rehearse difficult buyer conversations, measure rep readiness,
+                  and give managers a clearer view of where coaching is working before live customer
+                  calls happen.
                 </p>
                 <div className={styles.heroActions}>
                   <Link href="/auth/register" className={styles.primaryButton}>
-                    Book Client Walkthrough <ArrowRight size={17} />
+                    Request a walkthrough <ArrowRight size={17} />
                   </Link>
                   <Link
                     href={GITHUB_URL}
@@ -322,19 +328,41 @@ export default function Home() {
                     <Github size={17} /> View Source
                   </Link>
                 </div>
+                <div className={styles.heroSignals}>
+                  {heroSignals.map((signal) => (
+                    <span key={signal}>{signal}</span>
+                  ))}
+                </div>
               </div>
 
               <aside className={`${styles.heroPanel} ${styles.reveal}`} style={withDelay('0.16s')}>
                 <p className={styles.ibmLabel}>Sponsored by</p>
                 <img src="/IBM.png" alt="IBM Logo" className={styles.ibmLogo} />
                 <p className={styles.ibmText}>
-                  Industry-supported innovation for a real client coaching challenge.
+                  Built with IBM-backed mentorship around a real coaching problem: helping teams
+                  practice better before live customer conversations.
                 </p>
+                <p className={styles.metricLabel}>Current activity</p>
 
                 <div className={styles.statGrid}>
                   {heroStats.map((item) => (
                     <article key={item.label}>
-                      <p>{item.value}</p>
+                      <p className={styles.statValue}>
+                        <Counter
+                          value={item.value}
+                          suffix={item.suffix}
+                          fontSize={24}
+                          padding={2}
+                          gap={2}
+                          horizontalPadding={0}
+                          fontWeight={700}
+                          textColor="#f7fbff"
+                          gradientHeight={18}
+                          gradientFrom="rgba(5, 10, 27, 0.92)"
+                          gradientTo="rgba(5, 10, 27, 0)"
+                          counterStyle={{ paddingLeft: 0, paddingRight: 0 }}
+                        />
+                      </p>
                       <span>{item.label}</span>
                     </article>
                   ))}
@@ -347,12 +375,12 @@ export default function Home() {
         <section id="problem" className={styles.screen}>
           <div className={styles.screenInner}>
             <div className={`${styles.sectionIntro} ${styles.reveal}`} style={withDelay('0.06s')}>
-              <p className={styles.sectionKicker}>Client Problem</p>
-              <h2>Why clients need a better rehearsal system</h2>
+              <p className={styles.sectionKicker}>Problem</p>
+              <h2>Sales coaching still breaks down when teams try to scale it</h2>
               <p>
-                Traditional role-play is inconsistent, hard to measure, and difficult to scale.
-                PITCH addresses this with structured AI simulations and transparent coaching
-                analytics.
+                Most sales teams still depend on ad hoc role-play, manager availability, and manual
+                follow-up. That makes readiness inconsistent, coaching uneven, and improvement hard
+                to measure.
               </p>
             </div>
 
@@ -401,11 +429,11 @@ export default function Home() {
         <section id="solution" className={styles.screen}>
           <div className={styles.screenInner}>
             <div className={`${styles.sectionIntro} ${styles.reveal}`} style={withDelay('0.06s')}>
-              <p className={styles.sectionKicker}>Solution Design</p>
-              <h2>Built for practical, measurable client adoption</h2>
+              <p className={styles.sectionKicker}>Solution</p>
+              <h2>One workflow for practice, coaching, and review</h2>
               <p>
-                PITCH combines simulation quality, coaching intelligence, and clean reporting so
-                clients can make faster enablement decisions with less ambiguity.
+                PITCH brings together scenario design, live simulations, and manager-ready reporting
+                so teams can coach with more consistency and less guesswork.
               </p>
             </div>
 
@@ -434,7 +462,7 @@ export default function Home() {
                 style={withDelay('0.22s')}
               >
                 <h3>
-                  <Workflow size={17} /> Client Workflow
+                  <Workflow size={17} /> How it works
                 </h3>
                 <ol>
                   {workflowSteps.map((step) => (
@@ -453,10 +481,10 @@ export default function Home() {
           <div className={styles.screenInner}>
             <div className={`${styles.sectionIntro} ${styles.reveal}`} style={withDelay('0.06s')}>
               <p className={styles.sectionKicker}>Analytics</p>
-              <h2>Dedicated reporting screen for client stakeholders</h2>
+              <h2>Reporting that shows whether coaching is actually working</h2>
               <p>
-                Visualize readiness progress and confidence growth over time, then compare pre- and
-                post-coaching outcomes for each key sales competency.
+                Track readiness trends, confidence growth, and before-versus-after changes in the
+                behaviors clients care about most.
               </p>
             </div>
 
@@ -467,11 +495,11 @@ export default function Home() {
               >
                 <div className={styles.chartHead}>
                   <div>
-                    <p>Team Readiness Trend</p>
+                    <p>Readiness trend</p>
                     <small>6-month pilot cohort</small>
                   </div>
                   <span>
-                    <TrendingUp size={14} /> +19% readiness momentum
+                    <TrendingUp size={14} /> +19% improvement trend
                   </span>
                 </div>
 
@@ -484,16 +512,16 @@ export default function Home() {
                   >
                     <defs>
                       <linearGradient id="readiness-fill" x1="0" x2="0" y1="0" y2="1">
-                        <stop offset="0%" stopColor="rgba(15, 98, 254, 0.38)" />
-                        <stop offset="100%" stopColor="rgba(15, 98, 254, 0.04)" />
+                        <stop offset="0%" stopColor="rgba(93, 103, 255, 0.34)" />
+                        <stop offset="100%" stopColor="rgba(93, 103, 255, 0.04)" />
                       </linearGradient>
                       <linearGradient id="readiness-line" x1="0" x2="1" y1="0" y2="0">
-                        <stop offset="0%" stopColor="#0f62fe" />
-                        <stop offset="100%" stopColor="#4cc9f0" />
+                        <stop offset="0%" stopColor="#5d67ff" />
+                        <stop offset="100%" stopColor="#96ddff" />
                       </linearGradient>
                       <linearGradient id="confidence-line" x1="0" x2="1" y1="0" y2="0">
-                        <stop offset="0%" stopColor="#f97316" />
-                        <stop offset="100%" stopColor="#ffd166" />
+                        <stop offset="0%" stopColor="#9c8dff" />
+                        <stop offset="100%" stopColor="#dce2ff" />
                       </linearGradient>
                     </defs>
 
@@ -549,7 +577,7 @@ export default function Home() {
 
               <aside className={`${styles.deltaCard} ${styles.reveal}`} style={withDelay('0.2s')}>
                 <h3>
-                  <Target size={16} /> Before vs After Coaching
+                  <Target size={16} /> Coaching impact by skill
                 </h3>
                 <ul>
                   {improvementBars.map((metric, index) => (
@@ -581,14 +609,14 @@ export default function Home() {
           </div>
         </section>
 
-        <section id="screens" className={styles.screen}>
+        <section id="examples" className={styles.screen}>
           <div className={styles.screenInner}>
             <div className={`${styles.sectionIntro} ${styles.reveal}`} style={withDelay('0.06s')}>
-              <p className={styles.sectionKicker}>Dedicated Product Screens</p>
-              <h2>Each product section has its own clear interface focus</h2>
+              <p className={styles.sectionKicker}>Examples</p>
+              <h2>Examples of the product in action</h2>
               <p>
-                Designed for high clarity in demos: one screen for leadership visibility, one for
-                live rehearsal, and one for scenario setup and control.
+                These views show how PITCH supports leaders, reps, and scenario designers during a
+                complete coaching cycle.
               </p>
             </div>
 
@@ -601,7 +629,7 @@ export default function Home() {
                   <span />
                   <span />
                   <span />
-                  <p>{screenshotCards[0].title}</p>
+                  <p>{exampleCards[0].title}</p>
                 </header>
                 <div className={styles.mockDashboard}>
                   <div className={styles.mockSidebar}>
@@ -619,7 +647,7 @@ export default function Home() {
                     </div>
                   </div>
                 </div>
-                <p>{screenshotCards[0].detail}</p>
+                <p>{exampleCards[0].detail}</p>
               </article>
 
               <article
@@ -630,7 +658,7 @@ export default function Home() {
                   <span />
                   <span />
                   <span />
-                  <p>{screenshotCards[1].title}</p>
+                  <p>{exampleCards[1].title}</p>
                 </header>
                 <div className={styles.mockLive}>
                   <div className={styles.liveMedia}>
@@ -649,7 +677,7 @@ export default function Home() {
                     <li>Coach: Good discovery. Quantify business impact next.</li>
                   </ul>
                 </div>
-                <p>{screenshotCards[1].detail}</p>
+                <p>{exampleCards[1].detail}</p>
               </article>
 
               <article
@@ -660,7 +688,7 @@ export default function Home() {
                   <span />
                   <span />
                   <span />
-                  <p>{screenshotCards[2].title}</p>
+                  <p>{exampleCards[2].title}</p>
                 </header>
                 <div className={styles.mockBuilder}>
                   <div>
@@ -683,26 +711,26 @@ export default function Home() {
                     </li>
                   </ul>
                 </div>
-                <p>{screenshotCards[2].detail}</p>
+                <p>{exampleCards[2].detail}</p>
               </article>
             </div>
           </div>
         </section>
 
-        <section id="capstone" className={styles.screen}>
+        <section id="team" className={styles.screen}>
           <div className={styles.screenInner}>
             <div className={`${styles.sectionIntro} ${styles.reveal}`} style={withDelay('0.06s')}>
-              <p className={styles.sectionKicker}>Capstone Credibility</p>
-              <h2>Built as an IBM-sponsored University of Calgary capstone</h2>
+              <p className={styles.sectionKicker}>The Team</p>
+              <h2>Built by a six-student team with IBM-backed sponsorship</h2>
               <p>
-                This project combines academic rigor with practical client strategy: clear outcomes,
-                pilot structure, and measurable rollout planning.
+                PITCH was built as a multidisciplinary capstone spanning product strategy, design,
+                engineering, AI, analytics, and delivery quality.
               </p>
             </div>
 
-            <div className={styles.capstoneLayout}>
+            <div className={styles.teamSectionStack}>
               <div className={styles.factGrid}>
-                {capstoneFacts.map((fact, index) => {
+                {teamHighlights.map((fact, index) => {
                   const Icon = fact.icon
                   return (
                     <article
@@ -720,48 +748,18 @@ export default function Home() {
                 })}
               </div>
 
-              <aside
-                className={`${styles.strategyCard} ${styles.reveal}`}
-                style={withDelay('0.22s')}
-              >
-                <h3>
-                  <Layers3 size={16} /> Marketing and Adoption Strategy
-                </h3>
-                <ol>
-                  {goToMarket.map((phase) => (
-                    <li key={phase.title}>
-                      <h4>{phase.title}</h4>
-                      <p>{phase.text}</p>
-                    </li>
-                  ))}
-                </ol>
-              </aside>
-            </div>
-          </div>
-        </section>
-
-        <section id="team" className={styles.screen}>
-          <div className={styles.screenInner}>
-            <div className={`${styles.sectionIntro} ${styles.reveal}`} style={withDelay('0.06s')}>
-              <p className={styles.sectionKicker}>The Team</p>
-              <h2>Built by 6 University of Calgary students</h2>
-              <p>
-                A six-person capstone team collaborated across product strategy, design,
-                engineering, AI, and delivery quality.
-              </p>
-            </div>
-
-            <div className={styles.teamGrid}>
-              {teamPods.map((member, index) => (
-                <article
-                  key={member.role}
-                  className={`${styles.teamCard} ${styles.reveal}`}
-                  style={withDelay(`${0.12 + index * 0.06}s`)}
-                >
-                  <h3>{member.role}</h3>
-                  <p>{member.focus}</p>
-                </article>
-              ))}
+              <div className={styles.teamGrid}>
+                {teamPods.map((member, index) => (
+                  <article
+                    key={member.role}
+                    className={`${styles.teamCard} ${styles.reveal}`}
+                    style={withDelay(`${0.18 + index * 0.06}s`)}
+                  >
+                    <h3>{member.role}</h3>
+                    <p>{member.focus}</p>
+                  </article>
+                ))}
+              </div>
             </div>
           </div>
         </section>
@@ -769,11 +767,11 @@ export default function Home() {
         <section id="github" className={`${styles.screen} ${styles.screenFinal}`}>
           <div className={styles.screenInner}>
             <div className={`${styles.finalCard} ${styles.reveal}`} style={withDelay('0.08s')}>
-              <p className={styles.sectionKicker}>Open Project Access</p>
-              <h2>Explore the code, architecture, and progress on GitHub</h2>
+              <p className={styles.sectionKicker}>GitHub</p>
+              <h2>See the code, architecture, and delivery history</h2>
               <p>
-                PITCH is presented as a client-ready capstone platform with transparent engineering
-                delivery. Review source code, open issues, and implementation details.
+                The repository shows how the product was built: frontend work, API orchestration,
+                AI-driven simulation flows, tests, and the issues used to track progress.
               </p>
 
               <div className={styles.finalActions}>
@@ -797,8 +795,8 @@ export default function Home() {
             </div>
 
             <footer className={styles.footer}>
-              <p>© {year} PITCH Capstone Project</p>
-              <p>IBM Sponsored • University of Calgary • PITCH Team</p>
+              <p>© {year} PITCH</p>
+              <p>IBM-sponsored University of Calgary capstone</p>
             </footer>
           </div>
         </section>

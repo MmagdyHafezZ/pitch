@@ -2,69 +2,64 @@ import { Logger } from '@nestjs/common'
 
 const logger = new Logger('HealthCheck')
 
+const RETRY_ATTEMPTS = 20
+const RETRY_DELAY_MS = 5000
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+async function withRetry<T>(name: string, fn: () => Promise<T>): Promise<T> {
+  for (let attempt = 1; attempt <= RETRY_ATTEMPTS; attempt++) {
+    try {
+      return await fn()
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      if (attempt < RETRY_ATTEMPTS) {
+        logger.warn(
+          `⏳ ${name} not ready (attempt ${attempt}/${RETRY_ATTEMPTS}): ${errorMessage} — retrying in ${RETRY_DELAY_MS / 1000}s...`
+        )
+        await sleep(RETRY_DELAY_MS)
+      } else {
+        throw error
+      }
+    }
+  }
+  // unreachable, but TypeScript needs this
+  throw new Error(`${name} failed after ${RETRY_ATTEMPTS} attempts`)
+}
+
 export interface PrismaLike {
   $connect(): Promise<void>
   $disconnect(): Promise<void>
   $queryRaw(query: TemplateStringsArray): Promise<any>
 }
 
-/**
- * Checks if RabbitMQ is accessible and connectable
- * Requires amqplib to be installed by the consumer
- * @param rabbitmqUrl - RabbitMQ connection URL
- * @throws Error if connection fails
- */
 export async function checkRabbitMQConnection(rabbitmqUrl: string): Promise<void> {
   logger.log('🔍 Checking RabbitMQ connection...')
 
-  try {
+  await withRetry('RabbitMQ', async () => {
     const amqp = await import('amqplib')
-
     const connection = await amqp.connect(rabbitmqUrl)
-
     const channel = await connection.createChannel()
     await channel.close()
     await connection.close()
+  })
 
-    logger.log('✅ RabbitMQ connection successful')
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error)
-    logger.error(`❌ RabbitMQ connection failed: ${errorMessage}`)
-    logger.error('Please ensure RabbitMQ is running and the RABBITMQ_URL is correct')
-    throw new Error(`RabbitMQ health check failed: ${errorMessage}`)
-  }
+  logger.log('✅ RabbitMQ connection successful')
 }
 
-/**
- * Checks if the database is accessible and connectable
- * @param prismaClient - Any Prisma client instance
- * @throws Error if connection fails
- */
 export async function checkDatabaseConnection(prismaClient: PrismaLike): Promise<void> {
   logger.log('🔍 Checking database connection...')
 
-  try {
+  await withRetry('Database', async () => {
     await prismaClient.$connect()
-
     await prismaClient.$queryRaw`SELECT 1 as health_check`
+  }).finally(() => prismaClient.$disconnect())
 
-    logger.log('✅ Database connection successful')
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error)
-    logger.error(`❌ Database connection failed: ${errorMessage}`)
-    logger.error('Please ensure the database is running and DATABASE_URL is correct')
-    throw new Error(`Database health check failed: ${errorMessage}`)
-  } finally {
-    await prismaClient.$disconnect()
-  }
+  logger.log('✅ Database connection successful')
 }
 
-/**
- * Runs all startup health checks
- * @param rabbitmqUrl - RabbitMQ connection URL
- * @param prismaClient - Any Prisma client instance
- * @throws Error if any health check fails
- */
 export async function runStartupHealthChecks(
   rabbitmqUrl: string,
   prismaClient: PrismaLike
@@ -73,10 +68,9 @@ export async function runStartupHealthChecks(
 
   try {
     await Promise.all([checkRabbitMQConnection(rabbitmqUrl), checkDatabaseConnection(prismaClient)])
-
     logger.log('✅ All health checks passed')
   } catch (error) {
-    logger.error('❌ Startup health checks failed')
+    logger.error('❌ Startup health checks failed after all retries')
     throw error
   }
 }
