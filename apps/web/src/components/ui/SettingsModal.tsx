@@ -69,6 +69,7 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
   const [name, setName] = useState(user?.name || 'John Doe')
   const [email, setEmail] = useState(user?.email || 'john.doe@ibm.com')
   const [timezone, setTimezone] = useState('(GMT-5:00) Eastern Time')
+  const [platformLanguage, setPlatformLanguage] = useState('English')
   const {
     colorMode,
     setColorMode,
@@ -832,11 +833,31 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
             )}
 
             {activeSection === 'Language' && (
-              <Stack gap="md">
-                <Text size="xl" fw={600} mb="md" c="var(--pitch-surface-text)">
+              <Stack gap="lg">
+                <Text size="xl" fw={600} mb="xs" c="var(--pitch-surface-text)">
                   Language
                 </Text>
-                <Text c="var(--pitch-surface-text-dim)">Language settings coming soon...</Text>
+                <Text c="var(--pitch-surface-text-dim)">
+                  Choose the language used across PITCH and as the default for new training
+                  sessions.
+                </Text>
+                <Select
+                  label="Platform language"
+                  value={platformLanguage}
+                  onChange={(value) => setPlatformLanguage(value || 'English')}
+                  data={['English']}
+                  allowDeselect={false}
+                  size="md"
+                  classNames={settingsInputClassNames}
+                />
+                <Text size="sm" c="var(--pitch-surface-text-dim)">
+                  This language will be used by default.
+                </Text>
+                <Group justify="flex-end">
+                  <Button onClick={handleSave} size="md" fullWidth={isMobile}>
+                    Save
+                  </Button>
+                </Group>
               </Stack>
             )}
           </Box>
