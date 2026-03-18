@@ -63,9 +63,22 @@
     box-shadow 180ms ease;
   border: 1px solid color-mix(in srgb, var(--pc-accent) 38%, rgba(255, 255, 255, 0.08));
   background:
-    radial-gradient(circle at 18% 18%, color-mix(in srgb, var(--pc-accent) 22%, transparent), transparent 32%),
-    radial-gradient(circle at 78% 14%, color-mix(in srgb, var(--pc-accent-glow) 20%, transparent), transparent 30%),
-    linear-gradient(165deg, rgba(7, 14, 28, 0.98) 0%, rgba(10, 17, 35, 0.94) 42%, rgba(4, 7, 18, 0.98) 100%);
+    radial-gradient(
+      circle at 18% 18%,
+      color-mix(in srgb, var(--pc-accent) 22%, transparent),
+      transparent 32%
+    ),
+    radial-gradient(
+      circle at 78% 14%,
+      color-mix(in srgb, var(--pc-accent-glow) 20%, transparent),
+      transparent 30%
+    ),
+    linear-gradient(
+      165deg,
+      rgba(7, 14, 28, 0.98) 0%,
+      rgba(10, 17, 35, 0.94) 42%,
+      rgba(4, 7, 18, 0.98) 100%
+    );
   box-shadow:
     0 28px 60px color-mix(in srgb, var(--mantine-color-dark-9) 70%, transparent),
     inset 0 1px 0 rgba(255, 255, 255, 0.08);
@@ -125,12 +138,11 @@
 
 .cardGlare {
   z-index: 2;
-  background:
-    radial-gradient(
-      circle at var(--pc-pointer-x) var(--pc-pointer-y),
-      color-mix(in srgb, var(--pc-accent-glow) 26%, rgba(255, 255, 255, 0.12)),
-      transparent 34%
-    );
+  background: radial-gradient(
+    circle at var(--pc-pointer-x) var(--pc-pointer-y),
+    color-mix(in srgb, var(--pc-accent-glow) 26%, rgba(255, 255, 255, 0.12)),
+    transparent 34%
+  );
   mix-blend-mode: overlay;
   opacity: 0.7;
 }
@@ -201,7 +213,11 @@
   color: color-mix(in srgb, var(--pc-accent-glow) 78%, white 12%);
   border: 1px solid color-mix(in srgb, var(--pc-accent) 28%, rgba(255, 255, 255, 0.08));
   background:
-    radial-gradient(circle at center, color-mix(in srgb, var(--pc-accent) 20%, transparent), transparent 68%),
+    radial-gradient(
+      circle at center,
+      color-mix(in srgb, var(--pc-accent) 20%, transparent),
+      transparent 68%
+    ),
     linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02));
   backdrop-filter: blur(20px);
 }
@@ -337,7 +353,11 @@
   border-radius: 24px;
   border: 1px solid color-mix(in srgb, var(--pc-accent) 30%, rgba(255, 255, 255, 0.1));
   background:
-    radial-gradient(circle at top right, color-mix(in srgb, var(--pc-accent) 18%, transparent), transparent 28%),
+    radial-gradient(
+      circle at top right,
+      color-mix(in srgb, var(--pc-accent) 18%, transparent),
+      transparent 28%
+    ),
     linear-gradient(180deg, rgba(7, 15, 30, 0.94), rgba(4, 8, 18, 0.97));
   backdrop-filter: blur(22px);
   box-shadow:
