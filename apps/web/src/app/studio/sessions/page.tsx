@@ -270,7 +270,7 @@ function SessionDetailPanel({ session, onDismiss }: { session: Session; onDismis
               {new Date(session.createdAt).toLocaleDateString()}
             </Text>
             <Text size="sm" c="dimmed">
-              •
+              ?
             </Text>
             <Badge color={statusColor[displayStatus]} radius="sm" variant="light">
               {displayStatus}

@@ -2,17 +2,28 @@
 
 import { AppShell, Box, rem } from '@mantine/core'
 import { ReactNode } from 'react'
+import { useMediaQuery } from '@mantine/hooks'
 import classes from './app-layout.module.css'
 
 type Props = {
   header: ReactNode
   navbar: ReactNode
   children: ReactNode
-  navbarOpened: boolean
+  navbarOpened?: boolean
 }
 
-export function AppLayout({ header, navbar, children, navbarOpened }: Props) {
-  const headerHeight = '3.7em'
+export function AppLayout({ header, navbar, children, navbarOpened = false }: Props) {
+  const isMobile = useMediaQuery('(max-width: 48em)')
+  const currentPage = typeof window !== 'undefined' ? window.location.pathname : ''
+  const mobileBaseHeaderHeight =
+    currentPage === '/studio/sessions'
+      ? rem(180)
+      : currentPage === '/studio/team-config'
+        ? rem(150)
+        : rem(100)
+  const headerHeight = isMobile
+    ? `calc(${mobileBaseHeaderHeight} + env(safe-area-inset-top, 0px))`
+    : rem(60)
   const curveRadius = rem(18)
 
   return (
@@ -32,7 +43,7 @@ export function AppLayout({ header, navbar, children, navbarOpened }: Props) {
         main: {
           background:
             'var(--pitch-app-bg, var(--pitch-surface-bg, var(--mantine-color-surface-0, var(--mantine-color-body))))',
-          minHeight: `calc(100vh - ${headerHeight})`,
+          height: `calc(100dvh - ${headerHeight})`,
           overflow: 'hidden',
         },
       }}

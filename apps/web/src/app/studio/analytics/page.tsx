@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import {
   Alert,
@@ -42,11 +42,12 @@ import {
   IconUsers,
 } from '@tabler/icons-react'
 import { useAuth } from '@/features/auth'
+import { useTour } from '@/features/onboarding'
 import { useTeams } from '@/features/teams'
 import type { Team } from '@/features/teams'
 import { api } from '@/lib/client'
 
-// ── Types ──────────────────────────────────────────────────────────────────
+// -- Types ------------------------------------------------------------------
 
 type DashboardSession = {
   id: string
@@ -70,7 +71,7 @@ type MemberData = {
 type SortKey = 'date' | 'score' | 'name' | 'type'
 type SortDir = 'asc' | 'desc'
 
-// ── Helpers ────────────────────────────────────────────────────────────────
+// -- Helpers ----------------------------------------------------------------
 
 const toMonthKey = (dateStr: string) => {
   const d = new Date(dateStr)
@@ -202,7 +203,7 @@ const managerTeams = (teams: Team[], userId: string) =>
     return membership?.role === 'OWNER' || membership?.role === 'ADMIN'
   })
 
-// ── Skeleton loaders ───────────────────────────────────────────────────────
+// -- Skeleton loaders -------------------------------------------------------
 
 function KpiSkeleton() {
   return (
@@ -227,7 +228,7 @@ function ChartSkeleton({ h = 240 }: { h?: number }) {
   )
 }
 
-// ── SortableHeader ─────────────────────────────────────────────────────────
+// -- SortableHeader ---------------------------------------------------------
 
 function SortableHeader({
   label,
@@ -271,13 +272,15 @@ function SortableHeader({
   )
 }
 
-// ── Component ──────────────────────────────────────────────────────────────
+// -- Component --------------------------------------------------------------
 
 export default function AnalyticsPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { user } = useAuth()
+  const { startTour } = useTour()
   const { teams, fetchUserTeams } = useTeams()
+  const autoStartedTourKeyRef = useRef<string | null>(null)
 
   // Tab is driven by URL (?tab=Personal|Team)
   const activeTab = searchParams.get('tab') ?? 'Personal'
@@ -298,6 +301,32 @@ export default function AnalyticsPage() {
   const [tableStatusFilter, setTableStatusFilter] = useState<string | null>(null)
   const [sortKey, setSortKey] = useState<SortKey>('date')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
+
+  useEffect(() => {
+    const startTourParam = searchParams.get('startTour')
+    const tourScreenParam = searchParams.get('tourScreen')
+    const key = `${startTourParam ?? ''}:${tourScreenParam ?? ''}`
+
+    if (autoStartedTourKeyRef.current === key) {
+      return
+    }
+
+    if (startTourParam === 'analytics') {
+      const timer = setTimeout(() => {
+        autoStartedTourKeyRef.current = key
+        void startTour('analytics')
+      }, 800)
+      return () => clearTimeout(timer)
+    }
+
+    if (startTourParam === 'full' && tourScreenParam === 'analytics') {
+      const timer = setTimeout(() => {
+        autoStartedTourKeyRef.current = key
+        void startTour('analytics', { mode: 'full' })
+      }, 800)
+      return () => clearTimeout(timer)
+    }
+  }, [searchParams, startTour])
 
   useEffect(() => {
     void fetchUserTeams()
@@ -375,7 +404,7 @@ export default function AnalyticsPage() {
     if (activeTab === 'Team') void loadTeamData()
   }, [activeTab, loadTeamData])
 
-  // ── Personal computed values ─────────────────────────────────────────────
+  // -- Personal computed values ---------------------------------------------
 
   const monthlyTrend = useMemo(() => computeMonthlyTrend(sessions), [sessions])
   const competencyData = useMemo(() => computeCompetencyAverages(sessions), [sessions])
@@ -388,7 +417,7 @@ export default function AnalyticsPage() {
     [sessions]
   )
 
-  // ── Team computed values ─────────────────────────────────────────────────
+  // -- Team computed values -------------------------------------------------
 
   const teamLeaderboard = useMemo(
     () =>
@@ -414,7 +443,7 @@ export default function AnalyticsPage() {
     [teamMemberData]
   )
 
-  // ── Session history: filter + sort ───────────────────────────────────────
+  // -- Session history: filter + sort ---------------------------------------
 
   const sessionTypes = useMemo(() => [...new Set(sessions.map((s) => s.type))].sort(), [sessions])
 
@@ -474,7 +503,7 @@ export default function AnalyticsPage() {
     }
   }
 
-  // ── KPI items ────────────────────────────────────────────────────────────
+  // -- KPI items ------------------------------------------------------------
 
   const kpiItems = [
     {
@@ -487,7 +516,7 @@ export default function AnalyticsPage() {
     },
     {
       label: 'Avg score',
-      value: myAvgScore ?? '—',
+      value: myAvgScore ?? '�',
       sub: `${scoredCount} scored sessions`,
       icon: IconBrain,
       color: 'cyan',
@@ -496,7 +525,7 @@ export default function AnalyticsPage() {
     },
     {
       label: 'Best score',
-      value: myBestScore ?? '—',
+      value: myBestScore ?? '�',
       sub: 'Personal best',
       icon: IconTrophy,
       color: 'teal',
@@ -513,7 +542,7 @@ export default function AnalyticsPage() {
     },
   ]
 
-  // ── Render ───────────────────────────────────────────────────────────────
+  // -- Render ---------------------------------------------------------------
 
   return (
     <>
@@ -528,7 +557,7 @@ export default function AnalyticsPage() {
       `}</style>
 
       <Box p={{ base: 'md', sm: 'xl' }} style={{ minHeight: '100vh' }}>
-        <Stack gap="lg">
+        <Stack data-tour-id="analytics-dashboard" gap="lg">
           {error && (
             <Alert
               color="red"
@@ -541,9 +570,9 @@ export default function AnalyticsPage() {
             </Alert>
           )}
 
-          {/* ══════════════════════════════════════════════════
+          {/* --------------------------------------------------
               PERSONAL TAB
-          ══════════════════════════════════════════════════ */}
+          -------------------------------------------------- */}
           {activeTab === 'Personal' && (
             <>
               {loading ? (
@@ -586,7 +615,7 @@ export default function AnalyticsPage() {
               ) : (
                 <Stack gap="lg">
                   {/* KPI cards */}
-                  <SimpleGrid cols={{ base: 2, sm: 4 }} spacing="md">
+                  <SimpleGrid data-tour-id="analytics-kpis" cols={{ base: 2, sm: 4 }} spacing="md">
                     {kpiItems.map((item, i) => (
                       <Card
                         key={item.label}
@@ -619,6 +648,7 @@ export default function AnalyticsPage() {
                   <Grid gutter="md">
                     <Grid.Col span={{ base: 12, md: 8 }}>
                       <Card
+                        data-tour-id="analytics-score-trend"
                         radius="lg"
                         p="lg"
                         withBorder
@@ -661,7 +691,7 @@ export default function AnalyticsPage() {
                               </ThemeIcon>
                               <Text size="sm" c="dimmed" ta="center" maw={260}>
                                 {monthlyTrend.length === 1
-                                  ? 'Keep going — trend appears across multiple months.'
+                                  ? 'Keep going � trend appears across multiple months.'
                                   : 'No scored sessions yet.'}
                               </Text>
                             </Stack>
@@ -672,6 +702,7 @@ export default function AnalyticsPage() {
 
                     <Grid.Col span={{ base: 12, md: 4 }}>
                       <Card
+                        data-tour-id="analytics-session-types"
                         radius="lg"
                         p="lg"
                         withBorder
@@ -733,6 +764,7 @@ export default function AnalyticsPage() {
                   {/* Competency breakdown */}
                   {competencyData.length > 0 && (
                     <Card
+                      data-tour-id="analytics-competencies"
                       radius="lg"
                       p="lg"
                       withBorder
@@ -743,7 +775,7 @@ export default function AnalyticsPage() {
                         <Stack gap={2}>
                           <Text fw={700}>Competency breakdown</Text>
                           <Text size="xs" c="dimmed">
-                            Average score impact per skill — across all assessed sessions
+                            Average score impact per skill � across all assessed sessions
                           </Text>
                         </Stack>
                         <Badge color="violet" variant="light" radius="xl">
@@ -767,8 +799,9 @@ export default function AnalyticsPage() {
                     </Card>
                   )}
 
-                  {/* ── Session history table ── */}
+                  {/* -- Session history table -- */}
                   <Card
+                    data-tour-id="analytics-history"
                     radius="lg"
                     p="lg"
                     withBorder
@@ -788,7 +821,7 @@ export default function AnalyticsPage() {
                       <Group gap="sm" wrap="wrap">
                         <TextInput
                           size="xs"
-                          placeholder="Search sessions…"
+                          placeholder="Search sessions�"
                           leftSection={<IconSearch size={13} />}
                           value={tableQuery}
                           onChange={(e) => setTableQuery(e.currentTarget.value)}
@@ -939,7 +972,7 @@ export default function AnalyticsPage() {
                                       </Text>
                                     ) : (
                                       <Text size="sm" c="dimmed">
-                                        —
+                                        �
                                       </Text>
                                     )}
                                   </Table.Td>
@@ -971,9 +1004,9 @@ export default function AnalyticsPage() {
             </>
           )}
 
-          {/* ══════════════════════════════════════════════════
+          {/* --------------------------------------------------
               TEAM TAB
-          ══════════════════════════════════════════════════ */}
+          -------------------------------------------------- */}
           {activeTab === 'Team' && (
             <>
               {!isManager ? (
@@ -1017,7 +1050,11 @@ export default function AnalyticsPage() {
               ) : teamLoaded ? (
                 <Stack gap="lg">
                   {/* Team KPI cards */}
-                  <SimpleGrid cols={{ base: 2, sm: 4 }} spacing="md">
+                  <SimpleGrid
+                    data-tour-id="analytics-team-kpis"
+                    cols={{ base: 2, sm: 4 }}
+                    spacing="md"
+                  >
                     {[
                       {
                         label: 'Members',
@@ -1029,7 +1066,7 @@ export default function AnalyticsPage() {
                       },
                       {
                         label: 'Team avg score',
-                        value: teamAvgScore ?? '—',
+                        value: teamAvgScore ?? '�',
                         sub: 'Across all members',
                         icon: IconBrain,
                         color: 'cyan',
@@ -1040,7 +1077,7 @@ export default function AnalyticsPage() {
                       },
                       {
                         label: 'Top performer',
-                        value: teamLeaderboard[0]?.name ?? '—',
+                        value: teamLeaderboard[0]?.name ?? '�',
                         sub: teamLeaderboard[0]
                           ? `Avg: ${teamLeaderboard[0].avgScore}`
                           : 'No scores yet',
@@ -1091,12 +1128,18 @@ export default function AnalyticsPage() {
 
                   {/* Team leaderboard */}
                   {teamLeaderboard.length > 0 && (
-                    <Card radius="lg" p="lg" withBorder style={themedCardStyle}>
+                    <Card
+                      data-tour-id="analytics-team-leaderboard"
+                      radius="lg"
+                      p="lg"
+                      withBorder
+                      style={themedCardStyle}
+                    >
                       <Group justify="space-between" mb="md">
                         <Stack gap={2}>
                           <Text fw={700}>Team leaderboard</Text>
                           <Text size="xs" c="dimmed">
-                            Average score — higher is better
+                            Average score � higher is better
                           </Text>
                         </Stack>
                         <Badge color="teal" variant="light" radius="xl">
@@ -1123,7 +1166,11 @@ export default function AnalyticsPage() {
                   )}
 
                   {/* Member detail cards */}
-                  <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="md">
+                  <SimpleGrid
+                    data-tour-id="analytics-team-members"
+                    cols={{ base: 1, sm: 2, lg: 3 }}
+                    spacing="md"
+                  >
                     {teamMemberData.map((member) => {
                       const memberAvg = calcAvgScore(member.sessions)
                       const memberBest = calcBestScore(member.sessions)
@@ -1161,7 +1208,7 @@ export default function AnalyticsPage() {
                                   size="xl"
                                   c={memberAvg !== null ? 'teal' : undefined}
                                 >
-                                  {memberAvg ?? '—'}
+                                  {memberAvg ?? '�'}
                                 </Text>
                               </div>
                               <div>
@@ -1173,7 +1220,7 @@ export default function AnalyticsPage() {
                                   size="xl"
                                   c={memberBest !== null ? 'cyan' : undefined}
                                 >
-                                  {memberBest ?? '—'}
+                                  {memberBest ?? '�'}
                                 </Text>
                               </div>
                             </SimpleGrid>

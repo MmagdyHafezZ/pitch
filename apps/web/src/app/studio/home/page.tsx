@@ -1,7 +1,8 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { useTour } from '@/features/onboarding'
 import {
   Alert,
   Badge,
@@ -264,8 +265,40 @@ const buildWeeklyTrend = (sessions: Session[], weeks = 8) => {
 
 export default function DashboardHome() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { user } = useAuth()
   const { teams, fetchUserTeams } = useTeams()
+  const { startTour } = useTour()
+  const autoStartedTourKeyRef = useRef<string | null>(null)
+
+  // Auto-start tour if redirected from onboarding with query params.
+  useEffect(() => {
+    const startTourParam = searchParams.get('startTour')
+    const tourScreenParam = searchParams.get('tourScreen')
+    const key = `${startTourParam ?? ''}:${tourScreenParam ?? ''}`
+
+    if (autoStartedTourKeyRef.current === key) {
+      return
+    }
+
+    if (startTourParam === 'home') {
+      const timer = setTimeout(() => {
+        autoStartedTourKeyRef.current = key
+        void startTour('home')
+      }, 800)
+      return () => clearTimeout(timer)
+    }
+
+    if (startTourParam === 'full' && (!tourScreenParam || tourScreenParam === 'home')) {
+      const timer = setTimeout(() => {
+        autoStartedTourKeyRef.current = key
+        void startTour('home', { mode: 'full' })
+      }, 800)
+      return () => clearTimeout(timer)
+    }
+  const isMobile = useMediaQuery('(max-width: 768px)')
+  const [homeView, setHomeView] = useState<'All' | 'Favorites' | 'Archived'>('All')
+  }, [searchParams, startTour])
   const isMobile = useMediaQuery('(max-width: 768px)')
   const [homeView, setHomeView] = useState<'All' | 'Favorites' | 'Archived'>('All')
 
@@ -483,6 +516,7 @@ export default function DashboardHome() {
   return (
     <Stack gap="lg">
       <Card
+        data-tour-id="home-header"
         withBorder
         radius="lg"
         p="lg"
@@ -586,8 +620,8 @@ export default function DashboardHome() {
         </Center>
       ) : (
         <>
-          <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} spacing="md">
-            <Card withBorder radius="lg" p="lg" style={themedCardStyle}>
+          <SimpleGrid data-tour-id="home-analytics" cols={{ base: 1, sm: 2, lg: 4 }} spacing="md">
+            <Card data-tour-id="home-stat-total" withBorder radius="lg" p="lg" style={themedCardStyle}>
               <Group justify="space-between" mb={6}>
                 <Text size="sm" c="dimmed">
                   Total sessions
@@ -604,7 +638,7 @@ export default function DashboardHome() {
               </Text>
             </Card>
 
-            <Card withBorder radius="lg" p="lg" style={themedCardStyle}>
+            <Card data-tour-id="home-stat-weekly" withBorder radius="lg" p="lg" style={themedCardStyle}>
               <Group justify="space-between" mb={6}>
                 <Text size="sm" c="dimmed">
                   Weekly completions
@@ -621,7 +655,13 @@ export default function DashboardHome() {
               </Text>
             </Card>
 
-            <Card withBorder radius="lg" p="lg" style={themedCardStyle}>
+            <Card
+              data-tour-id="home-stat-completion"
+              withBorder
+              radius="lg"
+              p="lg"
+              style={themedCardStyle}
+            >
               <Group justify="space-between" mb={6}>
                 <Text size="sm" c="dimmed">
                   Completion rate
@@ -636,7 +676,7 @@ export default function DashboardHome() {
               <Progress value={completionRate} color="grape" mt="sm" />
             </Card>
 
-            <Card withBorder radius="lg" p="lg" style={themedCardStyle}>
+            <Card data-tour-id="home-stat-streak" withBorder radius="lg" p="lg" style={themedCardStyle}>
               <Group justify="space-between" mb={6}>
                 <Text size="sm" c="dimmed">
                   Current streak
@@ -656,7 +696,14 @@ export default function DashboardHome() {
 
           <Grid gutter="md">
             <Grid.Col span={{ base: 12, lg: 8 }}>
-              <Card withBorder radius="lg" p="lg" h="100%" style={themedCardStyle}>
+              <Card
+                data-tour-id="home-activity-map"
+                withBorder
+                radius="lg"
+                p="lg"
+                h="100%"
+                style={themedCardStyle}
+              >
                 <Group justify="space-between" mb="sm" wrap="wrap">
                   <Stack gap={2}>
                     <Text fw={700}>Practice activity map</Text>
@@ -734,7 +781,14 @@ export default function DashboardHome() {
             </Grid.Col>
 
             <Grid.Col span={{ base: 12, lg: 4 }}>
-              <Card withBorder radius="lg" p="lg" h="100%" style={themedCardStyle}>
+              <Card
+                data-tour-id="home-team-snapshot"
+                withBorder
+                radius="lg"
+                p="lg"
+                h="100%"
+                style={themedCardStyle}
+              >
                 <Group justify="space-between" mb="sm">
                   <Text fw={700}>Team snapshot</Text>
                   <ThemeIcon radius="xl" style={themedIconStyle}>
@@ -792,7 +846,7 @@ export default function DashboardHome() {
             </Grid.Col>
 
             <Grid.Col span={{ base: 12, lg: 8 }}>
-              <Card withBorder radius="lg" p="lg" style={themedCardStyle}>
+              <Card data-tour-id="home-momentum-chart" withBorder radius="lg" p="lg" style={themedCardStyle}>
                 <Group justify="space-between" mb="sm">
                   <Text fw={700}>Session momentum</Text>
                   <Badge color="cyan" variant="light">
@@ -815,7 +869,7 @@ export default function DashboardHome() {
             </Grid.Col>
 
             <Grid.Col span={{ base: 12, lg: 4 }}>
-              <Card withBorder radius="lg" p="lg" style={themedCardStyle}>
+              <Card data-tour-id="home-sessions" withBorder radius="lg" p="lg" style={themedCardStyle}>
                 <Group justify="space-between" mb="sm">
                   <Text fw={700}>Recent sessions</Text>
                   <ThemeIcon color="grape" variant="light" radius="xl">

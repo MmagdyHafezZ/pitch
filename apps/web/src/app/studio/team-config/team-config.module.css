@@ -97,6 +97,39 @@
   overflow: hidden;
 }
 
+.shell::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(
+      85% 55% at 12% 0%,
+      color-mix(in srgb, var(--mantine-color-blue-6) 18%, transparent) 0%,
+      transparent 72%
+    ),
+    radial-gradient(
+      70% 55% at 92% 6%,
+      color-mix(in srgb, var(--mantine-color-blue-6) 14%, transparent) 0%,
+      transparent 74%
+    );
+  opacity: 0.95;
+}
+
+.shell::after {
+  content: '';
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 26%;
+  pointer-events: none;
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    color-mix(in srgb, var(--mantine-color-blue-6) 7%, transparent) 58%,
+    color-mix(in srgb, var(--mantine-color-blue-6) 11%, transparent) 100%
+  );
+  opacity: 0.9;
+}
 .heroCard {
   border-radius: 20px;
   background: color-mix(in srgb, var(--pitch-surface-bg, var(--mantine-color-body)) 98%, var(--pitch-accent) 2%);
@@ -295,7 +328,8 @@
   transform: none;
 }
 
-.stepper :global(.mantine-Stepper-step[data-completed]:not([data-progress]) .mantine-Stepper-stepIcon),
+.stepper
+  :global(.mantine-Stepper-step[data-completed]:not([data-progress]) .mantine-Stepper-stepIcon),
 .stepper :global(.mantine-Stepper-stepIcon[data-completed]:not([data-progress])) {
   background: color-mix(in srgb, var(--pitch-surface-bg, var(--mantine-color-body)) 90%, transparent);
   border-color: color-mix(in srgb, var(--pitch-border, var(--mantine-color-default-border)) 85%, transparent);

@@ -547,7 +547,7 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
                     Color Mode
                   </Text>
                   <Text size="sm" c="var(--pitch-surface-text-dim)">
-                    Choose if PITCH’s appearance should be light or dark, or follow your device’s
+                    Choose if PITCH?s appearance should be light or dark, or follow your device?s
                     settings.
                   </Text>
                 </Stack>
