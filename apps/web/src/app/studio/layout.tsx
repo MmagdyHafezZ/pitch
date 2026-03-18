@@ -15,7 +15,7 @@ import { useMediaQuery } from '@mantine/hooks'
 
 export default function ClientLayerComponent({ children }: { children: React.ReactNode }) {
   const [active, setActive] = useState<
-    'Home' | 'Sessions' | 'Teams' | 'Analytics' | 'Settings' | 'Team Config' | 'Challenges'
+    'Home' | 'Sessions' | 'Teams' | 'Analytics' | 'Settings' | 'Team Config'
   >('Home')
   const [selectedDate, setSelectedDate] = useState<Date | null>(new Date())
   const {
@@ -33,11 +33,31 @@ export default function ClientLayerComponent({ children }: { children: React.Rea
   const isMobile = useMediaQuery('(max-width: 768px)')
   const [navbarOpened, setNavbarOpened] = useState(false)
 
-  useEffect(() => {
-    if (user && !user.settings?.onboarding?.completed) {
-      router.replace('/onboarding')
-    }
-  }, [user, router])
+  const setSidebarActive = (
+    value:
+      | 'Home'
+      | 'Sessions'
+      | 'Teams'
+      | 'Analytics'
+      | 'Settings'
+      | 'Team Config'
+      | 'Challenges'
+      | ((
+          current: 'Home' | 'Sessions' | 'Teams' | 'Analytics' | 'Settings' | 'Team Config'
+        ) =>
+          | 'Home'
+          | 'Sessions'
+          | 'Teams'
+          | 'Analytics'
+          | 'Settings'
+          | 'Team Config'
+          | 'Challenges')
+  ) => {
+    setActive((current) => {
+      const next = typeof value === 'function' ? value(current) : value
+      return next === 'Challenges' ? current : next
+    })
+  }
 
   const [tabsByPage, setTabsByPage] = useState<
     Record<'Home' | 'Sessions' | 'Teams' | 'Analytics' | 'Challenges' | 'Settings', string>
@@ -104,7 +124,7 @@ export default function ClientLayerComponent({ children }: { children: React.Rea
       return { page: 'Settings' as const, nav: 'Settings' as const }
     }
     if (pathname.startsWith('/studio/challenges')) {
-      return { page: 'Challenges' as const, nav: 'Challenges' as const }
+      return { page: 'Challenges' as const, nav: 'Home' as const }
     }
     return { page: 'Home' as const, nav: 'Home' as const }
   }, [pathname])
@@ -264,7 +284,7 @@ export default function ClientLayerComponent({ children }: { children: React.Rea
             <AppSidebar
               active={active}
               setActive={(value) => {
-                setActive(value)
+                setSidebarActive(value)
                 closeNavbar()
               }}
               selectedDate={selectedDate}

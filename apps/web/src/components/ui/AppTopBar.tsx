@@ -20,7 +20,7 @@ import {
   Loader,
   useMantineColorScheme,
 } from '@mantine/core'
-import { IconSearch, IconBell, IconUser, IconHelp, IconMenu2, IconX } from '@tabler/icons-react'
+import { IconSearch, IconBell, IconUser, IconHelp, IconX } from '@tabler/icons-react'
 import dayjs from 'dayjs'
 import { ReactNode, useEffect, useMemo, useState } from 'react'
 import { SettingsModal } from './SettingsModal'
@@ -656,7 +656,7 @@ export function AppTopBar({
 
   const acceptTeamInviteMutation = useMutation({
     mutationFn: (payload: { teamId: string; notificationId: string }) =>
-      api.teams.acceptInvite(payload.teamId),
+      (api.teams as any).acceptInvite(payload.teamId),
     onSuccess: async (_result, payload) => {
       setAcceptedInviteIds((previous) =>
         previous.includes(payload.notificationId) ? previous : [...previous, payload.notificationId]
@@ -756,25 +756,6 @@ export function AppTopBar({
   const languageSelectWidth = isMobile ? 104 : isNarrow ? 92 : 140
   const utilityControls = (
     <Group data-tour-id="app-topbar-controls" align="center" gap={isNarrow ? 8 : 12} wrap="nowrap">
-      {navToggleHandler && isMobile && (
-        <ActionIcon
-          aria-label={mobileNavOpened ? 'Close navigation menu' : 'Open navigation menu'}
-          size={actionIconSize}
-          radius="md"
-          variant="default"
-          onClick={navToggleHandler}
-          styles={{
-            root: {
-              background: 'var(--pitch-nav-accent-soft)',
-              color: 'var(--pitch-nav-text)',
-              boxShadow: '0 0 0 1px var(--pitch-nav-text-dim)',
-            },
-          }}
-        >
-          {mobileNavOpened ? <IconX size={16} /> : <IconMenu2 size={16} />}
-        </ActionIcon>
-      )}
-
       {!isMobile && !isNarrow && (
         <Box ta="right" lh={1}>
           <Text size="xs" fw={700} c="var(--pitch-nav-text)">
@@ -1052,7 +1033,66 @@ export function AppTopBar({
         {isMobile ? (
           <Stack gap={rem(8)} w="100%">
             <Group justify="space-between" align="center" w="100%" wrap="nowrap">
-              <Group align="center" style={{ minWidth: 0 }}>
+              <Group align="center" gap={rem(8)} style={{ minWidth: 0 }} wrap="nowrap">
+                {navToggleHandler ? (
+                  <ActionIcon
+                    aria-label={mobileNavOpened ? 'Close navigation menu' : 'Open navigation menu'}
+                    size="auto"
+                    p={0}
+                    variant="transparent"
+                    onClick={navToggleHandler}
+                    styles={{
+                      root: {
+                        color: 'var(--pitch-nav-text)',
+                        background: 'transparent',
+                        boxShadow: 'none',
+                        minWidth: 'unset',
+                        minHeight: 'unset',
+                      },
+                    }}
+                  >
+                    {mobileNavOpened ? (
+                      <IconX size={15} stroke={2.25} />
+                    ) : (
+                      <Box
+                        aria-hidden="true"
+                        style={{
+                          width: 16,
+                          height: 16,
+                          display: 'flex',
+                          flexDirection: 'column',
+                          justifyContent: 'center',
+                          gap: 3,
+                        }}
+                      >
+                        <Box
+                          style={{
+                            height: 2,
+                            width: 14,
+                            borderRadius: 999,
+                            background: 'currentColor',
+                          }}
+                        />
+                        <Box
+                          style={{
+                            height: 2,
+                            width: 10,
+                            borderRadius: 999,
+                            background: 'currentColor',
+                          }}
+                        />
+                        <Box
+                          style={{
+                            height: 2,
+                            width: 14,
+                            borderRadius: 999,
+                            background: 'currentColor',
+                          }}
+                        />
+                      </Box>
+                    )}
+                  </ActionIcon>
+                ) : null}
                 <Text
                   px={rem(isNarrow ? 4 : 10)}
                   size={rem(isNarrow ? 20 : 22)}

@@ -1,4 +1,4 @@
-'use client'
+ï»¿'use client'
 
 import { useEffect, useMemo, useState } from 'react'
 import {
@@ -39,7 +39,7 @@ import {
 } from '@tabler/icons-react'
 import { useTeams } from '@/features/teams/hooks/useTeams'
 import { useTeamConfigStore } from '@/features/teams/stores/team-config.store'
-import type { TeamMembership, TeamPendingSignupInvite } from '@/features/teams/types/teams.types'
+import type { TeamMembership } from '@/features/teams/types/teams.types'
 import { notifications } from '@mantine/notifications'
 import { modals } from '@mantine/modals'
 import { useMediaQuery } from '@mantine/hooks'
@@ -117,9 +117,19 @@ const themedIconStyle = {
   color: 'var(--pitch-accent-strong)',
 }
 
+type TeamPendingSignupInvite = {
+  email: string
+  invitedAt?: string | null
+  role?: string | null
+}
+
 export function TeamMembersPanel() {
+  const teamsApi = useTeams() as ReturnType<typeof useTeams> & {
+    inviteMember: (teamId: string, payload: { userId: string; role: string }) => Promise<void>
+    sendSignupInvite: (teamId: string, payload: { email: string; role: string }) => Promise<void>
+  }
   const { currentTeam, inviteMember, sendSignupInvite, updateMember, deleteMember, loading } =
-    useTeams()
+    teamsApi
   const isMobile = useMediaQuery('(max-width: 48em)')
   const orgUsers = useTeamConfigStore((s) => s.orgUsers)
   const orgUsersLoading = useTeamConfigStore((s) => s.orgUsersLoading)
@@ -162,7 +172,7 @@ export function TeamMembersPanel() {
     [memberships]
   )
   const pendingEmailInvites: TeamPendingSignupInvite[] = useMemo(
-    () => currentTeam?.metadata?.pendingSignupInvites ?? [],
+    () => ((currentTeam as any)?.metadata?.pendingSignupInvites ?? []) as TeamPendingSignupInvite[],
     [currentTeam]
   )
   const currentOwner = useMemo(
@@ -516,7 +526,7 @@ export function TeamMembersPanel() {
             <Group gap="xs">
               <Loader size="sm" />
               <Text size="sm" c="dimmed">
-                Loading people…
+                Loading peopleâ€¦
               </Text>
             </Group>
           ) : peopleRows.length === 0 ? (
@@ -544,7 +554,7 @@ export function TeamMembersPanel() {
                 <Table.Tbody>
                   {peopleRows.map(({ user, membership, inTeam }) => {
                     const name = user?.name ?? 'Unknown user'
-                    const email = user?.email ?? '—'
+                    const email = user?.email ?? 'â€”'
                     const avatarSrc =
                       user?.avatar ?? user?.avatarUrl ?? membership?.user?.avatar ?? undefined
                     const isPending = membership
@@ -610,7 +620,7 @@ export function TeamMembersPanel() {
                             />
                           ) : (
                             <Text size="sm" c="dimmed">
-                              —
+                              â€”
                             </Text>
                           )}
                         </Table.Td>
@@ -639,14 +649,14 @@ export function TeamMembersPanel() {
                             />
                           ) : (
                             <Text size="sm" c="dimmed">
-                              —
+                              â€”
                             </Text>
                           )}
                         </Table.Td>
 
                         <Table.Td>
                           <Badge size="sm" variant="light" color={inTeam ? 'blue' : 'gray'}>
-                            {inTeam ? sessions : '—'}
+                            {inTeam ? sessions : 'â€”'}
                           </Badge>
                         </Table.Td>
 
@@ -780,3 +790,4 @@ export function TeamMembersPanel() {
     </Card>
   )
 }
+

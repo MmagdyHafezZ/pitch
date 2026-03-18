@@ -296,8 +296,6 @@ export default function DashboardHome() {
       }, 800)
       return () => clearTimeout(timer)
     }
-  const isMobile = useMediaQuery('(max-width: 768px)')
-  const [homeView, setHomeView] = useState<'All' | 'Favorites' | 'Archived'>('All')
   }, [searchParams, startTour])
   const isMobile = useMediaQuery('(max-width: 768px)')
   const [homeView, setHomeView] = useState<'All' | 'Favorites' | 'Archived'>('All')

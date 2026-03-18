@@ -1,4 +1,4 @@
-'use client'
+ï»¿'use client'
 
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
@@ -52,7 +52,7 @@ type TeamEditValues = {
 
 export default function TeamConfigPage() {
   return (
-    <Suspense fallback={<div>Loading team configuration…</div>}>
+    <Suspense fallback={<div>Loading team configurationâ€¦</div>}>
       <TeamConfigInner />
     </Suspense>
   )
@@ -279,7 +279,7 @@ function TeamConfigInner() {
   const isEditLoading = !isCreateMode && isEditingMode && loading && !currentTeam
 
   if (isEditLoading) {
-    return <div>Loading team configuration…</div>
+    return <div>Loading team configurationâ€¦</div>
   }
 
   return (
@@ -378,7 +378,7 @@ function TeamConfigInner() {
 
                 {selectedTeamView === 'All' && allTeamsLoading ? (
                   <Text c="dimmed" size="sm">
-                    Loading teams…
+                    Loading teamsâ€¦
                   </Text>
                 ) : null}
 
@@ -806,3 +806,4 @@ function EditModeLayout({
     </Stack>
   )
 }
+

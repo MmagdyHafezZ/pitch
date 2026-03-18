@@ -1,4 +1,4 @@
-'use client'
+ï»¿'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
@@ -516,7 +516,7 @@ export default function AnalyticsPage() {
     },
     {
       label: 'Avg score',
-      value: myAvgScore ?? '—',
+      value: myAvgScore ?? 'â€”',
       sub: `${scoredCount} scored sessions`,
       icon: IconBrain,
       color: 'cyan',
@@ -525,7 +525,7 @@ export default function AnalyticsPage() {
     },
     {
       label: 'Best score',
-      value: myBestScore ?? '—',
+      value: myBestScore ?? 'â€”',
       sub: 'Personal best',
       icon: IconTrophy,
       color: 'teal',
@@ -691,7 +691,7 @@ export default function AnalyticsPage() {
                               </ThemeIcon>
                               <Text size="sm" c="dimmed" ta="center" maw={260}>
                                 {monthlyTrend.length === 1
-                                  ? 'Keep going — trend appears across multiple months.'
+                                  ? 'Keep going â€” trend appears across multiple months.'
                                   : 'No scored sessions yet.'}
                               </Text>
                             </Stack>
@@ -775,7 +775,7 @@ export default function AnalyticsPage() {
                         <Stack gap={2}>
                           <Text fw={700}>Competency breakdown</Text>
                           <Text size="xs" c="dimmed">
-                            Average score impact per skill — across all assessed sessions
+                            Average score impact per skill â€” across all assessed sessions
                           </Text>
                         </Stack>
                         <Badge color="violet" variant="light" radius="xl">
@@ -821,7 +821,7 @@ export default function AnalyticsPage() {
                       <Group gap="sm" wrap="wrap">
                         <TextInput
                           size="xs"
-                          placeholder="Search sessions…"
+                          placeholder="Search sessionsâ€¦"
                           leftSection={<IconSearch size={13} />}
                           value={tableQuery}
                           onChange={(e) => setTableQuery(e.currentTarget.value)}
@@ -972,7 +972,7 @@ export default function AnalyticsPage() {
                                       </Text>
                                     ) : (
                                       <Text size="sm" c="dimmed">
-                                        —
+                                        â€”
                                       </Text>
                                     )}
                                   </Table.Td>
@@ -1066,7 +1066,7 @@ export default function AnalyticsPage() {
                       },
                       {
                         label: 'Team avg score',
-                        value: teamAvgScore ?? '—',
+                        value: teamAvgScore ?? 'â€”',
                         sub: 'Across all members',
                         icon: IconBrain,
                         color: 'cyan',
@@ -1077,7 +1077,7 @@ export default function AnalyticsPage() {
                       },
                       {
                         label: 'Top performer',
-                        value: teamLeaderboard[0]?.name ?? '—',
+                        value: teamLeaderboard[0]?.name ?? 'â€”',
                         sub: teamLeaderboard[0]
                           ? `Avg: ${teamLeaderboard[0].avgScore}`
                           : 'No scores yet',
@@ -1139,7 +1139,7 @@ export default function AnalyticsPage() {
                         <Stack gap={2}>
                           <Text fw={700}>Team leaderboard</Text>
                           <Text size="xs" c="dimmed">
-                            Average score — higher is better
+                            Average score â€” higher is better
                           </Text>
                         </Stack>
                         <Badge color="teal" variant="light" radius="xl">
@@ -1208,7 +1208,7 @@ export default function AnalyticsPage() {
                                   size="xl"
                                   c={memberAvg !== null ? 'teal' : undefined}
                                 >
-                                  {memberAvg ?? '—'}
+                                  {memberAvg ?? 'â€”'}
                                 </Text>
                               </div>
                               <div>
@@ -1220,7 +1220,7 @@ export default function AnalyticsPage() {
                                   size="xl"
                                   c={memberBest !== null ? 'cyan' : undefined}
                                 >
-                                  {memberBest ?? '—'}
+                                  {memberBest ?? 'â€”'}
                                 </Text>
                               </div>
                             </SimpleGrid>
@@ -1291,3 +1291,4 @@ export default function AnalyticsPage() {
     </>
   )
 }
+

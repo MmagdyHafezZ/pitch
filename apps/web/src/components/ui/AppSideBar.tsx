@@ -17,19 +17,22 @@ import classes from './AppSideBar.module.css'
 
 export type SidebarLink = {
   icon: React.ComponentType<{ size?: number }>
-  label: 'Home' | 'Sessions' | 'Teams' | 'Analytics' | 'Settings' | 'Team Config'
+  label: 'Home' | 'Sessions' | 'Teams' | 'Analytics' | 'Settings' | 'Team Config' | 'Challenges'
 }
 
 type Props = {
-  active: 'Home' | 'Sessions' | 'Teams' | 'Analytics' | 'Settings' | 'Team Config'
+  active: 'Home' | 'Sessions' | 'Teams' | 'Analytics' | 'Settings' | 'Team Config' | 'Challenges'
   setActive: Dispatch<
-    SetStateAction<'Home' | 'Sessions' | 'Teams' | 'Analytics' | 'Settings' | 'Team Config'>
+    SetStateAction<
+      'Home' | 'Sessions' | 'Teams' | 'Analytics' | 'Settings' | 'Team Config' | 'Challenges'
+    >
   >
   selectedDate: Date | null
   setSelectedDate: Dispatch<SetStateAction<Date | null>>
   showTeamConfig?: boolean
   mainLinks?: SidebarLink[]
   secondaryLinks?: SidebarLink[]
+  onNavigate?: () => void
 }
 
 const DEFAULT_MAIN: SidebarLink[] = [
@@ -46,6 +49,7 @@ export function AppSidebar({
   setSelectedDate,
   showTeamConfig = true,
   mainLinks = DEFAULT_MAIN,
+  onNavigate,
 }: Props) {
   const router = useRouter()
   const [settingsOpened, setSettingsOpened] = useState(false)
@@ -86,6 +90,7 @@ export function AppSidebar({
                 onClick={() => {
                   setActive(label)
                   router.push(`/studio/${label.toLowerCase().replace(/\s+/g, '-')}`)
+                  onNavigate?.()
                 }}
                 leftSection={<Icon size={18} />}
                 label={
