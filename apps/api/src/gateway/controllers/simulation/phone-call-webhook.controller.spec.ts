@@ -109,6 +109,63 @@ describe('PhoneCallWebhookController', () => {
     });
   });
 
+  it('does not treat an empty user turn as a fresh assistant start', async () => {
+    const res = {
+      json: jest.fn(),
+    } as any;
+
+    await controller.handleVapiCustomLlm(
+      'signed-token',
+      {
+        messages: [{ role: 'user', content: '' }],
+      },
+      res,
+    );
+
+    expect(phoneConversationEngine.generateTurn).not.toHaveBeenCalled();
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        choices: [
+          expect.objectContaining({
+            finish_reason: 'stop',
+            message: expect.objectContaining({
+              content:
+                'I did not catch that. Say that again and we can keep going.',
+            }),
+          }),
+        ],
+      }),
+    );
+  });
+
+  it('keeps the call in conversation mode when Vapi sends keypad digits', async () => {
+    const res = {
+      json: jest.fn(),
+    } as any;
+
+    await controller.handleVapiCustomLlm(
+      'signed-token',
+      {
+        messages: [{ role: 'user', content: '1' }],
+      },
+      res,
+    );
+
+    expect(phoneConversationEngine.generateTurn).not.toHaveBeenCalled();
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        choices: [
+          expect.objectContaining({
+            finish_reason: 'stop',
+            message: expect.objectContaining({
+              content: expect.stringContaining('No need to press any keys.'),
+            }),
+          }),
+        ],
+      }),
+    );
+  });
+
   it('falls back to an emergency end-call response when the backend errors', async () => {
     phoneConversationEngine.generateTurn.mockRejectedValue(
       new Error('backend down'),

@@ -21,7 +21,16 @@ import { SessionService } from '@microservices/simulation/services/session.servi
 
 interface OpenAIChatMessage {
   role: string;
-  content?: string | Array<{ type?: string; text?: string; content?: string }>;
+  content?:
+    | string
+    | Array<{
+        type?: string;
+        text?: string;
+        content?: string;
+        inputText?: string;
+        input_text?: string;
+        value?: string;
+      }>;
 }
 
 interface OpenAIChatCompletionRequest {
@@ -60,14 +69,33 @@ export class PhoneCallWebhookController {
   ) {
     const context = this.vapiContext.verifyToken(token);
     const model = body.model ?? 'pitch-phone-engine';
-    const latestUserText = this.getLatestUserText(body.messages ?? []);
-    const startAsAssistant = latestUserText.length === 0;
+    const messages = body.messages ?? [];
+    const latestUserText = this.getLatestUserText(messages);
+    const startAsAssistant = !this.hasUserMessage(messages);
+    const inputMode = startAsAssistant
+      ? 'assistant_start'
+      : this.classifyUserInput(latestUserText);
 
     this.logger.log(
-      `vapi.llm.request session=${context.sessionId} user=${context.userId} startAsAssistant=${startAsAssistant} text="${this.preview(latestUserText)}"`,
+      `vapi.llm.request session=${context.sessionId} user=${context.userId} startAsAssistant=${startAsAssistant} inputMode=${inputMode} messageCount=${messages.length} text="${this.preview(latestUserText)}"`,
     );
 
     try {
+      const nonSpeechResult = this.buildNonSpeechTurnResult(inputMode);
+      if (nonSpeechResult) {
+        this.logger.log(
+          `vapi.llm.non_speech session=${context.sessionId} user=${context.userId} inputMode=${inputMode}`,
+        );
+
+        if (body.stream === true) {
+          this.writeStreamingCompletion(res, model, nonSpeechResult);
+          return;
+        }
+
+        res.json(this.buildCompletion(model, nonSpeechResult));
+        return;
+      }
+
       const result = await this.phoneConversationEngine.generateTurn({
         sessionId: context.sessionId,
         userId: context.userId,
@@ -205,9 +233,56 @@ export class PhoneCallWebhookController {
     }
 
     return latestUserMessage.content
-      .map((part) => part.text ?? part.content ?? '')
+      .map(
+        (part) =>
+          part.text ??
+          part.content ??
+          part.inputText ??
+          part.input_text ??
+          part.value ??
+          '',
+      )
       .join(' ')
       .trim();
+  }
+
+  private hasUserMessage(messages: OpenAIChatMessage[]): boolean {
+    return messages.some((message) => message.role === 'user');
+  }
+
+  private classifyUserInput(text: string): 'spoken' | 'empty' | 'dtmf_digits' {
+    const normalized = text.trim();
+    if (!normalized) {
+      return 'empty';
+    }
+
+    if (/^[0-9#*]{1,2}$/.test(normalized)) {
+      return 'dtmf_digits';
+    }
+
+    return 'spoken';
+  }
+
+  private buildNonSpeechTurnResult(
+    inputMode: 'assistant_start' | 'spoken' | 'empty' | 'dtmf_digits',
+  ): PhoneConversationResult | null {
+    if (inputMode === 'empty') {
+      return {
+        text: 'I did not catch that. Say that again and we can keep going.',
+        hangupRequested: false,
+        toolEvents: [],
+      };
+    }
+
+    if (inputMode === 'dtmf_digits') {
+      return {
+        text: 'No need to press any keys. Just talk to me naturally and we can keep the conversation going.',
+        hangupRequested: false,
+        toolEvents: [],
+      };
+    }
+
+    return null;
   }
 
   private buildCompletion(model: string, result: PhoneConversationResult) {

@@ -1,6 +1,5 @@
 import { ConflictException, HttpException, HttpStatus } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import axios from 'axios';
 import { createHash } from 'crypto';
 import { PhoneVerificationStatus as VerificationStatusRecord } from '@prisma/user-client';
 import { PhoneVerificationService } from '../../user/services/phone-verification.service';
@@ -24,18 +23,16 @@ type PrismaMock = {
   };
 };
 
-jest.mock('axios');
-const mockAxios = axios as jest.Mocked<typeof axios>;
-
 describe('PhoneVerificationService', () => {
   let service: PhoneVerificationService;
   let prisma: PrismaMock;
   let configService: jest.Mocked<ConfigService>;
+  let smsSender: {
+    assertConfigured: jest.Mock;
+    sendMessage: jest.Mock;
+  };
 
   const configValues: Record<string, string> = {
-    TWILIO_ACCOUNT_SID: 'AC1234567890abcdef1234567890abcd',
-    TWILIO_AUTH_TOKEN: 'twilio-auth-token',
-    TWILIO_FROM_NUMBER: '+17822026330',
     PHONE_VERIFICATION_CODE_SECRET: 'verify-secret',
     PHONE_VERIFICATION_CODE_TTL_MINUTES: '10',
     PHONE_VERIFICATION_RESEND_COOLDOWN_SECONDS: '30',
@@ -71,13 +68,6 @@ describe('PhoneVerificationService', () => {
       .digest('hex');
 
   beforeEach(() => {
-    mockAxios.post.mockResolvedValue({
-      data: {
-        sid: 'SM1234567890abcdef1234567890abcdef',
-        status: 'queued',
-      },
-    });
-
     prisma = {
       user: {
         findUnique: jest.fn(),
@@ -102,10 +92,15 @@ describe('PhoneVerificationService', () => {
     configService = {
       get: jest.fn((key: string) => configValues[key]),
     } as unknown as jest.Mocked<ConfigService>;
+    smsSender = {
+      assertConfigured: jest.fn(),
+      sendMessage: jest.fn().mockResolvedValue(undefined),
+    };
 
     service = new PhoneVerificationService(
       prisma as any,
       configService as unknown as ConfigService,
+      smsSender as any,
     );
   });
 
@@ -153,7 +148,7 @@ describe('PhoneVerificationService', () => {
         }),
       }),
     );
-    expect(mockAxios.post).toHaveBeenCalledTimes(1);
+    expect(smsSender.sendMessage).toHaveBeenCalledTimes(1);
     expect(status).toEqual(
       expect.objectContaining({
         verified: false,
@@ -186,7 +181,7 @@ describe('PhoneVerificationService', () => {
     expect(
       prisma.client.phoneVerificationChallenge.create,
     ).not.toHaveBeenCalled();
-    expect(mockAxios.post).not.toHaveBeenCalled();
+    expect(smsSender.sendMessage).not.toHaveBeenCalled();
   });
 
   it('expires stale pending challenges when reading status', async () => {
@@ -269,7 +264,7 @@ describe('PhoneVerificationService', () => {
       id: 'challenge-1',
       status: VerificationStatusRecord.cancelled,
     } as any);
-    mockAxios.post.mockRejectedValue(new Error('delivery failed'));
+    smsSender.sendMessage.mockRejectedValue(new Error('delivery failed'));
 
     await expect(
       service.requestVerification('user-1', '+15551234567'),
@@ -374,7 +369,7 @@ describe('PhoneVerificationService', () => {
       }),
     );
     expect(status.remainingAttempts).toBe(5);
-    expect(mockAxios.post).toHaveBeenCalledTimes(1);
+    expect(smsSender.sendMessage).toHaveBeenCalledTimes(1);
   });
 
   it('enforces resend cooldown before sending another code', async () => {
@@ -396,7 +391,7 @@ describe('PhoneVerificationService', () => {
       'Please wait 30 seconds before requesting another code.',
     );
     expect(thrown?.getStatus()).toBe(HttpStatus.TOO_MANY_REQUESTS);
-    expect(mockAxios.post).not.toHaveBeenCalled();
+    expect(smsSender.sendMessage).not.toHaveBeenCalled();
   });
 
   it('rejects invalid verification code format before comparing hashes', async () => {
@@ -494,13 +489,20 @@ describe('PhoneVerificationService', () => {
 
   it('validates startup config for verification delivery', () => {
     const brokenConfig = {
-      get: jest.fn((key: string) =>
-        key === 'TWILIO_FROM_NUMBER' ? undefined : configValues[key],
-      ),
+      get: jest.fn((key: string) => configValues[key]),
     } as unknown as ConfigService;
+    const brokenSender = {
+      assertConfigured: jest.fn().mockImplementation(() => {
+        throw new Error(
+          'TWILIO_FROM_NUMBER is required for phone verification SMS.',
+        );
+      }),
+      sendMessage: jest.fn(),
+    };
     const brokenService = new PhoneVerificationService(
       prisma as any,
       brokenConfig,
+      brokenSender as any,
     );
 
     expect(() => brokenService.onModuleInit()).toThrow(

@@ -212,6 +212,7 @@ describe('SettingsModal', () => {
     render(<SettingsModal opened onClose={jest.fn()} />)
 
     await user.click(await screen.findByRole('button', { name: 'Finish setup' }))
+    await screen.findByText('Please enter verification code below')
     const codeInput = within(screen.getByTestId('phone-code-input')).getAllByRole('textbox')[0]
     await user.type(codeInput, '123456')
     await user.click(screen.getByRole('button', { name: 'Verify code' }))

@@ -27,21 +27,6 @@ export class VapiConfigService implements OnModuleInit {
     );
   }
 
-  getHostedAssistantId(): string | undefined {
-    return this.configService.get<string>('VAPI_ASSISTANT_ID');
-  }
-
-  allowHostedAssistantFallback(): boolean {
-    const explicit = this.configService.get<string>(
-      'VAPI_ALLOW_HOSTED_ASSISTANT_FALLBACK',
-    );
-    if (explicit != null) {
-      return explicit === 'true';
-    }
-
-    return Boolean(this.getHostedAssistantId());
-  }
-
   getCallUrl(): string {
     const explicitUrl = this.configService.get<string>('VAPI_CALL_URL');
     if (explicitUrl) {
@@ -65,6 +50,27 @@ export class VapiConfigService implements OnModuleInit {
     return value.trim();
   }
 
+  getReachablePublicApiBaseUrl(): string {
+    const value = this.getPublicApiBaseUrl();
+
+    let url: URL;
+    try {
+      url = new URL(value);
+    } catch {
+      throw new InternalServerErrorException(
+        'PUBLIC_API_BASE_URL or API_BASE_URL must be a valid absolute URL for Vapi call routing.',
+      );
+    }
+
+    if (!this.isPubliclyReachableHost(url.hostname)) {
+      throw new InternalServerErrorException(
+        `Vapi phone calls require PUBLIC_API_BASE_URL or API_BASE_URL to be publicly reachable from Vapi. "${url.hostname}" is not reachable from Vapi; use your deployed API URL or a tunnel such as ngrok.`,
+      );
+    }
+
+    return url.toString();
+  }
+
   getContextSecret(): string {
     const value =
       this.configService.get<string>('VAPI_CONTEXT_SECRET') ??
@@ -83,6 +89,38 @@ export class VapiConfigService implements OnModuleInit {
     return (
       this.configService.get<string>('VAPI_BASE_URL') ?? 'https://api.vapi.ai'
     );
+  }
+
+  private isPubliclyReachableHost(hostname: string): boolean {
+    const normalized = hostname.trim().toLowerCase();
+
+    if (
+      normalized === 'localhost' ||
+      normalized === '0.0.0.0' ||
+      normalized === '127.0.0.1' ||
+      normalized === '::1' ||
+      normalized.endsWith('.local')
+    ) {
+      return false;
+    }
+
+    if (/^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(normalized)) {
+      return false;
+    }
+
+    if (/^192\.168\.\d{1,3}\.\d{1,3}$/.test(normalized)) {
+      return false;
+    }
+
+    const match172 = normalized.match(/^172\.(\d{1,3})\.\d{1,3}\.\d{1,3}$/);
+    if (match172) {
+      const secondOctet = Number(match172[1]);
+      if (secondOctet >= 16 && secondOctet <= 31) {
+        return false;
+      }
+    }
+
+    return true;
   }
 
   private require(key: string, message: string): string {

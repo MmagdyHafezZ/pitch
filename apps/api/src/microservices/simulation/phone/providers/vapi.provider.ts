@@ -1,4 +1,4 @@
-import { HttpException, Injectable } from '@nestjs/common';
+import { HttpException, Injectable, Logger } from '@nestjs/common';
 import axios from 'axios';
 import {
   PhoneCallRequest,
@@ -11,6 +11,7 @@ import { VapiConfigService } from '../vapi-config.service';
 export class VapiPhoneProvider implements PhoneProvider {
   readonly name = 'vapi';
   readonly description = 'Vapi outbound calling';
+  private readonly logger = new Logger(VapiPhoneProvider.name);
 
   constructor(private readonly vapiConfig: VapiConfigService) {}
 
@@ -22,11 +23,10 @@ export class VapiPhoneProvider implements PhoneProvider {
       this.resolveString(providerConfig, 'phoneNumberId', 'phone_number_id') ??
       this.vapiConfig.getPhoneNumberId();
     const assistant = this.resolveObject(providerConfig, 'assistant');
-    const assistantId = this.resolveHostedAssistantId(providerConfig);
 
-    if (!assistant && !assistantId) {
+    if (!assistant) {
       throw new Error(
-        'Vapi assistant config is required. Hosted assistant fallback is disabled.',
+        'Vapi assistant config is required for phone calls. Hosted assistant IDs are not supported.',
       );
     }
     const customerConfig = this.resolveObject(providerConfig, 'customer');
@@ -38,13 +38,8 @@ export class VapiPhoneProvider implements PhoneProvider {
     const payload: Record<string, unknown> = {
       phoneNumberId,
       customer,
+      assistant,
     };
-
-    if (assistant) {
-      payload.assistant = assistant;
-    } else {
-      payload.assistantId = assistantId;
-    }
 
     if (typeof providerConfig.customerId === 'string') {
       payload.customerId = providerConfig.customerId;
@@ -56,6 +51,9 @@ export class VapiPhoneProvider implements PhoneProvider {
 
     const callUrl = this.resolveCallUrl();
     let response;
+    this.logger.log(
+      `vapi.call.request phoneNumberId=${phoneNumberId} to=${this.maskPhone(request.to)} url=${callUrl}`,
+    );
     try {
       response = await axios.post(callUrl, payload, {
         headers: {
@@ -65,13 +63,24 @@ export class VapiPhoneProvider implements PhoneProvider {
         timeout: 20_000,
       });
     } catch (error) {
-      if (axios.isAxiosError(error) && error.response) {
-        const status = error.response.status ?? 500;
-        const message =
-          this.formatErrorMessage(error.response.data) ??
-          `Vapi request failed with status ${status}`;
+      if (axios.isAxiosError(error)) {
+        const status = error.response?.status ?? 500;
+        const rawMessage = error.response
+          ? (this.formatErrorMessage(error.response.data) ??
+            `Vapi request failed with status ${status}`)
+          : error.message;
+        const message = this.enrichErrorMessage(rawMessage);
+
+        this.logger.error(
+          `vapi.call.failed phoneNumberId=${phoneNumberId} to=${this.maskPhone(request.to)} status=${status} message=${message} response=${this.stringifyForLog(error.response?.data)}`,
+        );
+
         throw new HttpException(message, status);
       }
+
+      this.logger.error(
+        `vapi.call.failed phoneNumberId=${phoneNumberId} to=${this.maskPhone(request.to)} unexpected=${this.stringifyForLog(error)}`,
+      );
       throw error;
     }
 
@@ -94,6 +103,10 @@ export class VapiPhoneProvider implements PhoneProvider {
 
     const status = typeof data.status === 'string' ? data.status : undefined;
 
+    this.logger.log(
+      `vapi.call.started phoneNumberId=${phoneNumberId} to=${this.maskPhone(request.to)} call=${callId} status=${status ?? 'unknown'}`,
+    );
+
     return {
       provider: this.name,
       callId,
@@ -102,19 +115,6 @@ export class VapiPhoneProvider implements PhoneProvider {
       from: request.from ?? phoneNumberId,
       raw: data,
     };
-  }
-
-  private resolveHostedAssistantId(
-    providerConfig: Record<string, unknown>,
-  ): string | undefined {
-    if (!this.vapiConfig.allowHostedAssistantFallback()) {
-      return undefined;
-    }
-
-    return (
-      this.resolveString(providerConfig, 'assistantId', 'assistant_id') ??
-      this.vapiConfig.getHostedAssistantId()
-    );
   }
 
   private resolveCallUrl(): string {
@@ -147,6 +147,18 @@ export class VapiPhoneProvider implements PhoneProvider {
     return undefined;
   }
 
+  private enrichErrorMessage(message: string): string {
+    const normalized = message.toLowerCase();
+    if (
+      normalized.includes('free vapi numbers') &&
+      normalized.includes('international calls')
+    ) {
+      return `${message} Check that VAPI_PHONE_NUMBER_ID, or a session-level phone.vapi.phoneNumberId override, points to your imported Vapi number instead of a free Vapi number.`;
+    }
+
+    return message;
+  }
+
   private resolveString(
     source: Record<string, unknown>,
     ...keys: string[]
@@ -171,5 +183,27 @@ export class VapiPhoneProvider implements PhoneProvider {
     }
 
     return undefined;
+  }
+
+  private maskPhone(phoneNumber: string): string {
+    return phoneNumber.length > 4
+      ? `${phoneNumber.slice(0, 3)}***${phoneNumber.slice(-2)}`
+      : phoneNumber;
+  }
+
+  private stringifyForLog(value: unknown): string {
+    if (value == null) {
+      return 'null';
+    }
+
+    if (typeof value === 'string') {
+      return value;
+    }
+
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return '[unserializable]';
+    }
   }
 }

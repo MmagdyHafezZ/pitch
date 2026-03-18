@@ -197,13 +197,14 @@ export class PhoneCallService {
     const sessionVoice =
       this.resolveNestedObject(sessionConfigRecord, 'voice') ?? {};
 
-    const resolvedVoiceProvider =
+    const resolvedVoiceProvider = this.normalizeVapiVoiceProvider(
       this.resolveString(voiceConfig, 'provider') ??
-      this.resolveString(vapiConfig, 'voiceProvider') ??
-      this.resolveString(sessionVoice, 'provider') ??
-      this.resolveString(sessionConfigRecord, 'ttsProvider') ??
-      this.resolveString(personaVoice, 'provider') ??
-      'elevenlabs';
+        this.resolveString(vapiConfig, 'voiceProvider') ??
+        this.resolveString(sessionVoice, 'provider') ??
+        this.resolveString(sessionConfigRecord, 'ttsProvider') ??
+        this.resolveString(personaVoice, 'provider') ??
+        'elevenlabs',
+    );
     const resolvedVoiceId =
       this.resolveString(voiceConfig, 'voiceId') ??
       this.resolveString(vapiConfig, 'voiceId') ??
@@ -298,6 +299,21 @@ export class PhoneCallService {
     return /^\+[1-9]\d{7,14}$/.test(value);
   }
 
+  private normalizeVapiVoiceProvider(provider: string): string {
+    const normalized = provider.trim().toLowerCase();
+
+    switch (normalized) {
+      case 'elevenlabs':
+      case 'eleven-labs':
+      case '11labs':
+        return '11labs';
+      case 'play.ht':
+        return 'playht';
+      default:
+        return normalized;
+    }
+  }
+
   private resolveRecord(value: unknown): Record<string, unknown> | undefined {
     return value && typeof value === 'object'
       ? (value as Record<string, unknown>)
@@ -352,7 +368,7 @@ export class PhoneCallService {
   }
 
   private resolveNestedObject(
-    source: Record<string, unknown> | undefined,
+    source: Record<string, unknown> | null | undefined,
     key: string,
   ): Record<string, unknown> | undefined {
     if (!source) {

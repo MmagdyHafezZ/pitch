@@ -208,6 +208,7 @@ export default function LiveSessionPage() {
   const hasUserEnabledMicRef = useRef(false)
   const [isMultiTurn, setIsMultiTurn] = useState(false)
   const assistantStartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const autoPhoneCallAttemptRef = useRef<string | null>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const lastAssistantMessageIdRef = useRef<string | null>(null)
   // Hidden pose camera feed used by MediaPipe across session types.
@@ -383,6 +384,9 @@ export default function LiveSessionPage() {
     setAvatarVideoError(avatarState.error)
     setAvatarVideoJobId(avatarState.jobId)
     setAvatarVideoUrl(nextAvatarVideoUrl)
+    if (session?.type !== 'phone' || session?.status === 'ended') {
+      setCallStarted(false)
+    }
     setCallModalOpen(session?.type === 'phone' && session?.status !== 'ended')
   }, [])
 
@@ -391,6 +395,9 @@ export default function LiveSessionPage() {
     try {
       const status = (await api.users.getMyPhoneVerification()) as PhoneVerificationState
       setPhoneVerification(status)
+      if ((!status.verified || !status.phoneNumber) && sessionStatus !== 'ended' && !callStarted) {
+        setCallModalOpen(true)
+      }
       if (status.phoneNumber) {
         setPhoneNumber(status.phoneNumber)
       } else if (status.pendingPhoneNumber) {
@@ -406,7 +413,7 @@ export default function LiveSessionPage() {
     } finally {
       setPhoneVerificationLoading(false)
     }
-  }, [])
+  }, [callStarted, sessionStatus])
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -434,11 +441,17 @@ export default function LiveSessionPage() {
         setLoadedSessionRecord(sessionRecord)
         syncSessionState(session)
 
+        const isPhoneSession = sessionRecord.type === 'phone'
         const status =
           typeof sessionRecord.status === 'string' ? sessionRecord.status.toLowerCase() : ''
 
         if (status === 'ended') {
-          setAutoConnectConversation(true)
+          setAutoConnectConversation(!isPhoneSession)
+          return
+        }
+
+        if (isPhoneSession) {
+          setAutoConnectConversation(false)
           return
         }
 
@@ -488,8 +501,12 @@ export default function LiveSessionPage() {
 
   const handleResumeSession = useCallback(() => {
     setResumePromptOpen(false)
+    if (sessionType === 'phone') {
+      setCallModalOpen(true)
+      return
+    }
     setAutoConnectConversation(true)
-  }, [])
+  }, [sessionType])
 
   const handleStartOver = useCallback(async () => {
     if (!loadedSessionRecord || startOverLoading) return
@@ -584,7 +601,7 @@ export default function LiveSessionPage() {
   const handleRequestPhoneVerification = async () => {
     const nextPhoneNumber = phoneNumber.trim()
     if (!nextPhoneNumber) {
-      setCallError('Enter the phone number you want us to call.')
+      setCallError('Enter the phone number you want to verify.')
       return
     }
 
@@ -597,8 +614,8 @@ export default function LiveSessionPage() {
       setPhoneVerification(status)
       setVerificationCode('')
       notifications.show({
-        title: 'Verification call sent',
-        message: `We’re calling ${status.pendingPhoneNumber ?? nextPhoneNumber} with your verification code.`,
+        title: 'Verification code sent',
+        message: `We texted a verification code to ${status.pendingPhoneNumber ?? nextPhoneNumber}.`,
         color: 'blue',
       })
     } catch (error) {
@@ -623,8 +640,8 @@ export default function LiveSessionPage() {
       setPhoneVerification(status)
       setVerificationCode('')
       notifications.show({
-        title: 'Verification call resent',
-        message: `We’re calling ${status.pendingPhoneNumber ?? phoneNumber} again with a fresh code.`,
+        title: 'Verification code resent',
+        message: `We texted a fresh verification code to ${status.pendingPhoneNumber ?? phoneNumber}.`,
         color: 'blue',
       })
     } catch (error) {
@@ -643,7 +660,7 @@ export default function LiveSessionPage() {
 
   const handleVerifyPhoneCode = async () => {
     if (!verificationCode.trim()) {
-      setCallError('Enter the 6-digit verification code from the call.')
+      setCallError('Enter the 6-digit verification code from the text message.')
       return
     }
 
@@ -690,6 +707,7 @@ export default function LiveSessionPage() {
       await api.phoneCalls.start({
         sessionId,
       })
+      setSessionStatus('active')
       notifications.show({
         title: 'Calling now',
         message: `We’re calling ${phoneVerification.phoneNumber}. Answer your phone to begin.`,
@@ -710,6 +728,28 @@ export default function LiveSessionPage() {
       setCallLoading(false)
     }
   }
+
+  useEffect(() => {
+    if (sessionType !== 'phone' || sessionStatus === 'ended') return
+    if (phoneVerificationLoading || callLoading || callStarted) return
+    if (!phoneVerification?.verified || !phoneVerification.phoneNumber) return
+
+    const attemptKey = `${sessionId}:${phoneVerification.phoneNumber}`
+    if (autoPhoneCallAttemptRef.current === attemptKey) {
+      return
+    }
+
+    autoPhoneCallAttemptRef.current = attemptKey
+    void handleStartPhoneCall()
+  }, [
+    callLoading,
+    callStarted,
+    phoneVerification,
+    phoneVerificationLoading,
+    sessionId,
+    sessionStatus,
+    sessionType,
+  ])
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60)
@@ -1021,6 +1061,8 @@ export default function LiveSessionPage() {
     }
 
     hangUp()
+    setCallStarted(false)
+    setCallModalOpen(false)
     router.push(`/session/${sessionId}/performance`)
   }, [hangUp, isListening, router, sessionId, stopListening])
 
@@ -1029,12 +1071,6 @@ export default function LiveSessionPage() {
     clearHangupRequest()
     void handleHangUp()
   }, [hangupRequest, sessionStatus, clearHangupRequest, handleHangUp])
-
-  useEffect(() => {
-    if (sessionType === 'phone' && sessionStatus === 'ended') {
-      router.push(`/session/${sessionId}/performance`)
-    }
-  }, [sessionType, sessionStatus, sessionId, router])
 
   useEffect(() => {
     if (sessionType !== 'phone' || !callStarted || sessionStatus === 'ended') return
@@ -1160,7 +1196,13 @@ export default function LiveSessionPage() {
       <Modal
         opened={callModalOpen && sessionType === 'phone'}
         onClose={() => setCallModalOpen(false)}
-        title={phoneVerification?.verified ? 'Start phone call' : 'Verify your phone number'}
+        title={
+          phoneVerification?.verified
+            ? sessionStatus === 'ended'
+              ? 'Start another phone call'
+              : 'Start phone call'
+            : 'Verify your phone number'
+        }
         centered
       >
         <Stack gap="md">
@@ -1171,7 +1213,9 @@ export default function LiveSessionPage() {
           ) : phoneVerification?.verified ? (
             <>
               <Text size="sm" c="dimmed">
-                Your verified number will be used for this phone session.
+                {sessionStatus === 'ended'
+                  ? 'Your verified number will be used again for the next phone call.'
+                  : 'Your verified number will be used for this phone session.'}
               </Text>
               <TextInput
                 label="Verified phone number"
@@ -1189,15 +1233,15 @@ export default function LiveSessionPage() {
                   Not now
                 </Button>
                 <Button onClick={handleStartPhoneCall} loading={callLoading}>
-                  Start call
+                  {sessionStatus === 'ended' ? 'Start another call' : 'Start call'}
                 </Button>
               </Group>
             </>
           ) : (
             <>
               <Text size="sm" c="dimmed">
-                Add the phone number you want us to call, then verify it from the automated code
-                call before starting this session.
+                Add the phone number you want us to call, then verify it with the texted code before
+                starting this session.
               </Text>
               <TextInput
                 label="Phone number"
@@ -1216,8 +1260,8 @@ export default function LiveSessionPage() {
               {phoneVerification?.pendingPhoneNumber && (
                 <>
                   <Text size="sm" c="dimmed">
-                    We’ve already sent a verification call to {phoneVerification.pendingPhoneNumber}
-                    .
+                    We’ve already texted a verification code to{' '}
+                    {phoneVerification.pendingPhoneNumber}.
                   </Text>
                   <TextInput
                     label="Verification code"
@@ -1265,7 +1309,7 @@ export default function LiveSessionPage() {
                       onClick={handleRequestPhoneVerification}
                       loading={phoneVerificationActionLoading}
                     >
-                      Send verification call
+                      Text verification code
                     </Button>
                   )}
                 </Group>
@@ -1357,14 +1401,18 @@ export default function LiveSessionPage() {
                   onToggle={() => setVisualEnabled((v) => !v)}
                 />
               )}
-              {sessionType === 'phone' && sessionStatus !== 'ended' && !callStarted && (
+              {sessionType === 'phone' && !callStarted && (
                 <Button
                   size="xs"
                   variant="light"
                   color="blue"
                   onClick={() => setCallModalOpen(true)}
                 >
-                  {phoneVerification?.verified ? 'Start call' : 'Verify phone'}
+                  {phoneVerification?.verified
+                    ? sessionStatus === 'ended'
+                      ? 'Start another call'
+                      : 'Start call'
+                    : 'Verify phone'}
                 </Button>
               )}
               <ActionIcon
@@ -1788,6 +1836,12 @@ export default function LiveSessionPage() {
                 <Text ta="center" c={aiStateColor} fw={500} size="sm" style={{ minHeight: 20 }}>
                   {aiStateLabel}
                 </Text>
+                {sessionType === 'voice' && (
+                  <Text ta="center" c="dimmed" size="xs" maw={420}>
+                    Voice sessions stay in your browser. Use <strong>Phone calls</strong> if you
+                    want PITCH to ring your verified number.
+                  </Text>
+                )}
 
                 {/* Control Buttons */}
                 <Group justify="center" gap="xl">

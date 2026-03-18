@@ -124,7 +124,7 @@ describe('PhoneCallService', () => {
               tools: [{ type: 'endCall' }],
             }),
             voice: expect.objectContaining({
-              provider: 'elevenlabs',
+              provider: '11labs',
               voiceId: 'Voice-42',
             }),
           }),
@@ -241,5 +241,34 @@ describe('PhoneCallService', () => {
     );
 
     expect(provider.createCall).not.toHaveBeenCalled();
+  });
+
+  it('maps elevenlabs voice providers to the Vapi 11labs key', async () => {
+    prisma.client.session.findUnique.mockResolvedValue({
+      ...baseSession,
+      sessionConfig: {
+        ttsProvider: 'elevenlabs',
+        ttsVoice: 'Voice-42',
+      },
+    });
+
+    await service.startCall({
+      sessionId: 'session-1',
+      phoneNumber: '+15551234567',
+      userId: 'user-1',
+    });
+
+    expect(provider.createCall).toHaveBeenCalledWith(
+      expect.objectContaining({
+        providerConfig: expect.objectContaining({
+          assistant: expect.objectContaining({
+            voice: expect.objectContaining({
+              provider: '11labs',
+              voiceId: 'Voice-42',
+            }),
+          }),
+        }),
+      }),
+    );
   });
 });

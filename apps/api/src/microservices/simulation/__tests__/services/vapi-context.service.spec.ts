@@ -74,4 +74,27 @@ describe('VapiContextService', () => {
       'https://api.example.com/api/v1/simulation/phone-calls/vapi/server?token=signed-token',
     );
   });
+
+  it('rejects localhost callback URLs because Vapi cannot reach them', () => {
+    const configService = {
+      get: jest.fn((key: string) => {
+        if (key === 'VAPI_API_KEY') return 'vapi-key';
+        if (key === 'VAPI_PHONE_NUMBER_ID') return 'phone-number-id';
+        if (key === 'API_BASE_URL') return 'http://localhost:8000';
+        if (key === 'VAPI_CONTEXT_SECRET') return 'context-secret';
+        return undefined;
+      }),
+    } as unknown as ConfigService;
+
+    const localhostService = new VapiContextService(
+      new VapiConfigService(configService),
+    );
+
+    expect(() =>
+      localhostService.buildGatewayUrl(
+        'simulation/phone-calls/vapi/server',
+        'signed-token',
+      ),
+    ).toThrow('not reachable from Vapi');
+  });
 });

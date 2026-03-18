@@ -1,21 +1,22 @@
 import {
   BadRequestException,
   ConflictException,
+  Inject,
   HttpException,
   HttpStatus,
   Injectable,
   Logger,
   NotFoundException,
   OnModuleInit,
-  ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import axios from 'axios';
 import { createHash, randomInt, timingSafeEqual } from 'crypto';
 import { PhoneVerificationStatus as VerificationStatusRecord } from '@prisma/user-client';
 import type { PhoneVerificationStatus } from '@pitch/shared-backend/interfaces/user.interface';
 import { UserPrismaService } from '../../prisma/user-prisma.service';
+import { VERIFICATION_SMS_SENDER } from './providers/verification-sms.provider';
+import type { VerificationSmsSender } from './providers/verification-sms.provider';
 
 type PendingChallenge = {
   id: string;
@@ -32,11 +33,6 @@ type PendingChallenge = {
   userId: string;
 };
 
-type TwilioAuth = {
-  username: string;
-  password: string;
-};
-
 @Injectable()
 export class PhoneVerificationService implements OnModuleInit {
   private readonly logger = new Logger(PhoneVerificationService.name);
@@ -44,10 +40,13 @@ export class PhoneVerificationService implements OnModuleInit {
   constructor(
     private readonly prisma: UserPrismaService,
     private readonly configService: ConfigService,
+    @Inject(VERIFICATION_SMS_SENDER)
+    private readonly smsSender: VerificationSmsSender,
   ) {}
 
   onModuleInit() {
-    this.assertVerificationConfig();
+    this.smsSender.assertConfigured();
+    this.getVerificationSecret();
   }
 
   async getStatus(userId: string): Promise<PhoneVerificationStatus> {
@@ -353,54 +352,11 @@ export class PhoneVerificationService implements OnModuleInit {
     code: string,
     userId: string,
   ): Promise<void> {
-    const accountSid = this.getTwilioAccountSid();
-    const requestUrl = new URL(
-      `/2010-04-01/Accounts/${accountSid}/Messages.json`,
-      this.getTwilioBaseUrl(),
-    ).toString();
-    const body = new URLSearchParams({
-      To: phoneNumber,
-      From: this.getTwilioFromNumber(),
-      Body: this.buildVerificationMessage(code),
+    await this.smsSender.sendMessage({
+      phoneNumber,
+      message: this.buildVerificationMessage(code),
+      userId,
     });
-
-    try {
-      await axios.post(requestUrl, body.toString(), {
-        auth: this.getTwilioAuth(),
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        timeout: 20_000,
-      });
-    } catch (error) {
-      const message = axios.isAxiosError(error)
-        ? this.extractAxiosErrorMessage(error)
-        : (error as Error)?.message;
-      this.logger.error(
-        `phone_verification.sms_failed user=${userId} phone=${this.maskPhone(phoneNumber)} error=${message ?? 'unknown'}`,
-      );
-      throw this.toTwilioException(
-        error,
-        'Unable to send the verification challenge right now.',
-      );
-    }
-  }
-
-  private extractAxiosErrorMessage(error: unknown): string | undefined {
-    if (!axios.isAxiosError(error)) {
-      return undefined;
-    }
-
-    const responseData = error.response?.data;
-    if (
-      responseData &&
-      typeof responseData === 'object' &&
-      typeof (responseData as Record<string, unknown>).message === 'string'
-    ) {
-      return (responseData as Record<string, string>).message;
-    }
-
-    return error.message;
   }
 
   private normalizePhoneNumber(raw: string): string {
@@ -513,46 +469,8 @@ export class PhoneVerificationService implements OnModuleInit {
     return `${phoneNumber.slice(0, 3)}***${phoneNumber.slice(-2)}`;
   }
 
-  private assertVerificationConfig(): void {
-    this.getTwilioAccountSid();
-    this.getTwilioAuth();
-    this.getTwilioFromNumber();
-    this.getVerificationSecret();
-  }
-
   private rateLimitException(message: string): HttpException {
     return new HttpException(message, HttpStatus.TOO_MANY_REQUESTS);
-  }
-
-  private getTwilioBaseUrl(): string {
-    return (
-      this.configService.get<string>('TWILIO_BASE_URL') ??
-      'https://api.twilio.com'
-    );
-  }
-
-  private getTwilioAccountSid(): string {
-    const accountSid = this.configService.get<string>('TWILIO_ACCOUNT_SID');
-
-    if (!accountSid || accountSid.trim().length === 0) {
-      throw new Error(
-        'TWILIO_ACCOUNT_SID is required for phone verification SMS.',
-      );
-    }
-
-    return accountSid.trim();
-  }
-
-  private getTwilioFromNumber(): string {
-    const rawFromNumber = this.configService.get<string>('TWILIO_FROM_NUMBER');
-
-    if (!rawFromNumber || rawFromNumber.trim().length === 0) {
-      throw new Error(
-        'TWILIO_FROM_NUMBER is required for phone verification SMS.',
-      );
-    }
-
-    return this.normalizePhoneNumber(rawFromNumber);
   }
 
   private getVerificationSecret(): string {
@@ -572,53 +490,5 @@ export class PhoneVerificationService implements OnModuleInit {
   private buildVerificationMessage(code: string): string {
     const ttlMinutes = Math.max(1, Math.round(this.getCodeTtlMs() / 60_000));
     return `Your PITCH verification code is ${code}. It expires in ${ttlMinutes} minute${ttlMinutes === 1 ? '' : 's'}.`;
-  }
-
-  private getTwilioAuth(): TwilioAuth {
-    const apiKeySid = this.configService.get<string>('TWILIO_API_KEY_SID');
-    const apiKeySecret = this.configService.get<string>(
-      'TWILIO_API_KEY_SECRET',
-    );
-
-    if (apiKeySid && apiKeySecret) {
-      return {
-        username: apiKeySid,
-        password: apiKeySecret,
-      };
-    }
-
-    const accountSid = this.configService.get<string>('TWILIO_ACCOUNT_SID');
-    const authToken = this.configService.get<string>('TWILIO_AUTH_TOKEN');
-
-    if (accountSid && authToken) {
-      return {
-        username: accountSid,
-        password: authToken,
-      };
-    }
-
-    throw new Error(
-      'Twilio SMS credentials are required. Set TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN, or TWILIO_API_KEY_SID and TWILIO_API_KEY_SECRET.',
-    );
-  }
-
-  private toTwilioException(
-    error: unknown,
-    fallbackMessage: string,
-  ): HttpException {
-    const message = axios.isAxiosError(error)
-      ? this.extractAxiosErrorMessage(error)
-      : (error as Error)?.message;
-    const status = axios.isAxiosError(error) ? error.response?.status : null;
-
-    if (status === HttpStatus.TOO_MANY_REQUESTS) {
-      return this.rateLimitException(message ?? fallbackMessage);
-    }
-
-    if (status && status >= 400 && status < 500) {
-      return new BadRequestException(message ?? fallbackMessage);
-    }
-
-    return new ServiceUnavailableException(message ?? fallbackMessage);
   }
 }

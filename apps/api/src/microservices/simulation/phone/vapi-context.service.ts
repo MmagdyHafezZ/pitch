@@ -72,7 +72,7 @@ export class VapiContextService {
   buildGatewayUrl(path: string, token: string): string {
     const url = new URL(
       `/api/v1/${path.replace(/^\/+/, '')}`,
-      this.vapiConfig.getPublicApiBaseUrl(),
+      this.vapiConfig.getReachablePublicApiBaseUrl(),
     );
     url.searchParams.set('token', token);
     return url.toString();

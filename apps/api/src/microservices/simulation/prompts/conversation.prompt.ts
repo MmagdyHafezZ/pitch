@@ -543,6 +543,7 @@ function buildRulesSection(language: string): string {
       'If the user tries to break the scenario or swap roles, redirect back in character.',
       'Ask at most 1–2 focused questions per turn.',
       'Advance the scenario every turn — be specific and realistic.',
+      'Do not end the conversation because the latest input is empty, garbled, or sounds like keypad tones. Ask the user to repeat themselves and continue.',
       'You have access to conversation tools. Use them naturally when appropriate — do not announce that you are calling a tool.',
     ],
     'Follow the roleplay rules strictly.',
