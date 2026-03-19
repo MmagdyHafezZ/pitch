@@ -87,6 +87,40 @@ describe('PhoneCallWebhookController', () => {
     expect(res.send).toHaveBeenCalledWith(audioBuffer);
   });
 
+  it('accepts nested Vapi voice-request payloads', async () => {
+    const audioBuffer = Buffer.from([5, 6, 7, 8]);
+    phoneCallService.synthesizePhoneCallAudio.mockResolvedValue({
+      audioBuffer,
+      contentType: 'audio/pcm;rate=16000;channels=1',
+    });
+
+    const res = {
+      setHeader: jest.fn(),
+      status: jest.fn().mockReturnThis(),
+      send: jest.fn(),
+    };
+
+    await controller.handleVapiVoiceRequest(
+      'signed-token',
+      {
+        message: {
+          type: 'voice-request',
+          text: 'Nested hello from PITCH.',
+          sampleRate: 16000,
+        },
+      },
+      res as any,
+    );
+
+    expect(phoneCallService.synthesizePhoneCallAudio).toHaveBeenCalledWith({
+      sessionId: 'session-1',
+      userId: 'user-1',
+      text: 'Nested hello from PITCH.',
+      sampleRate: 16000,
+    });
+    expect(res.send).toHaveBeenCalledWith(audioBuffer);
+  });
+
   it('returns OpenAI-compatible chat completions from the PITCH conversation engine', async () => {
     conversationOrchestration.stream.mockReturnValue(
       of(
@@ -206,6 +240,63 @@ describe('PhoneCallWebhookController', () => {
     );
   });
 
+  it('streams OpenAI-compatible SSE chunks and ends the phone call when the model asks to hang up', async () => {
+    conversationOrchestration.stream.mockReturnValue(
+      of(
+        { type: 'delta', data: { delta: 'Hello' } },
+        { type: 'delta', data: { delta: ' there.' } },
+        {
+          type: 'hangup_requested',
+          data: { reason: 'Verification complete' },
+        },
+        {
+          type: 'completed',
+          data: {
+            fullText: 'Hello there.',
+            totalSentences: 1,
+          },
+        },
+      ) as any,
+    );
+
+    const res = {
+      setHeader: jest.fn(),
+      flushHeaders: jest.fn(),
+      write: jest.fn(),
+      end: jest.fn(),
+      writableEnded: false,
+    };
+
+    await controller.handleVapiChatCompletions(
+      'signed-token',
+      {
+        model: 'pitch-phone-engine',
+        stream: true,
+        messages: [{ role: 'user', content: 'Hi there' }],
+      },
+      res as any,
+    );
+
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(res.flushHeaders).toHaveBeenCalled();
+    expect(res.write).toHaveBeenCalledWith(
+      expect.stringContaining('"object":"chat.completion.chunk"'),
+    );
+    expect(res.write).toHaveBeenCalledWith('data: [DONE]\n\n');
+    expect(res.end).toHaveBeenCalled();
+    expect(phoneCallService.endActiveCall).toHaveBeenCalledWith({
+      sessionId: 'session-1',
+      userId: 'user-1',
+      reason: 'Verification complete',
+    });
+    expect(sessionService.end).toHaveBeenCalledWith(
+      'session-1',
+      { reason: 'phone_call_completed:assistant-ended-call' },
+      'user-1',
+    );
+  });
+
   it('returns ok for transcript events without ending the session', async () => {
     const response = await controller.handleVapiServerEvent('signed-token', {
       message: {
@@ -219,6 +310,38 @@ describe('PhoneCallWebhookController', () => {
       phoneCallService.syncPhoneCallRuntimeFromWebhook,
     ).not.toHaveBeenCalled();
     expect(sessionService.end).not.toHaveBeenCalled();
+    expect(response).toEqual({ ok: true });
+  });
+
+  it('ends the session for terminal failure status updates', async () => {
+    sessionService.end.mockResolvedValue({ id: 'session-1' } as never);
+
+    const response = await controller.handleVapiServerEvent('signed-token', {
+      message: {
+        type: 'status-update',
+        status: 'failed',
+        endedReason: 'upstream-timeout',
+        call: {
+          id: 'call-2',
+        },
+      },
+    });
+
+    expect(
+      phoneCallService.syncPhoneCallRuntimeFromWebhook,
+    ).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: 'session-1',
+        callId: 'call-2',
+        status: 'failed',
+        endedReason: 'upstream-timeout',
+      }),
+    );
+    expect(sessionService.end).toHaveBeenCalledWith(
+      'session-1',
+      { reason: 'phone_call_terminated:failed:upstream-timeout' },
+      'user-1',
+    );
     expect(response).toEqual({ ok: true });
   });
 

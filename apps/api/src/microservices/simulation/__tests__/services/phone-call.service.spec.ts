@@ -241,6 +241,93 @@ describe('PhoneCallService', () => {
     });
   });
 
+  it('rejects programmatic hangup when no active phone runtime is registered', async () => {
+    prisma.client.session.findUnique.mockResolvedValueOnce({
+      ...baseSession,
+      sessionConfig: {},
+    });
+
+    await expect(
+      service.endActiveCall({
+        sessionId: 'session-1',
+        userId: 'user-1',
+      }),
+    ).rejects.toThrow(
+      'No active phone call is registered for session session-1.',
+    );
+
+    expect(provider.endCall).not.toHaveBeenCalled();
+  });
+
+  it('persists terminal webhook runtime updates with endedAt while preserving startedAt', async () => {
+    prisma.client.session.findUnique.mockResolvedValueOnce({
+      id: 'session-1',
+      type: 'phone',
+      sessionConfig: {
+        phone: {
+          runtime: {
+            provider: 'vapi',
+            callId: 'call-1',
+            startedAt: '2026-03-19T06:00:00.000Z',
+            status: 'in-progress',
+          },
+        },
+      },
+    });
+
+    await service.syncPhoneCallRuntimeFromWebhook({
+      sessionId: 'session-1',
+      callId: 'call-1',
+      status: 'ended',
+      endedReason: 'customer-ended-call',
+      controlUrl: 'https://control.vapi.ai/call-1/control',
+      listenUrl: 'wss://control.vapi.ai/call-1/listen',
+    });
+
+    expect(prisma.client.session.update).toHaveBeenCalledWith({
+      where: { id: 'session-1' },
+      data: {
+        sessionConfig: expect.objectContaining({
+          phone: expect.objectContaining({
+            runtime: expect.objectContaining({
+              provider: 'vapi',
+              callId: 'call-1',
+              startedAt: '2026-03-19T06:00:00.000Z',
+              status: 'ended',
+              endedReason: 'customer-ended-call',
+              controlUrl: 'https://control.vapi.ai/call-1/control',
+              listenUrl: 'wss://control.vapi.ai/call-1/listen',
+              endedAt: expect.any(String),
+            }),
+          }),
+        }),
+      },
+    });
+  });
+
+  it('ignores webhook runtime sync requests for missing or non-phone sessions', async () => {
+    prisma.client.session.findUnique
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        id: 'session-1',
+        type: 'voice',
+        sessionConfig: {},
+      });
+
+    await service.syncPhoneCallRuntimeFromWebhook({
+      sessionId: 'missing',
+      callId: 'call-1',
+      status: 'ended',
+    });
+    await service.syncPhoneCallRuntimeFromWebhook({
+      sessionId: 'session-1',
+      callId: 'call-2',
+      status: 'ended',
+    });
+
+    expect(prisma.client.session.update).not.toHaveBeenCalled();
+  });
+
   it('uses a session-configured firstMessage without giving up the PITCH custom LLM', async () => {
     prisma.client.session.findUnique.mockResolvedValue({
       ...baseSession,
@@ -248,6 +335,7 @@ describe('PhoneCallService', () => {
         phone: {
           vapi: {
             firstMessage: 'Please say your verification code now.',
+            firstMessageMode: 'assistant-speaks-first',
           },
         },
       },
@@ -387,6 +475,7 @@ describe('PhoneCallService', () => {
       firstMessage: 'https://cdn.example.com/session-audio.mp3',
       firstMessageMode: 'assistant-speaks-first',
     });
+    expect(createCallInput?.providerConfig?.assistant?.model).toBeUndefined();
     expect(createCallInput?.providerConfig?.assistant?.voice).toBeUndefined();
   });
 

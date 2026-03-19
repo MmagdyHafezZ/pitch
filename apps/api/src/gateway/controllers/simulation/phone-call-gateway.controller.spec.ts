@@ -142,6 +142,77 @@ describe('PhoneCallGatewayController', () => {
     });
   });
 
+  it('defaults to a temporarily verified phone number when no explicit number is provided', async () => {
+    userService.send.mockReturnValue(
+      of({
+        verified: false,
+        phoneNumber: null,
+        temporaryVerifiedPhoneNumber: '+15557654321',
+      }) as never,
+    );
+    simulationService.send.mockReturnValue(
+      of({
+        callId: 'call-1',
+        provider: 'vapi',
+        sessionId: 'session-1',
+      }) as never,
+    );
+
+    const result = await controller.startCall(
+      {
+        sessionId: 'session-1',
+      },
+      userClaims,
+    );
+
+    expect(simulationService.send).toHaveBeenCalledWith(
+      SIMULATION_SERVICE_PATTERNS.PHONE_CALL_START,
+      {
+        sessionId: 'session-1',
+        phoneNumber: '+15557654321',
+        userClaims,
+      },
+    );
+    expect(result).toEqual({
+      callId: 'call-1',
+      provider: 'vapi',
+      sessionId: 'session-1',
+    });
+  });
+
+  it('trims a requested verified phone number before forwarding it', async () => {
+    userService.send.mockReturnValue(
+      of({
+        verified: true,
+        phoneNumber: '+15551234567',
+      }) as never,
+    );
+    simulationService.send.mockReturnValue(
+      of({
+        callId: 'call-1',
+        provider: 'vapi',
+        sessionId: 'session-1',
+      }) as never,
+    );
+
+    await controller.startCall(
+      {
+        sessionId: 'session-1',
+        phoneNumber: '  +15551234567  ',
+      },
+      userClaims,
+    );
+
+    expect(simulationService.send).toHaveBeenCalledWith(
+      SIMULATION_SERVICE_PATTERNS.PHONE_CALL_START,
+      {
+        sessionId: 'session-1',
+        phoneNumber: '+15551234567',
+        userClaims,
+      },
+    );
+  });
+
   it('rejects unverified users before contacting simulation service', async () => {
     userService.send.mockReturnValue(
       of({

@@ -105,10 +105,6 @@ export class PhoneCallWebhookController {
       timestamp: new Date().toISOString(),
     };
 
-    this.logger.log(
-      `vapi.llm.request session=${context.sessionId} user=${context.userId} call=${callId ?? 'unknown'} stream=${body.stream === true} startAsAssistant=${startAsAssistant} messageCount=${messages.length} bodyKeys=${this.listObjectKeys(body)} text="${this.previewText(latestUserMessage)}"`,
-    );
-
     if (body.stream === true) {
       await this.streamCustomLlmResponse({
         context,
@@ -133,10 +129,6 @@ export class PhoneCallWebhookController {
       text: completion.fullText,
       hangupReason: completion.hangupReason,
     });
-
-    this.logger.log(
-      `vapi.llm.response session=${context.sessionId} user=${context.userId} call=${callId ?? 'unknown'} hangup=${completion.hangupReason ? 'true' : 'false'} text="${this.previewText(completion.fullText)}"`,
-    );
 
     if (completion.hangupReason) {
       await this.requestPhoneHangup(
@@ -219,10 +211,6 @@ export class PhoneCallWebhookController {
     const controlUrl = this.extractMonitorUrl(message, 'controlUrl');
     const listenUrl = this.extractMonitorUrl(message, 'listenUrl');
 
-    this.logger.log(
-      `vapi.event.received session=${context.sessionId} user=${context.userId} call=${callId ?? 'unknown'} type=${type} status=${status ?? 'unknown'} endedReason=${endedReason ?? 'unknown'} bodyKeys=${this.listObjectKeys(body)}`,
-    );
-
     if (callId) {
       await this.phoneCallService
         .syncPhoneCallRuntimeFromWebhook({
@@ -242,13 +230,7 @@ export class PhoneCallWebhookController {
 
     switch (type) {
       case 'status-update': {
-        this.logger.log(
-          `vapi.event.status session=${context.sessionId} user=${context.userId} call=${callId ?? 'unknown'} status=${status ?? 'unknown'} payload=${this.safeJson(message)}`,
-        );
         if (status === 'connected' || status === 'in-progress') {
-          this.logger.log(
-            `vapi.event.connected session=${context.sessionId} user=${context.userId} call=${callId ?? 'unknown'} status=${status}`,
-          );
         }
         if (
           status === 'failed' ||
@@ -262,9 +244,6 @@ export class PhoneCallWebhookController {
         }
         if (this.isTerminalStatus(status)) {
           const reason = this.buildStatusEndReason(status, endedReason);
-          this.logger.log(
-            `vapi.event.status_terminal session=${context.sessionId} user=${context.userId} call=${callId ?? 'unknown'} status=${status ?? 'unknown'} reason=${reason}`,
-          );
           await this.endSessionIfNeeded(
             context.sessionId,
             context.userId,
@@ -274,20 +253,11 @@ export class PhoneCallWebhookController {
         break;
       }
       case 'speech-update':
-        this.logger.log(
-          `vapi.event.speech session=${context.sessionId} user=${context.userId} call=${callId ?? 'unknown'} payload=${this.safeJson(message)}`,
-        );
         break;
       case 'transcript':
-        this.logger.log(
-          `vapi.event.transcript session=${context.sessionId} user=${context.userId} call=${callId ?? 'unknown'} payload=${this.safeJson(message)}`,
-        );
         break;
       case 'end-of-call-report': {
         const reason = endedReason ?? 'unknown';
-        this.logger.log(
-          `vapi.event.end_of_call session=${context.sessionId} user=${context.userId} call=${callId ?? 'unknown'} reason=${reason} payload=${this.safeJson(message)}`,
-        );
         await this.endSessionIfNeeded(
           context.sessionId,
           context.userId,
@@ -306,9 +276,6 @@ export class PhoneCallWebhookController {
         );
         break;
       default:
-        this.logger.log(
-          `vapi.event.ignored session=${context.sessionId} user=${context.userId} call=${callId ?? 'unknown'} type=${type} payload=${this.safeJson(message)}`,
-        );
         break;
     }
 
