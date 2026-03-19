@@ -81,6 +81,13 @@ export class VapiContextService {
     return url.toString();
   }
 
+  buildGatewayPathTokenUrl(path: string, token: string): string {
+    return new URL(
+      `/api/v1/${path.replace(/^\/+/, '')}/${encodeURIComponent(token)}`,
+      this.vapiConfig.getReachablePublicApiBaseUrl(),
+    ).toString();
+  }
+
   private sign(encodedPayload: string): string {
     return createHmac('sha256', this.vapiConfig.getContextSecret())
       .update(encodedPayload)

@@ -13,6 +13,8 @@ import { TtsService } from '../tts/tts.service';
 import { TtsOptions, TtsResult } from '../tts/providers/tts.provider';
 import { resolveTtsConfig, type ResolvedTtsConfig } from '../utils/tts-config';
 
+const PHONE_STARTER_PROMPT_PREFIX = '[PITCH_STARTER_PROMPT]';
+
 interface StartPhoneCallInput {
   sessionId: string;
   phoneNumber?: string;
@@ -381,6 +383,10 @@ export class PhoneCallService {
       'simulation/phone-calls/vapi/voice',
       token,
     );
+    const llmUrl = this.vapiContext.buildGatewayPathTokenUrl(
+      'simulation/phone-calls/vapi/llm',
+      token,
+    );
     const transcriberConfig =
       this.resolveNestedObject(vapiConfig, 'transcriber') ?? {};
     const voiceConfig = this.resolveNestedObject(vapiConfig, 'voice') ?? {};
@@ -389,20 +395,12 @@ export class PhoneCallService {
         this.resolveString(vapiConfig, 'firstMessage') ??
         this.resolveString(vapiConfig, 'first_message') ??
         this.resolveString(phoneConfig, 'firstMessage') ??
-        this.resolveString(sessionConfigRecord, 'firstMessage') ??
-        session.scenario?.description ??
-        session.name,
+        this.resolveString(sessionConfigRecord, 'firstMessage'),
     );
     const playbackAudioUrl = this.resolvePlaybackAudioUrl(
       this.resolveString(vapiConfig, 'audioUrl') ??
         this.resolveString(vapiConfig, 'audio_url'),
     );
-
-    if (!firstMessage && !playbackAudioUrl) {
-      throw new BadRequestException(
-        'Phone call firstMessage text must be configured on the request or session.',
-      );
-    }
 
     const assistantBase = {
       name:
@@ -423,58 +421,108 @@ export class PhoneCallService {
       },
     };
 
-    const assistant =
-      firstMessage != null
-        ? {
-            ...assistantBase,
-            firstMessage,
-            firstMessageMode:
-              this.resolveString(vapiConfig, 'firstMessageMode') ??
-              'assistant-speaks-first',
-            modelOutputInMessagesEnabled: false,
-            serverMessages: this.resolveStringArray(
-              vapiConfig,
-              'serverMessages',
-            ) ?? [
-              'status-update',
-              'speech-update',
-              'transcript',
-              'end-of-call-report',
-              'hang',
-            ],
-            voice: {
-              provider: 'custom-voice',
-              server: {
-                url: voiceUrl,
-                ...(this.resolveNumber(voiceConfig, 'timeoutSeconds')
-                  ? {
-                      timeoutSeconds: this.resolveNumber(
-                        voiceConfig,
-                        'timeoutSeconds',
-                      ),
-                    }
-                  : {}),
-              },
+    const customVoice = {
+      provider: 'custom-voice',
+      server: {
+        url: voiceUrl,
+        ...(this.resolveNumber(voiceConfig, 'timeoutSeconds')
+          ? {
+              timeoutSeconds: this.resolveNumber(voiceConfig, 'timeoutSeconds'),
+            }
+          : {}),
+      },
+      // Preserve the exact wording authored by PITCH instead of letting Vapi
+      // post-process it before calling our custom voice endpoint.
+      chunkPlan: {
+        enabled: false,
+        formatPlan: {
+          enabled: false,
+        },
+      },
+    };
+
+    const scriptedServerMessages = this.resolveStringArray(
+      vapiConfig,
+      'serverMessages',
+    ) ?? [
+      'status-update',
+      'speech-update',
+      'transcript',
+      'end-of-call-report',
+      'hang',
+    ];
+    const conversationalServerMessages = this.resolveStringArray(
+      vapiConfig,
+      'serverMessages',
+    ) ?? [
+      'status-update',
+      'speech-update',
+      'transcript',
+      'conversation-update',
+      'model-output',
+      'tool-calls',
+      'end-of-call-report',
+      'hang',
+    ];
+    const baseModelMessages = [
+      {
+        role: 'system',
+        content:
+          'Use the external custom LLM endpoint as the source of truth for all phone-call replies. Keep answers concise, natural, and optimized for live speech.',
+      },
+    ];
+
+    let assistant: Record<string, unknown>;
+
+    if (playbackAudioUrl) {
+      assistant = {
+        ...assistantBase,
+        firstMessage: playbackAudioUrl,
+        firstMessageMode:
+          this.resolveString(vapiConfig, 'firstMessageMode') ??
+          'assistant-speaks-first',
+        modelOutputInMessagesEnabled: false,
+        serverMessages: scriptedServerMessages,
+      };
+    } else if (firstMessage) {
+      assistant = {
+        ...assistantBase,
+        firstMessageMode: 'assistant-speaks-first-with-model-generated-message',
+        modelOutputInMessagesEnabled: false,
+        serverMessages: conversationalServerMessages,
+        model: {
+          provider: 'custom-llm',
+          url: llmUrl,
+          model:
+            this.resolveString(vapiConfig, 'model') ?? 'pitch-phone-engine',
+          messages: [
+            ...baseModelMessages,
+            {
+              role: 'system',
+              content: `${PHONE_STARTER_PROMPT_PREFIX} ${firstMessage}`,
             },
-          }
-        : {
-            ...assistantBase,
-            firstMessage: playbackAudioUrl,
-            firstMessageMode:
-              this.resolveString(vapiConfig, 'firstMessageMode') ??
-              'assistant-speaks-first',
-            modelOutputInMessagesEnabled: false,
-            serverMessages: this.resolveStringArray(
-              vapiConfig,
-              'serverMessages',
-            ) ?? [
-              'status-update',
-              'speech-update',
-              'transcript',
-              'end-of-call-report',
-              'hang',
-            ],
-          };
+          ],
+        },
+        voice: customVoice,
+      };
+    } else {
+      assistant = {
+        ...assistantBase,
+        firstMessageMode:
+          this.resolveString(vapiConfig, 'firstMessageMode') ??
+          'assistant-speaks-first-with-model-generated-message',
+        modelOutputInMessagesEnabled: false,
+        serverMessages: conversationalServerMessages,
+        model: {
+          provider: 'custom-llm',
+          url: llmUrl,
+          model:
+            this.resolveString(vapiConfig, 'model') ?? 'pitch-phone-engine',
+          messages: baseModelMessages,
+        },
+        voice: customVoice,
+      };
+    }
 
     return {
       ...existingProviderConfig,
@@ -490,7 +538,9 @@ export class PhoneCallService {
   ): void {
     const assistant = this.resolveNestedObject(providerConfig, 'assistant');
     const server = this.resolveNestedObject(assistant, 'server');
+    const model = this.resolveNestedObject(assistant, 'model');
     const firstMessage = this.resolveString(assistant, 'firstMessage');
+    const starterPrompt = this.extractStarterPromptFromModelMessages(model);
     const transcriber = this.resolveNestedObject(assistant, 'transcriber');
     const voice = this.resolveNestedObject(assistant, 'voice');
     const voiceServer = this.resolveNestedObject(voice, 'server');
@@ -500,8 +550,14 @@ export class PhoneCallService {
       'env_default';
     const serverUrl =
       this.sanitizeUrlForLog(this.resolveString(server, 'url')) ?? 'unknown';
-    const firstMessageSummary =
-      this.summarizeAssistantFirstMessage(firstMessage);
+    const llmSummary =
+      this.sanitizeUrlForLog(this.resolveString(model, 'url')) ??
+      this.resolveString(model, 'provider') ??
+      'none';
+    const llmModel = this.resolveString(model, 'model') ?? 'none';
+    const firstMessageSummary = this.summarizeAssistantFirstMessage(
+      firstMessage ?? starterPrompt,
+    );
     const transcriberSummary = [
       this.resolveString(transcriber, 'provider') ?? 'unknown-provider',
       this.resolveString(transcriber, 'model') ?? 'unknown-model',
@@ -512,7 +568,7 @@ export class PhoneCallService {
       'none';
 
     this.logger.log(
-      `phone_call.routing session=${sessionId} user=${userId} phoneNumberId=${phoneNumberId} server=${serverUrl} voice=${voiceSummary} transcriber=${transcriberSummary} firstMessage=${firstMessageSummary}`,
+      `phone_call.routing session=${sessionId} user=${userId} phoneNumberId=${phoneNumberId} server=${serverUrl} llm=${llmSummary} model=${llmModel} voice=${voiceSummary} transcriber=${transcriberSummary} firstMessage=${firstMessageSummary}`,
     );
   }
 
@@ -856,6 +912,10 @@ export class PhoneCallService {
       if (parsed.searchParams.has('token')) {
         parsed.searchParams.set('token', '[redacted]');
       }
+      parsed.pathname = parsed.pathname.replace(
+        /(\/simulation\/phone-calls\/vapi\/llm\/)[^/]+$/u,
+        '$1[redacted]',
+      );
       return parsed.toString();
     } catch {
       return url;
@@ -880,6 +940,36 @@ export class PhoneCallService {
     }
 
     return this.previewText(value);
+  }
+
+  private extractStarterPromptFromModelMessages(
+    model: Record<string, unknown> | undefined,
+  ): string | undefined {
+    const messages = Array.isArray(model?.messages) ? model.messages : [];
+
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+      const message = messages[index];
+      if (!message || typeof message !== 'object') {
+        continue;
+      }
+
+      const record = message as Record<string, unknown>;
+      if (this.resolveString(record, 'role') !== 'system') {
+        continue;
+      }
+
+      const content = this.resolveString(record, 'content');
+      if (!content?.startsWith(PHONE_STARTER_PROMPT_PREFIX)) {
+        continue;
+      }
+
+      const prompt = content.slice(PHONE_STARTER_PROMPT_PREFIX.length).trim();
+      if (prompt.length > 0) {
+        return prompt;
+      }
+    }
+
+    return undefined;
   }
 
   private resolvePlaybackText(

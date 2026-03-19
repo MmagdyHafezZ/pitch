@@ -5,16 +5,25 @@ import {
   HttpCode,
   HttpStatus,
   Logger,
+  Param,
   Post,
   Query,
   Res,
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Response } from 'express';
+import { randomUUID } from 'crypto';
 import { Public } from '../../../microservices/userManagement/decorators/public.decorator';
 import { VapiContextService } from '@microservices/simulation/phone/vapi-context.service';
 import { PhoneCallService } from '@microservices/simulation/phone/phone-call.service';
 import { SessionService } from '@microservices/simulation/services/session.service';
+import { ConversationOrchestrationService } from '@microservices/simulation/services/conversation-orchestration.service';
+import {
+  WsEnvelope,
+  ConversationStartPayload,
+  WsMessageType,
+} from '@microservices/simulation/dto/websocket.dto';
+import type { ConversationStreamEvent } from '@microservices/simulation/dto/conversation-stream.types';
 
 interface VapiServerEnvelope {
   message?: {
@@ -37,6 +46,20 @@ interface VapiVoiceRequestEnvelope {
   [key: string]: unknown;
 }
 
+interface VapiChatCompletionMessage {
+  role?: string;
+  content?: unknown;
+}
+
+interface VapiChatCompletionRequestEnvelope {
+  model?: string;
+  stream?: boolean;
+  messages?: VapiChatCompletionMessage[];
+  [key: string]: unknown;
+}
+
+const PHONE_STARTER_PROMPT_PREFIX = '[PITCH_STARTER_PROMPT]';
+
 @ApiTags('simulation-phone-calls')
 @Controller({ path: 'simulation/phone-calls', version: '1' })
 export class PhoneCallWebhookController {
@@ -46,7 +69,91 @@ export class PhoneCallWebhookController {
     private readonly vapiContext: VapiContextService,
     private readonly sessionService: SessionService,
     private readonly phoneCallService: PhoneCallService,
+    private readonly conversationOrchestration: ConversationOrchestrationService,
   ) {}
+
+  @Post('vapi/llm/:token/chat/completions')
+  @Public()
+  @ApiOperation({
+    summary: 'OpenAI-compatible custom LLM endpoint used by Vapi phone calls',
+  })
+  async handleVapiChatCompletions(
+    @Param('token') token: string,
+    @Body() body: VapiChatCompletionRequestEnvelope,
+    @Res() res: Response,
+  ) {
+    const context = this.vapiContext.verifyToken(token);
+    const messages = Array.isArray(body.messages) ? body.messages : [];
+    const latestUserMessage = this.extractLatestUserMessage(messages);
+    const starterPrompt = this.extractStarterPrompt(messages);
+    const startAsAssistant = !latestUserMessage;
+    const callId = this.extractCallId(body);
+    const requestId = randomUUID();
+    const startedAt = Date.now();
+    const model = this.resolveChatCompletionModel(body);
+    const envelope: WsEnvelope<ConversationStartPayload> = {
+      type: WsMessageType.CONVERSATION_START,
+      requestId,
+      sessionId: context.sessionId,
+      userId: context.userId,
+      payload: {
+        text: latestUserMessage ?? '',
+        startAsAssistant,
+        ...(starterPrompt ? { starterPrompt } : {}),
+        skipTts: true,
+      },
+      timestamp: new Date().toISOString(),
+    };
+
+    this.logger.log(
+      `vapi.llm.request session=${context.sessionId} user=${context.userId} call=${callId ?? 'unknown'} stream=${body.stream === true} startAsAssistant=${startAsAssistant} messageCount=${messages.length} bodyKeys=${this.listObjectKeys(body)} text="${this.previewText(latestUserMessage)}"`,
+    );
+
+    if (body.stream === true) {
+      await this.streamCustomLlmResponse({
+        context,
+        callId,
+        requestId,
+        model,
+        envelope,
+        res,
+        startedAt,
+      });
+      return;
+    }
+
+    const completion = await this.collectCustomLlmResponse(envelope);
+
+    this.logPitchModelResponse({
+      sessionId: context.sessionId,
+      userId: context.userId,
+      callId,
+      requestId,
+      model,
+      text: completion.fullText,
+      hangupReason: completion.hangupReason,
+    });
+
+    this.logger.log(
+      `vapi.llm.response session=${context.sessionId} user=${context.userId} call=${callId ?? 'unknown'} hangup=${completion.hangupReason ? 'true' : 'false'} text="${this.previewText(completion.fullText)}"`,
+    );
+
+    if (completion.hangupReason) {
+      await this.requestPhoneHangup(
+        context.sessionId,
+        context.userId,
+        completion.hangupReason,
+      );
+    }
+
+    res.status(HttpStatus.OK).json(
+      this.buildChatCompletionResponse({
+        requestId,
+        model,
+        content: completion.fullText,
+      }),
+    );
+  }
 
   @Post('vapi/voice')
   @Public()
@@ -222,6 +329,279 @@ export class PhoneCallWebhookController {
     }
   }
 
+  private async streamCustomLlmResponse(input: {
+    context: { sessionId: string; userId: string };
+    callId?: string;
+    requestId: string;
+    model: string;
+    envelope: WsEnvelope<ConversationStartPayload>;
+    res: Response;
+    startedAt: number;
+  }): Promise<void> {
+    const { context, callId, requestId, model, envelope, res, startedAt } =
+      input;
+    const responseId = `chatcmpl_${requestId}`;
+    const created = Math.floor(Date.now() / 1000);
+    const stream$ = this.conversationOrchestration.stream(envelope);
+    let wroteAssistantRole = false;
+    let firstDeltaLatencyMs: number | null = null;
+    let completionText = '';
+    let hangupReason: string | undefined;
+
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.flushHeaders();
+
+    const flush = () => (res as Response & { flush?: () => void }).flush?.();
+
+    this.logger.log(
+      `vapi.llm.stream.open session=${context.sessionId} user=${context.userId} call=${callId ?? 'unknown'} model=${model}`,
+    );
+
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const subscription = stream$.subscribe({
+          next: (event: ConversationStreamEvent) => {
+            if (event.type === 'delta' && event.data.delta) {
+              if (firstDeltaLatencyMs == null) {
+                firstDeltaLatencyMs = Date.now() - startedAt;
+                this.logger.log(
+                  `vapi.llm.stream.first_delta session=${context.sessionId} user=${context.userId} call=${callId ?? 'unknown'} latencyMs=${firstDeltaLatencyMs} chars=${event.data.delta.length}`,
+                );
+              }
+
+              completionText += event.data.delta;
+              res.write(
+                `data: ${JSON.stringify(
+                  this.buildChatCompletionChunk({
+                    responseId,
+                    created,
+                    model,
+                    delta: {
+                      ...(wroteAssistantRole ? {} : { role: 'assistant' }),
+                      content: event.data.delta,
+                    },
+                  }),
+                )}\n\n`,
+              );
+              wroteAssistantRole = true;
+              flush();
+              return;
+            }
+
+            if (event.type === 'completed') {
+              completionText = event.data.fullText;
+              if (!wroteAssistantRole && completionText.trim().length > 0) {
+                res.write(
+                  `data: ${JSON.stringify(
+                    this.buildChatCompletionChunk({
+                      responseId,
+                      created,
+                      model,
+                      delta: {
+                        role: 'assistant',
+                        content: completionText,
+                      },
+                    }),
+                  )}\n\n`,
+                );
+                wroteAssistantRole = true;
+                flush();
+              }
+              return;
+            }
+
+            if (event.type === 'hangup_requested') {
+              hangupReason = event.data.reason;
+            }
+          },
+          error: (error) => {
+            subscription.unsubscribe();
+            reject(error instanceof Error ? error : new Error(String(error)));
+          },
+          complete: () => {
+            resolve();
+          },
+        });
+      });
+
+      if (hangupReason) {
+        void this.requestPhoneHangup(
+          context.sessionId,
+          context.userId,
+          hangupReason,
+        );
+      }
+
+      this.logPitchModelResponse({
+        sessionId: context.sessionId,
+        userId: context.userId,
+        callId,
+        requestId,
+        model,
+        text: completionText,
+        hangupReason,
+      });
+
+      this.logger.log(
+        `vapi.llm.stream.completed session=${context.sessionId} user=${context.userId} call=${callId ?? 'unknown'} latencyMs=${Date.now() - startedAt} chars=${completionText.length}`,
+      );
+
+      res.write(
+        `data: ${JSON.stringify(
+          this.buildChatCompletionChunk({
+            responseId,
+            created,
+            model,
+            delta: {},
+            finishReason: 'stop',
+          }),
+        )}\n\n`,
+      );
+      res.write('data: [DONE]\n\n');
+      res.end();
+    } catch (error) {
+      this.logger.error(
+        `vapi.llm.stream.failed session=${context.sessionId} user=${context.userId} call=${callId ?? 'unknown'} error=${(error as Error)?.message ?? error}`,
+      );
+      if (!res.writableEnded) {
+        res.write('data: [DONE]\n\n');
+        res.end();
+      }
+    }
+  }
+
+  private collectCustomLlmResponse(
+    envelope: WsEnvelope<ConversationStartPayload>,
+  ): Promise<{ fullText: string; hangupReason?: string }> {
+    const stream$ = this.conversationOrchestration.stream(envelope);
+
+    return new Promise((resolve, reject) => {
+      let fullText = '';
+      let completedText: string | undefined;
+      let hangupReason: string | undefined;
+
+      const subscription = stream$.subscribe({
+        next: (event: ConversationStreamEvent) => {
+          if (event.type === 'delta' && event.data.delta) {
+            fullText += event.data.delta;
+            return;
+          }
+
+          if (event.type === 'completed') {
+            completedText = event.data.fullText;
+            return;
+          }
+
+          if (event.type === 'hangup_requested') {
+            hangupReason = event.data.reason;
+          }
+        },
+        error: (error) => {
+          subscription.unsubscribe();
+          reject(error instanceof Error ? error : new Error(String(error)));
+        },
+        complete: () => {
+          resolve({
+            fullText: completedText ?? fullText,
+            ...(hangupReason ? { hangupReason } : {}),
+          });
+        },
+      });
+    });
+  }
+
+  private async requestPhoneHangup(
+    sessionId: string,
+    userId: string,
+    reason: string,
+  ): Promise<void> {
+    try {
+      await this.phoneCallService.endActiveCall({
+        sessionId,
+        userId,
+        reason,
+      });
+      await this.endSessionIfNeeded(
+        sessionId,
+        userId,
+        'phone_call_completed:assistant-ended-call',
+      );
+    } catch (error) {
+      this.logger.warn(
+        `vapi.llm.hangup_failed session=${sessionId} user=${userId} reason=${reason} error=${(error as Error)?.message ?? error}`,
+      );
+    }
+  }
+
+  private logPitchModelResponse(input: {
+    sessionId: string;
+    userId: string;
+    callId?: string;
+    requestId: string;
+    model: string;
+    text: string;
+    hangupReason?: string;
+  }): void {
+    this.logger.log(
+      `pitch.phone.model.response session=${input.sessionId} user=${input.userId} call=${input.callId ?? 'unknown'} request=${input.requestId} model=${input.model} hangup=${input.hangupReason ? 'true' : 'false'} text="${this.previewText(input.text, 500)}"`,
+    );
+  }
+
+  private buildChatCompletionResponse(input: {
+    requestId: string;
+    model: string;
+    content: string;
+  }): Record<string, unknown> {
+    const created = Math.floor(Date.now() / 1000);
+
+    return {
+      id: `chatcmpl_${input.requestId}`,
+      object: 'chat.completion',
+      created,
+      model: input.model,
+      choices: [
+        {
+          index: 0,
+          message: {
+            role: 'assistant',
+            content: input.content,
+          },
+          finish_reason: 'stop',
+        },
+      ],
+      usage: {
+        prompt_tokens: 0,
+        completion_tokens: 0,
+        total_tokens: 0,
+      },
+    };
+  }
+
+  private buildChatCompletionChunk(input: {
+    responseId: string;
+    created: number;
+    model: string;
+    delta: Record<string, unknown>;
+    finishReason?: string | null;
+  }): Record<string, unknown> {
+    return {
+      id: input.responseId,
+      object: 'chat.completion.chunk',
+      created: input.created,
+      model: input.model,
+      choices: [
+        {
+          index: 0,
+          delta: input.delta,
+          finish_reason: input.finishReason ?? null,
+        },
+      ],
+    };
+  }
+
   private isTerminalStatus(status: string | undefined): boolean {
     return (
       status === 'ended' ||
@@ -340,6 +720,92 @@ export class PhoneCallWebhookController {
         'sampleRate',
       )
     );
+  }
+
+  private resolveChatCompletionModel(
+    payload: VapiChatCompletionRequestEnvelope,
+  ): string {
+    const model = typeof payload.model === 'string' ? payload.model.trim() : '';
+    return model.length > 0 ? model : 'pitch-phone-engine';
+  }
+
+  private extractLatestUserMessage(
+    messages: VapiChatCompletionMessage[],
+  ): string | undefined {
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+      const message = messages[index];
+      if (message?.role !== 'user') {
+        continue;
+      }
+
+      const content = this.extractChatMessageContent(message.content);
+      if (content) {
+        return content;
+      }
+    }
+
+    return undefined;
+  }
+
+  private extractStarterPrompt(
+    messages: VapiChatCompletionMessage[],
+  ): string | undefined {
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+      const message = messages[index];
+      if (message?.role !== 'system') {
+        continue;
+      }
+
+      const content = this.extractChatMessageContent(message.content);
+      if (!content?.startsWith(PHONE_STARTER_PROMPT_PREFIX)) {
+        continue;
+      }
+
+      const prompt = content.slice(PHONE_STARTER_PROMPT_PREFIX.length).trim();
+      if (prompt.length > 0) {
+        return prompt;
+      }
+    }
+
+    return undefined;
+  }
+
+  private extractChatMessageContent(content: unknown): string | undefined {
+    if (typeof content === 'string' && content.trim().length > 0) {
+      return content.trim();
+    }
+
+    if (!Array.isArray(content)) {
+      return undefined;
+    }
+
+    const parts = content
+      .flatMap((part) => {
+        if (typeof part === 'string') {
+          return [part];
+        }
+
+        if (!part || typeof part !== 'object') {
+          return [];
+        }
+
+        const record = part as Record<string, unknown>;
+        const directText = this.readString(record, 'text');
+        if (directText) {
+          return [directText];
+        }
+
+        const nestedText = this.readNestedString(record, 'text', 'value');
+        if (nestedText) {
+          return [nestedText];
+        }
+
+        return [];
+      })
+      .map((part) => part.trim())
+      .filter((part) => part.length > 0);
+
+    return parts.length > 0 ? parts.join('\n') : undefined;
   }
 
   private readString(
@@ -483,6 +949,10 @@ export class PhoneCallWebhookController {
       if (parsed.searchParams.has('token')) {
         parsed.searchParams.set('token', '[redacted]');
       }
+      parsed.pathname = parsed.pathname.replace(
+        /(\/simulation\/phone-calls\/vapi\/llm\/)[^/]+$/u,
+        '$1[redacted]',
+      );
       return parsed.toString();
     } catch {
       return value;

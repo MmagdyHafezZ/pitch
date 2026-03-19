@@ -54,23 +54,17 @@ interface PhoneVerificationState {
   remainingSends?: number
 }
 
+type EntryPromptMode = 'resume' | 'retake'
+
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
 
-const normalizeSessionStatus = (
-  session: unknown,
-  options?: { launchFreshIteration?: boolean }
-): string | null => {
+const normalizeSessionStatus = (session: unknown): string | null => {
   if (!isRecord(session) || typeof session.status !== 'string') {
     return null
   }
 
-  const status = session.status.trim().toLowerCase()
-  if (options?.launchFreshIteration && status === 'ended') {
-    return 'active'
-  }
-
-  return status
+  return session.status.trim().toLowerCase()
 }
 
 const readAvatarVideoState = (session: unknown): AvatarVideoState => {
@@ -169,6 +163,7 @@ export default function LiveSessionPage() {
   const [avatarVideoJobId, setAvatarVideoJobId] = useState<string | null>(null)
   const [autoConnectConversation, setAutoConnectConversation] = useState(false)
   const [resumePromptOpen, setResumePromptOpen] = useState(false)
+  const [entryPromptMode, setEntryPromptMode] = useState<EntryPromptMode | null>(null)
   const [entryDecisionLoading, setEntryDecisionLoading] = useState(true)
   const [startOverLoading, setStartOverLoading] = useState(false)
   const [loadedSessionRecord, setLoadedSessionRecord] = useState<Record<string, unknown> | null>(
@@ -371,31 +366,30 @@ export default function LiveSessionPage() {
     onUserAbsent: () => {},
   })
 
-  const syncSessionState = useCallback(
-    (session: any, options?: { launchFreshIteration?: boolean }) => {
-      const config = (session?.sessionConfig as Record<string, any>) ?? {}
-      const avatarState = readAvatarVideoState(session)
-      const normalizedStatus = normalizeSessionStatus(session, options)
-      const nextAvatarVideoUrl =
-        session?.id && avatarState.status === 'ready' && avatarState.playbackToken
-          ? buildSessionVideoStreamUrl(session.id, avatarState.playbackToken, avatarState.jobId)
-          : avatarState.url
+  const syncSessionState = useCallback((session: any) => {
+    const config = (session?.sessionConfig as Record<string, any>) ?? {}
+    const avatarState = readAvatarVideoState(session)
+    const normalizedStatus = normalizeSessionStatus(session)
+    const nextAvatarVideoUrl =
+      session?.id && avatarState.status === 'ready' && avatarState.playbackToken
+        ? buildSessionVideoStreamUrl(session.id, avatarState.playbackToken, avatarState.jobId)
+        : avatarState.url
 
-      setIsMultiTurn(Boolean(config.multiTurnEnabled))
-      setSessionType(session?.type ?? null)
-      setSessionStatus(normalizedStatus)
-      setSessionName((session as any)?.name ?? (session as any)?.scenario?.name ?? '')
-      setPersonaName((session as any)?.persona?.name ?? null)
-      setPhoneNumber('')
-      setAvatarVideoStatus(avatarState.status)
-      setAvatarVideoProvider(avatarState.provider)
-      setAvatarVideoError(avatarState.error)
-      setAvatarVideoJobId(avatarState.jobId)
-      setAvatarVideoUrl(nextAvatarVideoUrl)
-      setCallModalOpen(session?.type === 'phone' && normalizedStatus !== 'ended')
-    },
-    []
-  )
+    setIsMultiTurn(Boolean(config.multiTurnEnabled))
+    setSessionType(session?.type ?? null)
+    setSessionStatus(normalizedStatus)
+    setSessionName((session as any)?.name ?? (session as any)?.scenario?.name ?? '')
+    setPersonaName((session as any)?.persona?.name ?? null)
+    setAvatarVideoStatus(avatarState.status)
+    setAvatarVideoProvider(avatarState.provider)
+    setAvatarVideoError(avatarState.error)
+    setAvatarVideoJobId(avatarState.jobId)
+    setAvatarVideoUrl(nextAvatarVideoUrl)
+    if (session?.type !== 'phone' || normalizedStatus === 'ended') {
+      setCallModalOpen(false)
+      setCallStarted(false)
+    }
+  }, [])
 
   const loadPhoneVerificationStatus = useCallback(async () => {
     setPhoneVerificationLoading(true)
@@ -433,6 +427,7 @@ export default function LiveSessionPage() {
     let cancelled = false
     setAutoConnectConversation(false)
     setResumePromptOpen(false)
+    setEntryPromptMode(null)
     setEntryDecisionLoading(true)
     setStartOverLoading(false)
     setLoadedSessionRecord(null)
@@ -457,14 +452,22 @@ export default function LiveSessionPage() {
         const sessionRecord = isRecord(session) ? session : {}
         setLoadedSessionRecord(sessionRecord)
         const status = normalizeSessionStatus(session)
+        const isPhoneSession = sessionRecord.type === 'phone'
 
         if (status === 'ended') {
-          syncSessionState(session, { launchFreshIteration: true })
-          setAutoConnectConversation(true)
+          syncSessionState(session)
+          setEntryPromptMode('retake')
+          setResumePromptOpen(true)
+          setAutoConnectConversation(false)
           return
         }
 
         syncSessionState(session)
+
+        if (isPhoneSession) {
+          setAutoConnectConversation(false)
+          return
+        }
 
         let hasExistingProgress = false
         try {
@@ -482,14 +485,17 @@ export default function LiveSessionPage() {
         if (cancelled) return
 
         if (hasExistingProgress) {
+          setEntryPromptMode('resume')
           setResumePromptOpen(true)
           setAutoConnectConversation(false)
         } else {
+          setEntryPromptMode(null)
           setAutoConnectConversation(true)
         }
       } catch {
         if (cancelled) return
         setIsMultiTurn(false)
+        setEntryPromptMode(null)
         setAutoConnectConversation(true)
       } finally {
         if (!cancelled) {
@@ -510,8 +516,30 @@ export default function LiveSessionPage() {
     void loadPhoneVerificationStatus()
   }, [sessionType, sessionStatus, loadPhoneVerificationStatus])
 
+  useEffect(() => {
+    if (entryDecisionLoading) return
+    if (entryPromptMode) return
+
+    if (sessionType !== 'phone' || sessionStatus === 'ended') {
+      setCallModalOpen(false)
+      return
+    }
+
+    if (!callStarted) {
+      setCallModalOpen(true)
+    }
+  }, [callStarted, entryDecisionLoading, entryPromptMode, sessionStatus, sessionType])
+
+  useEffect(() => {
+    if (sessionType !== 'phone') return
+    if (autoConnectConversation) {
+      setAutoConnectConversation(false)
+    }
+  }, [sessionType, autoConnectConversation])
+
   const handleResumeSession = useCallback(() => {
     setResumePromptOpen(false)
+    setEntryPromptMode(null)
     if (sessionType === 'phone') {
       setCallModalOpen(true)
       return
@@ -550,6 +578,7 @@ export default function LiveSessionPage() {
 
       setLoadedSessionRecord(restartedRecord)
       syncSessionState(restartedSession)
+      setEntryPromptMode(null)
 
       if (hintsEnabled) {
         try {
@@ -603,7 +632,11 @@ export default function LiveSessionPage() {
         color: 'green',
       })
       setResumePromptOpen(false)
-      setAutoConnectConversation(true)
+      if (restartedRecord.type === 'phone') {
+        setAutoConnectConversation(false)
+      } else {
+        setAutoConnectConversation(true)
+      }
     } catch (error) {
       const message =
         error instanceof Error ? error.message : 'Unable to start a new iteration right now.'
@@ -1041,6 +1074,7 @@ export default function LiveSessionPage() {
 
   useEffect(() => {
     if (sessionStatus === 'ended') return
+    if (sessionType === 'phone') return
     if (!isMultiTurn || !isConnected) return
     if (messages.length > 0) return
 
@@ -1106,6 +1140,34 @@ export default function LiveSessionPage() {
     setAvatarVideoStatus('rendering')
     setAvatarVideoError(null)
   }, [messages, sessionType])
+
+  useEffect(() => {
+    if (sessionType !== 'phone') return
+    if (!sessionId || sessionStatus === 'ended') return
+    if (entryPromptMode === 'retake') return
+
+    let cancelled = false
+    const refreshPhoneState = async () => {
+      try {
+        const session = await api.sessions.getById(sessionId)
+        if (!cancelled) {
+          syncSessionState(session)
+        }
+      } catch {
+        // Keep the current UI state and try again on the next tick.
+      }
+    }
+
+    void refreshPhoneState()
+    const interval = setInterval(() => {
+      void refreshPhoneState()
+    }, 3000)
+
+    return () => {
+      cancelled = true
+      clearInterval(interval)
+    }
+  }, [entryPromptMode, sessionId, sessionStatus, sessionType, syncSessionState])
 
   useEffect(() => {
     if (sessionType !== 'video') return
@@ -1199,10 +1261,10 @@ export default function LiveSessionPage() {
   }, [hangUp, isListening, router, sessionId, stopListening])
 
   useEffect(() => {
-    if (sessionType === 'phone' && sessionStatus === 'ended') {
+    if (sessionType === 'phone' && sessionStatus === 'ended' && entryPromptMode !== 'retake') {
       router.push(`/session/${sessionId}/performance`)
     }
-  }, [sessionType, sessionStatus, sessionId, router])
+  }, [entryPromptMode, sessionType, sessionStatus, sessionId, router])
 
   const sttCommitProgress = Math.min(1, Math.max(0, sttCommitRemainingMs / speechFinalizeDelayMs))
 
@@ -1411,7 +1473,7 @@ export default function LiveSessionPage() {
                   onToggle={() => setVisualEnabled((v) => !v)}
                 />
               )}
-              {sessionType === 'phone' && !callStarted && (
+              {sessionType === 'phone' && !callStarted && sessionStatus !== 'ended' && (
                 <Button
                   size="xs"
                   variant="light"
@@ -1527,6 +1589,7 @@ export default function LiveSessionPage() {
             globeState={globeState}
             analyserRef={analyserRef}
             resumePromptOpen={resumePromptOpen}
+            entryPromptMode={entryPromptMode}
             onResume={handleResumeSession}
             onStartOver={handleStartOver}
             startOverLoading={startOverLoading}

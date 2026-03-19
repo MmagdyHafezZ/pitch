@@ -19,6 +19,7 @@ describe('PhoneCallService', () => {
   let vapiContext: {
     createToken: jest.Mock;
     buildGatewayUrl: jest.Mock;
+    buildGatewayPathTokenUrl: jest.Mock;
   };
   let provider: {
     name: string;
@@ -72,6 +73,12 @@ describe('PhoneCallService', () => {
           (path: string, token: string) =>
             `https://api.example.com/api/v1/${path}?token=${token}`,
         ),
+      buildGatewayPathTokenUrl: jest
+        .fn()
+        .mockImplementation(
+          (path: string, token: string) =>
+            `https://api.example.com/api/v1/${path}/${token}`,
+        ),
     };
     ttsService = {
       synthesize: jest.fn(),
@@ -86,7 +93,7 @@ describe('PhoneCallService', () => {
     );
   });
 
-  it('builds a text-first playback assistant with a custom voice server', async () => {
+  it('builds a text-first assistant that still uses the PITCH custom LLM and voice server', async () => {
     prisma.client.session.findUnique.mockResolvedValue(baseSession);
 
     const result = await service.startCall({
@@ -111,9 +118,26 @@ describe('PhoneCallService', () => {
         },
         providerConfig: expect.objectContaining({
           assistant: expect.objectContaining({
-            firstMessage: 'Hello, this is your verification call.',
-            firstMessageMode: 'assistant-speaks-first',
+            firstMessageMode:
+              'assistant-speaks-first-with-model-generated-message',
             modelOutputInMessagesEnabled: false,
+            model: {
+              provider: 'custom-llm',
+              url: 'https://api.example.com/api/v1/simulation/phone-calls/vapi/llm/signed-token',
+              model: 'pitch-phone-engine',
+              messages: [
+                {
+                  role: 'system',
+                  content:
+                    'Use the external custom LLM endpoint as the source of truth for all phone-call replies. Keep answers concise, natural, and optimized for live speech.',
+                },
+                {
+                  role: 'system',
+                  content:
+                    '[PITCH_STARTER_PROMPT] Hello, this is your verification call.',
+                },
+              ],
+            },
             server: {
               url: 'https://api.example.com/api/v1/simulation/phone-calls/vapi/server?token=signed-token',
             },
@@ -121,6 +145,12 @@ describe('PhoneCallService', () => {
               provider: 'custom-voice',
               server: {
                 url: 'https://api.example.com/api/v1/simulation/phone-calls/vapi/voice?token=signed-token',
+              },
+              chunkPlan: {
+                enabled: false,
+                formatPlan: {
+                  enabled: false,
+                },
               },
             },
             transcriber: expect.objectContaining({
@@ -134,7 +164,17 @@ describe('PhoneCallService', () => {
 
     const createCallInput = provider.createCall.mock.calls[0]?.[0];
     const assistant = createCallInput?.providerConfig?.assistant;
-    expect(assistant?.model).toBeUndefined();
+    expect(assistant?.firstMessage).toBeUndefined();
+    expect(assistant?.serverMessages).toEqual([
+      'status-update',
+      'speech-update',
+      'transcript',
+      'conversation-update',
+      'model-output',
+      'tool-calls',
+      'end-of-call-report',
+      'hang',
+    ]);
     expect(prisma.client.session.update).toHaveBeenCalledWith({
       where: { id: 'session-1' },
       data: {
@@ -201,7 +241,7 @@ describe('PhoneCallService', () => {
     });
   });
 
-  it('uses a session-configured firstMessage when no override is provided', async () => {
+  it('uses a session-configured firstMessage without giving up the PITCH custom LLM', async () => {
     prisma.client.session.findUnique.mockResolvedValue({
       ...baseSession,
       sessionConfig: {
@@ -223,12 +263,45 @@ describe('PhoneCallService', () => {
       expect.objectContaining({
         providerConfig: expect.objectContaining({
           assistant: expect.objectContaining({
-            firstMessage: 'Please say your verification code now.',
-            firstMessageMode: 'assistant-speaks-first',
+            firstMessageMode:
+              'assistant-speaks-first-with-model-generated-message',
+            model: {
+              provider: 'custom-llm',
+              url: 'https://api.example.com/api/v1/simulation/phone-calls/vapi/llm/signed-token',
+              model: 'pitch-phone-engine',
+              messages: [
+                {
+                  role: 'system',
+                  content:
+                    'Use the external custom LLM endpoint as the source of truth for all phone-call replies. Keep answers concise, natural, and optimized for live speech.',
+                },
+                {
+                  role: 'system',
+                  content:
+                    '[PITCH_STARTER_PROMPT] Please say your verification code now.',
+                },
+              ],
+            },
+            serverMessages: [
+              'status-update',
+              'speech-update',
+              'transcript',
+              'conversation-update',
+              'model-output',
+              'tool-calls',
+              'end-of-call-report',
+              'hang',
+            ],
             voice: {
               provider: 'custom-voice',
               server: {
                 url: 'https://api.example.com/api/v1/simulation/phone-calls/vapi/voice?token=signed-token',
+              },
+              chunkPlan: {
+                enabled: false,
+                formatPlan: {
+                  enabled: false,
+                },
               },
             },
           }),
@@ -237,14 +310,13 @@ describe('PhoneCallService', () => {
     );
   });
 
-  it('falls back to the scenario description when no explicit firstMessage is configured', async () => {
+  it('uses the PITCH custom LLM when no scripted playback prompt is configured', async () => {
     prisma.client.session.findUnique.mockResolvedValue({
       ...baseSession,
-      name: null,
       scenario: {
         id: 'scenario-1',
-        name: 'Verification',
-        description: 'Please say your full name after the tone.',
+        name: 'First Call',
+        description: 'A skeptical buyer challenge.',
       },
     });
 
@@ -258,7 +330,32 @@ describe('PhoneCallService', () => {
       expect.objectContaining({
         providerConfig: expect.objectContaining({
           assistant: expect.objectContaining({
-            firstMessage: 'Please say your full name after the tone.',
+            firstMessageMode:
+              'assistant-speaks-first-with-model-generated-message',
+            model: {
+              provider: 'custom-llm',
+              url: 'https://api.example.com/api/v1/simulation/phone-calls/vapi/llm/signed-token',
+              model: 'pitch-phone-engine',
+              messages: [
+                {
+                  role: 'system',
+                  content:
+                    'Use the external custom LLM endpoint as the source of truth for all phone-call replies. Keep answers concise, natural, and optimized for live speech.',
+                },
+              ],
+            },
+            voice: {
+              provider: 'custom-voice',
+              server: {
+                url: 'https://api.example.com/api/v1/simulation/phone-calls/vapi/voice?token=signed-token',
+              },
+              chunkPlan: {
+                enabled: false,
+                formatPlan: {
+                  enabled: false,
+                },
+              },
+            },
           }),
         }),
       }),
