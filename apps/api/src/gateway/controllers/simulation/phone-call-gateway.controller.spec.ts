@@ -69,6 +69,40 @@ describe('PhoneCallGatewayController', () => {
     });
   });
 
+  it('forwards an optional firstMessage to the simulation service', async () => {
+    userService.send.mockReturnValue(
+      of({
+        verified: true,
+        phoneNumber: '+15551234567',
+      }) as never,
+    );
+    simulationService.send.mockReturnValue(
+      of({
+        callId: 'call-1',
+        provider: 'vapi',
+        sessionId: 'session-1',
+      }) as never,
+    );
+
+    await controller.startCall(
+      {
+        sessionId: 'session-1',
+        firstMessage: 'Hello, this is your verification call.',
+      },
+      userClaims,
+    );
+
+    expect(simulationService.send).toHaveBeenCalledWith(
+      SIMULATION_SERVICE_PATTERNS.PHONE_CALL_START,
+      {
+        sessionId: 'session-1',
+        firstMessage: 'Hello, this is your verification call.',
+        phoneNumber: '+15551234567',
+        userClaims,
+      },
+    );
+  });
+
   it('rejects unverified users before contacting simulation service', async () => {
     userService.send.mockReturnValue(
       of({

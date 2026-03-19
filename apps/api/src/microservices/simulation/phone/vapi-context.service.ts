@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { createHmac, timingSafeEqual } from 'crypto';
 import { VapiConfigService } from './vapi-config.service';
 
@@ -12,6 +12,8 @@ export interface VapiRequestContext {
 
 @Injectable()
 export class VapiContextService {
+  private readonly logger = new Logger(VapiContextService.name);
+
   constructor(private readonly vapiConfig: VapiConfigService) {}
 
   createToken(
@@ -31,7 +33,8 @@ export class VapiContextService {
   }
 
   verifyToken(token: string): VapiRequestContext {
-    const [encodedPayload, signature] = token.split('.');
+    const normalizedToken = this.normalizeToken(token);
+    const [encodedPayload, signature] = normalizedToken.split('.');
 
     if (!encodedPayload || !signature) {
       throw new UnauthorizedException('Invalid Vapi request token.');
@@ -82,6 +85,20 @@ export class VapiContextService {
     return createHmac('sha256', this.vapiConfig.getContextSecret())
       .update(encodedPayload)
       .digest('base64url');
+  }
+
+  private normalizeToken(token: string): string {
+    const trimmed = token.trim();
+    const slashIndex = trimmed.indexOf('/');
+    if (slashIndex === -1) {
+      return trimmed;
+    }
+
+    const normalized = trimmed.slice(0, slashIndex);
+    this.logger.warn(
+      `Normalizing malformed Vapi token by trimming unexpected suffix after position ${slashIndex}.`,
+    );
+    return normalized;
   }
 
   private toBase64Url(value: string): string {

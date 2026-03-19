@@ -4,6 +4,10 @@ import { PhoneCallService } from '../../phone/phone-call.service';
 describe('PhoneCallService', () => {
   let service: PhoneCallService;
   let providerFactory: { getProvider: jest.Mock };
+  let ttsService: {
+    synthesize: jest.Mock;
+    synthesizeStream: jest.Mock;
+  };
   let prisma: {
     client: {
       session: {
@@ -23,17 +27,9 @@ describe('PhoneCallService', () => {
   const baseSession = {
     id: 'session-1',
     type: 'phone',
-    name: 'Discovery Call',
+    name: 'Verification Call',
     sessionConfig: {},
-    persona: {
-      name: 'Morgan',
-      traits: {
-        voice: {
-          provider: 'elevenlabs',
-          voiceName: 'Persona Voice',
-        },
-      },
-    },
+    persona: null,
     scenario: null,
   };
 
@@ -67,35 +63,27 @@ describe('PhoneCallService', () => {
             `https://api.example.com/api/v1/${path}?token=${token}`,
         ),
     };
+    ttsService = {
+      synthesize: jest.fn(),
+      synthesizeStream: jest.fn(),
+    };
 
     service = new PhoneCallService(
       providerFactory as any,
       prisma as any,
       vapiContext as any,
+      ttsService as any,
     );
   });
 
-  it('builds a Vapi custom-LLM assistant using the session-selected voice', async () => {
-    prisma.client.session.findUnique.mockResolvedValue({
-      ...baseSession,
-      sessionConfig: {
-        voice: {
-          provider: 'elevenlabs',
-          voice: 'Voice-42',
-        },
-        phone: {
-          vapi: {
-            maxDurationSeconds: 120,
-            model: { model: 'pitch-override' },
-          },
-        },
-      },
-    });
+  it('builds a text-first playback assistant with a custom voice server', async () => {
+    prisma.client.session.findUnique.mockResolvedValue(baseSession);
 
     const result = await service.startCall({
       sessionId: 'session-1',
       phoneNumber: '+15551234567',
       userId: 'user-1',
+      firstMessage: 'Hello, this is your verification call.',
     });
 
     expect(vapiContext.createToken).toHaveBeenCalledWith({
@@ -113,25 +101,123 @@ describe('PhoneCallService', () => {
         },
         providerConfig: expect.objectContaining({
           assistant: expect.objectContaining({
-            maxDurationSeconds: 120,
+            firstMessage: 'Hello, this is your verification call.',
+            firstMessageMode: 'assistant-speaks-first',
+            modelOutputInMessagesEnabled: false,
             server: {
               url: 'https://api.example.com/api/v1/simulation/phone-calls/vapi/server?token=signed-token',
             },
-            model: expect.objectContaining({
-              provider: 'custom-llm',
-              model: 'pitch-override',
-              url: 'https://api.example.com/api/v1/simulation/phone-calls/vapi/llm/chat/completions?token=signed-token',
-              tools: [{ type: 'endCall' }],
-            }),
-            voice: expect.objectContaining({
-              provider: '11labs',
-              voiceId: 'Voice-42',
+            voice: {
+              provider: 'custom-voice',
+              server: {
+                url: 'https://api.example.com/api/v1/simulation/phone-calls/vapi/voice?token=signed-token',
+              },
+            },
+            transcriber: expect.objectContaining({
+              provider: 'deepgram',
+              model: 'nova-2',
             }),
           }),
         }),
       }),
     );
+
+    const createCallInput = provider.createCall.mock.calls[0]?.[0];
+    const assistant = createCallInput?.providerConfig?.assistant;
+    expect(assistant?.model).toBeUndefined();
     expect(result.sessionId).toBe('session-1');
+  });
+
+  it('uses a session-configured firstMessage when no override is provided', async () => {
+    prisma.client.session.findUnique.mockResolvedValue({
+      ...baseSession,
+      sessionConfig: {
+        phone: {
+          vapi: {
+            firstMessage: 'Please say your verification code now.',
+          },
+        },
+      },
+    });
+
+    await service.startCall({
+      sessionId: 'session-1',
+      phoneNumber: '+15551234567',
+      userId: 'user-1',
+    });
+
+    expect(provider.createCall).toHaveBeenCalledWith(
+      expect.objectContaining({
+        providerConfig: expect.objectContaining({
+          assistant: expect.objectContaining({
+            firstMessage: 'Please say your verification code now.',
+            firstMessageMode: 'assistant-speaks-first',
+            voice: {
+              provider: 'custom-voice',
+              server: {
+                url: 'https://api.example.com/api/v1/simulation/phone-calls/vapi/voice?token=signed-token',
+              },
+            },
+          }),
+        }),
+      }),
+    );
+  });
+
+  it('falls back to the scenario description when no explicit firstMessage is configured', async () => {
+    prisma.client.session.findUnique.mockResolvedValue({
+      ...baseSession,
+      name: null,
+      scenario: {
+        id: 'scenario-1',
+        name: 'Verification',
+        description: 'Please say your full name after the tone.',
+      },
+    });
+
+    await service.startCall({
+      sessionId: 'session-1',
+      phoneNumber: '+15551234567',
+      userId: 'user-1',
+    });
+
+    expect(provider.createCall).toHaveBeenCalledWith(
+      expect.objectContaining({
+        providerConfig: expect.objectContaining({
+          assistant: expect.objectContaining({
+            firstMessage: 'Please say your full name after the tone.',
+          }),
+        }),
+      }),
+    );
+  });
+
+  it('keeps the legacy audioUrl fallback when only an audio URL is configured', async () => {
+    prisma.client.session.findUnique.mockResolvedValue({
+      ...baseSession,
+      name: null,
+      scenario: null,
+      sessionConfig: {
+        phone: {
+          vapi: {
+            audioUrl: 'https://cdn.example.com/session-audio.mp3',
+          },
+        },
+      },
+    });
+
+    await service.startCall({
+      sessionId: 'session-1',
+      phoneNumber: '+15551234567',
+      userId: 'user-1',
+    });
+
+    const createCallInput = provider.createCall.mock.calls[0]?.[0];
+    expect(createCallInput?.providerConfig?.assistant).toMatchObject({
+      firstMessage: 'https://cdn.example.com/session-audio.mp3',
+      firstMessageMode: 'assistant-speaks-first',
+    });
+    expect(createCallInput?.providerConfig?.assistant?.voice).toBeUndefined();
   });
 
   it('uses the session-configured phone number when an explicit number is not provided', async () => {
@@ -223,52 +309,91 @@ describe('PhoneCallService', () => {
     ).rejects.toThrow(BadRequestException);
   });
 
-  it('rejects phone calls when no session or persona voice is configured', async () => {
-    prisma.client.session.findUnique.mockResolvedValue({
-      ...baseSession,
-      sessionConfig: {},
-      persona: null,
-    });
-
-    await expect(
-      service.startCall({
-        sessionId: 'session-1',
-        phoneNumber: '+15551234567',
-        userId: 'user-1',
-      }),
-    ).rejects.toThrow(
-      'Phone session voice must be configured on the session or persona.',
-    );
-
-    expect(provider.createCall).not.toHaveBeenCalled();
-  });
-
-  it('maps elevenlabs voice providers to the Vapi 11labs key', async () => {
+  it('synthesizes raw PCM audio with the resolved ElevenLabs voice config', async () => {
+    const audioBuffer = Buffer.from([1, 2, 3]);
     prisma.client.session.findUnique.mockResolvedValue({
       ...baseSession,
       sessionConfig: {
         ttsProvider: 'elevenlabs',
-        ttsVoice: 'Voice-42',
+        ttsVoice: 'Rachel',
       },
     });
-
-    await service.startCall({
-      sessionId: 'session-1',
-      phoneNumber: '+15551234567',
-      userId: 'user-1',
+    ttsService.synthesizeStream.mockResolvedValue({
+      contentType: 'audio/pcm;rate=24000;channels=1',
+      audioStream: (async function* () {
+        yield audioBuffer;
+      })(),
     });
 
-    expect(provider.createCall).toHaveBeenCalledWith(
+    const result = await service.synthesizePhoneCallAudio({
+      sessionId: 'session-1',
+      userId: 'user-1',
+      text: 'Hello from PITCH.',
+      sampleRate: 24000,
+    });
+
+    expect(ttsService.synthesizeStream).toHaveBeenCalledWith(
+      'Hello from PITCH.',
+      'elevenlabs',
       expect.objectContaining({
-        providerConfig: expect.objectContaining({
-          assistant: expect.objectContaining({
-            voice: expect.objectContaining({
-              provider: '11labs',
-              voiceId: 'Voice-42',
-            }),
-          }),
-        }),
+        voice: 'Rachel',
+        format: 'pcm',
+        sampleRate: 24000,
       }),
     );
+    expect(result).toEqual({
+      audioBuffer,
+      contentType: 'audio/pcm;rate=24000;channels=1',
+    });
+  });
+
+  it('falls back to default ElevenLabs PCM when the resolved provider cannot serve phone audio', async () => {
+    prisma.client.session.findUnique.mockResolvedValue({
+      ...baseSession,
+      sessionConfig: {
+        ttsProvider: 'openai',
+        ttsVoice: 'alloy',
+      },
+    });
+    ttsService.synthesizeStream.mockRejectedValue(
+      new Error('TTS provider "openai" does not support streaming'),
+    );
+    ttsService.synthesize
+      .mockResolvedValueOnce({
+        audioBuffer: Buffer.from('mp3'),
+        contentType: 'audio/mpeg',
+      })
+      .mockResolvedValueOnce({
+        audioBuffer: Buffer.from([9, 9]),
+        contentType: 'audio/pcm;rate=24000;channels=1',
+      });
+
+    const result = await service.synthesizePhoneCallAudio({
+      sessionId: 'session-1',
+      userId: 'user-1',
+      text: 'Fallback path',
+      sampleRate: 24000,
+    });
+
+    expect(ttsService.synthesize).toHaveBeenNthCalledWith(
+      1,
+      'Fallback path',
+      'openai',
+      expect.objectContaining({
+        voice: 'alloy',
+        format: 'pcm',
+        sampleRate: 24000,
+      }),
+    );
+    expect(ttsService.synthesize).toHaveBeenNthCalledWith(
+      2,
+      'Fallback path',
+      'elevenlabs',
+      expect.objectContaining({
+        format: 'pcm',
+        sampleRate: 24000,
+      }),
+    );
+    expect(result.contentType).toBe('audio/pcm;rate=24000;channels=1');
   });
 });

@@ -18,6 +18,16 @@ export class StartPhoneCallDto {
   @IsOptional()
   @Matches(/^\+[1-9]\d{7,14}$/)
   phoneNumber?: string;
+
+  @ApiPropertyOptional({
+    example:
+      'Hello, this is your verification call from PITCH. Please say your full name after the beep.',
+    description:
+      'Optional text to synthesize and play when the phone call connects. When omitted, the backend falls back to session-level phone configuration and scenario/session copy.',
+  })
+  @IsOptional()
+  @IsString()
+  firstMessage?: string;
 }
 
 export class PhoneCallResponseDto {

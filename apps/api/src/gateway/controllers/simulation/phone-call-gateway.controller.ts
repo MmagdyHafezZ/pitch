@@ -50,7 +50,7 @@ export class PhoneCallGatewayController {
     description: 'Phone number must be verified before starting a call',
   })
   async startCall(
-    @Body() payload: { sessionId: string },
+    @Body() payload: { sessionId: string; firstMessage?: string },
     @UserClaims() userClaims: UserClaimsType,
   ) {
     try {
@@ -74,6 +74,9 @@ export class PhoneCallGatewayController {
         this.simulationService
           .send(SIMULATION_SERVICE_PATTERNS.PHONE_CALL_START, {
             sessionId: payload.sessionId,
+            ...(payload.firstMessage
+              ? { firstMessage: payload.firstMessage }
+              : {}),
             phoneNumber: verification.phoneNumber,
             userClaims,
           })

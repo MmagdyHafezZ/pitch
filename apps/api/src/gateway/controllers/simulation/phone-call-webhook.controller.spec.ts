@@ -1,16 +1,13 @@
 import { PhoneCallWebhookController } from './phone-call-webhook.controller';
 import type { VapiContextService } from '@microservices/simulation/phone/vapi-context.service';
-import type {
-  PhoneConversationEngineService,
-  PhoneConversationResult,
-} from '@microservices/simulation/services/phone-conversation-engine.service';
+import type { PhoneCallService } from '@microservices/simulation/phone/phone-call.service';
 import type { SessionService } from '@microservices/simulation/services/session.service';
 
 describe('PhoneCallWebhookController', () => {
   let controller: PhoneCallWebhookController;
   let vapiContext: jest.Mocked<VapiContextService>;
-  let phoneConversationEngine: jest.Mocked<PhoneConversationEngineService>;
   let sessionService: jest.Mocked<SessionService>;
+  let phoneCallService: jest.Mocked<PhoneCallService>;
 
   beforeEach(() => {
     vapiContext = {
@@ -22,217 +19,74 @@ describe('PhoneCallWebhookController', () => {
         exp: 2,
       }),
     } as unknown as jest.Mocked<VapiContextService>;
-    phoneConversationEngine = {
-      generateTurn: jest.fn(),
-    } as unknown as jest.Mocked<PhoneConversationEngineService>;
+
     sessionService = {
       end: jest.fn(),
     } as unknown as jest.Mocked<SessionService>;
 
+    phoneCallService = {
+      synthesizePhoneCallAudio: jest.fn(),
+    } as unknown as jest.Mocked<PhoneCallService>;
+
     controller = new PhoneCallWebhookController(
       vapiContext,
-      phoneConversationEngine,
       sessionService,
+      phoneCallService,
     );
   });
 
-  it('returns an endCall tool response when the backend requests hangup', async () => {
-    const result: PhoneConversationResult = {
-      text: 'Thanks for your time today.',
-      hangupRequested: true,
-      hangupReason: 'conversation_completed',
-      toolEvents: [],
-    };
-    phoneConversationEngine.generateTurn.mockResolvedValue(result);
-    const res = {
-      json: jest.fn(),
-    } as any;
-
-    await controller.handleVapiCustomLlm(
-      'signed-token',
-      {
-        messages: [{ role: 'user', content: 'Goodbye' }],
-      },
-      res,
-    );
-
-    expect(phoneConversationEngine.generateTurn).toHaveBeenCalledWith({
-      sessionId: 'session-1',
-      userId: 'user-1',
-      text: 'Goodbye',
-      startAsAssistant: false,
+  it('returns PCM audio for Vapi voice requests', async () => {
+    const audioBuffer = Buffer.from([1, 2, 3, 4]);
+    phoneCallService.synthesizePhoneCallAudio.mockResolvedValue({
+      audioBuffer,
+      contentType: 'audio/pcm;rate=24000;channels=1',
     });
-    expect(res.json).toHaveBeenCalledWith(
-      expect.objectContaining({
-        choices: [
-          expect.objectContaining({
-            finish_reason: 'tool_calls',
-            message: expect.objectContaining({
-              content: 'Thanks for your time today.',
-              tool_calls: [
-                expect.objectContaining({
-                  function: expect.objectContaining({
-                    name: 'endCall',
-                  }),
-                }),
-              ],
-            }),
-          }),
-        ],
-      }),
-    );
-  });
 
-  it('starts as assistant when Vapi has not yet supplied user speech', async () => {
-    phoneConversationEngine.generateTurn.mockResolvedValue({
-      text: 'Hello, thanks for taking the call.',
-      hangupRequested: false,
-      toolEvents: [],
-    });
     const res = {
-      json: jest.fn(),
-    } as any;
-
-    await controller.handleVapiCustomLlm(
-      'signed-token',
-      {
-        messages: [],
-      },
-      res,
-    );
-
-    expect(phoneConversationEngine.generateTurn).toHaveBeenCalledWith({
-      sessionId: 'session-1',
-      userId: 'user-1',
-      text: '',
-      startAsAssistant: true,
-    });
-  });
-
-  it('does not treat an empty user turn as a fresh assistant start', async () => {
-    const res = {
-      json: jest.fn(),
-    } as any;
-
-    await controller.handleVapiCustomLlm(
-      'signed-token',
-      {
-        messages: [{ role: 'user', content: '' }],
-      },
-      res,
-    );
-
-    expect(phoneConversationEngine.generateTurn).not.toHaveBeenCalled();
-    expect(res.json).toHaveBeenCalledWith(
-      expect.objectContaining({
-        choices: [
-          expect.objectContaining({
-            finish_reason: 'stop',
-            message: expect.objectContaining({
-              content:
-                'I did not catch that. Say that again and we can keep going.',
-            }),
-          }),
-        ],
-      }),
-    );
-  });
-
-  it('keeps the call in conversation mode when Vapi sends keypad digits', async () => {
-    const res = {
-      json: jest.fn(),
-    } as any;
-
-    await controller.handleVapiCustomLlm(
-      'signed-token',
-      {
-        messages: [{ role: 'user', content: '1' }],
-      },
-      res,
-    );
-
-    expect(phoneConversationEngine.generateTurn).not.toHaveBeenCalled();
-    expect(res.json).toHaveBeenCalledWith(
-      expect.objectContaining({
-        choices: [
-          expect.objectContaining({
-            finish_reason: 'stop',
-            message: expect.objectContaining({
-              content: expect.stringContaining('No need to press any keys.'),
-            }),
-          }),
-        ],
-      }),
-    );
-  });
-
-  it('falls back to an emergency end-call response when the backend errors', async () => {
-    phoneConversationEngine.generateTurn.mockRejectedValue(
-      new Error('backend down'),
-    );
-    const res = {
-      json: jest.fn(),
-    } as any;
-
-    await controller.handleVapiCustomLlm(
-      'signed-token',
-      {
-        messages: [{ role: 'user', content: 'Hello?' }],
-      },
-      res,
-    );
-
-    expect(res.json).toHaveBeenCalledWith(
-      expect.objectContaining({
-        choices: [
-          expect.objectContaining({
-            finish_reason: 'tool_calls',
-            message: expect.objectContaining({
-              content:
-                'I am sorry, something went wrong and I need to end the call now.',
-            }),
-          }),
-        ],
-      }),
-    );
-  });
-
-  it('streams assistant text and the endCall tool when Vapi requests streaming', async () => {
-    phoneConversationEngine.generateTurn.mockResolvedValue({
-      text: 'We are all set.',
-      hangupRequested: true,
-      hangupReason: 'done',
-      toolEvents: [],
-    });
-    const res = {
-      status: jest.fn().mockReturnThis(),
       setHeader: jest.fn(),
-      write: jest.fn(),
-      end: jest.fn(),
-    } as any;
+      status: jest.fn().mockReturnThis(),
+      send: jest.fn(),
+    };
 
-    await controller.handleVapiCustomLlm(
+    await controller.handleVapiVoiceRequest(
       'signed-token',
       {
-        stream: true,
-        messages: [{ role: 'user', content: 'Thanks' }],
+        type: 'voice-request',
+        text: 'Hello from PITCH.',
+        sampleRate: 24000,
       },
-      res,
+      res as any,
     );
 
-    expect(res.status).toHaveBeenCalled();
-    expect(res.write).toHaveBeenCalledWith(
-      expect.stringContaining('"content":"We are all set."'),
+    expect(phoneCallService.synthesizePhoneCallAudio).toHaveBeenCalledWith({
+      sessionId: 'session-1',
+      userId: 'user-1',
+      text: 'Hello from PITCH.',
+      sampleRate: 24000,
+    });
+    expect(res.setHeader).toHaveBeenCalledWith(
+      'Content-Type',
+      'application/octet-stream',
     );
-    expect(res.write).toHaveBeenCalledWith(
-      expect.stringContaining('"name":"endCall"'),
-    );
-    expect(res.write).toHaveBeenCalledWith('data: [DONE]\n\n');
-    expect(res.end).toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.send).toHaveBeenCalledWith(audioBuffer);
+  });
+
+  it('returns ok for transcript events without ending the session', async () => {
+    const response = await controller.handleVapiServerEvent('signed-token', {
+      message: {
+        type: 'transcript',
+        transcript: 'Verification successful.',
+      },
+    });
+
+    expect(vapiContext.verifyToken).toHaveBeenCalledWith('signed-token');
+    expect(sessionService.end).not.toHaveBeenCalled();
+    expect(response).toEqual({ ok: true });
   });
 
   it('ends the session when Vapi sends an end-of-call report', async () => {
-    sessionService.end.mockResolvedValue({ id: 'session-1' } as any);
+    sessionService.end.mockResolvedValue({ id: 'session-1' } as never);
 
     const response = await controller.handleVapiServerEvent('signed-token', {
       message: {
@@ -250,7 +104,7 @@ describe('PhoneCallWebhookController', () => {
   });
 
   it('ends the session when Vapi sends a hang event', async () => {
-    sessionService.end.mockResolvedValue({ id: 'session-1' } as any);
+    sessionService.end.mockResolvedValue({ id: 'session-1' } as never);
 
     await controller.handleVapiServerEvent('signed-token', {
       message: {
@@ -263,5 +117,17 @@ describe('PhoneCallWebhookController', () => {
       { reason: 'phone_call_hang' },
       'user-1',
     );
+  });
+
+  it('does not throw when session shutdown fails', async () => {
+    sessionService.end.mockRejectedValue(new Error('already closed'));
+
+    await expect(
+      controller.handleVapiServerEvent('signed-token', {
+        message: {
+          type: 'hang',
+        },
+      }),
+    ).resolves.toEqual({ ok: true });
   });
 });

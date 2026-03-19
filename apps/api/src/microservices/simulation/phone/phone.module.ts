@@ -7,12 +7,14 @@ import { PhoneCallController } from './phone.controller';
 import { SimulationPrismaService } from '../prisma/simulation-prisma.service';
 import { VapiContextService } from './vapi-context.service';
 import { VapiConfigService } from './vapi-config.service';
+import { TtsModule } from '../tts/tts.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
     }),
+    TtsModule,
   ],
   controllers: [PhoneCallController],
   providers: [

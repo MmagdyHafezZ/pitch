@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   HttpCode,
@@ -10,38 +11,27 @@ import {
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Response } from 'express';
-import { randomUUID } from 'crypto';
 import { Public } from '../../../microservices/userManagement/decorators/public.decorator';
 import { VapiContextService } from '@microservices/simulation/phone/vapi-context.service';
-import {
-  PhoneConversationEngineService,
-  type PhoneConversationResult,
-} from '@microservices/simulation/services/phone-conversation-engine.service';
+import { PhoneCallService } from '@microservices/simulation/phone/phone-call.service';
 import { SessionService } from '@microservices/simulation/services/session.service';
-
-interface OpenAIChatMessage {
-  role: string;
-  content?:
-    | string
-    | Array<{
-        type?: string;
-        text?: string;
-        content?: string;
-        inputText?: string;
-        input_text?: string;
-        value?: string;
-      }>;
-}
-
-interface OpenAIChatCompletionRequest {
-  model?: string;
-  messages?: OpenAIChatMessage[];
-  stream?: boolean;
-}
 
 interface VapiServerEnvelope {
   message?: {
     type?: string;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+}
+
+interface VapiVoiceRequestEnvelope {
+  type?: string;
+  text?: string;
+  sampleRate?: number;
+  message?: {
+    type?: string;
+    text?: string;
+    sampleRate?: number;
     [key: string]: unknown;
   };
   [key: string]: unknown;
@@ -54,77 +44,55 @@ export class PhoneCallWebhookController {
 
   constructor(
     private readonly vapiContext: VapiContextService,
-    private readonly phoneConversationEngine: PhoneConversationEngineService,
     private readonly sessionService: SessionService,
+    private readonly phoneCallService: PhoneCallService,
   ) {}
 
-  @Post('vapi/llm/chat/completions')
+  @Post('vapi/voice')
   @Public()
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Custom LLM endpoint used by Vapi phone calls' })
-  async handleVapiCustomLlm(
+  @ApiOperation({ summary: 'Custom TTS endpoint used by Vapi phone calls' })
+  async handleVapiVoiceRequest(
     @Query('token') token: string,
-    @Body() body: OpenAIChatCompletionRequest,
+    @Body() body: VapiVoiceRequestEnvelope,
     @Res() res: Response,
   ) {
     const context = this.vapiContext.verifyToken(token);
-    const model = body.model ?? 'pitch-phone-engine';
-    const messages = body.messages ?? [];
-    const latestUserText = this.getLatestUserText(messages);
-    const startAsAssistant = !this.hasUserMessage(messages);
-    const inputMode = startAsAssistant
-      ? 'assistant_start'
-      : this.classifyUserInput(latestUserText);
+    const type = this.extractVoiceRequestType(body);
+    const text = this.extractVoiceRequestText(body);
+    const sampleRate = this.extractVoiceSampleRate(body) ?? 24000;
+    const callId = this.extractCallId(body);
 
     this.logger.log(
-      `vapi.llm.request session=${context.sessionId} user=${context.userId} startAsAssistant=${startAsAssistant} inputMode=${inputMode} messageCount=${messages.length} text="${this.preview(latestUserText)}"`,
+      `vapi.voice.request session=${context.sessionId} user=${context.userId} call=${callId ?? 'unknown'} type=${type} sampleRate=${sampleRate} text="${this.previewText(text)}" bodyKeys=${this.listObjectKeys(body)}`,
     );
 
-    try {
-      const nonSpeechResult = this.buildNonSpeechTurnResult(inputMode);
-      if (nonSpeechResult) {
-        this.logger.log(
-          `vapi.llm.non_speech session=${context.sessionId} user=${context.userId} inputMode=${inputMode}`,
-        );
-
-        if (body.stream === true) {
-          this.writeStreamingCompletion(res, model, nonSpeechResult);
-          return;
-        }
-
-        res.json(this.buildCompletion(model, nonSpeechResult));
-        return;
-      }
-
-      const result = await this.phoneConversationEngine.generateTurn({
-        sessionId: context.sessionId,
-        userId: context.userId,
-        text: latestUserText,
-        startAsAssistant,
-      });
-
-      this.logConversationResult(context.sessionId, context.userId, result);
-
-      if (body.stream === true) {
-        this.writeStreamingCompletion(res, model, result);
-        return;
-      }
-
-      res.json(this.buildCompletion(model, result));
-    } catch (error) {
-      this.logger.error(
-        `vapi.llm.error session=${context.sessionId} user=${context.userId}`,
-        error,
+    if (type !== 'voice-request') {
+      throw new BadRequestException(
+        `Unsupported Vapi voice request type "${type}".`,
       );
-
-      const fallback = this.buildEmergencyEndCallResult();
-      if (body.stream === true) {
-        this.writeStreamingCompletion(res, model, fallback);
-        return;
-      }
-
-      res.json(this.buildCompletion(model, fallback));
     }
+
+    if (!text) {
+      throw new BadRequestException(
+        'Vapi voice request must include text to synthesize.',
+      );
+    }
+
+    const result = await this.phoneCallService.synthesizePhoneCallAudio({
+      sessionId: context.sessionId,
+      userId: context.userId,
+      text,
+      sampleRate,
+    });
+
+    this.logger.log(
+      `vapi.voice.response session=${context.sessionId} user=${context.userId} call=${callId ?? 'unknown'} sampleRate=${sampleRate} bytes=${result.audioBuffer.length}`,
+    );
+
+    res.setHeader('Content-Type', 'application/octet-stream');
+    res.setHeader('Cache-Control', 'no-store');
+    res.status(HttpStatus.OK).send(result.audioBuffer);
   }
 
   @Post('vapi/server')
@@ -138,16 +106,22 @@ export class PhoneCallWebhookController {
     const context = this.vapiContext.verifyToken(token);
     const message = body.message ?? {};
     const type = typeof message.type === 'string' ? message.type : 'unknown';
+    const status = this.extractStatus(message);
+    const endedReason = this.extractEndReasonOrUndefined(message);
+    const callId = this.extractCallId(body);
+
+    this.logger.log(
+      `vapi.event.received session=${context.sessionId} user=${context.userId} call=${callId ?? 'unknown'} type=${type} status=${status ?? 'unknown'} endedReason=${endedReason ?? 'unknown'} bodyKeys=${this.listObjectKeys(body)}`,
+    );
 
     switch (type) {
       case 'status-update': {
-        const status = this.extractStatus(message);
         this.logger.log(
-          `vapi.event.status session=${context.sessionId} user=${context.userId} status=${status ?? 'unknown'} payload=${this.safeJson(message)}`,
+          `vapi.event.status session=${context.sessionId} user=${context.userId} call=${callId ?? 'unknown'} status=${status ?? 'unknown'} payload=${this.safeJson(message)}`,
         );
         if (status === 'connected' || status === 'in-progress') {
           this.logger.log(
-            `vapi.event.connected session=${context.sessionId} user=${context.userId} status=${status}`,
+            `vapi.event.connected session=${context.sessionId} user=${context.userId} call=${callId ?? 'unknown'} status=${status}`,
           );
         }
         if (
@@ -157,40 +131,25 @@ export class PhoneCallWebhookController {
           status === 'canceled'
         ) {
           this.logger.warn(
-            `vapi.event.failure session=${context.sessionId} user=${context.userId} status=${status} payload=${this.safeJson(message)}`,
+            `vapi.event.failure session=${context.sessionId} user=${context.userId} call=${callId ?? 'unknown'} status=${status} endedReason=${endedReason ?? 'unknown'} payload=${this.safeJson(message)}`,
           );
         }
         break;
       }
       case 'speech-update':
         this.logger.log(
-          `vapi.event.speech session=${context.sessionId} user=${context.userId} payload=${this.safeJson(message)}`,
+          `vapi.event.speech session=${context.sessionId} user=${context.userId} call=${callId ?? 'unknown'} payload=${this.safeJson(message)}`,
         );
         break;
       case 'transcript':
         this.logger.log(
-          `vapi.event.transcript session=${context.sessionId} user=${context.userId} payload=${this.safeJson(message)}`,
-        );
-        break;
-      case 'conversation-update':
-        this.logger.log(
-          `vapi.event.conversation session=${context.sessionId} user=${context.userId} payload=${this.safeJson(message)}`,
-        );
-        break;
-      case 'model-output':
-        this.logger.log(
-          `vapi.event.model_output session=${context.sessionId} user=${context.userId} payload=${this.safeJson(message)}`,
-        );
-        break;
-      case 'tool-calls':
-        this.logger.log(
-          `vapi.event.tool_calls session=${context.sessionId} user=${context.userId} payload=${this.safeJson(message)}`,
+          `vapi.event.transcript session=${context.sessionId} user=${context.userId} call=${callId ?? 'unknown'} payload=${this.safeJson(message)}`,
         );
         break;
       case 'end-of-call-report': {
-        const reason = this.extractEndReason(message);
+        const reason = endedReason ?? 'unknown';
         this.logger.log(
-          `vapi.event.end_of_call session=${context.sessionId} user=${context.userId} reason=${reason} payload=${this.safeJson(message)}`,
+          `vapi.event.end_of_call session=${context.sessionId} user=${context.userId} call=${callId ?? 'unknown'} reason=${reason} payload=${this.safeJson(message)}`,
         );
         await this.endSessionIfNeeded(
           context.sessionId,
@@ -201,7 +160,7 @@ export class PhoneCallWebhookController {
       }
       case 'hang':
         this.logger.warn(
-          `vapi.event.hang session=${context.sessionId} user=${context.userId} payload=${this.safeJson(message)}`,
+          `vapi.event.hang session=${context.sessionId} user=${context.userId} call=${callId ?? 'unknown'} endedReason=${endedReason ?? 'unknown'} payload=${this.safeJson(message)}`,
         );
         await this.endSessionIfNeeded(
           context.sessionId,
@@ -211,202 +170,12 @@ export class PhoneCallWebhookController {
         break;
       default:
         this.logger.log(
-          `vapi.event.ignored session=${context.sessionId} user=${context.userId} type=${type} payload=${this.safeJson(message)}`,
+          `vapi.event.ignored session=${context.sessionId} user=${context.userId} call=${callId ?? 'unknown'} type=${type} payload=${this.safeJson(message)}`,
         );
         break;
     }
 
     return { ok: true };
-  }
-
-  private getLatestUserText(messages: OpenAIChatMessage[]): string {
-    const latestUserMessage = [...messages]
-      .reverse()
-      .find((message) => message.role === 'user');
-
-    if (!latestUserMessage?.content) {
-      return '';
-    }
-
-    if (typeof latestUserMessage.content === 'string') {
-      return latestUserMessage.content.trim();
-    }
-
-    return latestUserMessage.content
-      .map(
-        (part) =>
-          part.text ??
-          part.content ??
-          part.inputText ??
-          part.input_text ??
-          part.value ??
-          '',
-      )
-      .join(' ')
-      .trim();
-  }
-
-  private hasUserMessage(messages: OpenAIChatMessage[]): boolean {
-    return messages.some((message) => message.role === 'user');
-  }
-
-  private classifyUserInput(text: string): 'spoken' | 'empty' | 'dtmf_digits' {
-    const normalized = text.trim();
-    if (!normalized) {
-      return 'empty';
-    }
-
-    if (/^[0-9#*]{1,2}$/.test(normalized)) {
-      return 'dtmf_digits';
-    }
-
-    return 'spoken';
-  }
-
-  private buildNonSpeechTurnResult(
-    inputMode: 'assistant_start' | 'spoken' | 'empty' | 'dtmf_digits',
-  ): PhoneConversationResult | null {
-    if (inputMode === 'empty') {
-      return {
-        text: 'I did not catch that. Say that again and we can keep going.',
-        hangupRequested: false,
-        toolEvents: [],
-      };
-    }
-
-    if (inputMode === 'dtmf_digits') {
-      return {
-        text: 'No need to press any keys. Just talk to me naturally and we can keep the conversation going.',
-        hangupRequested: false,
-        toolEvents: [],
-      };
-    }
-
-    return null;
-  }
-
-  private buildCompletion(model: string, result: PhoneConversationResult) {
-    const toolCalls = result.hangupRequested
-      ? [
-          {
-            id: `call_${randomUUID()}`,
-            type: 'function',
-            function: {
-              name: 'endCall',
-              arguments: JSON.stringify({
-                reason: result.hangupReason ?? 'conversation_completed',
-              }),
-            },
-          },
-        ]
-      : undefined;
-
-    return {
-      id: `chatcmpl_${randomUUID()}`,
-      object: 'chat.completion',
-      created: Math.floor(Date.now() / 1000),
-      model,
-      choices: [
-        {
-          index: 0,
-          message: {
-            role: 'assistant',
-            content: result.text,
-            ...(toolCalls ? { tool_calls: toolCalls } : {}),
-          },
-          finish_reason: toolCalls ? 'tool_calls' : 'stop',
-        },
-      ],
-    };
-  }
-
-  private writeStreamingCompletion(
-    res: Response,
-    model: string,
-    result: PhoneConversationResult,
-  ) {
-    const created = Math.floor(Date.now() / 1000);
-    const completionId = `chatcmpl_${randomUUID()}`;
-
-    res.status(HttpStatus.OK);
-    res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Connection', 'keep-alive');
-
-    const contentChunk = {
-      id: completionId,
-      object: 'chat.completion.chunk',
-      created,
-      model,
-      choices: [
-        {
-          index: 0,
-          delta: {
-            role: 'assistant',
-            ...(result.text ? { content: result.text } : {}),
-          },
-          finish_reason: null,
-        },
-      ],
-    };
-    res.write(`data: ${JSON.stringify(contentChunk)}\n\n`);
-
-    if (result.hangupRequested) {
-      const toolChunk = {
-        id: completionId,
-        object: 'chat.completion.chunk',
-        created,
-        model,
-        choices: [
-          {
-            index: 0,
-            delta: {
-              tool_calls: [
-                {
-                  index: 0,
-                  id: `call_${randomUUID()}`,
-                  type: 'function',
-                  function: {
-                    name: 'endCall',
-                    arguments: JSON.stringify({
-                      reason: result.hangupReason ?? 'conversation_completed',
-                    }),
-                  },
-                },
-              ],
-            },
-            finish_reason: null,
-          },
-        ],
-      };
-      res.write(`data: ${JSON.stringify(toolChunk)}\n\n`);
-    }
-
-    const doneChunk = {
-      id: completionId,
-      object: 'chat.completion.chunk',
-      created,
-      model,
-      choices: [
-        {
-          index: 0,
-          delta: {},
-          finish_reason: result.hangupRequested ? 'tool_calls' : 'stop',
-        },
-      ],
-    };
-    res.write(`data: ${JSON.stringify(doneChunk)}\n\n`);
-    res.write('data: [DONE]\n\n');
-    res.end();
-  }
-
-  private buildEmergencyEndCallResult(): PhoneConversationResult {
-    return {
-      text: 'I am sorry, something went wrong and I need to end the call now.',
-      hangupRequested: true,
-      hangupReason: 'backend_error',
-      toolEvents: [],
-    };
   }
 
   private async endSessionIfNeeded(
@@ -423,7 +192,9 @@ export class PhoneCallWebhookController {
     }
   }
 
-  private extractEndReason(message: Record<string, unknown>): string {
+  private extractEndReasonOrUndefined(
+    message: Record<string, unknown>,
+  ): string | undefined {
     const endedReason = this.readString(message, 'endedReason');
     const artifact = message.artifact;
     if (artifact && typeof artifact === 'object') {
@@ -436,7 +207,7 @@ export class PhoneCallWebhookController {
       }
     }
 
-    return endedReason ?? 'unknown';
+    return endedReason;
   }
 
   private extractStatus(message: Record<string, unknown>): string | undefined {
@@ -459,6 +230,44 @@ export class PhoneCallWebhookController {
     return undefined;
   }
 
+  private extractVoiceRequestType(payload: VapiVoiceRequestEnvelope): string {
+    return (
+      this.readString(payload as Record<string, unknown>, 'type') ??
+      this.readNestedString(
+        payload as Record<string, unknown>,
+        'message',
+        'type',
+      ) ??
+      'unknown'
+    );
+  }
+
+  private extractVoiceRequestText(
+    payload: VapiVoiceRequestEnvelope,
+  ): string | undefined {
+    return (
+      this.readString(payload as Record<string, unknown>, 'text') ??
+      this.readNestedString(
+        payload as Record<string, unknown>,
+        'message',
+        'text',
+      )
+    );
+  }
+
+  private extractVoiceSampleRate(
+    payload: VapiVoiceRequestEnvelope,
+  ): number | undefined {
+    return (
+      this.readNumber(payload as Record<string, unknown>, 'sampleRate') ??
+      this.readNestedNumber(
+        payload as Record<string, unknown>,
+        'message',
+        'sampleRate',
+      )
+    );
+  }
+
   private readString(
     source: Record<string, unknown>,
     key: string,
@@ -469,41 +278,167 @@ export class PhoneCallWebhookController {
       : undefined;
   }
 
+  private readNumber(
+    source: Record<string, unknown>,
+    key: string,
+  ): number | undefined {
+    const value = source[key];
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return value;
+    }
+
+    if (typeof value === 'string' && value.trim().length > 0) {
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : undefined;
+    }
+
+    return undefined;
+  }
+
+  private readNestedString(
+    source: Record<string, unknown>,
+    ...path: string[]
+  ): string | undefined {
+    let current: unknown = source;
+
+    for (const segment of path) {
+      if (!current || typeof current !== 'object') {
+        return undefined;
+      }
+
+      current = (current as Record<string, unknown>)[segment];
+    }
+
+    return typeof current === 'string' && current.trim().length > 0
+      ? current
+      : undefined;
+  }
+
+  private readNestedNumber(
+    source: Record<string, unknown>,
+    ...path: string[]
+  ): number | undefined {
+    if (path.length === 0) {
+      return undefined;
+    }
+
+    const parentPath = path.slice(0, -1);
+    const leaf = path[path.length - 1];
+    let current: unknown = source;
+
+    for (const segment of parentPath) {
+      if (!current || typeof current !== 'object') {
+        return undefined;
+      }
+
+      current = (current as Record<string, unknown>)[segment];
+    }
+
+    if (!current || typeof current !== 'object') {
+      return undefined;
+    }
+
+    return this.readNumber(current as Record<string, unknown>, leaf);
+  }
+
+  private extractCallId(payload: unknown): string | undefined {
+    if (!payload || typeof payload !== 'object') {
+      return undefined;
+    }
+
+    const record = payload as Record<string, unknown>;
+    return (
+      this.readString(record, 'callId') ??
+      this.readNestedString(record, 'call', 'id') ??
+      this.readNestedString(record, 'message', 'callId') ??
+      this.readNestedString(record, 'message', 'call', 'id') ??
+      this.readNestedString(record, 'message', 'artifact', 'callId') ??
+      this.readNestedString(record, 'message', 'artifact', 'call', 'id') ??
+      this.readNestedString(record, 'artifact', 'callId') ??
+      this.readNestedString(record, 'artifact', 'call', 'id')
+    );
+  }
+
+  private listObjectKeys(value: unknown): string {
+    if (!value || typeof value !== 'object') {
+      return 'none';
+    }
+
+    const keys = Object.keys(value as Record<string, unknown>).sort();
+    return keys.length > 0 ? keys.join(',') : 'none';
+  }
+
   private safeJson(value: unknown): string {
     try {
-      return JSON.stringify(value);
+      return JSON.stringify(this.sanitizeForLog(value));
     } catch {
       return '[unserializable]';
     }
   }
 
-  private preview(value: string): string {
-    if (value.length <= 120) {
+  private sanitizeForLog(value: unknown): unknown {
+    if (Array.isArray(value)) {
+      return value.map((entry) => this.sanitizeForLog(entry));
+    }
+
+    if (!value || typeof value !== 'object') {
+      if (typeof value === 'string') {
+        return this.sanitizeStringForLog(value);
+      }
       return value;
     }
 
-    return `${value.slice(0, 117)}...`;
+    const record = value as Record<string, unknown>;
+    const sanitized: Record<string, unknown> = {};
+
+    for (const [key, entry] of Object.entries(record)) {
+      if (this.shouldRedactKey(key)) {
+        sanitized[key] = '[redacted]';
+        continue;
+      }
+
+      sanitized[key] = this.sanitizeForLog(entry);
+    }
+
+    return sanitized;
   }
 
-  private logConversationResult(
-    sessionId: string,
-    userId: string,
-    result: PhoneConversationResult,
-  ) {
-    this.logger.log(
-      `vapi.llm.response session=${sessionId} user=${userId} hangup=${result.hangupRequested} text="${this.preview(result.text)}"`,
+  private sanitizeStringForLog(value: string): string {
+    try {
+      const parsed = new URL(value);
+      if (parsed.searchParams.has('token')) {
+        parsed.searchParams.set('token', '[redacted]');
+      }
+      return parsed.toString();
+    } catch {
+      return value;
+    }
+  }
+
+  private shouldRedactKey(key: string): boolean {
+    const normalized = key.trim().toLowerCase();
+    return (
+      normalized === 'token' ||
+      normalized.endsWith('token') ||
+      normalized.endsWith('secret') ||
+      normalized.endsWith('apikey') ||
+      normalized.endsWith('api_key') ||
+      normalized === 'authorization' ||
+      normalized === 'signature' ||
+      normalized === 'twilioauthtoken'
     );
+  }
 
-    for (const toolEvent of result.toolEvents) {
-      this.logger.log(
-        `vapi.llm.tool session=${sessionId} user=${userId} tool=${toolEvent.tool} args=${this.safeJson(toolEvent.args)}`,
-      );
+  private previewText(value: string | undefined, maxLength = 120): string {
+    if (!value) {
+      return '';
     }
 
-    if (result.hangupRequested) {
-      this.logger.log(
-        `vapi.llm.hangup session=${sessionId} user=${userId} reason=${result.hangupReason ?? 'conversation_completed'}`,
-      );
+    const normalized = value.replace(/\s+/g, ' ').trim();
+    if (normalized.length <= maxLength) {
+      return normalized;
     }
+
+    return `${normalized.slice(0, maxLength - 3)}...`;
   }
 }
