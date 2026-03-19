@@ -1,26 +1,5 @@
-import { useCallback } from 'react'
-import type { ReactElement } from 'react'
-
-export type TourScreen =
-  | 'home'
-  | 'sessions'
-  | 'analytics'
-  | 'team-config'
-  | 'challenges'
-  | 'create-session'
-
-type StartTourOptions = {
-  mode?: 'full'
-}
-
-export function OnboardingWizard(): ReactElement | null {
-  return null
-}
-
-export function useTour() {
-  const startTour = useCallback(async (_screen: TourScreen, _options?: StartTourOptions) => {
-    return
-  }, [])
-
-  return { startTour }
-}
+export { OnboardingWizard } from './components/OnboardingWizard'
+export { useOnboarding } from './hooks/useOnboarding'
+export { useTour } from './hooks/useTour'
+export { useOnboardingStore } from './stores/onboarding.store'
+export type { UserRole, OnboardingStep, OnboardingData, TourScreen } from './types'
