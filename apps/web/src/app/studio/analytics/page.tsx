@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
@@ -47,7 +47,7 @@ import { useTeams } from '@/features/teams'
 import type { Team } from '@/features/teams'
 import { api } from '@/lib/client'
 
-// -- Types ------------------------------------------------------------------
+// ── Types ──────────────────────────────────────────────────────────────────
 
 type DashboardSession = {
   id: string
@@ -71,7 +71,7 @@ type MemberData = {
 type SortKey = 'date' | 'score' | 'name' | 'type'
 type SortDir = 'asc' | 'desc'
 
-// -- Helpers ----------------------------------------------------------------
+// ── Helpers ────────────────────────────────────────────────────────────────
 
 const toMonthKey = (dateStr: string) => {
   const d = new Date(dateStr)
@@ -132,38 +132,6 @@ const TYPE_COLORS: Record<string, string> = {
   phone: 'orange',
 }
 
-const themedCardStyle = {
-  background: `linear-gradient(
-    180deg,
-    var(--pitch-card-bg, var(--pitch-surface-bg, var(--mantine-color-body))) 0%,
-    color-mix(in srgb, var(--pitch-card-bg-strong, var(--pitch-card-bg, var(--pitch-surface-bg))) 84%, transparent) 100%
-  )`,
-  border: '1px solid var(--pitch-card-border, var(--pitch-border, var(--mantine-color-default-border)))',
-  boxShadow: `0 10px 24px color-mix(
-    in srgb,
-    var(--pitch-card-shadow, var(--pitch-surface-bg, #000)) 16%,
-    transparent
-  )`,
-}
-
-const elevatedCardStyle = {
-  ...themedCardStyle,
-  boxShadow: `0 14px 30px color-mix(
-    in srgb,
-    var(--pitch-card-shadow, var(--pitch-accent-strong)) 18%,
-    transparent
-  )`,
-}
-
-const animatedCardStyle = (delay: string, revealed: boolean) =>
-  revealed ? { ...themedCardStyle, animationDelay: delay } : { ...themedCardStyle, opacity: 0 }
-
-const themedIconStyle = {
-  background: 'var(--pitch-card-bg-subtle, var(--pitch-card-bg, var(--pitch-surface-bg, var(--mantine-color-body))))',
-  color: 'var(--pitch-accent-strong)',
-  border: '1px solid var(--pitch-card-border, var(--pitch-border, var(--mantine-color-default-border)))',
-}
-
 const computeSessionTypeData = (sessions: DashboardSession[]) => {
   const byType = new Map<string, number>()
   for (const s of sessions) {
@@ -203,13 +171,13 @@ const managerTeams = (teams: Team[], userId: string) =>
     return membership?.role === 'OWNER' || membership?.role === 'ADMIN'
   })
 
-// -- Skeleton loaders -------------------------------------------------------
+// ── Skeleton loaders ───────────────────────────────────────────────────────
 
 function KpiSkeleton() {
   return (
     <SimpleGrid cols={{ base: 2, sm: 4 }} spacing="md">
       {[0, 1, 2, 3].map((i) => (
-        <Card key={i} radius="lg" p="lg" withBorder style={themedCardStyle}>
+        <Card key={i} radius="lg" p="lg" withBorder>
           <Skeleton height={12} width="60%" mb={12} />
           <Skeleton height={36} width="45%" mb={8} />
           <Skeleton height={8} width="80%" />
@@ -221,14 +189,14 @@ function KpiSkeleton() {
 
 function ChartSkeleton({ h = 240 }: { h?: number }) {
   return (
-    <Card radius="lg" p="lg" withBorder style={themedCardStyle}>
+    <Card radius="lg" p="lg" withBorder>
       <Skeleton height={14} width="40%" mb={16} />
       <Skeleton height={h} />
     </Card>
   )
 }
 
-// -- SortableHeader ---------------------------------------------------------
+// ── SortableHeader ─────────────────────────────────────────────────────────
 
 function SortableHeader({
   label,
@@ -253,7 +221,7 @@ function SortableHeader({
         gap: 4,
         fontWeight: 600,
         fontSize: 13,
-        color: isActive ? 'var(--pitch-accent-strong)' : 'var(--mantine-color-dimmed)',
+        color: isActive ? 'var(--mantine-color-cyan-5)' : 'var(--mantine-color-dimmed)',
         whiteSpace: 'nowrap',
         userSelect: 'none',
       }}
@@ -272,7 +240,7 @@ function SortableHeader({
   )
 }
 
-// -- Component --------------------------------------------------------------
+// ── Component ──────────────────────────────────────────────────────────────
 
 export default function AnalyticsPage() {
   const router = useRouter()
@@ -404,7 +372,7 @@ export default function AnalyticsPage() {
     if (activeTab === 'Team') void loadTeamData()
   }, [activeTab, loadTeamData])
 
-  // -- Personal computed values ---------------------------------------------
+  // ── Personal computed values ─────────────────────────────────────────────
 
   const monthlyTrend = useMemo(() => computeMonthlyTrend(sessions), [sessions])
   const competencyData = useMemo(() => computeCompetencyAverages(sessions), [sessions])
@@ -417,7 +385,7 @@ export default function AnalyticsPage() {
     [sessions]
   )
 
-  // -- Team computed values -------------------------------------------------
+  // ── Team computed values ─────────────────────────────────────────────────
 
   const teamLeaderboard = useMemo(
     () =>
@@ -443,7 +411,7 @@ export default function AnalyticsPage() {
     [teamMemberData]
   )
 
-  // -- Session history: filter + sort ---------------------------------------
+  // ── Session history: filter + sort ───────────────────────────────────────
 
   const sessionTypes = useMemo(() => [...new Set(sessions.map((s) => s.type))].sort(), [sessions])
 
@@ -503,7 +471,7 @@ export default function AnalyticsPage() {
     }
   }
 
-  // -- KPI items ------------------------------------------------------------
+  // ── KPI items ────────────────────────────────────────────────────────────
 
   const kpiItems = [
     {
@@ -542,7 +510,7 @@ export default function AnalyticsPage() {
     },
   ]
 
-  // -- Render ---------------------------------------------------------------
+  // ── Render ───────────────────────────────────────────────────────────────
 
   return (
     <>
@@ -570,9 +538,9 @@ export default function AnalyticsPage() {
             </Alert>
           )}
 
-          {/* --------------------------------------------------
+          {/* ══════════════════════════════════════════════════
               PERSONAL TAB
-          -------------------------------------------------- */}
+          ══════════════════════════════════════════════════ */}
           {activeTab === 'Personal' && (
             <>
               {loading ? (
@@ -589,9 +557,9 @@ export default function AnalyticsPage() {
                   <ChartSkeleton h={220} />
                 </Stack>
               ) : sessions.length === 0 ? (
-                <Card withBorder radius="xl" p="xl" style={elevatedCardStyle}>
+                <Card withBorder radius="xl" p="xl">
                   <Stack align="center" gap="md" py="xl">
-                    <ThemeIcon size={64} radius="xl" style={themedIconStyle}>
+                    <ThemeIcon size={64} radius="xl" color="blue" variant="light">
                       <IconChartBar size={30} />
                     </ThemeIcon>
                     <Stack align="center" gap={4}>
@@ -623,7 +591,7 @@ export default function AnalyticsPage() {
                         p="lg"
                         withBorder
                         className={revealed ? 'analytics-reveal' : undefined}
-                        style={animatedCardStyle(`${i * 70}ms`, revealed)}
+                        style={revealed ? { animationDelay: `${i * 70}ms` } : { opacity: 0 }}
                       >
                         <Group justify="space-between" mb={8}>
                           <Text c="dimmed" size="xs" fw={500} tt="uppercase">
@@ -654,7 +622,7 @@ export default function AnalyticsPage() {
                         withBorder
                         h="100%"
                         className={revealed ? 'analytics-reveal' : undefined}
-                        style={{ ...animatedCardStyle('280ms', revealed), height: '100%' }}
+                        style={revealed ? { animationDelay: '280ms' } : { opacity: 0 }}
                       >
                         <Group justify="space-between" mb="md">
                           <Stack gap={2}>
@@ -708,7 +676,7 @@ export default function AnalyticsPage() {
                         withBorder
                         h="100%"
                         className={revealed ? 'analytics-reveal' : undefined}
-                        style={{ ...animatedCardStyle('350ms', revealed), height: '100%' }}
+                        style={revealed ? { animationDelay: '350ms' } : { opacity: 0 }}
                       >
                         <Stack gap={2} mb="md">
                           <Text fw={700}>Session types</Text>
@@ -769,7 +737,7 @@ export default function AnalyticsPage() {
                       p="lg"
                       withBorder
                       className={revealed ? 'analytics-reveal' : undefined}
-                      style={animatedCardStyle('420ms', revealed)}
+                      style={revealed ? { animationDelay: '420ms' } : { opacity: 0 }}
                     >
                       <Group justify="space-between" mb="md">
                         <Stack gap={2}>
@@ -799,14 +767,14 @@ export default function AnalyticsPage() {
                     </Card>
                   )}
 
-                  {/* -- Session history table -- */}
+                  {/* ── Session history table ── */}
                   <Card
                     data-tour-id="analytics-history"
                     radius="lg"
                     p="lg"
                     withBorder
                     className={revealed ? 'analytics-reveal' : undefined}
-                    style={animatedCardStyle('490ms', revealed)}
+                    style={revealed ? { animationDelay: '490ms' } : { opacity: 0 }}
                   >
                     {/* Header */}
                     <Group justify="space-between" mb="md" wrap="wrap" gap="sm">
@@ -1004,13 +972,13 @@ export default function AnalyticsPage() {
             </>
           )}
 
-          {/* --------------------------------------------------
+          {/* ══════════════════════════════════════════════════
               TEAM TAB
-          -------------------------------------------------- */}
+          ══════════════════════════════════════════════════ */}
           {activeTab === 'Team' && (
             <>
               {!isManager ? (
-                <Card withBorder radius="xl" p="xl" style={elevatedCardStyle}>
+                <Card withBorder radius="xl" p="xl">
                   <Stack align="center" gap="md" py="xl">
                     <ThemeIcon size={64} radius="xl" color="violet" variant="light">
                       <IconUsers size={30} />
@@ -1034,7 +1002,7 @@ export default function AnalyticsPage() {
                   </SimpleGrid>
                 </Stack>
               ) : teamLoaded && teamMemberData.length === 0 ? (
-                <Card withBorder radius="xl" p="xl" style={elevatedCardStyle}>
+                <Card withBorder radius="xl" p="xl">
                   <Stack align="center" gap="md" py="xl">
                     <ThemeIcon size={64} radius="xl" color="violet" variant="light">
                       <IconUsers size={30} />
@@ -1105,7 +1073,7 @@ export default function AnalyticsPage() {
                         p="lg"
                         withBorder
                         className="analytics-reveal"
-                        style={{ ...themedCardStyle, animationDelay: `${i * 70}ms` }}
+                        style={{ animationDelay: `${i * 70}ms` }}
                       >
                         <Group justify="space-between" mb={8}>
                           <Text c="dimmed" size="xs" fw={500} tt="uppercase">
@@ -1128,13 +1096,7 @@ export default function AnalyticsPage() {
 
                   {/* Team leaderboard */}
                   {teamLeaderboard.length > 0 && (
-                    <Card
-                      data-tour-id="analytics-team-leaderboard"
-                      radius="lg"
-                      p="lg"
-                      withBorder
-                      style={themedCardStyle}
-                    >
+                    <Card data-tour-id="analytics-team-leaderboard" radius="lg" p="lg" withBorder>
                       <Group justify="space-between" mb="md">
                         <Stack gap={2}>
                           <Text fw={700}>Team leaderboard</Text>
@@ -1176,7 +1138,7 @@ export default function AnalyticsPage() {
                       const memberBest = calcBestScore(member.sessions)
                       const recentSessions = member.sessions.slice(0, 3)
                       return (
-                        <Card key={member.userId} withBorder radius="lg" p="lg" style={themedCardStyle}>
+                        <Card key={member.userId} withBorder radius="lg" p="lg">
                           <Stack gap="sm">
                             <Group justify="space-between" align="flex-start">
                               <Stack gap={2}>
@@ -1258,7 +1220,7 @@ export default function AnalyticsPage() {
                                         variant="subtle"
                                         p={0}
                                         h="auto"
-                                        color="brand"
+                                        color="gray"
                                         onClick={() => {
                                           const q = s.runId
                                             ? `?runId=${encodeURIComponent(s.runId)}`
@@ -1291,4 +1253,3 @@ export default function AnalyticsPage() {
     </>
   )
 }
-

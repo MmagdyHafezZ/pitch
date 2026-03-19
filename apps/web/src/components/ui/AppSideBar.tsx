@@ -1,7 +1,6 @@
 'use client'
 
 import { Box, Stack, NavLink, Text, Divider, rem, Group } from '@mantine/core'
-import { useMediaQuery } from '@mantine/hooks'
 import {
   IconHome,
   IconCalendar,
@@ -9,12 +8,14 @@ import {
   IconUserCog,
   IconHelp,
   IconSettings,
+  IconTrophy,
 } from '@tabler/icons-react'
 import { Dispatch, SetStateAction, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { WeekCalendar } from '@/components/ui/WeekCalendar'
 import { SettingsModal } from './SettingsModal'
 import classes from './AppSideBar.module.css'
+import { useI18n } from '@/features/i18n'
 
 export type SidebarLink = {
   icon: React.ComponentType<{ size?: number }>
@@ -40,6 +41,7 @@ const DEFAULT_MAIN: SidebarLink[] = [
   { icon: IconHome, label: 'Home' },
   { icon: IconCalendar, label: 'Sessions' },
   { icon: IconChartBar, label: 'Analytics' },
+  { icon: IconTrophy, label: 'Challenges' },
   { icon: IconUserCog, label: 'Team Config' },
 ]
 
@@ -53,7 +55,7 @@ export function AppSidebar({
   onNavigate,
 }: Props) {
   const router = useRouter()
-  const isMobile = useMediaQuery('(max-width: 48em)')
+  const { t } = useI18n()
   const [settingsOpened, setSettingsOpened] = useState(false)
   const resolvedMainLinks = showTeamConfig
     ? mainLinks
@@ -63,9 +65,12 @@ export function AppSidebar({
     <>
       <SettingsModal opened={settingsOpened} onClose={() => setSettingsOpened(false)} />
       <Box
+        data-tour-id="app-sidebar"
         style={{
           height: '100%',
-          width: '100%',
+          flex: 1,
+          minWidth: 0,
+          boxSizing: 'border-box',
           background: 'transparent',
           display: 'flex',
         }}
@@ -76,15 +81,16 @@ export function AppSidebar({
             borderTopLeftRadius: 0,
             borderTopRightRadius: 0,
             borderBottomLeftRadius: 0,
-            padding: rem(isMobile ? 8 : 10),
+            padding: rem(10),
             display: 'flex',
             flexDirection: 'column',
-            gap: rem(isMobile ? 6 : 8),
+            gap: rem(8),
             width: '100%',
             height: '100%',
+            boxSizing: 'border-box',
           }}
         >
-          <Stack gap={isMobile ? 4 : 6} mt={isMobile ? 4 : 'xs'} flex={1}>
+          <Stack gap={6} mt="xs" flex={1}>
             {resolvedMainLinks.map(({ icon: Icon, label }) => (
               <NavLink
                 key={label}
@@ -97,7 +103,17 @@ export function AppSidebar({
                 leftSection={<Icon size={18} />}
                 label={
                   <Text size="sm" className={classes.navLabel}>
-                    {label}
+                    {label === 'Home'
+                      ? t('nav.home')
+                      : label === 'Sessions'
+                        ? t('nav.sessions')
+                        : label === 'Analytics'
+                          ? t('nav.analytics')
+                          : label === 'Team Config'
+                            ? t('nav.teamConfig')
+                            : label === 'Challenges'
+                              ? t('nav.challenges')
+                              : label}
                   </Text>
                 }
                 variant="subtle"
@@ -110,15 +126,15 @@ export function AppSidebar({
               />
             ))}
             <Box
-              className={classes.calendarShell}
               mt="auto"
-              pt={isMobile ? 'md' : 'lg'}
+              pt="lg"
               mx="0"
-              pb={isMobile ? 6 : 10}
+              pb={10}
               style={{
                 width: '100%',
                 background: 'var(--pitch-nav-bg, var(--mantine-color-nav-9))',
                 borderRadius: 12,
+                border: '1px solid var(--pitch-nav-text-dim)',
                 overflow: 'hidden',
               }}
             >
