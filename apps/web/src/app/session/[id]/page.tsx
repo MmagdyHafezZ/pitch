@@ -13,7 +13,6 @@ import {
   Badge,
   TextInput,
   ScrollArea,
-  Select,
   Loader,
   Modal,
   Button,
@@ -393,21 +392,33 @@ export default function LiveSessionPage() {
       setAvatarVideoError(avatarState.error)
       setAvatarVideoJobId(avatarState.jobId)
       setAvatarVideoUrl(nextAvatarVideoUrl)
-
-      const resolvedProvider =
-        typeof config.phoneProvider === 'string'
-          ? config.phoneProvider
-          : typeof config.phone?.provider === 'string'
-            ? config.phone.provider
-            : 'twilio'
-
-      setCallProvider(
-        resolvedProvider === 'vapi' || resolvedProvider === 'twilio' ? resolvedProvider : 'twilio'
-      )
       setCallModalOpen(session?.type === 'phone' && normalizedStatus !== 'ended')
     },
     []
   )
+
+  const loadPhoneVerificationStatus = useCallback(async () => {
+    setPhoneVerificationLoading(true)
+    try {
+      const status = (await api.users.getMyPhoneVerification()) as PhoneVerificationState
+      setPhoneVerification(status)
+      if (status.verified && status.phoneNumber) {
+        setEditingVerifiedPhone(false)
+        setPhoneNumber(status.phoneNumber)
+      } else if (status.pendingPhoneNumber) {
+        setPhoneNumber(status.pendingPhoneNumber)
+      }
+      setCallError(null)
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'Unable to load your phone verification status right now.'
+      setCallError(message)
+    } finally {
+      setPhoneVerificationLoading(false)
+    }
+  }, [])
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -1270,16 +1281,6 @@ export default function LiveSessionPage() {
             error={callError ?? undefined}
             type="tel"
             autoComplete="tel"
-          />
-          <Select
-            label="Provider"
-            data={[
-              { value: 'twilio', label: 'Twilio' },
-              { value: 'vapi', label: 'Vapi' },
-            ]}
-            value={callProvider}
-            onChange={(value) => setCallProvider(value ?? 'twilio')}
-            allowDeselect={false}
           />
           <Group justify="flex-end">
             <Button variant="default" onClick={() => setCallModalOpen(false)}>
