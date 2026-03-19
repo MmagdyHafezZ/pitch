@@ -30,7 +30,39 @@ export default function ClientLayerComponent({ children }: { children: React.Rea
   const searchParams = useSearchParams()
   const user = useAuthStore((state) => state.user)
 
-  // Guard: redirect to onboarding if user is loaded but hasn't completed it
+  const setSidebarActive = (
+    value:
+      | 'Home'
+      | 'Sessions'
+      | 'Teams'
+      | 'Analytics'
+      | 'Settings'
+      | 'Team Config'
+      | 'Challenges'
+      | ((
+          current:
+            | 'Home'
+            | 'Sessions'
+            | 'Teams'
+            | 'Analytics'
+            | 'Settings'
+            | 'Team Config'
+            | 'Challenges'
+        ) =>
+          | 'Home'
+          | 'Sessions'
+          | 'Teams'
+          | 'Analytics'
+          | 'Settings'
+          | 'Team Config'
+          | 'Challenges')
+  ) => {
+    setActive((current) => {
+      const next = typeof value === 'function' ? value(current) : value
+      return next === 'Challenges' ? current : next
+    })
+  }
+
   useEffect(() => {
     if (user && !user.settings?.onboarding?.completed) {
       router.replace('/onboarding')
@@ -53,11 +85,13 @@ export default function ClientLayerComponent({ children }: { children: React.Rea
   ) => {
     return (tab: string) => {
       setTabsByPage((prev) => ({ ...prev, [page]: tab }))
+
       if (page === 'Sessions') {
         const params = new URLSearchParams(searchParams.toString())
         params.set('filter', tab)
         router.replace(`${pathname}?${params.toString()}`)
       }
+
       if (page === 'Analytics') {
         const params = new URLSearchParams(searchParams.toString())
         params.set('tab', tab)
@@ -139,7 +173,6 @@ export default function ClientLayerComponent({ children }: { children: React.Rea
     const membership = activeTeam?.memberships?.find((m) => m.userId === user.id)
     return membership?.role === 'OWNER' || membership?.role === 'ADMIN'
   }, [activeTeam?.memberships, user?.id])
-
   const handleLeaveTeam = (team: { id: string; name: string; canLeave?: boolean }) => {
     if (!user?.id) return
     modals.openConfirmModal({
@@ -187,6 +220,7 @@ export default function ClientLayerComponent({ children }: { children: React.Rea
   useEffect(() => {
     fetchUserTeams()
   }, [fetchUserTeams])
+
   useEffect(() => {
     if (active !== pageInfo.nav) {
       setActive(pageInfo.nav)
@@ -229,7 +263,7 @@ export default function ClientLayerComponent({ children }: { children: React.Rea
             />
             <AppSidebar
               active={active}
-              setActive={setActive}
+              setActive={setSidebarActive}
               selectedDate={selectedDate}
               setSelectedDate={setSelectedDate}
               showTeamConfig={canAccessTeamConfig}
