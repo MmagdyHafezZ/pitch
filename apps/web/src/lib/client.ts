@@ -562,6 +562,11 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(data || {}),
       }),
+    restart: (id: string, data?: { reason?: string }) =>
+      apiRequest<any>(`/simulation/sessions/${id}/restart`, {
+        method: 'POST',
+        body: JSON.stringify(data || {}),
+      }),
     delete: (id: string) =>
       apiRequest<any>(`/simulation/sessions/${id}`, {
         method: 'DELETE',

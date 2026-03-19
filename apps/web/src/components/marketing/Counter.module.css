@@ -1,0 +1,34 @@
+.wrapper {
+  position: relative;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.08em;
+  line-height: 1;
+}
+
+.value {
+  display: inline-block;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.03em;
+  white-space: nowrap;
+}
+
+.affix {
+  display: inline-block;
+  font-size: 0.62em;
+  font-weight: 650;
+  line-height: 1;
+  opacity: 0.84;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

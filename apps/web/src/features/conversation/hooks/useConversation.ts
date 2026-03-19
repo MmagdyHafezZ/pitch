@@ -507,7 +507,7 @@ export function useConversation(options: UseConversationOptions) {
 
     // Cancel any ongoing conversation
     if (currentRequestIdRef.current) {
-      conversationService.cancelConversation(sessionId, currentRequestIdRef.current)
+      void conversationService.cancelConversation(sessionId, currentRequestIdRef.current)
       currentRequestIdRef.current = null
     }
 
@@ -530,88 +530,109 @@ export function useConversation(options: UseConversationOptions) {
     })
   }, [sessionId, disconnect, stopAudio, clearAudioQueue])
 
-  const interrupt = useCallback(() => {
-    // Cancel current request but stay connected
-    if (currentRequestIdRef.current) {
-      conversationService.cancelConversation(sessionId, currentRequestIdRef.current)
-      currentRequestIdRef.current = null
-    }
+  const interrupt = useCallback(async () => {
+    const requestId = currentRequestIdRef.current
+    currentRequestIdRef.current = null
 
-    // Stop audio and clear sentence queue
+    // Stop audio and clear sentence queue immediately for responsive barge-in
     stopAudio()
     clearAudioQueue()
-
-    // Reset processing state
     setIsProcessing(false)
+
+    if (requestId) {
+      await conversationService.cancelConversation(sessionId, requestId)
+    }
   }, [sessionId, stopAudio, clearAudioQueue])
 
   const sendMessage = useCallback(
     (text: string, options?: Partial<ConversationStartPayload>) => {
-      if (!conversationService.isConnected()) {
-        const errorMsg = 'Not connected to conversation service'
-        setError(errorMsg)
-        onErrorRef.current?.(errorMsg)
-        return
-      }
+      void (async () => {
+        if (!conversationService.isConnected()) {
+          const errorMsg = 'Not connected to conversation service'
+          setError(errorMsg)
+          onErrorRef.current?.(errorMsg)
+          return
+        }
 
-      // If currently processing, interrupt the current conversation
-      if (currentRequestIdRef.current) {
-        interrupt()
-      }
+        if (currentRequestIdRef.current) {
+          await interrupt()
+        }
 
-      setIsProcessing(true)
-      setError(null)
-      setHangupRequest(null)
-      stopAudio()
-      clearAudioQueue()
+        if (!conversationService.isConnected()) {
+          const errorMsg = 'Not connected to conversation service'
+          setError(errorMsg)
+          onErrorRef.current?.(errorMsg)
+          return
+        }
 
-      const userMessage: ConversationMessage = {
-        id: `user_${Date.now()}`,
-        role: 'user',
-        text,
-        timestamp: new Date(),
-      }
-      setMessages((prev) => [...prev, userMessage])
+        setIsProcessing(true)
+        setError(null)
+        setHangupRequest(null)
+        stopAudio()
+        clearAudioQueue()
 
-      const payload: ConversationStartPayload = {
-        text,
-        ...options,
-      }
+        const userMessage: ConversationMessage = {
+          id: `user_${Date.now()}`,
+          role: 'user',
+          text,
+          timestamp: new Date(),
+        }
+        setMessages((prev) => [...prev, userMessage])
 
-      const requestId = conversationService.sendConversation(sessionId, payload)
-      currentRequestIdRef.current = requestId
+        const payload: ConversationStartPayload = {
+          text,
+          ...options,
+        }
+
+        const requestId = conversationService.sendConversation(sessionId, payload)
+        currentRequestIdRef.current = requestId
+      })()
     },
     [sessionId, stopAudio, interrupt, clearAudioQueue]
   )
 
   const startAssistantTurn = useCallback(
     (options?: Partial<ConversationStartPayload>) => {
-      if (!conversationService.isConnected()) {
-        const errorMsg = 'Not connected to conversation service'
-        setError(errorMsg)
-        onErrorRef.current?.(errorMsg)
-        return
-      }
+      void (async () => {
+        if (!conversationService.isConnected()) {
+          const errorMsg = 'Not connected to conversation service'
+          setError(errorMsg)
+          onErrorRef.current?.(errorMsg)
+          return
+        }
 
-      setIsProcessing(true)
-      setError(null)
-      stopAudio()
+        if (currentRequestIdRef.current) {
+          await interrupt()
+        }
 
-      const payload: ConversationStartPayload = {
-        text: '',
-        startAsAssistant: true,
-        ...options,
-      }
+        if (!conversationService.isConnected()) {
+          const errorMsg = 'Not connected to conversation service'
+          setError(errorMsg)
+          onErrorRef.current?.(errorMsg)
+          return
+        }
 
-      const requestId = conversationService.sendConversation(sessionId, payload)
-      currentRequestIdRef.current = requestId
+        setIsProcessing(true)
+        setError(null)
+        stopAudio()
+
+        const payload: ConversationStartPayload = {
+          text: '',
+          startAsAssistant: true,
+          ...options,
+        }
+
+        const requestId = conversationService.sendConversation(sessionId, payload)
+        currentRequestIdRef.current = requestId
+      })()
     },
-    [sessionId, stopAudio]
+    [sessionId, stopAudio, interrupt]
   )
 
   const clearMessages = useCallback(() => {
+    revokeAudioUrls()
     setMessages([])
-  }, [])
+  }, [revokeAudioUrls])
 
   const clearHangupRequest = useCallback(() => {
     setHangupRequest(null)
@@ -679,6 +700,7 @@ export function useConversation(options: UseConversationOptions) {
     clearToolEvents,
     stopAudio,
     replayAudio,
+    audioElementRef: currentAudioRef,
   }
 }
 

@@ -5,6 +5,7 @@ import type {
   CreateSessionInput,
   UpdateSessionInput,
   EndSessionInput,
+  RestartSessionInput,
   ListSessionsParams,
   DeleteSessionResponse,
 } from '../types/sessions.types'
@@ -42,6 +43,10 @@ export const SessionService = {
 
   end(id: string, payload?: EndSessionInput): Promise<Session> {
     return api.sessions.end(id, payload)
+  },
+
+  restart(id: string, payload?: RestartSessionInput): Promise<Session> {
+    return api.sessions.restart(id, payload)
   },
 
   delete(id: string): Promise<DeleteSessionResponse> {

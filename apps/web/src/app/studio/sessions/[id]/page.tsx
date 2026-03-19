@@ -258,8 +258,8 @@ export default function SessionDetailPage() {
 
   return (
     <Stack gap="lg">
-      <Group justify="space-between" align="flex-start" wrap="nowrap">
-        <Group gap="sm" align="flex-start" style={{ flex: 1, minWidth: 0 }}>
+      <Stack gap="xs">
+        <Group justify="space-between" align="center" wrap="nowrap" gap="xs">
           <Button
             variant="subtle"
             color="gray"
@@ -270,56 +270,66 @@ export default function SessionDetailPage() {
           >
             Sessions
           </Button>
-          <Stack gap={4} style={{ minWidth: 0 }}>
-            <Group gap="sm" align="center">
-              <Title order={2} c="white" style={{ wordBreak: 'break-word' }}>
-                {displayName}
-              </Title>
-              <Badge color={badgeColor} radius="sm" variant="light">
-                {displayStatus}
-              </Badge>
-            </Group>
-            <Text size="xs" c="dimmed" style={{ fontFamily: 'monospace' }}>
-              {session.id}
-            </Text>
-          </Stack>
+          <Group gap="xs" wrap="nowrap" style={{ flexShrink: 0 }}>
+            <Button
+              size="sm"
+              variant="light"
+              color="blue"
+              leftSection={<IconEdit size={15} />}
+              disabled={!canModify}
+              title={!canModify ? 'Only the session owner can edit this session.' : undefined}
+              onClick={() => {
+                if (!canModify) return
+                router.push(`/studio/sessions/${session.id}/edit`)
+              }}
+            >
+              Edit
+            </Button>
+            <Button
+              size="sm"
+              variant="light"
+              color="gray"
+              leftSection={<IconLink size={15} />}
+              visibleFrom="sm"
+              onClick={() => setLtiEmbedOpen(true)}
+            >
+              Embed in LMS
+            </Button>
+            <Button
+              size="sm"
+              variant="filled"
+              color="brand"
+              leftSection={<IconPlayerPlay size={15} />}
+              onClick={() => router.push(`/session/${session.id}`)}
+            >
+              Launch
+            </Button>
+          </Group>
         </Group>
 
-        <Group gap="xs" style={{ flexShrink: 0 }}>
-          <Button
-            size="sm"
-            variant="light"
-            color="blue"
-            leftSection={<IconEdit size={15} />}
-            disabled={!canModify}
-            title={!canModify ? 'Only the session owner can edit this session.' : undefined}
-            onClick={() => {
-              if (!canModify) return
-              router.push(`/studio/sessions/${session.id}/edit`)
+        <Group gap="sm" align="center" wrap="wrap">
+          <Title
+            order={2}
+            c="white"
+            style={{
+              flex: 1,
+              minWidth: 0,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
             }}
           >
-            Edit
-          </Button>
-          <Button
-            size="sm"
-            variant="light"
-            color="gray"
-            leftSection={<IconLink size={15} />}
-            onClick={() => setLtiEmbedOpen(true)}
-          >
-            Embed in LMS
-          </Button>
-          <Button
-            size="sm"
-            variant="filled"
-            color="brand"
-            leftSection={<IconPlayerPlay size={15} />}
-            onClick={() => router.push(`/session/${session.id}`)}
-          >
-            Launch
-          </Button>
+            {displayName}
+          </Title>
+          <Badge color={badgeColor} radius="sm" variant="light" style={{ flexShrink: 0 }}>
+            {displayStatus}
+          </Badge>
         </Group>
-      </Group>
+
+        <Text size="xs" c="dimmed" style={{ fontFamily: 'monospace' }}>
+          {session.id}
+        </Text>
+      </Stack>
 
       <Divider color="dark.5" />
 

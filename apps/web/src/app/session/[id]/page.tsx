@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { useMediaQuery } from '@mantine/hooks'
 import {
   Box,
   Group,
@@ -8,37 +9,27 @@ import {
   Title,
   Text,
   Paper,
-  Avatar,
   ActionIcon,
   Badge,
   TextInput,
   ScrollArea,
+  Select,
   Loader,
   Modal,
   Button,
   Checkbox,
 } from '@mantine/core'
-import {
-  IconPhone,
-  IconPlayerPause,
-  IconMicrophone,
-  IconArrowRight,
-  IconSend,
-  IconCheck,
-  IconEdit,
-} from '@tabler/icons-react'
+import { IconPhone, IconArrowRight } from '@tabler/icons-react'
 import { useRouter, useParams } from 'next/navigation'
-import {
-  useConversation,
-  useVisualState,
-  VisualStateOverlay,
-  CameraEngagementIndicator,
-} from '@/features/conversation'
+import { useConversation, useVisualState, CameraEngagementIndicator } from '@/features/conversation'
+import { type GlobeState } from '@/features/conversation/components/GlobeVisualizer'
+import VoiceOrbSession from '@/features/conversation/components/VoiceOrbSession'
+import { useAudioLevel } from '@/features/conversation/hooks/useAudioLevel'
 import { CoachChatWidget } from '@/components/ui/CoachChatWidget'
 import { useSpeechToText } from '@/features/stt'
 import { API_CONFIG, api } from '@/lib/client'
 import { notifications } from '@mantine/notifications'
-import type { CreateSessionInput, SessionType } from '@/features/sessions'
+import type { SessionType } from '@/features/sessions'
 
 type AvatarVideoStatus = 'idle' | 'queued' | 'rendering' | 'ready' | 'failed'
 
@@ -66,6 +57,22 @@ interface PhoneVerificationState {
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
+
+const normalizeSessionStatus = (
+  session: unknown,
+  options?: { launchFreshIteration?: boolean }
+): string | null => {
+  if (!isRecord(session) || typeof session.status !== 'string') {
+    return null
+  }
+
+  const status = session.status.trim().toLowerCase()
+  if (options?.launchFreshIteration && status === 'ended') {
+    return 'active'
+  }
+
+  return status
+}
 
 const readAvatarVideoState = (session: unknown): AvatarVideoState => {
   if (!isRecord(session)) {
@@ -107,17 +114,6 @@ const readAvatarVideoState = (session: unknown): AvatarVideoState => {
   }
 }
 
-const readPersonaImageUrl = (session: unknown): string | null => {
-  if (!isRecord(session) || !isRecord(session.persona) || !isRecord(session.persona.traits)) {
-    return null
-  }
-
-  const avatar = isRecord(session.persona.traits.avatar) ? session.persona.traits.avatar : {}
-  return typeof avatar.imageUrl === 'string' && avatar.imageUrl.trim().length > 0
-    ? avatar.imageUrl
-    : null
-}
-
 const buildSessionVideoStreamUrl = (sessionId: string, token: string, jobId?: string | null) => {
   const url = new URL(`${API_CONFIG.baseURL}/simulation/video/stream/${sessionId}`)
   url.searchParams.set('token', token)
@@ -127,45 +123,11 @@ const buildSessionVideoStreamUrl = (sessionId: string, token: string, jobId?: st
   return url.toString()
 }
 
-const buildCreateSessionPayload = (session: Record<string, unknown>): CreateSessionInput => {
-  const orgId = typeof session.orgId === 'string' ? session.orgId : ''
-  const type = typeof session.type === 'string' ? session.type : ''
-
-  if (!orgId) {
-    throw new Error('Unable to start over: session org is missing.')
-  }
-  if (!type) {
-    throw new Error('Unable to start over: session type is missing.')
-  }
-
-  const sessionConfig = isRecord(session.sessionConfig) ? { ...session.sessionConfig } : undefined
-  if (sessionConfig && isRecord(sessionConfig.phone)) {
-    const nextPhoneConfig = { ...sessionConfig.phone }
-    delete nextPhoneConfig.runtime
-    sessionConfig.phone = nextPhoneConfig
-  }
-
-  return {
-    orgId,
-    orgSnapshot: isRecord(session.orgSnapshot) ? session.orgSnapshot : undefined,
-    userSnapshot: isRecord(session.userSnapshot) ? session.userSnapshot : undefined,
-    name: typeof session.name === 'string' ? session.name : undefined,
-    type,
-    tags: Array.isArray(session.tags)
-      ? session.tags.filter((tag): tag is string => typeof tag === 'string')
-      : [],
-    sessionConfig,
-    scenarioId: typeof session.scenarioId === 'string' ? session.scenarioId : undefined,
-    personaId: typeof session.personaId === 'string' ? session.personaId : undefined,
-    language: typeof session.language === 'string' ? session.language : undefined,
-    crmContextId: typeof session.crmContextId === 'string' ? session.crmContextId : undefined,
-  }
-}
-
 export default function LiveSessionPage() {
   const router = useRouter()
   const params = useParams()
   const sessionId = params.id as string
+  const isMobile = useMediaQuery('(max-width: 768px)')
   const [time, setTime] = useState(0)
   const [textInput, setTextInput] = useState('')
   const [hints, setHints] = useState<string[]>([])
@@ -185,7 +147,6 @@ export default function LiveSessionPage() {
   const [sessionStatus, setSessionStatus] = useState<string | null>(null)
   const [sessionName, setSessionName] = useState<string>('')
   const [personaName, setPersonaName] = useState<string | null>(null)
-  const [personaImageUrl, setPersonaImageUrl] = useState<string | null>(null)
   const [hintsEnabled, setHintsEnabled] = useState(false)
   const [timelineEnabled, setTimelineEnabled] = useState(false)
   const [callStarted, setCallStarted] = useState(false)
@@ -222,6 +183,7 @@ export default function LiveSessionPage() {
   const speechFinalizeTickerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const previousAudioPlayingRef = useRef(false)
   const speechBufferRef = useRef<string>('')
+  const assistantInterruptTriggeredRef = useRef(false)
   const hasUserEnabledMicRef = useRef(false)
   const [isMultiTurn, setIsMultiTurn] = useState(false)
   const assistantStartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -229,6 +191,8 @@ export default function LiveSessionPage() {
   const lastAssistantMessageIdRef = useRef<string | null>(null)
   // Hidden pose camera feed used by MediaPipe across session types.
   const poseVideoRef = useRef<HTMLVideoElement | null>(null)
+  // Visible PiP camera feed shown in the Zoom-like video layout.
+  const userPipVideoRef = useRef<HTMLVideoElement | null>(null)
   const poseCameraStreamRef = useRef<MediaStream | null>(null)
   const [visualEnabled, setVisualEnabled] = useState(true)
   const speechFinalizeDelayMs = sessionType === 'voice' || sessionType === 'video' ? 250 : 1500
@@ -315,8 +279,11 @@ export default function LiveSessionPage() {
     interrupt,
     stopAudio,
     replayAudio,
+    clearMessages,
     clearHangupRequest,
+    clearToolEvents,
     toolEvents,
+    audioElementRef,
   } = useConversation({
     sessionId,
     autoConnect: autoConnectConversation,
@@ -343,9 +310,32 @@ export default function LiveSessionPage() {
     onSpeechEnd: handleSpeechEnd,
     onResult: (text, isFinal) => {
       if (sessionStatus === 'ended') return
-      if (!isFinal) return
       const cleaned = text.trim()
       if (!cleaned) return
+
+      const canBargeIn =
+        (sessionType === 'voice' || sessionType === 'video') &&
+        hasUserEnabledMicRef.current &&
+        (assistantSpeaking || isProcessing)
+
+      if (!isFinal) {
+        const wordCount = cleaned.split(/\s+/u).filter(Boolean).length
+        if (
+          canBargeIn &&
+          !assistantInterruptTriggeredRef.current &&
+          wordCount >= 2 &&
+          cleaned.length >= 8
+        ) {
+          assistantInterruptTriggeredRef.current = true
+          void interrupt()
+        }
+        return
+      }
+
+      if (canBargeIn && !assistantInterruptTriggeredRef.current) {
+        assistantInterruptTriggeredRef.current = true
+        void interrupt()
+      }
 
       speechBufferRef.current = speechBufferRef.current
         ? `${speechBufferRef.current.trim()} ${cleaned}`
@@ -372,6 +362,8 @@ export default function LiveSessionPage() {
     },
   })
 
+  const analyserRef = useAudioLevel({ audioElementRef, assistantSpeaking })
+
   const { isReady: poseIsReady, currentState: visualState } = useVisualState({
     sessionId,
     videoRef: poseVideoRef,
@@ -380,59 +372,42 @@ export default function LiveSessionPage() {
     onUserAbsent: () => {},
   })
 
-  const syncSessionState = useCallback((session: any) => {
-    const config = (session?.sessionConfig as Record<string, any>) ?? {}
-    const avatarState = readAvatarVideoState(session)
-    const nextAvatarVideoUrl =
-      session?.id && avatarState.status === 'ready' && avatarState.playbackToken
-        ? buildSessionVideoStreamUrl(session.id, avatarState.playbackToken, avatarState.jobId)
-        : avatarState.url
+  const syncSessionState = useCallback(
+    (session: any, options?: { launchFreshIteration?: boolean }) => {
+      const config = (session?.sessionConfig as Record<string, any>) ?? {}
+      const avatarState = readAvatarVideoState(session)
+      const normalizedStatus = normalizeSessionStatus(session, options)
+      const nextAvatarVideoUrl =
+        session?.id && avatarState.status === 'ready' && avatarState.playbackToken
+          ? buildSessionVideoStreamUrl(session.id, avatarState.playbackToken, avatarState.jobId)
+          : avatarState.url
 
-    setIsMultiTurn(Boolean(config.multiTurnEnabled))
-    setSessionType(session?.type ?? null)
-    setSessionStatus(session?.status ?? null)
-    setSessionName((session as any)?.name ?? (session as any)?.scenario?.name ?? '')
-    setPersonaName((session as any)?.persona?.name ?? null)
-    setPersonaImageUrl(readPersonaImageUrl(session))
-    setPhoneNumber('')
-    setAvatarVideoStatus(avatarState.status)
-    setAvatarVideoProvider(avatarState.provider)
-    setAvatarVideoError(avatarState.error)
-    setAvatarVideoJobId(avatarState.jobId)
-    setAvatarVideoUrl(nextAvatarVideoUrl)
-    if (session?.type !== 'phone' || session?.status === 'ended') {
-      setCallStarted(false)
-    }
-    setCallModalOpen(session?.type === 'phone' && session?.status !== 'ended')
-  }, [])
+      setIsMultiTurn(Boolean(config.multiTurnEnabled))
+      setSessionType(session?.type ?? null)
+      setSessionStatus(normalizedStatus)
+      setSessionName((session as any)?.name ?? (session as any)?.scenario?.name ?? '')
+      setPersonaName((session as any)?.persona?.name ?? null)
+      setPhoneNumber('')
+      setAvatarVideoStatus(avatarState.status)
+      setAvatarVideoProvider(avatarState.provider)
+      setAvatarVideoError(avatarState.error)
+      setAvatarVideoJobId(avatarState.jobId)
+      setAvatarVideoUrl(nextAvatarVideoUrl)
 
-  const loadPhoneVerificationStatus = useCallback(async () => {
-    setPhoneVerificationLoading(true)
-    try {
-      const status = (await api.users.getMyPhoneVerification()) as PhoneVerificationState
-      setPhoneVerification(status)
-      if (status.verified && status.phoneNumber) {
-        setEditingVerifiedPhone(false)
-      }
-      if ((!status.verified || !status.phoneNumber) && sessionStatus !== 'ended' && !callStarted) {
-        setCallModalOpen(true)
-      }
-      if (status.phoneNumber) {
-        setPhoneNumber(status.phoneNumber)
-      } else if (status.pendingPhoneNumber) {
-        setPhoneNumber(status.pendingPhoneNumber)
-      }
-      setCallError(null)
-    } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : 'Unable to load your phone verification status right now.'
-      setCallError(message)
-    } finally {
-      setPhoneVerificationLoading(false)
-    }
-  }, [callStarted, sessionStatus])
+      const resolvedProvider =
+        typeof config.phoneProvider === 'string'
+          ? config.phoneProvider
+          : typeof config.phone?.provider === 'string'
+            ? config.phone.provider
+            : 'twilio'
+
+      setCallProvider(
+        resolvedProvider === 'vapi' || resolvedProvider === 'twilio' ? resolvedProvider : 'twilio'
+      )
+      setCallModalOpen(session?.type === 'phone' && normalizedStatus !== 'ended')
+    },
+    []
+  )
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -470,21 +445,15 @@ export default function LiveSessionPage() {
 
         const sessionRecord = isRecord(session) ? session : {}
         setLoadedSessionRecord(sessionRecord)
-        syncSessionState(session)
-
-        const isPhoneSession = sessionRecord.type === 'phone'
-        const status =
-          typeof sessionRecord.status === 'string' ? sessionRecord.status.toLowerCase() : ''
+        const status = normalizeSessionStatus(session)
 
         if (status === 'ended') {
-          setAutoConnectConversation(!isPhoneSession)
+          syncSessionState(session, { launchFreshIteration: true })
+          setAutoConnectConversation(true)
           return
         }
 
-        if (isPhoneSession) {
-          setAutoConnectConversation(false)
-          return
-        }
+        syncSessionState(session)
 
         let hasExistingProgress = false
         try {
@@ -544,33 +513,86 @@ export default function LiveSessionPage() {
 
     setStartOverLoading(true)
     try {
-      const currentStatus =
-        typeof loadedSessionRecord.status === 'string'
-          ? loadedSessionRecord.status.toLowerCase()
-          : ''
-      if (currentStatus !== 'ended') {
+      await interrupt()
+      stopListening()
+      stopAudio()
+
+      const restartedSession = await api.sessions.restart(sessionId, {
+        reason: 'restart_from_scratch',
+      })
+      const restartedRecord = isRecord(restartedSession) ? restartedSession : {}
+
+      clearMessages()
+      clearToolEvents()
+      clearHangupRequest()
+      setTextInput('')
+      setHints([])
+      setHintsError(null)
+      setTimelineStages([])
+      setCurrentProgress(0)
+      setTimelineError(null)
+      setCallStarted(false)
+      setCallError(null)
+      speechBufferRef.current = ''
+      assistantInterruptTriggeredRef.current = false
+      resetTranscript()
+
+      setLoadedSessionRecord(restartedRecord)
+      syncSessionState(restartedSession)
+
+      if (hintsEnabled) {
         try {
-          await api.sessions.end(sessionId, { reason: 'restart_from_scratch' })
+          const response = await api.hints.history(sessionId, 1)
+          const latest = response?.history?.[0]
+          const nextHints = latest?.hints?.map((hint: { content: string }) => hint.content) ?? []
+          setHints(nextHints)
+          setHintsError(null)
         } catch {
-          // Best effort: if ending fails, still attempt creating a fresh iteration.
+          setHintsError('Unable to load hints')
         }
       }
 
-      const payload = buildCreateSessionPayload(loadedSessionRecord)
-      const freshSession = await api.sessions.create(payload)
-      const nextSessionId = typeof freshSession?.id === 'string' ? freshSession.id : ''
-      if (!nextSessionId) {
-        throw new Error('Unable to start over right now. Please try again.')
+      if (timelineEnabled) {
+        try {
+          const response = await api.sessions.timeline(sessionId, 50)
+          const plannedStages = response?.plannedStages ?? []
+          const progress = response?.currentProgress ?? 0
+          const totalTurns = response?.total ?? 0
+
+          if (plannedStages.length === 0) {
+            setTimelineStages([])
+            setCurrentProgress(0)
+            setTimelineError(null)
+          } else {
+            const currentStageIndex = Math.min(
+              plannedStages.length - 1,
+              Math.floor((progress / 100) * plannedStages.length)
+            )
+
+            const stages = plannedStages.map((stage: any, index: number) => ({
+              order: stage.order,
+              label: stage.label,
+              description: stage.description,
+              active: index === currentStageIndex && totalTurns > 0,
+              completed: index < currentStageIndex,
+            }))
+
+            setTimelineStages(stages)
+            setCurrentProgress(progress)
+            setTimelineError(null)
+          }
+        } catch {
+          setTimelineError('Unable to load timeline')
+        }
       }
 
       notifications.show({
         title: 'Started a new iteration',
-        message: 'You are now in a fresh session with the same setup.',
+        message: 'You are now in a fresh iteration of this session.',
         color: 'green',
       })
       setResumePromptOpen(false)
-      setAutoConnectConversation(false)
-      router.replace(`/session/${nextSessionId}`)
+      setAutoConnectConversation(true)
     } catch (error) {
       const message =
         error instanceof Error ? error.message : 'Unable to start a new iteration right now.'
@@ -582,7 +604,21 @@ export default function LiveSessionPage() {
     } finally {
       setStartOverLoading(false)
     }
-  }, [loadedSessionRecord, router, sessionId, startOverLoading])
+  }, [
+    clearHangupRequest,
+    clearMessages,
+    clearToolEvents,
+    hintsEnabled,
+    interrupt,
+    loadedSessionRecord,
+    resetTranscript,
+    sessionId,
+    startOverLoading,
+    stopAudio,
+    stopListening,
+    syncSessionState,
+    timelineEnabled,
+  ])
 
   // Hidden pose camera for MediaPipe across session types.
   // The visible video area is reserved for the AI avatar on video sessions.
@@ -593,6 +629,7 @@ export default function LiveSessionPage() {
       poseCameraStreamRef.current?.getTracks().forEach((t) => t.stop())
       poseCameraStreamRef.current = null
       if (poseVideoRef.current) poseVideoRef.current.srcObject = null
+      if (userPipVideoRef.current) userPipVideoRef.current.srcObject = null
       return
     }
 
@@ -614,6 +651,10 @@ export default function LiveSessionPage() {
           poseVideoElement.srcObject = stream
           poseVideoElement.play().catch(() => {})
         }
+        if (userPipVideoRef.current) {
+          userPipVideoRef.current.srcObject = stream
+          userPipVideoRef.current.play().catch(() => {})
+        }
       } catch {
         // Camera permission denied — visual state won't be sent; conversation still works normally
       }
@@ -626,6 +667,7 @@ export default function LiveSessionPage() {
       poseCameraStreamRef.current?.getTracks().forEach((t) => t.stop())
       poseCameraStreamRef.current = null
       if (poseVideoElement) poseVideoElement.srcObject = null
+      if (userPipVideoRef.current) userPipVideoRef.current.srcObject = null
     }
   }, [isVideoSession, visualEnabled, isConnected, sessionType])
 
@@ -848,6 +890,29 @@ export default function LiveSessionPage() {
     void startListening()
   }
 
+  const handlePauseReplay = useCallback(() => {
+    if (assistantSpeaking) {
+      stopAudio()
+    } else if (currentAudioUrl) {
+      if (isVideoSession && videoRef.current && avatarVideoUrl) {
+        videoRef.current.currentTime = 0
+        videoRef.current.play().catch(() => {})
+      }
+      replayAudio()
+    } else if (isProcessing) {
+      interrupt()
+    }
+  }, [
+    assistantSpeaking,
+    currentAudioUrl,
+    isVideoSession,
+    avatarVideoUrl,
+    isProcessing,
+    stopAudio,
+    replayAudio,
+    interrupt,
+  ])
+
   useEffect(() => {
     latestMessagesRef.current = messages.map((msg) => ({
       role: msg.role,
@@ -977,10 +1042,18 @@ export default function LiveSessionPage() {
   }, [isMultiTurn, isConnected, messages.length, startAssistantTurn, sessionStatus])
 
   useEffect(() => {
-    if (assistantSpeaking && isListening) {
+    const shouldPauseMicWhileAssistantSpeaks = sessionType !== 'voice' && sessionType !== 'video'
+
+    if (assistantSpeaking && isListening && shouldPauseMicWhileAssistantSpeaks) {
       stopListening()
     }
-  }, [assistantSpeaking, isListening, stopListening])
+  }, [assistantSpeaking, isListening, sessionType, stopListening])
+
+  useEffect(() => {
+    if (!assistantSpeaking && !isProcessing) {
+      assistantInterruptTriggeredRef.current = false
+    }
+  }, [assistantSpeaking, isProcessing])
 
   useEffect(() => {
     const isVoiceOrVideo = sessionType === 'voice' || sessionType === 'video'
@@ -1115,44 +1188,11 @@ export default function LiveSessionPage() {
   }, [hangUp, isListening, router, sessionId, stopListening])
 
   useEffect(() => {
-    if (!hangupRequest || sessionStatus === 'ended') return
-    clearHangupRequest()
-    void handleHangUp()
-  }, [hangupRequest, sessionStatus, clearHangupRequest, handleHangUp])
-
-  useEffect(() => {
-    if (sessionType !== 'phone' || !callStarted || sessionStatus === 'ended') return
-
-    let cancelled = false
-    const refreshStatus = async () => {
-      try {
-        const session = await api.sessions.getById(sessionId)
-        if (cancelled) return
-        if (isRecord(session)) {
-          const nextStatus =
-            typeof session.status === 'string' ? session.status : (sessionStatus ?? null)
-          setSessionStatus(nextStatus)
-          if (nextStatus === 'ended') {
-            syncSessionState(session)
-          }
-        }
-      } catch {
-        // Keep polling quietly; transient read failures should not interrupt the call UX.
-      }
+    if (sessionType === 'phone' && sessionStatus === 'ended') {
+      router.push(`/session/${sessionId}/performance`)
     }
+  }, [sessionType, sessionStatus, sessionId, router])
 
-    void refreshStatus()
-    const interval = setInterval(() => {
-      void refreshStatus()
-    }, 3000)
-
-    return () => {
-      cancelled = true
-      clearInterval(interval)
-    }
-  }, [callStarted, sessionId, sessionStatus, sessionType, syncSessionState])
-
-  const isTextSession = sessionType === 'text'
   const sttCommitProgress = Math.min(1, Math.max(0, sttCommitRemainingMs / speechFinalizeDelayMs))
 
   const todayStr = new Date().toLocaleDateString('en-US', {
@@ -1162,21 +1202,13 @@ export default function LiveSessionPage() {
     year: 'numeric',
   })
 
-  // AI state label shown in the voice panel
-  const aiStateLabel = assistantSpeaking
-    ? 'Speaking'
+  const globeState: GlobeState = assistantSpeaking
+    ? 'speaking'
     : isProcessing
-      ? 'Thinking...'
+      ? 'processing'
       : isListening
-        ? 'Listening'
-        : ''
-  const aiStateColor = assistantSpeaking ? 'green' : isProcessing ? 'blue' : 'dimmed'
-  // The session page is always dark-9 — use reliable palette tokens that never depend on the user's theme profile.
-  const userBubbleBackground = 'var(--mantine-color-blue-9)'
-  const userBubbleTextColor = 'var(--mantine-color-blue-1)'
-  const assistantBubbleBackground = 'var(--mantine-color-dark-5)'
-  const assistantBubbleTextColor = 'var(--mantine-color-gray-3)'
-
+        ? 'listening'
+        : 'idle'
   // ── Tool event derived UI state ────────────────────────────────────────────
   const latestMoodEvent = toolEvents.findLast((e) => e.tool === 'update_mood')
   const currentMood = latestMoodEvent ? (latestMoodEvent.args.mood as string) : null
@@ -1190,7 +1222,7 @@ export default function LiveSessionPage() {
           : 'gray'
 
   const activeObjections = toolEvents.filter((e) => e.tool === 'raise_objection')
-  const latestNextStep = toolEvents.findLast((e) => e.tool === 'propose_next_step')
+  const latestNextStep = toolEvents.findLast((e) => e.tool === 'propose_next_step') ?? null
 
   // Show coaching toast for each new flag_moment event
   useEffect(() => {
@@ -1214,197 +1246,83 @@ export default function LiveSessionPage() {
         overflow: 'hidden',
       }}
     >
+      {/* Resume prompt is now rendered inside VoiceOrbSession as an orb speech bubble */}
       <Modal
-        opened={resumePromptOpen}
-        onClose={() => {}}
-        title="Resume previous progress?"
+        opened={callModalOpen && sessionType === 'phone'}
+        onClose={() => setCallModalOpen(false)}
+        title="Start phone call"
         centered
-        closeOnClickOutside={false}
-        closeOnEscape={false}
-        withCloseButton={false}
       >
         <Stack gap="md">
           <Text size="sm" c="dimmed">
-            You already have an in-progress session with saved turns.
+            Enter the destination number now. Phone-call sessions no longer store this during setup.
           </Text>
-          <Text size="sm" c="dimmed">
-            Choose <strong>Resume</strong> to continue where you left off, or{' '}
-            <strong>Start Over</strong> to create a brand new iteration from scratch.
-          </Text>
+          <TextInput
+            label="Phone number"
+            placeholder="+15551234567"
+            value={phoneNumber}
+            onChange={(event) => {
+              setPhoneNumber(event.currentTarget.value)
+              if (callError) {
+                setCallError(null)
+              }
+            }}
+            error={callError ?? undefined}
+            type="tel"
+            autoComplete="tel"
+          />
+          <Select
+            label="Provider"
+            data={[
+              { value: 'twilio', label: 'Twilio' },
+              { value: 'vapi', label: 'Vapi' },
+            ]}
+            value={callProvider}
+            onChange={(value) => setCallProvider(value ?? 'twilio')}
+            allowDeselect={false}
+          />
           <Group justify="flex-end">
-            <Button variant="default" onClick={handleResumeSession} disabled={startOverLoading}>
-              Resume
+            <Button variant="default" onClick={() => setCallModalOpen(false)}>
+              Not now
             </Button>
-            <Button color="brand" onClick={handleStartOver} loading={startOverLoading}>
-              Start Over
+            <Button onClick={handleStartPhoneCall} loading={callLoading}>
+              Start call
             </Button>
           </Group>
         </Stack>
       </Modal>
+
+      {/* AI Hang-up Confirmation Modal */}
       <Modal
-        opened={callModalOpen && sessionType === 'phone'}
-        onClose={handleCloseCallModal}
-        title={
-          showVerifiedPhoneChoice
-            ? sessionStatus === 'ended'
-              ? 'Call this verified number again?'
-              : isTransientVerifiedPhone
-                ? 'Continue with this verified phone'
-                : 'Continue with your verified phone'
-            : hasVerifiedPhone
-              ? 'Change your phone number'
-              : 'Verify your phone number'
-        }
+        opened={!!hangupRequest}
+        onClose={clearHangupRequest}
+        title="The AI persona wants to hang up"
         centered
+        size="sm"
+        styles={{
+          header: { background: 'var(--mantine-color-dark-7)' },
+          body: { background: 'var(--mantine-color-dark-7)' },
+        }}
       >
         <Stack gap="md">
-          {phoneVerificationLoading ? (
-            <Group justify="center" py="md">
-              <Loader size="sm" />
-            </Group>
-          ) : showVerifiedPhoneChoice ? (
-            <>
-              <Paper
-                withBorder
-                radius="lg"
-                p="lg"
-                style={{
-                  background:
-                    'linear-gradient(135deg, rgba(34, 197, 94, 0.14) 0%, rgba(34, 197, 94, 0.05) 100%)',
-                  borderColor: 'rgba(34, 197, 94, 0.35)',
-                }}
-              >
-                <Stack gap="sm">
-                  <Group justify="space-between" align="flex-start">
-                    <Stack gap={6}>
-                      <Group gap="xs">
-                        <Badge color="green" variant="light" leftSection={<IconCheck size={12} />}>
-                          Verified
-                        </Badge>
-                        <Badge variant="dot" color={isTransientVerifiedPhone ? 'orange' : 'blue'}>
-                          {isTransientVerifiedPhone ? 'This call only' : 'Ready for phone sessions'}
-                        </Badge>
-                      </Group>
-                      <Text fw={700} size="lg">
-                        {activeVerifiedPhoneNumber}
-                      </Text>
-                    </Stack>
-                    <IconPhone size={22} color="var(--mantine-color-green-6)" />
-                  </Group>
-                  <Text size="sm" c="dimmed">
-                    {isTransientVerifiedPhone
-                      ? 'This number is verified for the current call, but it will not replace your saved phone number.'
-                      : sessionStatus === 'ended'
-                        ? 'We can ring this verified number again for the next phone session, or you can switch to a different number first.'
-                        : 'We can ring this verified number now, or you can switch to a different number before we place the call.'}
-                  </Text>
-                </Stack>
-              </Paper>
-              {callError && (
-                <Text size="sm" c="red">
-                  {callError}
-                </Text>
-              )}
-              <Group justify="flex-end">
-                <Button
-                  variant="default"
-                  leftSection={<IconEdit size={16} />}
-                  onClick={handleEditVerifiedPhone}
-                >
-                  Change phone
-                </Button>
-                <Button onClick={handleStartPhoneCall} loading={callLoading}>
-                  Continue with verified phone
-                </Button>
-              </Group>
-            </>
-          ) : (
-            <>
-              <Text size="sm" c="dimmed">
-                {hasVerifiedPhone
-                  ? 'Enter the number you want to use instead, then confirm it with the texted code.'
-                  : 'Add the phone number you want us to call, then verify it with the texted code before starting this session.'}
-              </Text>
-              <TextInput
-                label="Phone number"
-                placeholder="+15551234567"
-                value={phoneNumber}
-                onChange={(event) => {
-                  setPhoneNumber(event.currentTarget.value)
-                  if (callError) {
-                    setCallError(null)
-                  }
-                }}
-                error={callError ?? undefined}
-                type="tel"
-                autoComplete="tel"
-              />
-              <Checkbox
-                size="sm"
-                checked={savePhoneForFutureUse}
-                onChange={(event) => setSavePhoneForFutureUse(event.currentTarget.checked)}
-                label="Save for future use"
-                description="Keep this number on your account for future phone sessions."
-              />
-              {phoneVerification?.pendingPhoneNumber && (
-                <>
-                  <Text size="sm" c="dimmed">
-                    We’ve already texted a verification code to{' '}
-                    {phoneVerification.pendingPhoneNumber}.
-                  </Text>
-                  <TextInput
-                    label="Verification code"
-                    placeholder="123456"
-                    value={verificationCode}
-                    onChange={(event) => {
-                      setVerificationCode(event.currentTarget.value)
-                      if (callError) {
-                        setCallError(null)
-                      }
-                    }}
-                    type="tel"
-                    autoComplete="one-time-code"
-                  />
-                </>
-              )}
-              {callError && (
-                <Text size="sm" c="red">
-                  {callError}
-                </Text>
-              )}
-              <Group justify="space-between">
-                <Button variant="default" onClick={handleCloseCallModal}>
-                  {hasVerifiedPhone ? 'Keep current phone' : 'Not now'}
-                </Button>
-                <Group justify="flex-end">
-                  {phoneVerification?.pendingPhoneNumber ? (
-                    <>
-                      <Button
-                        variant="default"
-                        onClick={handleResendPhoneVerification}
-                        loading={phoneVerificationActionLoading}
-                      >
-                        Resend code
-                      </Button>
-                      <Button
-                        onClick={handleVerifyPhoneCode}
-                        loading={phoneVerificationActionLoading}
-                      >
-                        Verify number
-                      </Button>
-                    </>
-                  ) : (
-                    <Button
-                      onClick={handleRequestPhoneVerification}
-                      loading={phoneVerificationActionLoading}
-                    >
-                      Text verification code
-                    </Button>
-                  )}
-                </Group>
-              </Group>
-            </>
-          )}
+          <Text size="sm" c="dimmed">
+            {hangupRequest?.reason}
+          </Text>
+          <Group justify="flex-end" gap="sm">
+            <Button variant="default" onClick={clearHangupRequest}>
+              Continue anyway
+            </Button>
+            <Button
+              color="red"
+              leftSection={<IconPhone size={14} />}
+              onClick={() => {
+                clearHangupRequest()
+                void handleHangUp()
+              }}
+            >
+              Let them hang up
+            </Button>
+          </Group>
         </Stack>
       </Modal>
 
@@ -1412,14 +1330,14 @@ export default function LiveSessionPage() {
       <Box
         style={{
           backgroundColor: 'var(--mantine-color-dark-8)',
-          padding: '16px 32px',
+          padding: isMobile ? '10px 12px' : '16px 32px',
+          paddingTop: isMobile ? 'max(10px, env(safe-area-inset-top, 10px))' : '16px',
           borderBottom: '1px solid var(--mantine-color-dark-6)',
           flexShrink: 0,
         }}
       >
-        <Group justify="space-between">
-          <Group gap="sm" align="center">
-            <Avatar size={44} radius="xl" src={personaImageUrl ?? undefined} />
+        <Group justify="space-between" align="center" wrap="wrap" gap="sm">
+          <Group gap="sm" align="center" style={{ minWidth: 0, flex: 1 }}>
             <Stack gap={2}>
               <Text fw={600} size="lg" c="white">
                 {sessionName || 'Live Session'}
@@ -1446,25 +1364,27 @@ export default function LiveSessionPage() {
               )}
             </Stack>
           </Group>
-          <Group gap="xl">
-            <Text size="xl" fw={700} c="white">
+          <Group gap={isMobile ? 'xs' : 'xl'} wrap="nowrap" style={{ flexShrink: 0 }}>
+            <Text size={isMobile ? 'md' : 'xl'} fw={700} c="white">
               {formatTime(time)}
             </Text>
-            <Group gap="xs">
-              <Box
-                style={{
-                  width: 8,
-                  height: 8,
-                  borderRadius: '50%',
-                  backgroundColor: 'red',
-                  animation: 'pulse 2s infinite',
-                }}
-              />
-              <Text c="red" fw={600}>
-                Recording
-              </Text>
-            </Group>
-            <Text c="dimmed">{todayStr}</Text>
+            {!isMobile && (
+              <Group gap="xs">
+                <Box
+                  style={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: '50%',
+                    backgroundColor: 'red',
+                    animation: 'pulse 2s infinite',
+                  }}
+                />
+                <Text c="red" fw={600}>
+                  Recording
+                </Text>
+              </Group>
+            )}
+            {!isMobile && <Text c="dimmed">{todayStr}</Text>}
             <Group gap="xs">
               {isConnecting && <Loader size="sm" color="white" />}
               {entryDecisionLoading && <Loader size="sm" color="white" />}
@@ -1513,17 +1433,23 @@ export default function LiveSessionPage() {
               >
                 <IconPhone size={20} />
               </ActionIcon>
-              <ActionIcon size="lg" variant="subtle" color="white">
-                <Avatar size="sm" src={personaImageUrl ?? undefined} />
-              </ActionIcon>
             </Group>
           </Group>
         </Group>
       </Box>
 
       {/* Main Content */}
-      <Box p="xl" style={{ display: 'flex', gap: 24, flex: 1, overflow: 'hidden' }}>
-        {hintsEnabled ? (
+      <Box
+        style={{
+          display: 'flex',
+          gap: isMobile ? 12 : 24,
+          flex: 1,
+          overflow: isMobile ? 'auto' : 'hidden',
+          flexDirection: isMobile ? 'column' : 'row',
+          padding: isMobile ? '0.75rem' : '1.5rem',
+        }}
+      >
+        {!isMobile && hintsEnabled ? (
           <Paper
             withBorder
             radius="lg"
@@ -1570,7 +1496,7 @@ export default function LiveSessionPage() {
               ))}
             </Stack>
           </Paper>
-        ) : (
+        ) : !isMobile ? (
           <Box
             style={{
               width: 220,
@@ -1583,7 +1509,7 @@ export default function LiveSessionPage() {
               Show hints
             </Button>
           </Box>
-        )}
+        ) : null}
 
         <Box
           style={{
@@ -1594,633 +1520,54 @@ export default function LiveSessionPage() {
             overflow: 'hidden',
           }}
         >
-          {isTextSession ? (
-            <Paper
-              withBorder
-              radius="lg"
-              p="xl"
-              style={{
-                backgroundColor: 'var(--pitch-surface-bg)',
-                display: 'flex',
-                flexDirection: 'column',
-                flex: 1,
-                overflow: 'hidden',
-              }}
-            >
-              <Group justify="space-between" mb="md">
-                <Title order={4}>Conversation</Title>
-                <Badge size="sm" variant="light">
-                  {messages.length} messages
-                </Badge>
-              </Group>
-              {/* Objection badges — shown when AI raises an objection */}
-              {activeObjections.length > 0 && (
-                <Stack gap={4} mb="sm">
-                  {activeObjections.slice(-3).map((e) => (
-                    <Box
-                      key={e.id}
-                      style={{
-                        backgroundColor: 'var(--mantine-color-orange-9)',
-                        borderRadius: 8,
-                        padding: '6px 12px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 6,
-                      }}
-                    >
-                      <Text size="xs" c="orange.2" fw={600}>
-                        ⚠{' '}
-                        {String(e.args.type ?? 'objection')
-                          .replace('_', ' ')
-                          .toUpperCase()}{' '}
-                        OBJECTION
-                      </Text>
-                      <Text size="xs" c="orange.3">
-                        — {String(e.args.text ?? '')}
-                      </Text>
-                    </Box>
-                  ))}
-                </Stack>
-              )}
-              <ScrollArea style={{ flex: 1 }} offsetScrollbars scrollbarSize={6}>
-                <Stack gap="lg" px="xs" pb="md">
-                  {messages.length === 0 ? (
-                    <Text c="dimmed" size="sm" ta="center">
-                      No messages yet. Start the conversation!
-                    </Text>
-                  ) : (
-                    messages.map((msg) => {
-                      const isUser = msg.role === 'user'
-                      return (
-                        <Box
-                          key={msg.id}
-                          style={{
-                            display: 'flex',
-                            justifyContent: isUser ? 'flex-end' : 'flex-start',
-                          }}
-                        >
-                          <Box
-                            style={{
-                              maxWidth: '72%',
-                              backgroundColor: isUser
-                                ? userBubbleBackground
-                                : assistantBubbleBackground,
-                              borderRadius: 18,
-                              padding: '12px 14px',
-                              boxShadow: '0 1px 2px rgba(0,0,0,0.08)',
-                            }}
-                          >
-                            <Text
-                              size="sm"
-                              style={{
-                                whiteSpace: 'pre-wrap',
-                                color: isUser ? userBubbleTextColor : assistantBubbleTextColor,
-                              }}
-                            >
-                              {msg.text}
-                            </Text>
-                            <Text size="xs" c="dimmed" mt={6} ta={isUser ? 'right' : 'left'}>
-                              {msg.timestamp.toLocaleTimeString()}
-                            </Text>
-                          </Box>
-                        </Box>
-                      )
-                    })
-                  )}
-                </Stack>
-              </ScrollArea>
-              {/* Propose next step card — shown when AI proposes a concrete next step */}
-              {latestNextStep && (
-                <Box
-                  mt="sm"
-                  style={{
-                    backgroundColor: 'var(--mantine-color-dark-6)',
-                    borderRadius: 10,
-                    padding: '8px 14px',
-                    borderLeft: '3px solid var(--mantine-color-teal-6)',
-                  }}
-                >
-                  <Text size="xs" c="teal.4" fw={600}>
-                    📅 Buyer proposed next step
-                  </Text>
-                  <Text size="xs" c="gray.3" mt={2}>
-                    {String(latestNextStep.args.action ?? '')} —{' '}
-                    {String(latestNextStep.args.timeframe ?? '')}
-                  </Text>
-                </Box>
-              )}
-              <Paper
-                withBorder
-                radius="md"
-                p="sm"
-                mt="md"
-                style={{ backgroundColor: 'var(--pitch-surface-bg)' }}
-              >
-                <Group gap="xs" align="flex-end">
-                  <TextInput
-                    placeholder="Type your message..."
-                    value={textInput}
-                    onChange={(e) => {
-                      setTextInput(e.target.value)
-                      scheduleIdleHints()
-                    }}
-                    onKeyPress={(e) => e.key === 'Enter' && handleSendText()}
-                    style={{ flex: 1 }}
-                    disabled={!isConnected || sessionStatus === 'ended'}
-                  />
-                  <ActionIcon
-                    size="lg"
-                    variant="filled"
-                    color="brand"
-                    onClick={handleSendText}
-                    disabled={!textInput.trim() || !isConnected || sessionStatus === 'ended'}
-                  >
-                    <IconSend size={20} />
-                  </ActionIcon>
-                </Group>
-              </Paper>
-            </Paper>
-          ) : (
-            <>
-              <Paper
-                withBorder
-                radius="lg"
-                p="xl"
-                style={{
-                  backgroundColor: 'var(--pitch-surface-bg)',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  justifyContent: 'space-between',
-                  flex: 1,
-                }}
-              >
-                <Box style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                  <Avatar size={120} radius="md" src={personaImageUrl ?? undefined} />
-                </Box>
-
-                <Box
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'center',
-                    alignItems: 'center',
-                    flex: 1,
-                  }}
-                >
-                  {isVideoSession ? (
-                    <Box
-                      style={{
-                        width: 420,
-                        height: 420,
-                        borderRadius: 24,
-                        overflow: 'hidden',
-                        backgroundColor: 'black',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                      }}
-                    >
-                      <Box style={{ position: 'relative', width: '100%', height: '100%' }}>
-                        {avatarVideoUrl ? (
-                          <video
-                            key={`${avatarVideoUrl}:${avatarVideoJobId ?? 'no-job'}`}
-                            ref={videoRef}
-                            src={avatarVideoUrl}
-                            poster={personaImageUrl ?? undefined}
-                            autoPlay
-                            playsInline
-                            muted
-                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                          />
-                        ) : (
-                          <Stack
-                            gap="xs"
-                            align="center"
-                            justify="center"
-                            style={{
-                              width: '100%',
-                              height: '100%',
-                              padding: 24,
-                              background:
-                                'radial-gradient(circle at top, rgba(255,255,255,0.18), transparent 50%), #050505',
-                            }}
-                          >
-                            {personaImageUrl && (
-                              <Avatar
-                                size={144}
-                                radius="xl"
-                                src={personaImageUrl}
-                                style={{
-                                  border: '2px solid rgba(255,255,255,0.12)',
-                                  boxShadow: '0 18px 48px rgba(0,0,0,0.35)',
-                                }}
-                              />
-                            )}
-                            <Badge
-                              color={avatarVideoStatus === 'failed' ? 'red' : 'blue'}
-                              variant="light"
-                              tt="uppercase"
-                            >
-                              Avatar
-                            </Badge>
-                            <Text c="white" fw={600} ta="center">
-                              {avatarVideoStatus === 'failed'
-                                ? 'Avatar video unavailable'
-                                : avatarVideoStatus === 'ready'
-                                  ? 'Latest avatar clip ready'
-                                  : avatarVideoStatus === 'idle'
-                                    ? 'Avatar video will appear after the first reply'
-                                    : 'Rendering avatar response'}
-                            </Text>
-                            <Text c="dimmed" size="sm" ta="center">
-                              {avatarVideoStatus === 'failed'
-                                ? (avatarVideoError ??
-                                  'The assistant will continue with audio only.')
-                                : avatarVideoStatus === 'idle'
-                                  ? 'The conversation starts with low-latency audio, then each AI reply is rendered as a matching avatar clip.'
-                                  : 'Audio plays immediately while the avatar video renders in the background.'}
-                            </Text>
-                          </Stack>
-                        )}
-                        <Group
-                          gap="xs"
-                          style={{
-                            position: 'absolute',
-                            top: 14,
-                            left: 14,
-                            zIndex: 2,
-                          }}
-                        >
-                          <Badge
-                            color={
-                              avatarVideoStatus === 'failed'
-                                ? 'red'
-                                : avatarVideoStatus === 'ready'
-                                  ? 'green'
-                                  : 'blue'
-                            }
-                            variant="filled"
-                          >
-                            {avatarVideoStatus === 'ready'
-                              ? 'Ready'
-                              : avatarVideoStatus === 'failed'
-                                ? 'Failed'
-                                : avatarVideoStatus === 'idle'
-                                  ? 'Waiting'
-                                  : 'Rendering'}
-                          </Badge>
-                          {avatarVideoProvider && (
-                            <Badge variant="light" color="gray">
-                              {avatarVideoProvider}
-                            </Badge>
-                          )}
-                        </Group>
-                        <VisualStateOverlay
-                          visualState={visualState}
-                          isReady={poseIsReady}
-                          visible={process.env.NODE_ENV === 'development'}
-                        />
-                      </Box>
-                    </Box>
-                  ) : (
-                    <Box
-                      style={{
-                        width: 400,
-                        height: 400,
-                        borderRadius: '50%',
-                        border: '2px solid var(--mantine-color-gray-3)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: 4,
-                        padding: 60,
-                      }}
-                    >
-                      {isListening || isProcessing ? (
-                        [...Array(15)].map((_, i) => (
-                          <Box
-                            key={i}
-                            style={{
-                              width: 6,
-                              height: `${Math.random() * 100 + 20}%`,
-                              backgroundColor: 'var(--pitch-accent-strong)',
-                              borderRadius: 3,
-                              animation: isProcessing ? 'pulse 1s infinite' : 'none',
-                            }}
-                          />
-                        ))
-                      ) : (
-                        <Text c="dimmed" size="sm" ta="center">
-                          {isSttSupported
-                            ? isSttPermissionBlocked
-                              ? 'Enable microphone permission, then click microphone'
-                              : 'Click microphone or type to start conversation'
-                            : 'Type to start conversation'}
-                        </Text>
-                      )}
-                    </Box>
-                  )}
-                </Box>
-
-                {/* AI state indicator */}
-                <Text ta="center" c={aiStateColor} fw={500} size="sm" style={{ minHeight: 20 }}>
-                  {aiStateLabel}
-                </Text>
-                {sessionType === 'voice' && (
-                  <Text ta="center" c="dimmed" size="xs" maw={420}>
-                    Voice sessions stay in your browser. Use <strong>Phone calls</strong> if you
-                    want PITCH to ring your verified number.
-                  </Text>
-                )}
-
-                {/* Control Buttons */}
-                <Group justify="center" gap="xl">
-                  <ActionIcon
-                    size={80}
-                    radius="xl"
-                    variant="filled"
-                    color="red"
-                    style={{
-                      border: '4px solid white',
-                      boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-                      cursor: 'pointer',
-                    }}
-                    onClick={handleHangUp}
-                    title="End call and return to sessions"
-                  >
-                    <IconPhone size={32} />
-                  </ActionIcon>
-                  <ActionIcon
-                    size={80}
-                    radius="xl"
-                    variant="filled"
-                    color={assistantSpeaking ? 'orange' : 'dark'}
-                    style={{
-                      border: '4px solid white',
-                      boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-                      cursor: assistantSpeaking ? 'pointer' : 'default',
-                    }}
-                    onClick={() => {
-                      if (assistantSpeaking) {
-                        stopAudio()
-                      } else if (currentAudioUrl) {
-                        if (isVideoSession && videoRef.current && avatarVideoUrl) {
-                          videoRef.current.currentTime = 0
-                          videoRef.current.play().catch(() => {})
-                        }
-                        replayAudio()
-                      } else if (isProcessing) {
-                        interrupt()
-                      }
-                    }}
-                    title={
-                      assistantSpeaking
-                        ? 'Stop audio'
-                        : currentAudioUrl
-                          ? 'Play latest audio'
-                          : isProcessing
-                            ? 'Interrupt conversation'
-                            : 'Pause (not active)'
-                    }
-                  >
-                    <IconPlayerPause size={32} />
-                  </ActionIcon>
-                  <ActionIcon
-                    size={80}
-                    radius="xl"
-                    variant="filled"
-                    color={isListening ? 'red' : 'dark'}
-                    style={{
-                      border: '4px solid white',
-                      boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-                    }}
-                    onClick={handleMicrophoneClick}
-                    disabled={!isSttSupported || !isConnected || sessionStatus === 'ended'}
-                    title={
-                      sessionStatus === 'ended'
-                        ? 'Session has ended'
-                        : !isSttSupported
-                          ? 'Speech recognition not supported'
-                          : isSttPermissionBlocked
-                            ? 'Microphone permission blocked. Allow access and try again.'
-                            : !isConnected
-                              ? 'Connecting...'
-                              : isListening
-                                ? 'Stop listening'
-                                : 'Start listening'
-                    }
-                  >
-                    <IconMicrophone size={32} />
-                  </ActionIcon>
-                </Group>
-              </Paper>
-
-              {/* Text Input */}
-              <Paper
-                withBorder
-                radius="lg"
-                p="md"
-                style={{ backgroundColor: 'var(--pitch-surface-bg)' }}
-              >
-                <Group gap="xs" align="flex-end">
-                  <TextInput
-                    placeholder="Type your message..."
-                    value={textInput}
-                    onChange={(e) => {
-                      setTextInput(e.target.value)
-                      scheduleIdleHints()
-                    }}
-                    onKeyPress={(e) => e.key === 'Enter' && handleSendText()}
-                    style={{ flex: 1 }}
-                    disabled={!isConnected || sessionStatus === 'ended'}
-                  />
-                  <ActionIcon
-                    size="lg"
-                    variant="filled"
-                    color="brand"
-                    onClick={handleSendText}
-                    disabled={!textInput.trim() || !isConnected || sessionStatus === 'ended'}
-                  >
-                    <IconSend size={20} />
-                  </ActionIcon>
-                </Group>
-                {(interimTranscript || transcript) && (
-                  <Text size="sm" c="dimmed" mt="xs">
-                    Listening: {interimTranscript || transcript}
-                  </Text>
-                )}
-                {sttError && (
-                  <Text size="xs" c="red" mt="xs">
-                    STT: {sttError}
-                  </Text>
-                )}
-                {sttCommitRemainingMs > 0 && (
-                  <Box mt="xs">
-                    <Text size="xs" c="dimmed" mb={6}>
-                      Sending to AI in {(sttCommitRemainingMs / 1000).toFixed(1)}s
-                    </Text>
-                    <Box
-                      style={{
-                        position: 'relative',
-                        height: 6,
-                        borderRadius: 999,
-                        backgroundColor: 'var(--mantine-color-gray-2)',
-                        overflow: 'hidden',
-                      }}
-                    >
-                      <Box
-                        style={{
-                          position: 'absolute',
-                          top: 0,
-                          bottom: 0,
-                          left: 0,
-                          width: `${sttCommitProgress * 50}%`,
-                          backgroundColor: 'var(--pitch-accent-strong)',
-                          transition: 'width 50ms linear',
-                        }}
-                      />
-                      <Box
-                        style={{
-                          position: 'absolute',
-                          top: 0,
-                          bottom: 0,
-                          right: 0,
-                          width: `${sttCommitProgress * 50}%`,
-                          backgroundColor: 'var(--pitch-accent-strong)',
-                          transition: 'width 50ms linear',
-                        }}
-                      />
-                    </Box>
-                  </Box>
-                )}
-              </Paper>
-
-              {/* Transcript */}
-              <Paper
-                withBorder
-                radius="lg"
-                p="lg"
-                style={{
-                  backgroundColor: 'var(--pitch-surface-bg)',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  flex: 1,
-                  minHeight: 260,
-                }}
-              >
-                <Group justify="space-between" mb="md">
-                  <Group gap="xs">
-                    <Title order={5}>Transcript</Title>
-                    <Badge size="sm" variant="light">
-                      {messages.length}
-                    </Badge>
-                  </Group>
-                  {sessionStatus === 'ended' && (
-                    <Badge size="sm" color="red" variant="light">
-                      Ended
-                    </Badge>
-                  )}
-                </Group>
-                {/* Objection badges — shown when AI raises an objection */}
-                {activeObjections.length > 0 && (
-                  <Stack gap={4} mb="sm">
-                    {activeObjections.slice(-3).map((e) => (
-                      <Box
-                        key={e.id}
-                        style={{
-                          backgroundColor: 'var(--mantine-color-orange-9)',
-                          borderRadius: 8,
-                          padding: '6px 12px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 6,
-                        }}
-                      >
-                        <Text size="xs" c="orange.2" fw={600}>
-                          ⚠{' '}
-                          {String(e.args.type ?? 'objection')
-                            .replace('_', ' ')
-                            .toUpperCase()}{' '}
-                          OBJECTION
-                        </Text>
-                        <Text size="xs" c="orange.3">
-                          — {String(e.args.text ?? '')}
-                        </Text>
-                      </Box>
-                    ))}
-                  </Stack>
-                )}
-                <ScrollArea style={{ flex: 1 }} offsetScrollbars scrollbarSize={6}>
-                  <Stack gap="sm" pr="sm">
-                    {messages.length === 0 ? (
-                      <Text c="dimmed" size="sm" ta="center">
-                        No messages yet. Start the conversation!
-                      </Text>
-                    ) : (
-                      messages.map((msg) => {
-                        const isUser = msg.role === 'user'
-                        return (
-                          <Box
-                            key={msg.id}
-                            style={{
-                              display: 'flex',
-                              justifyContent: isUser ? 'flex-end' : 'flex-start',
-                            }}
-                          >
-                            <Box
-                              style={{
-                                maxWidth: '78%',
-                                backgroundColor: isUser
-                                  ? userBubbleBackground
-                                  : assistantBubbleBackground,
-                                borderRadius: 16,
-                                padding: '10px 12px',
-                              }}
-                            >
-                              <Text
-                                size="sm"
-                                style={{
-                                  whiteSpace: 'pre-wrap',
-                                  color: isUser ? userBubbleTextColor : assistantBubbleTextColor,
-                                }}
-                              >
-                                {msg.text}
-                              </Text>
-                              <Text size="xs" c="dimmed" mt={6} ta={isUser ? 'right' : 'left'}>
-                                {msg.timestamp.toLocaleTimeString()}
-                              </Text>
-                            </Box>
-                          </Box>
-                        )
-                      })
-                    )}
-                  </Stack>
-                </ScrollArea>
-                {/* Propose next step card — shown when AI proposes a concrete next step */}
-                {latestNextStep && (
-                  <Box
-                    mt="sm"
-                    style={{
-                      backgroundColor: 'var(--mantine-color-dark-6)',
-                      borderRadius: 10,
-                      padding: '8px 14px',
-                      borderLeft: '3px solid var(--mantine-color-teal-6)',
-                    }}
-                  >
-                    <Text size="xs" c="teal.4" fw={600}>
-                      📅 Buyer proposed next step
-                    </Text>
-                    <Text size="xs" c="gray.3" mt={2}>
-                      {String(latestNextStep.args.action ?? '')} —{' '}
-                      {String(latestNextStep.args.timeframe ?? '')}
-                    </Text>
-                  </Box>
-                )}
-              </Paper>
-            </>
-          )}
+          <VoiceOrbSession
+            mode={sessionType === 'text' ? 'text' : sessionType === 'video' ? 'video' : 'voice'}
+            messages={messages}
+            globeState={globeState}
+            analyserRef={analyserRef}
+            resumePromptOpen={resumePromptOpen}
+            onResume={handleResumeSession}
+            onStartOver={handleStartOver}
+            startOverLoading={startOverLoading}
+            assistantSpeaking={assistantSpeaking}
+            isListening={isListening}
+            isProcessing={isProcessing}
+            isConnected={isConnected}
+            sessionStatus={sessionStatus}
+            isSttSupported={isSttSupported}
+            isSttPermissionBlocked={isSttPermissionBlocked}
+            transcript={transcript}
+            interimTranscript={interimTranscript}
+            sttError={sttError ?? null}
+            sttCommitRemainingMs={sttCommitRemainingMs}
+            sttCommitProgress={sttCommitProgress}
+            textInput={textInput}
+            currentAudioUrl={currentAudioUrl}
+            isMobile={!!isMobile}
+            activeObjections={activeObjections}
+            latestNextStep={latestNextStep}
+            onHangUp={handleHangUp}
+            onPauseReplay={handlePauseReplay}
+            onMicrophoneClick={handleMicrophoneClick}
+            onSendText={handleSendText}
+            onTextInputChange={setTextInput}
+            onScheduleIdleHints={scheduleIdleHints}
+            isVideoSession={isVideoSession}
+            avatarVideoUrl={avatarVideoUrl}
+            avatarVideoJobId={avatarVideoJobId}
+            avatarVideoStatus={avatarVideoStatus}
+            avatarVideoProvider={avatarVideoProvider}
+            avatarVideoError={avatarVideoError}
+            videoRef={videoRef}
+            visualState={visualState}
+            poseIsReady={poseIsReady}
+            cameraEnabled={visualEnabled}
+            onToggleCamera={() => setVisualEnabled((v) => !v)}
+            userVideoRef={userPipVideoRef}
+          />
         </Box>
 
-        {timelineEnabled ? (
+        {!isMobile && timelineEnabled ? (
           <Paper
             withBorder
             radius="lg"
@@ -2310,7 +1657,7 @@ export default function LiveSessionPage() {
               </Stack>
             </Box>
           </Paper>
-        ) : (
+        ) : !isMobile ? (
           <Box
             style={{
               width: 200,
@@ -2323,7 +1670,7 @@ export default function LiveSessionPage() {
               Show timeline
             </Button>
           </Box>
-        )}
+        ) : null}
       </Box>
 
       {/* Hidden MediaPipe pose video.

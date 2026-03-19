@@ -37,6 +37,7 @@ export interface ILLMProvider {
   stream(
     messages: LLMMessageDto[],
     config: LLMConfigDto,
+    signal?: AbortSignal,
   ): Observable<LLMStreamChunkDto>;
 
   /**
