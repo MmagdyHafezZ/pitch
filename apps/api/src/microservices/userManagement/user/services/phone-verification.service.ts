@@ -64,11 +64,17 @@ export class PhoneVerificationService implements OnModuleInit {
     }
 
     const pending = await this.getActivePendingChallenge(userId);
+    const temporaryVerified = await this.getLatestTemporaryVerifiedChallenge(
+      userId,
+      user.phoneNumber ?? null,
+    );
 
     return {
       verified: Boolean(user.phoneNumber && user.phoneVerifiedAt),
       phoneNumber: user.phoneNumber ?? null,
       verifiedAt: user.phoneVerifiedAt ?? null,
+      temporaryVerifiedPhoneNumber: temporaryVerified?.phoneNumber ?? null,
+      temporaryVerifiedAt: temporaryVerified?.verifiedAt ?? null,
       pendingPhoneNumber: pending?.phoneNumber ?? null,
       pendingExpiresAt: pending?.expiresAt ?? null,
       resendAvailableAt: pending
@@ -200,6 +206,7 @@ export class PhoneVerificationService implements OnModuleInit {
   async verifyCode(
     userId: string,
     rawCode: string,
+    saveForFutureUse = true,
   ): Promise<PhoneVerificationStatus> {
     const pending = await this.getActivePendingChallenge(userId);
     if (!pending) {
@@ -241,34 +248,38 @@ export class PhoneVerificationService implements OnModuleInit {
     await this.assertNumberIsAvailable(pending.phoneNumber, userId);
 
     const verifiedAt = new Date();
-    await this.prisma.client.$transaction([
-      this.prisma.client.user.update({
-        where: { id: userId },
-        data: {
-          phoneNumber: pending.phoneNumber,
-          phoneVerifiedAt: verifiedAt,
-        },
-      }),
-      this.prisma.client.phoneVerificationChallenge.update({
+    await this.prisma.client.$transaction(async (tx) => {
+      if (saveForFutureUse) {
+        await tx.user.update({
+          where: { id: userId },
+          data: {
+            phoneNumber: pending.phoneNumber,
+            phoneVerifiedAt: verifiedAt,
+          },
+        });
+      }
+
+      await tx.phoneVerificationChallenge.update({
         where: { id: pending.id },
         data: {
           status: VerificationStatusRecord.verified,
           verifiedAt,
           attemptCount: pending.attemptCount + 1,
         },
-      }),
-      this.prisma.client.phoneVerificationChallenge.updateMany({
+      });
+
+      await tx.phoneVerificationChallenge.updateMany({
         where: {
           userId,
           status: VerificationStatusRecord.pending,
           NOT: { id: pending.id },
         },
         data: { status: VerificationStatusRecord.cancelled },
-      }),
-    ]);
+      });
+    });
 
     this.logger.log(
-      `phone_verification.verified user=${userId} phone=${this.maskPhone(pending.phoneNumber)} challenge=${pending.id}`,
+      `phone_verification.verified user=${userId} phone=${this.maskPhone(pending.phoneNumber)} challenge=${pending.id} saved=${saveForFutureUse}`,
     );
 
     return this.getStatus(userId);
@@ -301,6 +312,26 @@ export class PhoneVerificationService implements OnModuleInit {
     }
 
     return pending;
+  }
+
+  private async getLatestTemporaryVerifiedChallenge(
+    userId: string,
+    savedPhoneNumber: string | null,
+  ): Promise<PendingChallenge | null> {
+    return await this.prisma.client.phoneVerificationChallenge.findFirst({
+      where: {
+        userId,
+        status: VerificationStatusRecord.verified,
+        ...(savedPhoneNumber
+          ? {
+              NOT: {
+                phoneNumber: savedPhoneNumber,
+              },
+            }
+          : {}),
+      },
+      orderBy: [{ verifiedAt: 'desc' }, { createdAt: 'desc' }],
+    });
   }
 
   private async expireChallenge(challengeId: string): Promise<void> {

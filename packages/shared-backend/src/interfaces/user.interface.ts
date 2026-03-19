@@ -25,6 +25,8 @@ export interface PhoneVerificationStatus {
   verified: boolean
   phoneNumber?: string | null
   verifiedAt?: Date | null
+  temporaryVerifiedPhoneNumber?: string | null
+  temporaryVerifiedAt?: Date | null
   pendingPhoneNumber?: string | null
   pendingExpiresAt?: Date | null
   resendAvailableAt?: Date | null
@@ -236,6 +238,7 @@ export interface RequestPhoneVerificationDto {
 
 export interface VerifyPhoneVerificationDto {
   code: string
+  saveForFutureUse?: boolean
 }
 
 export interface UpdateMySettingsDto {

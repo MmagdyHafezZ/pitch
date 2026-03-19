@@ -134,6 +134,17 @@ export class PhoneCallWebhookController {
             `vapi.event.failure session=${context.sessionId} user=${context.userId} call=${callId ?? 'unknown'} status=${status} endedReason=${endedReason ?? 'unknown'} payload=${this.safeJson(message)}`,
           );
         }
+        if (this.isTerminalStatus(status)) {
+          const reason = this.buildStatusEndReason(status, endedReason);
+          this.logger.log(
+            `vapi.event.status_terminal session=${context.sessionId} user=${context.userId} call=${callId ?? 'unknown'} status=${status ?? 'unknown'} reason=${reason}`,
+          );
+          await this.endSessionIfNeeded(
+            context.sessionId,
+            context.userId,
+            reason,
+          );
+        }
         break;
       }
       case 'speech-update':
@@ -190,6 +201,32 @@ export class PhoneCallWebhookController {
         `vapi.event.end_session_failed session=${sessionId} user=${userId} reason=${reason} error=${(error as Error)?.message ?? error}`,
       );
     }
+  }
+
+  private isTerminalStatus(status: string | undefined): boolean {
+    return (
+      status === 'ended' ||
+      status === 'failed' ||
+      status === 'busy' ||
+      status === 'no-answer' ||
+      status === 'canceled'
+    );
+  }
+
+  private buildStatusEndReason(
+    status: string | undefined,
+    endedReason: string | undefined,
+  ): string {
+    const normalizedStatus = status ?? 'unknown';
+    const normalizedReason = endedReason?.trim();
+
+    if (normalizedStatus === 'ended') {
+      return `phone_call_completed:${normalizedReason ?? normalizedStatus}`;
+    }
+
+    return normalizedReason
+      ? `phone_call_terminated:${normalizedStatus}:${normalizedReason}`
+      : `phone_call_terminated:${normalizedStatus}`;
   }
 
   private extractEndReasonOrUndefined(

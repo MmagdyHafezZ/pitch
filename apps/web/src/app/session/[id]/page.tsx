@@ -16,6 +16,7 @@ import {
   Loader,
   Modal,
   Button,
+  Checkbox,
 } from '@mantine/core'
 import {
   IconPhone,
@@ -23,6 +24,8 @@ import {
   IconMicrophone,
   IconArrowRight,
   IconSend,
+  IconCheck,
+  IconEdit,
 } from '@tabler/icons-react'
 import { useRouter, useParams } from 'next/navigation'
 import {
@@ -52,6 +55,8 @@ interface PhoneVerificationState {
   verified: boolean
   phoneNumber?: string | null
   verifiedAt?: string | null
+  temporaryVerifiedPhoneNumber?: string | null
+  temporaryVerifiedAt?: string | null
   pendingPhoneNumber?: string | null
   pendingExpiresAt?: string | null
   resendAvailableAt?: string | null
@@ -185,6 +190,11 @@ export default function LiveSessionPage() {
   const [phoneVerificationLoading, setPhoneVerificationLoading] = useState(false)
   const [phoneVerificationActionLoading, setPhoneVerificationActionLoading] = useState(false)
   const [verificationCode, setVerificationCode] = useState('')
+  const [savePhoneForFutureUse, setSavePhoneForFutureUse] = useState(true)
+  const [transientVerifiedPhoneNumber, setTransientVerifiedPhoneNumber] = useState<string | null>(
+    null
+  )
+  const [editingVerifiedPhone, setEditingVerifiedPhone] = useState(false)
   const [avatarVideoUrl, setAvatarVideoUrl] = useState<string | null>(null)
   const [avatarVideoStatus, setAvatarVideoStatus] = useState<AvatarVideoStatus>('idle')
   const [avatarVideoProvider, setAvatarVideoProvider] = useState<string | null>(null)
@@ -208,7 +218,6 @@ export default function LiveSessionPage() {
   const hasUserEnabledMicRef = useRef(false)
   const [isMultiTurn, setIsMultiTurn] = useState(false)
   const assistantStartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const autoPhoneCallAttemptRef = useRef<string | null>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const lastAssistantMessageIdRef = useRef<string | null>(null)
   // Hidden pose camera feed used by MediaPipe across session types.
@@ -395,6 +404,9 @@ export default function LiveSessionPage() {
     try {
       const status = (await api.users.getMyPhoneVerification()) as PhoneVerificationState
       setPhoneVerification(status)
+      if (status.verified && status.phoneNumber) {
+        setEditingVerifiedPhone(false)
+      }
       if ((!status.verified || !status.phoneNumber) && sessionStatus !== 'ended' && !callStarted) {
         setCallModalOpen(true)
       }
@@ -612,6 +624,8 @@ export default function LiveSessionPage() {
         phoneNumber: nextPhoneNumber,
       })) as PhoneVerificationState
       setPhoneVerification(status)
+      setTransientVerifiedPhoneNumber(null)
+      setEditingVerifiedPhone(true)
       setVerificationCode('')
       notifications.show({
         title: 'Verification code sent',
@@ -638,6 +652,8 @@ export default function LiveSessionPage() {
     try {
       const status = (await api.users.resendPhoneVerification()) as PhoneVerificationState
       setPhoneVerification(status)
+      setTransientVerifiedPhoneNumber(null)
+      setEditingVerifiedPhone(true)
       setVerificationCode('')
       notifications.show({
         title: 'Verification code resent',
@@ -669,15 +685,22 @@ export default function LiveSessionPage() {
     try {
       const status = (await api.users.verifyPhoneVerification({
         code: verificationCode.trim(),
+        saveForFutureUse: savePhoneForFutureUse,
       })) as PhoneVerificationState
       setPhoneVerification(status)
+      setEditingVerifiedPhone(false)
       setVerificationCode('')
+      setTransientVerifiedPhoneNumber(
+        savePhoneForFutureUse ? null : (status.temporaryVerifiedPhoneNumber ?? phoneNumber.trim())
+      )
       if (status.phoneNumber) {
         setPhoneNumber(status.phoneNumber)
       }
       notifications.show({
         title: 'Phone verified',
-        message: `${status.phoneNumber ?? 'Your phone number'} is now ready for calling sessions.`,
+        message: savePhoneForFutureUse
+          ? `${status.phoneNumber ?? 'Your phone number'} is now ready for calling sessions.`
+          : `${(status.temporaryVerifiedPhoneNumber ?? phoneNumber.trim()) || 'This phone number'} is verified for this call only.`,
         color: 'green',
       })
     } catch (error) {
@@ -696,7 +719,8 @@ export default function LiveSessionPage() {
 
   const handleStartPhoneCall = async () => {
     if (!sessionId) return
-    if (!phoneVerification?.verified || !phoneVerification.phoneNumber) {
+    const activeVerifiedPhoneNumber = transientVerifiedPhoneNumber ?? phoneVerification?.phoneNumber
+    if (!activeVerifiedPhoneNumber) {
       setCallError('Verify your phone number before starting the call.')
       return
     }
@@ -706,11 +730,12 @@ export default function LiveSessionPage() {
     try {
       await api.phoneCalls.start({
         sessionId,
+        phoneNumber: activeVerifiedPhoneNumber,
       })
       setSessionStatus('active')
       notifications.show({
         title: 'Calling now',
-        message: `We’re calling ${phoneVerification.phoneNumber}. Answer your phone to begin.`,
+        message: `We’re calling ${activeVerifiedPhoneNumber}. Answer your phone to begin.`,
         color: 'green',
       })
       setCallStarted(true)
@@ -729,27 +754,31 @@ export default function LiveSessionPage() {
     }
   }
 
-  useEffect(() => {
-    if (sessionType !== 'phone' || sessionStatus === 'ended') return
-    if (phoneVerificationLoading || callLoading || callStarted) return
-    if (!phoneVerification?.verified || !phoneVerification.phoneNumber) return
+  const handleEditVerifiedPhone = () => {
+    setEditingVerifiedPhone(true)
+    setVerificationCode('')
+    setCallError(null)
+    setSavePhoneForFutureUse(true)
+    setTransientVerifiedPhoneNumber(null)
+  }
 
-    const attemptKey = `${sessionId}:${phoneVerification.phoneNumber}`
-    if (autoPhoneCallAttemptRef.current === attemptKey) {
-      return
+  const handleCloseCallModal = () => {
+    setCallModalOpen(false)
+    setCallError(null)
+    setVerificationCode('')
+    if (phoneVerification?.verified && phoneVerification.phoneNumber) {
+      setPhoneNumber(phoneVerification.phoneNumber)
+      setEditingVerifiedPhone(false)
     }
+  }
 
-    autoPhoneCallAttemptRef.current = attemptKey
-    void handleStartPhoneCall()
-  }, [
-    callLoading,
-    callStarted,
-    phoneVerification,
-    phoneVerificationLoading,
-    sessionId,
-    sessionStatus,
-    sessionType,
-  ])
+  const activeVerifiedPhoneNumber =
+    transientVerifiedPhoneNumber ?? phoneVerification?.phoneNumber ?? null
+  const hasVerifiedPhone = Boolean(activeVerifiedPhoneNumber)
+  const isTransientVerifiedPhone = Boolean(
+    transientVerifiedPhoneNumber && transientVerifiedPhoneNumber !== phoneVerification?.phoneNumber
+  )
+  const showVerifiedPhoneChoice = hasVerifiedPhone && !editingVerifiedPhone
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60)
@@ -1195,13 +1224,17 @@ export default function LiveSessionPage() {
       </Modal>
       <Modal
         opened={callModalOpen && sessionType === 'phone'}
-        onClose={() => setCallModalOpen(false)}
+        onClose={handleCloseCallModal}
         title={
-          phoneVerification?.verified
+          showVerifiedPhoneChoice
             ? sessionStatus === 'ended'
-              ? 'Start another phone call'
-              : 'Start phone call'
-            : 'Verify your phone number'
+              ? 'Call this verified number again?'
+              : isTransientVerifiedPhone
+                ? 'Continue with this verified phone'
+                : 'Continue with your verified phone'
+            : hasVerifiedPhone
+              ? 'Change your phone number'
+              : 'Verify your phone number'
         }
         centered
       >
@@ -1210,38 +1243,68 @@ export default function LiveSessionPage() {
             <Group justify="center" py="md">
               <Loader size="sm" />
             </Group>
-          ) : phoneVerification?.verified ? (
+          ) : showVerifiedPhoneChoice ? (
             <>
-              <Text size="sm" c="dimmed">
-                {sessionStatus === 'ended'
-                  ? 'Your verified number will be used again for the next phone call.'
-                  : 'Your verified number will be used for this phone session.'}
-              </Text>
-              <TextInput
-                label="Verified phone number"
-                value={phoneVerification.phoneNumber ?? phoneNumber}
-                readOnly
-                disabled
-              />
+              <Paper
+                withBorder
+                radius="lg"
+                p="lg"
+                style={{
+                  background:
+                    'linear-gradient(135deg, rgba(34, 197, 94, 0.14) 0%, rgba(34, 197, 94, 0.05) 100%)',
+                  borderColor: 'rgba(34, 197, 94, 0.35)',
+                }}
+              >
+                <Stack gap="sm">
+                  <Group justify="space-between" align="flex-start">
+                    <Stack gap={6}>
+                      <Group gap="xs">
+                        <Badge color="green" variant="light" leftSection={<IconCheck size={12} />}>
+                          Verified
+                        </Badge>
+                        <Badge variant="dot" color={isTransientVerifiedPhone ? 'orange' : 'blue'}>
+                          {isTransientVerifiedPhone ? 'This call only' : 'Ready for phone sessions'}
+                        </Badge>
+                      </Group>
+                      <Text fw={700} size="lg">
+                        {activeVerifiedPhoneNumber}
+                      </Text>
+                    </Stack>
+                    <IconPhone size={22} color="var(--mantine-color-green-6)" />
+                  </Group>
+                  <Text size="sm" c="dimmed">
+                    {isTransientVerifiedPhone
+                      ? 'This number is verified for the current call, but it will not replace your saved phone number.'
+                      : sessionStatus === 'ended'
+                        ? 'We can ring this verified number again for the next phone session, or you can switch to a different number first.'
+                        : 'We can ring this verified number now, or you can switch to a different number before we place the call.'}
+                  </Text>
+                </Stack>
+              </Paper>
               {callError && (
                 <Text size="sm" c="red">
                   {callError}
                 </Text>
               )}
               <Group justify="flex-end">
-                <Button variant="default" onClick={() => setCallModalOpen(false)}>
-                  Not now
+                <Button
+                  variant="default"
+                  leftSection={<IconEdit size={16} />}
+                  onClick={handleEditVerifiedPhone}
+                >
+                  Change phone
                 </Button>
                 <Button onClick={handleStartPhoneCall} loading={callLoading}>
-                  {sessionStatus === 'ended' ? 'Start another call' : 'Start call'}
+                  Continue with verified phone
                 </Button>
               </Group>
             </>
           ) : (
             <>
               <Text size="sm" c="dimmed">
-                Add the phone number you want us to call, then verify it with the texted code before
-                starting this session.
+                {hasVerifiedPhone
+                  ? 'Enter the number you want to use instead, then confirm it with the texted code.'
+                  : 'Add the phone number you want us to call, then verify it with the texted code before starting this session.'}
               </Text>
               <TextInput
                 label="Phone number"
@@ -1256,6 +1319,13 @@ export default function LiveSessionPage() {
                 error={callError ?? undefined}
                 type="tel"
                 autoComplete="tel"
+              />
+              <Checkbox
+                size="sm"
+                checked={savePhoneForFutureUse}
+                onChange={(event) => setSavePhoneForFutureUse(event.currentTarget.checked)}
+                label="Save for future use"
+                description="Keep this number on your account for future phone sessions."
               />
               {phoneVerification?.pendingPhoneNumber && (
                 <>
@@ -1284,8 +1354,8 @@ export default function LiveSessionPage() {
                 </Text>
               )}
               <Group justify="space-between">
-                <Button variant="default" onClick={() => setCallModalOpen(false)}>
-                  Not now
+                <Button variant="default" onClick={handleCloseCallModal}>
+                  {hasVerifiedPhone ? 'Keep current phone' : 'Not now'}
                 </Button>
                 <Group justify="flex-end">
                   {phoneVerification?.pendingPhoneNumber ? (
@@ -1410,8 +1480,8 @@ export default function LiveSessionPage() {
                 >
                   {phoneVerification?.verified
                     ? sessionStatus === 'ended'
-                      ? 'Start another call'
-                      : 'Start call'
+                      ? 'Call options'
+                      : 'Use verified phone'
                     : 'Verify phone'}
                 </Button>
               )}

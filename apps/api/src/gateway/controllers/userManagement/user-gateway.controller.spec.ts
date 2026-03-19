@@ -151,7 +151,10 @@ describe('UserGatewayController', () => {
     );
 
     const result = await lastValueFrom(
-      controller.verifyPhoneVerification({ code: '123456' }, userClaims),
+      controller.verifyPhoneVerification(
+        { code: '123456', saveForFutureUse: false },
+        userClaims,
+      ),
     );
 
     expect(result).toEqual({
@@ -162,6 +165,7 @@ describe('UserGatewayController', () => {
       USER_SERVICE_PATTERNS.VERIFY_PHONE_VERIFICATION,
       {
         code: '123456',
+        saveForFutureUse: false,
         userClaims,
       },
     );

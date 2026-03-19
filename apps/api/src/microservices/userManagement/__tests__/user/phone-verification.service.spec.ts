@@ -83,9 +83,15 @@ describe('PhoneVerificationService', () => {
         user: {
           update: jest.fn(),
         },
-        $transaction: jest.fn(async (operations: Array<Promise<unknown>>) =>
-          Promise.all(operations),
-        ),
+        $transaction: jest.fn(async (input: unknown) => {
+          if (typeof input === 'function') {
+            return input(prisma.client as any);
+          }
+          if (Array.isArray(input)) {
+            return Promise.all(input);
+          }
+          return input;
+        }),
       },
     };
 
@@ -320,6 +326,40 @@ describe('PhoneVerificationService', () => {
       expect.objectContaining({
         verified: true,
         phoneNumber: '+15551234567',
+      }),
+    );
+  });
+
+  it('verifies a correct code without persisting the phone number when saveForFutureUse is false', async () => {
+    const pendingChallenge = createPendingChallenge();
+    const verifiedChallenge = {
+      ...pendingChallenge,
+      status: VerificationStatusRecord.verified,
+      verifiedAt: new Date('2024-01-01T00:00:00.000Z'),
+    };
+
+    prisma.client.phoneVerificationChallenge.findFirst
+      .mockResolvedValueOnce(pendingChallenge as any)
+      .mockResolvedValueOnce(null as any)
+      .mockResolvedValueOnce(verifiedChallenge as any);
+    prisma.user.findFirst.mockResolvedValue(null as any);
+    prisma.client.phoneVerificationChallenge.update.mockResolvedValue(
+      verifiedChallenge as any,
+    );
+    prisma.client.phoneVerificationChallenge.updateMany.mockResolvedValue({
+      count: 0,
+    } as any);
+    prisma.user.findUnique.mockResolvedValue(baseUser as any);
+
+    const status = await service.verifyCode('user-1', '123456', false);
+
+    expect(prisma.client.user.update).not.toHaveBeenCalled();
+    expect(status).toEqual(
+      expect.objectContaining({
+        verified: false,
+        phoneNumber: null,
+        temporaryVerifiedPhoneNumber: '+15551234567',
+        temporaryVerifiedAt: verifiedChallenge.verifiedAt,
       }),
     );
   });

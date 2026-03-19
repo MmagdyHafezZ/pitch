@@ -500,12 +500,14 @@ describe('UserController', () => {
     await expect(
       controller.verifyPhoneVerification({
         code: '123456',
+        saveForFutureUse: false,
         ...basePayload,
       }),
     ).resolves.toEqual(status);
     expect(phoneVerificationService.verifyCode).toHaveBeenCalledWith(
       'admin-1',
       '123456',
+      false,
     );
   });
 });

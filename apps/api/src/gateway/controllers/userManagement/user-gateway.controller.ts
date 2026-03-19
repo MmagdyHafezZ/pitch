@@ -263,12 +263,15 @@ export class UserGatewayController {
     description: 'Phone number verified successfully',
   })
   verifyPhoneVerification(
-    @Body() body: { code: string },
+    @Body() body: { code: string; saveForFutureUse?: boolean },
     @UserClaims() userClaims: UserClaimsType,
   ) {
     return this.userService
       .send(USER_SERVICE_PATTERNS.VERIFY_PHONE_VERIFICATION, {
         code: body.code,
+        ...(typeof body.saveForFutureUse === 'boolean'
+          ? { saveForFutureUse: body.saveForFutureUse }
+          : {}),
         userClaims,
       })
       .pipe(

@@ -264,7 +264,7 @@ export const api = {
       apiRequest<any>('/users/me/phone-verification/resend', {
         method: 'POST',
       }),
-    verifyPhoneVerification: (data: { code: string }) =>
+    verifyPhoneVerification: (data: { code: string; saveForFutureUse?: boolean }) =>
       apiRequest<any>('/users/me/phone-verification/verify', {
         method: 'POST',
         body: JSON.stringify(data),
@@ -569,7 +569,7 @@ export const api = {
   },
 
   phoneCalls: {
-    start: (data: { sessionId: string; firstMessage?: string }) =>
+    start: (data: { sessionId: string; firstMessage?: string; phoneNumber?: string }) =>
       apiRequest<any>('/simulation/phone-calls', {
         method: 'POST',
         body: JSON.stringify(data),

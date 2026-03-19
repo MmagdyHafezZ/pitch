@@ -196,6 +196,7 @@ export class UserController {
       return await this.phoneVerificationService.verifyCode(
         data.userClaims.id,
         data.code,
+        data.saveForFutureUse ?? true,
       );
     } catch (error) {
       throw toRpcException(error);

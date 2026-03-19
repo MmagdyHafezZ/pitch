@@ -103,6 +103,25 @@ describe('PhoneCallWebhookController', () => {
     expect(response).toEqual({ ok: true });
   });
 
+  it('ends the session when Vapi sends a terminal status update', async () => {
+    sessionService.end.mockResolvedValue({ id: 'session-1' } as never);
+
+    const response = await controller.handleVapiServerEvent('signed-token', {
+      message: {
+        type: 'status-update',
+        status: 'ended',
+        endedReason: 'customer-ended-call',
+      },
+    });
+
+    expect(sessionService.end).toHaveBeenCalledWith(
+      'session-1',
+      { reason: 'phone_call_completed:customer-ended-call' },
+      'user-1',
+    );
+    expect(response).toEqual({ ok: true });
+  });
+
   it('ends the session when Vapi sends a hang event', async () => {
     sessionService.end.mockResolvedValue({ id: 'session-1' } as never);
 

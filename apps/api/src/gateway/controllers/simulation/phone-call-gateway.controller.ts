@@ -50,7 +50,8 @@ export class PhoneCallGatewayController {
     description: 'Phone number must be verified before starting a call',
   })
   async startCall(
-    @Body() payload: { sessionId: string; firstMessage?: string },
+    @Body()
+    payload: { sessionId: string; firstMessage?: string; phoneNumber?: string },
     @UserClaims() userClaims: UserClaimsType,
   ) {
     try {
@@ -63,7 +64,25 @@ export class PhoneCallGatewayController {
           .pipe(timeout(5000)),
       );
 
-      if (!verification.verified || !verification.phoneNumber) {
+      const storedVerifiedPhone =
+        verification.verified && verification.phoneNumber
+          ? verification.phoneNumber
+          : null;
+      const temporaryVerifiedPhone =
+        verification.temporaryVerifiedPhoneNumber ?? null;
+      const requestedPhone = payload.phoneNumber?.trim() || null;
+      const allowedPhoneNumbers = new Set(
+        [storedVerifiedPhone, temporaryVerifiedPhone].filter(
+          (value): value is string => Boolean(value),
+        ),
+      );
+      const resolvedPhoneNumber =
+        requestedPhone ?? storedVerifiedPhone ?? temporaryVerifiedPhone;
+
+      if (
+        !resolvedPhoneNumber ||
+        !allowedPhoneNumbers.has(resolvedPhoneNumber)
+      ) {
         throw new HttpException(
           'Verify your phone number before starting a phone call.',
           HttpStatus.FORBIDDEN,
@@ -77,7 +96,7 @@ export class PhoneCallGatewayController {
             ...(payload.firstMessage
               ? { firstMessage: payload.firstMessage }
               : {}),
-            phoneNumber: verification.phoneNumber,
+            phoneNumber: resolvedPhoneNumber,
             userClaims,
           })
           .pipe(timeout(10000)),

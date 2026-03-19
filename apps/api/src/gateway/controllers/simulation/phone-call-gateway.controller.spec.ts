@@ -103,6 +103,45 @@ describe('PhoneCallGatewayController', () => {
     );
   });
 
+  it('starts a call with a temporarily verified phone number when explicitly requested', async () => {
+    userService.send.mockReturnValue(
+      of({
+        verified: false,
+        phoneNumber: null,
+        temporaryVerifiedPhoneNumber: '+15557654321',
+      }) as never,
+    );
+    simulationService.send.mockReturnValue(
+      of({
+        callId: 'call-1',
+        provider: 'vapi',
+        sessionId: 'session-1',
+      }) as never,
+    );
+
+    const result = await controller.startCall(
+      {
+        sessionId: 'session-1',
+        phoneNumber: '+15557654321',
+      },
+      userClaims,
+    );
+
+    expect(simulationService.send).toHaveBeenCalledWith(
+      SIMULATION_SERVICE_PATTERNS.PHONE_CALL_START,
+      {
+        sessionId: 'session-1',
+        phoneNumber: '+15557654321',
+        userClaims,
+      },
+    );
+    expect(result).toEqual({
+      callId: 'call-1',
+      provider: 'vapi',
+      sessionId: 'session-1',
+    });
+  });
+
   it('rejects unverified users before contacting simulation service', async () => {
     userService.send.mockReturnValue(
       of({
@@ -136,6 +175,25 @@ describe('PhoneCallGatewayController', () => {
 
     await expect(
       controller.startCall({ sessionId: 'session-1' }, userClaims),
+    ).rejects.toThrow('Verify your phone number before starting a phone call.');
+
+    expect(simulationService.send).not.toHaveBeenCalled();
+  });
+
+  it('rejects a requested phone number that is not verified for the user', async () => {
+    userService.send.mockReturnValue(
+      of({
+        verified: true,
+        phoneNumber: '+15551234567',
+        temporaryVerifiedPhoneNumber: '+15557654321',
+      }) as never,
+    );
+
+    await expect(
+      controller.startCall(
+        { sessionId: 'session-1', phoneNumber: '+15550000000' },
+        userClaims,
+      ),
     ).rejects.toThrow('Verify your phone number before starting a phone call.');
 
     expect(simulationService.send).not.toHaveBeenCalled();
