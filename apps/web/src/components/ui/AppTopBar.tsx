@@ -20,7 +20,7 @@ import {
   Loader,
   useMantineColorScheme,
 } from '@mantine/core'
-import { IconSearch, IconBell, IconUser, IconHelp, IconX } from '@tabler/icons-react'
+import { IconSearch, IconBell, IconUser, IconHelp, IconMenu2, IconX } from '@tabler/icons-react'
 import dayjs from 'dayjs'
 import { ReactNode, useEffect, useMemo, useState } from 'react'
 import { SettingsModal } from './SettingsModal'
@@ -61,7 +61,6 @@ export type HeaderProps = {
   onTabChange?: (tab: string) => void
   onToggleMobileNav?: () => void
   mobileNavOpened?: boolean
-  onMobileNavToggle?: () => void
 }
 
 type PageKey = 'Home' | 'Sessions' | 'Teams' | 'Analytics' | 'Challenges' | 'Settings'
@@ -353,6 +352,8 @@ function ActionConfig({
 
   const tabLabels: Record<string, string> = {
     All: t('tabs.all'),
+    Favorites: t('tabs.favorites'),
+    Archived: t('tabs.archived'),
     Created: t('tabs.created'),
     Shared: t('tabs.shared'),
     'My Teams': t('tabs.myTeams'),
@@ -366,7 +367,7 @@ function ActionConfig({
         <ActionBar
           enableSearch={false}
           searchPlaceholder={t('common.search')}
-          availableTabs={[]}
+          availableTabs={['All', 'Favorites', 'Archived']}
           selectedTab={selectedTab}
           onTabChange={onTabChange}
           value={value}
@@ -466,7 +467,6 @@ export function AppTopBar({
   onTabChange,
   onToggleMobileNav,
   mobileNavOpened = false,
-  onMobileNavToggle,
 }: HeaderProps) {
   const { t, locale, setLocale, localeOptions } = useI18n()
   const weekday = useMemo(
@@ -654,7 +654,7 @@ export function AppTopBar({
 
   const acceptTeamInviteMutation = useMutation({
     mutationFn: (payload: { teamId: string; notificationId: string }) =>
-      (api.teams as any).acceptInvite(payload.teamId),
+      api.teams.acceptInvite(payload.teamId),
     onSuccess: async (_result, payload) => {
       setAcceptedInviteIds((previous) =>
         previous.includes(payload.notificationId) ? previous : [...previous, payload.notificationId]
@@ -749,11 +749,29 @@ export function AppTopBar({
   )
   const showActionArea = Boolean(rightSlot || currentPage)
   const actionIconSize = isMobile ? 24 : isNarrow ? 26 : 28
-  const navToggleHandler = onToggleMobileNav ?? onMobileNavToggle
   const showLanguageSelect = !isMobile
   const languageSelectWidth = isMobile ? 104 : isNarrow ? 92 : 140
   const utilityControls = (
     <Group data-tour-id="app-topbar-controls" align="center" gap={isNarrow ? 8 : 12} wrap="nowrap">
+      {onToggleMobileNav && isMobile && (
+        <ActionIcon
+          aria-label={mobileNavOpened ? 'Close navigation menu' : 'Open navigation menu'}
+          size={actionIconSize}
+          radius="md"
+          variant="default"
+          onClick={onToggleMobileNav}
+          styles={{
+            root: {
+              background: 'var(--pitch-nav-accent-soft)',
+              color: 'var(--pitch-nav-text)',
+              boxShadow: '0 0 0 1px var(--pitch-nav-text-dim)',
+            },
+          }}
+        >
+          {mobileNavOpened ? <IconX size={16} /> : <IconMenu2 size={16} />}
+        </ActionIcon>
+      )}
+
       {!isMobile && !isNarrow && (
         <Box ta="right" lh={1}>
           <Text size="xs" fw={700} c="var(--pitch-nav-text)">
@@ -1029,70 +1047,11 @@ export function AppTopBar({
         }}
       >
         {isMobile ? (
-          <Stack gap={rem(6)} w="100%">
+          <Stack gap={rem(8)} w="100%">
             <Group justify="space-between" align="center" w="100%" wrap="nowrap">
-              <Group align="center" gap={rem(6)} style={{ minWidth: 0 }} wrap="nowrap">
-                {navToggleHandler ? (
-                  <ActionIcon
-                    aria-label={mobileNavOpened ? 'Close navigation menu' : 'Open navigation menu'}
-                    size="auto"
-                    p={0}
-                    variant="transparent"
-                    onClick={navToggleHandler}
-                    styles={{
-                      root: {
-                        color: 'var(--pitch-nav-text)',
-                        background: 'transparent',
-                        boxShadow: 'none',
-                        minWidth: 'unset',
-                        minHeight: 'unset',
-                      },
-                    }}
-                  >
-                    {mobileNavOpened ? (
-                      <IconX size={15} stroke={2.25} />
-                    ) : (
-                      <Box
-                        aria-hidden="true"
-                        style={{
-                          width: 16,
-                          height: 16,
-                          display: 'flex',
-                          flexDirection: 'column',
-                          justifyContent: 'center',
-                          gap: 3,
-                        }}
-                      >
-                        <Box
-                          style={{
-                            height: 2,
-                            width: 14,
-                            borderRadius: 999,
-                            background: 'currentColor',
-                          }}
-                        />
-                        <Box
-                          style={{
-                            height: 2,
-                            width: 10,
-                            borderRadius: 999,
-                            background: 'currentColor',
-                          }}
-                        />
-                        <Box
-                          style={{
-                            height: 2,
-                            width: 14,
-                            borderRadius: 999,
-                            background: 'currentColor',
-                          }}
-                        />
-                      </Box>
-                    )}
-                  </ActionIcon>
-                ) : null}
+              <Group align="center" style={{ minWidth: 0 }}>
                 <Text
-                  px={rem(isNarrow ? 2 : 6)}
+                  px={rem(isNarrow ? 4 : 10)}
                   size={rem(isNarrow ? 20 : 22)}
                   fw={700}
                   c="var(--pitch-accent-strong)"
@@ -1101,8 +1060,10 @@ export function AppTopBar({
                   P.I.T.C.H.
                 </Text>
               </Group>
+
               {utilityControls}
             </Group>
+
             {showActionArea && <Box style={{ width: '100%', minWidth: 0 }}>{actionArea}</Box>}
           </Stack>
         ) : (
@@ -1118,6 +1079,7 @@ export function AppTopBar({
                 P.I.T.C.H.
               </Text>
             </Group>
+
             {showActionArea && <Box style={{ flex: 1, minWidth: 0 }}>{actionArea}</Box>}
             {utilityControls}
           </Group>
