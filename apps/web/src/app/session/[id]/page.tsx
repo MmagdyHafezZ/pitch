@@ -138,6 +138,13 @@ const buildCreateSessionPayload = (session: Record<string, unknown>): CreateSess
     throw new Error('Unable to start over: session type is missing.')
   }
 
+  const sessionConfig = isRecord(session.sessionConfig) ? { ...session.sessionConfig } : undefined
+  if (sessionConfig && isRecord(sessionConfig.phone)) {
+    const nextPhoneConfig = { ...sessionConfig.phone }
+    delete nextPhoneConfig.runtime
+    sessionConfig.phone = nextPhoneConfig
+  }
+
   return {
     orgId,
     orgSnapshot: isRecord(session.orgSnapshot) ? session.orgSnapshot : undefined,
@@ -147,7 +154,7 @@ const buildCreateSessionPayload = (session: Record<string, unknown>): CreateSess
     tags: Array.isArray(session.tags)
       ? session.tags.filter((tag): tag is string => typeof tag === 'string')
       : [],
-    sessionConfig: isRecord(session.sessionConfig) ? session.sessionConfig : undefined,
+    sessionConfig,
     scenarioId: typeof session.scenarioId === 'string' ? session.scenarioId : undefined,
     personaId: typeof session.personaId === 'string' ? session.personaId : undefined,
     language: typeof session.language === 'string' ? session.language : undefined,
@@ -443,6 +450,18 @@ export default function LiveSessionPage() {
     setEntryDecisionLoading(true)
     setStartOverLoading(false)
     setLoadedSessionRecord(null)
+    setCallStarted(false)
+    setCallModalOpen(false)
+    setCallLoading(false)
+    setCallError(null)
+    setPhoneVerification(null)
+    setPhoneVerificationLoading(false)
+    setPhoneVerificationActionLoading(false)
+    setVerificationCode('')
+    setSavePhoneForFutureUse(true)
+    setTransientVerifiedPhoneNumber(null)
+    setEditingVerifiedPhone(false)
+    setPhoneNumber('')
 
     const loadSession = async () => {
       try {

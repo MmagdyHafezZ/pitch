@@ -56,3 +56,20 @@ export class PhoneCallResponseDto {
   @IsString()
   sessionId: string;
 }
+
+export class EndPhoneCallDto {
+  @ApiProperty({
+    example: 'session_123',
+    description: 'Session id whose active phone call should be ended.',
+  })
+  @IsString()
+  sessionId: string;
+
+  @ApiPropertyOptional({
+    example: 'The backend model determined the verification is complete.',
+    description: 'Optional internal reason for ending the live phone call.',
+  })
+  @IsOptional()
+  @IsString()
+  reason?: string;
+}

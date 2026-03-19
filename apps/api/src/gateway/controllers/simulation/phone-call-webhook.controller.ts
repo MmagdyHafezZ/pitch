@@ -109,10 +109,29 @@ export class PhoneCallWebhookController {
     const status = this.extractStatus(message);
     const endedReason = this.extractEndReasonOrUndefined(message);
     const callId = this.extractCallId(body);
+    const controlUrl = this.extractMonitorUrl(message, 'controlUrl');
+    const listenUrl = this.extractMonitorUrl(message, 'listenUrl');
 
     this.logger.log(
       `vapi.event.received session=${context.sessionId} user=${context.userId} call=${callId ?? 'unknown'} type=${type} status=${status ?? 'unknown'} endedReason=${endedReason ?? 'unknown'} bodyKeys=${this.listObjectKeys(body)}`,
     );
+
+    if (callId) {
+      await this.phoneCallService
+        .syncPhoneCallRuntimeFromWebhook({
+          sessionId: context.sessionId,
+          callId,
+          status,
+          endedReason,
+          controlUrl,
+          listenUrl,
+        })
+        .catch((error) => {
+          this.logger.warn(
+            `vapi.event.runtime_sync_failed session=${context.sessionId} user=${context.userId} call=${callId} error=${(error as Error)?.message ?? error}`,
+          );
+        });
+    }
 
     switch (type) {
       case 'status-update': {
@@ -245,6 +264,24 @@ export class PhoneCallWebhookController {
     }
 
     return endedReason;
+  }
+
+  private extractMonitorUrl(
+    message: Record<string, unknown>,
+    key: 'controlUrl' | 'listenUrl',
+  ): string | undefined {
+    const call = message.call;
+    if (!call || typeof call !== 'object') {
+      return undefined;
+    }
+
+    const callRecord = call as Record<string, unknown>;
+    const monitor = callRecord.monitor;
+    if (!monitor || typeof monitor !== 'object') {
+      return undefined;
+    }
+
+    return this.readString(monitor as Record<string, unknown>, key);
   }
 
   private extractStatus(message: Record<string, unknown>): string | undefined {

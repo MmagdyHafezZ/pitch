@@ -77,6 +77,25 @@ describe('VapiPhoneProvider', () => {
     );
   });
 
+  it('ends a live call through the Vapi control URL', async () => {
+    mockAxios.post.mockResolvedValueOnce({
+      data: { ok: true },
+    });
+
+    await provider.endCall({
+      callId: 'call-1',
+      controlUrl: 'https://control.vapi.ai/call-1/control',
+    });
+
+    expect(mockAxios.post).toHaveBeenLastCalledWith(
+      'https://control.vapi.ai/call-1/control',
+      { type: 'end-call' },
+      expect.objectContaining({
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+  });
+
   it('surfaces Vapi transport failures as HttpException', async () => {
     mockAxios.isAxiosError.mockReturnValue(true);
     mockAxios.post.mockRejectedValue({

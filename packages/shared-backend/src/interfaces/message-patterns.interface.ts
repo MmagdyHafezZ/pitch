@@ -159,6 +159,7 @@ export const SIMULATION_SERVICE_PATTERNS = {
   HINTS_HISTORY: 'simulation.hints.history',
 
   PHONE_CALL_START: 'simulation.phone.call.start',
+  PHONE_CALL_END: 'simulation.phone.call.end',
 
   ANALYTICS_DASHBOARD: 'analytics.dashboard',
 

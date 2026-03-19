@@ -12,6 +12,7 @@ describe('PhoneCallService', () => {
     client: {
       session: {
         findUnique: jest.Mock;
+        update: jest.Mock;
       };
     };
   };
@@ -22,6 +23,7 @@ describe('PhoneCallService', () => {
   let provider: {
     name: string;
     createCall: jest.Mock;
+    endCall: jest.Mock;
   };
 
   const baseSession = {
@@ -42,7 +44,14 @@ describe('PhoneCallService', () => {
         status: 'queued',
         to: '+15551234567',
         from: 'phone-number-id',
+        raw: {
+          monitor: {
+            controlUrl: 'https://control.vapi.ai/call-1/control',
+            listenUrl: 'wss://control.vapi.ai/call-1/listen',
+          },
+        },
       }),
+      endCall: jest.fn().mockResolvedValue(undefined),
     };
     providerFactory = {
       getProvider: jest.fn().mockReturnValue(provider),
@@ -51,6 +60,7 @@ describe('PhoneCallService', () => {
       client: {
         session: {
           findUnique: jest.fn(),
+          update: jest.fn().mockResolvedValue({ id: 'session-1' }),
         },
       },
     };
@@ -125,7 +135,70 @@ describe('PhoneCallService', () => {
     const createCallInput = provider.createCall.mock.calls[0]?.[0];
     const assistant = createCallInput?.providerConfig?.assistant;
     expect(assistant?.model).toBeUndefined();
+    expect(prisma.client.session.update).toHaveBeenCalledWith({
+      where: { id: 'session-1' },
+      data: {
+        sessionConfig: expect.objectContaining({
+          phone: expect.objectContaining({
+            runtime: expect.objectContaining({
+              provider: 'vapi',
+              callId: 'call-1',
+              controlUrl: 'https://control.vapi.ai/call-1/control',
+              listenUrl: 'wss://control.vapi.ai/call-1/listen',
+              status: 'queued',
+            }),
+          }),
+        }),
+      },
+    });
     expect(result.sessionId).toBe('session-1');
+  });
+
+  it('can end an active phone call through the stored Vapi control URL', async () => {
+    prisma.client.session.findUnique.mockResolvedValueOnce({
+      ...baseSession,
+      sessionConfig: {
+        phone: {
+          runtime: {
+            provider: 'vapi',
+            callId: 'call-1',
+            controlUrl: 'https://control.vapi.ai/call-1/control',
+          },
+        },
+      },
+    });
+
+    const result = await service.endActiveCall({
+      sessionId: 'session-1',
+      userId: 'user-1',
+      reason: 'Scenario completed',
+    });
+
+    expect(provider.endCall).toHaveBeenCalledWith({
+      callId: 'call-1',
+      controlUrl: 'https://control.vapi.ai/call-1/control',
+    });
+    expect(prisma.client.session.update).toHaveBeenCalledWith({
+      where: { id: 'session-1' },
+      data: {
+        sessionConfig: expect.objectContaining({
+          phone: expect.objectContaining({
+            runtime: expect.objectContaining({
+              provider: 'vapi',
+              callId: 'call-1',
+              controlUrl: 'https://control.vapi.ai/call-1/control',
+              endRequestedReason: 'Scenario completed',
+            }),
+          }),
+        }),
+      },
+    });
+    expect(result).toEqual({
+      ok: true,
+      callId: 'call-1',
+      provider: 'vapi',
+      sessionId: 'session-1',
+    });
   });
 
   it('uses a session-configured firstMessage when no override is provided', async () => {

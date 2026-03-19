@@ -1,6 +1,7 @@
 import { HttpException, Injectable, Logger } from '@nestjs/common';
 import axios from 'axios';
 import {
+  PhoneCallEndRequest,
   PhoneCallRequest,
   PhoneCallResult,
   PhoneProvider,
@@ -115,6 +116,53 @@ export class VapiPhoneProvider implements PhoneProvider {
       from: request.from ?? phoneNumberId,
       raw: data,
     };
+  }
+
+  async endCall(request: PhoneCallEndRequest): Promise<void> {
+    if (!request.controlUrl) {
+      throw new Error(
+        'Vapi live control URL is required to end an active phone call.',
+      );
+    }
+
+    this.logger.log(
+      `vapi.call.end.request call=${request.callId} url=${request.controlUrl}`,
+    );
+
+    try {
+      await axios.post(
+        request.controlUrl,
+        { type: 'end-call' },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          timeout: 10_000,
+        },
+      );
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        const status = error.response?.status ?? 500;
+        const rawMessage = error.response
+          ? (this.formatErrorMessage(error.response.data) ??
+            `Vapi end-call request failed with status ${status}`)
+          : error.message;
+        const message = this.enrichErrorMessage(rawMessage);
+
+        this.logger.error(
+          `vapi.call.end.failed call=${request.callId} status=${status} message=${message} response=${this.stringifyForLog(error.response?.data)}`,
+        );
+
+        throw new HttpException(message, status);
+      }
+
+      this.logger.error(
+        `vapi.call.end.failed call=${request.callId} unexpected=${this.stringifyForLog(error)}`,
+      );
+      throw error;
+    }
+
+    this.logger.log(`vapi.call.end.completed call=${request.callId}`);
   }
 
   private resolveCallUrl(): string {

@@ -4,9 +4,10 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
+import type { Prisma } from '@prisma/simulation-client';
 import { SimulationPrismaService } from '../prisma/simulation-prisma.service';
 import { PhoneProviderFactory } from './providers/phone.factory';
-import { PhoneCallResult, PhoneCallRequest } from './providers/phone.provider';
+import { PhoneCallRequest, PhoneCallResult } from './providers/phone.provider';
 import { VapiContextService } from './vapi-context.service';
 import { TtsService } from '../tts/tts.service';
 import { TtsOptions, TtsResult } from '../tts/providers/tts.provider';
@@ -20,11 +21,30 @@ interface StartPhoneCallInput {
   firstMessage?: string;
 }
 
+interface EndPhoneCallInput {
+  sessionId: string;
+  userId: string;
+  reason?: string;
+}
+
 interface SynthesizePhoneCallAudioInput {
   sessionId: string;
   userId: string;
   text: string;
   sampleRate?: number;
+}
+
+interface PhoneCallRuntimeUpdate {
+  provider?: string;
+  callId: string;
+  controlUrl?: string;
+  listenUrl?: string;
+  status?: string;
+  startedAt?: string;
+  endedAt?: string;
+  endedReason?: string;
+  endRequestedAt?: string;
+  endRequestedReason?: string;
 }
 
 @Injectable()
@@ -103,6 +123,19 @@ export class PhoneCallService {
 
     const result = await providerInstance.createCall(request);
 
+    await this.persistPhoneCallRuntime(session.id, session.sessionConfig, {
+      provider: result.provider,
+      callId: result.callId,
+      controlUrl: this.extractMonitorUrl(result.raw, 'controlUrl'),
+      listenUrl: this.extractMonitorUrl(result.raw, 'listenUrl'),
+      status: result.status,
+      startedAt: new Date().toISOString(),
+    }).catch((error) => {
+      this.logger.warn(
+        `phone_call.runtime.persist_failed session=${sessionId} user=${userId} call=${result.callId} error=${(error as Error)?.message ?? error}`,
+      );
+    });
+
     this.logger.log(
       `phone_call.started session=${sessionId} user=${userId} provider=${providerInstance.name} call=${result.callId}`,
     );
@@ -111,6 +144,112 @@ export class PhoneCallService {
       ...result,
       sessionId,
     };
+  }
+
+  async endActiveCall(input: EndPhoneCallInput): Promise<{
+    ok: true;
+    callId: string;
+    provider: string;
+    sessionId: string;
+  }> {
+    const { sessionId, userId, reason } = input;
+    const session = await this.prisma.client.session.findUnique({
+      where: { id: sessionId },
+    });
+
+    if (!session) {
+      throw new NotFoundException(`Session ${sessionId} not found`);
+    }
+
+    if (session.type !== 'phone') {
+      throw new BadRequestException(
+        `Session ${sessionId} is not a phone call session`,
+      );
+    }
+
+    const runtime = this.resolvePhoneCallRuntime(session.sessionConfig);
+    if (!runtime?.callId) {
+      throw new BadRequestException(
+        `No active phone call is registered for session ${sessionId}.`,
+      );
+    }
+
+    const providerName =
+      runtime.provider ??
+      this.resolvePhoneProvider(session.sessionConfig) ??
+      'vapi';
+    const providerInstance = this.providerFactory.getProvider(providerName);
+
+    if (!providerInstance.endCall) {
+      throw new BadRequestException(
+        `Phone provider "${providerName}" does not support programmatic hangup.`,
+      );
+    }
+
+    this.logger.log(
+      `phone_call.end.requested session=${sessionId} user=${userId} provider=${providerName} call=${runtime.callId} reason=${reason ?? 'none'}`,
+    );
+
+    await providerInstance.endCall({
+      callId: runtime.callId,
+      controlUrl: runtime.controlUrl,
+    });
+
+    await this.persistPhoneCallRuntime(sessionId, session.sessionConfig, {
+      ...runtime,
+      provider: providerName,
+      callId: runtime.callId,
+      endRequestedAt: new Date().toISOString(),
+      ...(reason ? { endRequestedReason: reason } : {}),
+    }).catch((error) => {
+      this.logger.warn(
+        `phone_call.end.persist_failed session=${sessionId} user=${userId} call=${runtime.callId} error=${(error as Error)?.message ?? error}`,
+      );
+    });
+
+    return {
+      ok: true,
+      callId: runtime.callId,
+      provider: providerName,
+      sessionId,
+    };
+  }
+
+  async syncPhoneCallRuntimeFromWebhook(input: {
+    sessionId: string;
+    callId: string;
+    status?: string;
+    endedReason?: string;
+    controlUrl?: string;
+    listenUrl?: string;
+  }): Promise<void> {
+    const session = await this.prisma.client.session.findUnique({
+      where: { id: input.sessionId },
+      select: {
+        id: true,
+        type: true,
+        sessionConfig: true,
+      },
+    });
+
+    if (!session || session.type !== 'phone') {
+      return;
+    }
+
+    const existingRuntime = this.resolvePhoneCallRuntime(session.sessionConfig);
+    const now = new Date().toISOString();
+    const isTerminalStatus = this.isTerminalPhoneStatus(input.status);
+
+    await this.persistPhoneCallRuntime(input.sessionId, session.sessionConfig, {
+      ...(existingRuntime ?? {}),
+      callId: input.callId,
+      ...(input.status ? { status: input.status } : {}),
+      ...(input.endedReason ? { endedReason: input.endedReason } : {}),
+      ...(input.controlUrl ? { controlUrl: input.controlUrl } : {}),
+      ...(input.listenUrl ? { listenUrl: input.listenUrl } : {}),
+      ...(existingRuntime?.startedAt ? {} : { startedAt: now }),
+      ...(isTerminalStatus ? { endedAt: now } : {}),
+    });
   }
 
   async synthesizePhoneCallAudio(
@@ -537,6 +676,94 @@ export class PhoneCallService {
     }
 
     return undefined;
+  }
+
+  private resolvePhoneCallRuntime(
+    sessionConfig: unknown,
+  ): PhoneCallRuntimeUpdate | undefined {
+    const phone = this.resolvePhoneConfig(sessionConfig);
+    const runtime = this.resolveNestedObject(phone, 'runtime');
+    if (!runtime) {
+      return undefined;
+    }
+
+    const callId = this.resolveString(runtime, 'callId');
+    if (!callId) {
+      return undefined;
+    }
+
+    return {
+      callId,
+      provider: this.resolveString(runtime, 'provider'),
+      controlUrl: this.resolveString(runtime, 'controlUrl'),
+      listenUrl: this.resolveString(runtime, 'listenUrl'),
+      status: this.resolveString(runtime, 'status'),
+      startedAt: this.resolveString(runtime, 'startedAt'),
+      endedAt: this.resolveString(runtime, 'endedAt'),
+      endedReason: this.resolveString(runtime, 'endedReason'),
+      endRequestedAt: this.resolveString(runtime, 'endRequestedAt'),
+      endRequestedReason: this.resolveString(runtime, 'endRequestedReason'),
+    };
+  }
+
+  private async persistPhoneCallRuntime(
+    sessionId: string,
+    sessionConfig: unknown,
+    runtime: PhoneCallRuntimeUpdate,
+  ): Promise<void> {
+    const nextSessionConfig = this.withPhoneCallRuntime(sessionConfig, runtime);
+    await this.prisma.client.session.update({
+      where: { id: sessionId },
+      data: {
+        sessionConfig: nextSessionConfig as Prisma.InputJsonValue,
+      },
+    });
+  }
+
+  private withPhoneCallRuntime(
+    sessionConfig: unknown,
+    runtime: PhoneCallRuntimeUpdate,
+  ): Record<string, unknown> {
+    const root = this.resolveRecord(sessionConfig) ?? {};
+    const phone = this.resolvePhoneConfig(sessionConfig) ?? {};
+    const existingRuntime = this.resolveNestedObject(phone, 'runtime') ?? {};
+
+    return {
+      ...root,
+      phone: {
+        ...phone,
+        runtime: {
+          ...existingRuntime,
+          ...this.withoutUndefined(runtime),
+        },
+      },
+    };
+  }
+
+  private extractMonitorUrl(
+    raw: Record<string, unknown> | undefined,
+    key: 'controlUrl' | 'listenUrl',
+  ): string | undefined {
+    const monitor = this.resolveNestedObject(raw, 'monitor');
+    return this.resolveString(monitor, key);
+  }
+
+  private withoutUndefined<T extends object>(
+    value: T,
+  ): Record<string, unknown> {
+    return Object.fromEntries(
+      Object.entries(value).filter(([, entry]) => entry !== undefined),
+    );
+  }
+
+  private isTerminalPhoneStatus(status: string | undefined): boolean {
+    return (
+      status === 'ended' ||
+      status === 'failed' ||
+      status === 'busy' ||
+      status === 'no-answer' ||
+      status === 'canceled'
+    );
   }
 
   private isStrictE164(value: string): boolean {

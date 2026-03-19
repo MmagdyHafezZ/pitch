@@ -26,6 +26,7 @@ describe('PhoneCallWebhookController', () => {
 
     phoneCallService = {
       synthesizePhoneCallAudio: jest.fn(),
+      syncPhoneCallRuntimeFromWebhook: jest.fn().mockResolvedValue(undefined),
     } as unknown as jest.Mocked<PhoneCallService>;
 
     controller = new PhoneCallWebhookController(
@@ -81,6 +82,9 @@ describe('PhoneCallWebhookController', () => {
     });
 
     expect(vapiContext.verifyToken).toHaveBeenCalledWith('signed-token');
+    expect(
+      phoneCallService.syncPhoneCallRuntimeFromWebhook,
+    ).not.toHaveBeenCalled();
     expect(sessionService.end).not.toHaveBeenCalled();
     expect(response).toEqual({ ok: true });
   });
@@ -111,9 +115,28 @@ describe('PhoneCallWebhookController', () => {
         type: 'status-update',
         status: 'ended',
         endedReason: 'customer-ended-call',
+        call: {
+          id: 'call-1',
+          monitor: {
+            controlUrl: 'https://control.vapi.ai/call-1/control',
+            listenUrl: 'wss://control.vapi.ai/call-1/listen',
+          },
+        },
       },
     });
 
+    expect(
+      phoneCallService.syncPhoneCallRuntimeFromWebhook,
+    ).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: 'session-1',
+        callId: 'call-1',
+        status: 'ended',
+        endedReason: 'customer-ended-call',
+        controlUrl: 'https://control.vapi.ai/call-1/control',
+        listenUrl: 'wss://control.vapi.ai/call-1/listen',
+      }),
+    );
     expect(sessionService.end).toHaveBeenCalledWith(
       'session-1',
       { reason: 'phone_call_completed:customer-ended-call' },
