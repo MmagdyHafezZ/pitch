@@ -12,6 +12,8 @@ describe('PhoneCallGatewayController', () => {
   let controller: PhoneCallGatewayController;
   let simulationService: jest.Mocked<ClientProxy>;
   let userService: jest.Mocked<ClientProxy>;
+  let simulationSend: jest.Mock;
+  let userSend: jest.Mock;
 
   const userClaims: UserClaims = {
     id: 'user-1',
@@ -20,11 +22,13 @@ describe('PhoneCallGatewayController', () => {
   };
 
   beforeEach(() => {
+    simulationSend = jest.fn();
+    userSend = jest.fn();
     simulationService = {
-      send: jest.fn(),
+      send: simulationSend,
     } as unknown as jest.Mocked<ClientProxy>;
     userService = {
-      send: jest.fn(),
+      send: userSend,
     } as unknown as jest.Mocked<ClientProxy>;
 
     controller = new PhoneCallGatewayController(simulationService, userService);
@@ -50,11 +54,11 @@ describe('PhoneCallGatewayController', () => {
       userClaims,
     );
 
-    expect(userService.send).toHaveBeenCalledWith(
+    expect(userSend).toHaveBeenCalledWith(
       USER_SERVICE_PATTERNS.GET_MY_PHONE_VERIFICATION,
       { userClaims },
     );
-    expect(simulationService.send).toHaveBeenCalledWith(
+    expect(simulationSend).toHaveBeenCalledWith(
       SIMULATION_SERVICE_PATTERNS.PHONE_CALL_START,
       {
         sessionId: 'session-1',
@@ -92,7 +96,7 @@ describe('PhoneCallGatewayController', () => {
       userClaims,
     );
 
-    expect(simulationService.send).toHaveBeenCalledWith(
+    expect(simulationSend).toHaveBeenCalledWith(
       SIMULATION_SERVICE_PATTERNS.PHONE_CALL_START,
       {
         sessionId: 'session-1',
@@ -127,7 +131,7 @@ describe('PhoneCallGatewayController', () => {
       userClaims,
     );
 
-    expect(simulationService.send).toHaveBeenCalledWith(
+    expect(simulationSend).toHaveBeenCalledWith(
       SIMULATION_SERVICE_PATTERNS.PHONE_CALL_START,
       {
         sessionId: 'session-1',
@@ -165,7 +169,7 @@ describe('PhoneCallGatewayController', () => {
       userClaims,
     );
 
-    expect(simulationService.send).toHaveBeenCalledWith(
+    expect(simulationSend).toHaveBeenCalledWith(
       SIMULATION_SERVICE_PATTERNS.PHONE_CALL_START,
       {
         sessionId: 'session-1',
@@ -203,7 +207,7 @@ describe('PhoneCallGatewayController', () => {
       userClaims,
     );
 
-    expect(simulationService.send).toHaveBeenCalledWith(
+    expect(simulationSend).toHaveBeenCalledWith(
       SIMULATION_SERVICE_PATTERNS.PHONE_CALL_START,
       {
         sessionId: 'session-1',
@@ -233,7 +237,7 @@ describe('PhoneCallGatewayController', () => {
       'Verify your phone number before starting a phone call.',
     );
     expect(thrown?.getStatus()).toBe(HttpStatus.FORBIDDEN);
-    expect(simulationService.send).not.toHaveBeenCalled();
+    expect(simulationSend).not.toHaveBeenCalled();
   });
 
   it('rejects users whose verification state is marked verified but has no stored number', async () => {
@@ -248,7 +252,7 @@ describe('PhoneCallGatewayController', () => {
       controller.startCall({ sessionId: 'session-1' }, userClaims),
     ).rejects.toThrow('Verify your phone number before starting a phone call.');
 
-    expect(simulationService.send).not.toHaveBeenCalled();
+    expect(simulationSend).not.toHaveBeenCalled();
   });
 
   it('rejects a requested phone number that is not verified for the user', async () => {
@@ -267,7 +271,7 @@ describe('PhoneCallGatewayController', () => {
       ),
     ).rejects.toThrow('Verify your phone number before starting a phone call.');
 
-    expect(simulationService.send).not.toHaveBeenCalled();
+    expect(simulationSend).not.toHaveBeenCalled();
   });
 
   it('normalizes downstream simulation errors into HTTP exceptions', async () => {

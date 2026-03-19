@@ -10,6 +10,8 @@ describe('SessionGatewayController', () => {
   let controller: SessionGatewayController;
   let simulationService: jest.Mocked<ClientProxy>;
   let sessionService: jest.Mocked<SessionService>;
+  let simulationSend: jest.Mock;
+  let sessionRestart: jest.Mock;
 
   const userClaims: UserClaims = {
     id: 'user-1',
@@ -18,12 +20,14 @@ describe('SessionGatewayController', () => {
   };
 
   beforeEach(() => {
+    simulationSend = jest.fn();
     simulationService = {
-      send: jest.fn(),
+      send: simulationSend,
     } as unknown as jest.Mocked<ClientProxy>;
 
+    sessionRestart = jest.fn();
     sessionService = {
-      restart: jest.fn(),
+      restart: sessionRestart,
     } as unknown as jest.Mocked<SessionService>;
 
     controller = new SessionGatewayController(
@@ -46,7 +50,7 @@ describe('SessionGatewayController', () => {
       userClaims,
     );
 
-    expect(simulationService.send).toHaveBeenCalledWith(
+    expect(simulationSend).toHaveBeenCalledWith(
       SIMULATION_SERVICE_PATTERNS.RESTART_SESSION,
       {
         id: 'session-1',
@@ -54,7 +58,7 @@ describe('SessionGatewayController', () => {
         userClaims,
       },
     );
-    expect(sessionService.restart).not.toHaveBeenCalled();
+    expect(sessionRestart).not.toHaveBeenCalled();
     expect(result).toEqual({
       id: 'session-1',
       status: 'active',
@@ -80,7 +84,7 @@ describe('SessionGatewayController', () => {
       userClaims,
     );
 
-    expect(sessionService.restart).toHaveBeenCalledWith(
+    expect(sessionRestart).toHaveBeenCalledWith(
       'session-1',
       { reason: 'restart_from_scratch' },
       'user-1',
@@ -113,6 +117,6 @@ describe('SessionGatewayController', () => {
     expect(thrown).toBeInstanceOf(HttpException);
     expect(thrown?.message).toBe('Session not found');
     expect(thrown?.getStatus()).toBe(HttpStatus.NOT_FOUND);
-    expect(sessionService.restart).not.toHaveBeenCalled();
+    expect(sessionRestart).not.toHaveBeenCalled();
   });
 });

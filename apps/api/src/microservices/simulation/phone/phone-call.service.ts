@@ -945,7 +945,8 @@ export class PhoneCallService {
   private extractStarterPromptFromModelMessages(
     model: Record<string, unknown> | undefined,
   ): string | undefined {
-    const messages = Array.isArray(model?.messages) ? model.messages : [];
+    const rawMessages = model?.messages;
+    const messages: unknown[] = Array.isArray(rawMessages) ? rawMessages : [];
 
     for (let index = messages.length - 1; index >= 0; index -= 1) {
       const message = messages[index];

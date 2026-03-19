@@ -30,6 +30,10 @@ import { UserClaims } from '../../decorators/user-claims.decorator';
 import type { UserClaims as UserClaimsType } from '@pitch/shared-backend/interfaces/user-claims.interface';
 import { normalizeError } from '@pitch/shared-backend/helpers/exceptions';
 import { SessionService } from '@microservices/simulation/services/session.service';
+import {
+  RestartSessionDto,
+  SessionResponseDto,
+} from '@microservices/simulation/dto/session.dto';
 
 /**
  * Session Gateway Controller
@@ -262,17 +266,20 @@ export class SessionGatewayController {
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   async restartSession(
     @Param('id') id: string,
-    @Body() restartSessionDto: any,
+    @Body() restartSessionDto: RestartSessionDto,
     @UserClaims() userClaims: UserClaimsType,
-  ) {
+  ): Promise<SessionResponseDto> {
     try {
       return await lastValueFrom(
         this.simulationService
-          .send(SIMULATION_SERVICE_PATTERNS.RESTART_SESSION, {
-            id,
-            ...restartSessionDto,
-            userClaims,
-          })
+          .send<SessionResponseDto>(
+            SIMULATION_SERVICE_PATTERNS.RESTART_SESSION,
+            {
+              id,
+              ...restartSessionDto,
+              userClaims,
+            },
+          )
           .pipe(timeout(5000)),
       );
     } catch (err: unknown) {
@@ -282,7 +289,7 @@ export class SessionGatewayController {
         try {
           return await this.sessionService.restart(
             id,
-            restartSessionDto ?? {},
+            restartSessionDto,
             userClaims?.id,
           );
         } catch (fallbackErr: unknown) {

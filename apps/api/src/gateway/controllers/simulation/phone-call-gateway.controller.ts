@@ -27,6 +27,7 @@ import { UserClaims } from '../../decorators/user-claims.decorator';
 import type { UserClaims as UserClaimsType } from '@pitch/shared-backend/interfaces/user-claims.interface';
 import { normalizeError } from '@pitch/shared-backend/helpers/exceptions';
 import type { PhoneVerificationStatus } from '@pitch/shared-backend/interfaces/user.interface';
+import type { PhoneCallResult } from '@microservices/simulation/phone/providers/phone.provider';
 
 @ApiTags('simulation-phone-calls')
 @Controller({ path: 'simulation/phone-calls', version: '1' })
@@ -53,7 +54,7 @@ export class PhoneCallGatewayController {
     @Body()
     payload: { sessionId: string; firstMessage?: string; phoneNumber?: string },
     @UserClaims() userClaims: UserClaimsType,
-  ) {
+  ): Promise<PhoneCallResult> {
     try {
       const verification = await lastValueFrom(
         this.userService
@@ -91,7 +92,7 @@ export class PhoneCallGatewayController {
 
       return await lastValueFrom(
         this.simulationService
-          .send(SIMULATION_SERVICE_PATTERNS.PHONE_CALL_START, {
+          .send<PhoneCallResult>(SIMULATION_SERVICE_PATTERNS.PHONE_CALL_START, {
             sessionId: payload.sessionId,
             ...(payload.firstMessage
               ? { firstMessage: payload.firstMessage }

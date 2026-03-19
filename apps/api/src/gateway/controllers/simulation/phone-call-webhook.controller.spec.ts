@@ -5,41 +5,74 @@ import type { SessionService } from '@microservices/simulation/services/session.
 import type { ConversationOrchestrationService } from '@microservices/simulation/services/conversation-orchestration.service';
 import { of } from 'rxjs';
 
+type MockJsonResponse = {
+  status: jest.Mock;
+  json: jest.Mock;
+};
+
+type MockBinaryResponse = {
+  setHeader: jest.Mock;
+  status: jest.Mock;
+  send: jest.Mock;
+};
+
+type MockSseResponse = {
+  setHeader: jest.Mock;
+  flushHeaders: jest.Mock;
+  write: jest.Mock;
+  end: jest.Mock;
+  writableEnded: boolean;
+};
+
 describe('PhoneCallWebhookController', () => {
   let controller: PhoneCallWebhookController;
   let vapiContext: jest.Mocked<VapiContextService>;
   let sessionService: jest.Mocked<SessionService>;
   let phoneCallService: jest.Mocked<PhoneCallService>;
   let conversationOrchestration: jest.Mocked<ConversationOrchestrationService>;
+  let verifyToken: jest.Mock;
+  let sessionEnd: jest.Mock;
+  let synthesizePhoneCallAudio: jest.Mock;
+  let syncPhoneCallRuntimeFromWebhook: jest.Mock;
+  let endActiveCall: jest.Mock;
+  let conversationStream: jest.MockedFunction<
+    ConversationOrchestrationService['stream']
+  >;
 
   beforeEach(() => {
+    verifyToken = jest.fn().mockReturnValue({
+      sessionId: 'session-1',
+      userId: 'user-1',
+      purpose: 'phone-call',
+      iat: 1,
+      exp: 2,
+    });
     vapiContext = {
-      verifyToken: jest.fn().mockReturnValue({
-        sessionId: 'session-1',
-        userId: 'user-1',
-        purpose: 'phone-call',
-        iat: 1,
-        exp: 2,
-      }),
+      verifyToken,
     } as unknown as jest.Mocked<VapiContextService>;
 
+    sessionEnd = jest.fn();
     sessionService = {
-      end: jest.fn(),
+      end: sessionEnd,
     } as unknown as jest.Mocked<SessionService>;
 
+    synthesizePhoneCallAudio = jest.fn();
+    syncPhoneCallRuntimeFromWebhook = jest.fn().mockResolvedValue(undefined);
+    endActiveCall = jest.fn().mockResolvedValue({
+      ok: true,
+      callId: 'call-1',
+      provider: 'vapi',
+      sessionId: 'session-1',
+    });
     phoneCallService = {
-      synthesizePhoneCallAudio: jest.fn(),
-      syncPhoneCallRuntimeFromWebhook: jest.fn().mockResolvedValue(undefined),
-      endActiveCall: jest.fn().mockResolvedValue({
-        ok: true,
-        callId: 'call-1',
-        provider: 'vapi',
-        sessionId: 'session-1',
-      }),
+      synthesizePhoneCallAudio,
+      syncPhoneCallRuntimeFromWebhook,
+      endActiveCall,
     } as unknown as jest.Mocked<PhoneCallService>;
 
+    conversationStream = jest.fn();
     conversationOrchestration = {
-      stream: jest.fn(),
+      stream: conversationStream,
     } as unknown as jest.Mocked<ConversationOrchestrationService>;
 
     controller = new PhoneCallWebhookController(
@@ -57,7 +90,7 @@ describe('PhoneCallWebhookController', () => {
       contentType: 'audio/pcm;rate=24000;channels=1',
     });
 
-    const res = {
+    const res: MockBinaryResponse = {
       setHeader: jest.fn(),
       status: jest.fn().mockReturnThis(),
       send: jest.fn(),
@@ -70,10 +103,10 @@ describe('PhoneCallWebhookController', () => {
         text: 'Hello from PITCH.',
         sampleRate: 24000,
       },
-      res as any,
+      res as never,
     );
 
-    expect(phoneCallService.synthesizePhoneCallAudio).toHaveBeenCalledWith({
+    expect(synthesizePhoneCallAudio).toHaveBeenCalledWith({
       sessionId: 'session-1',
       userId: 'user-1',
       text: 'Hello from PITCH.',
@@ -94,7 +127,7 @@ describe('PhoneCallWebhookController', () => {
       contentType: 'audio/pcm;rate=16000;channels=1',
     });
 
-    const res = {
+    const res: MockBinaryResponse = {
       setHeader: jest.fn(),
       status: jest.fn().mockReturnThis(),
       send: jest.fn(),
@@ -109,10 +142,10 @@ describe('PhoneCallWebhookController', () => {
           sampleRate: 16000,
         },
       },
-      res as any,
+      res as never,
     );
 
-    expect(phoneCallService.synthesizePhoneCallAudio).toHaveBeenCalledWith({
+    expect(synthesizePhoneCallAudio).toHaveBeenCalledWith({
       sessionId: 'session-1',
       userId: 'user-1',
       text: 'Nested hello from PITCH.',
@@ -122,7 +155,7 @@ describe('PhoneCallWebhookController', () => {
   });
 
   it('returns OpenAI-compatible chat completions from the PITCH conversation engine', async () => {
-    conversationOrchestration.stream.mockReturnValue(
+    conversationStream.mockReturnValue(
       of(
         { type: 'delta', data: { delta: 'Hello there.' } },
         {
@@ -139,7 +172,7 @@ describe('PhoneCallWebhookController', () => {
       ) as any,
     );
 
-    const res = {
+    const res: MockJsonResponse = {
       status: jest.fn().mockReturnThis(),
       json: jest.fn(),
     };
@@ -151,27 +184,36 @@ describe('PhoneCallWebhookController', () => {
         stream: false,
         messages: [{ role: 'user', content: 'Hi there' }],
       },
-      res as any,
+      res as never,
     );
 
-    expect(conversationOrchestration.stream).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: 'conversation.start',
-        sessionId: 'session-1',
-        userId: 'user-1',
-        payload: expect.objectContaining({
-          text: 'Hi there',
-          startAsAssistant: false,
-          skipTts: true,
-        }),
-      }),
-    );
-    expect(phoneCallService.endActiveCall).toHaveBeenCalledWith({
+    expect(conversationStream).toHaveBeenCalledTimes(1);
+    const envelope = conversationStream.mock.calls[0]?.[0] as {
+      type: string;
+      sessionId: string;
+      userId: string;
+      payload: {
+        text: string;
+        startAsAssistant: boolean;
+        skipTts: boolean;
+      };
+    };
+    expect(envelope).toMatchObject({
+      type: 'conversation.start',
+      sessionId: 'session-1',
+      userId: 'user-1',
+      payload: {
+        text: 'Hi there',
+        startAsAssistant: false,
+        skipTts: true,
+      },
+    });
+    expect(endActiveCall).toHaveBeenCalledWith({
       sessionId: 'session-1',
       userId: 'user-1',
       reason: 'Verification complete',
     });
-    expect(sessionService.end).toHaveBeenCalledWith(
+    expect(sessionEnd).toHaveBeenCalledWith(
       'session-1',
       { reason: 'phone_call_completed:assistant-ended-call' },
       'user-1',
@@ -194,7 +236,7 @@ describe('PhoneCallWebhookController', () => {
   });
 
   it('forwards a model-authored starter prompt when Vapi asks the assistant to speak first', async () => {
-    conversationOrchestration.stream.mockReturnValue(
+    conversationStream.mockReturnValue(
       of({
         type: 'completed',
         data: {
@@ -204,7 +246,7 @@ describe('PhoneCallWebhookController', () => {
       }) as any,
     );
 
-    const res = {
+    const res: MockJsonResponse = {
       status: jest.fn().mockReturnThis(),
       json: jest.fn(),
     };
@@ -222,26 +264,36 @@ describe('PhoneCallWebhookController', () => {
           },
         ],
       },
-      res as any,
+      res as never,
     );
 
-    expect(conversationOrchestration.stream).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: 'conversation.start',
-        sessionId: 'session-1',
-        userId: 'user-1',
-        payload: expect.objectContaining({
-          text: '',
-          startAsAssistant: true,
-          starterPrompt: 'Hello, this is your verification call.',
-          skipTts: true,
-        }),
-      }),
-    );
+    expect(conversationStream).toHaveBeenCalledTimes(1);
+    const starterEnvelope = conversationStream.mock.calls[0]?.[0] as {
+      type: string;
+      sessionId: string;
+      userId: string;
+      payload: {
+        text: string;
+        startAsAssistant: boolean;
+        starterPrompt: string;
+        skipTts: boolean;
+      };
+    };
+    expect(starterEnvelope).toMatchObject({
+      type: 'conversation.start',
+      sessionId: 'session-1',
+      userId: 'user-1',
+      payload: {
+        text: '',
+        startAsAssistant: true,
+        starterPrompt: 'Hello, this is your verification call.',
+        skipTts: true,
+      },
+    });
   });
 
   it('streams OpenAI-compatible SSE chunks and ends the phone call when the model asks to hang up', async () => {
-    conversationOrchestration.stream.mockReturnValue(
+    conversationStream.mockReturnValue(
       of(
         { type: 'delta', data: { delta: 'Hello' } },
         { type: 'delta', data: { delta: ' there.' } },
@@ -259,7 +311,7 @@ describe('PhoneCallWebhookController', () => {
       ) as any,
     );
 
-    const res = {
+    const res: MockSseResponse = {
       setHeader: jest.fn(),
       flushHeaders: jest.fn(),
       write: jest.fn(),
@@ -274,7 +326,7 @@ describe('PhoneCallWebhookController', () => {
         stream: true,
         messages: [{ role: 'user', content: 'Hi there' }],
       },
-      res as any,
+      res as never,
     );
 
     await new Promise((resolve) => setImmediate(resolve));
@@ -285,12 +337,12 @@ describe('PhoneCallWebhookController', () => {
     );
     expect(res.write).toHaveBeenCalledWith('data: [DONE]\n\n');
     expect(res.end).toHaveBeenCalled();
-    expect(phoneCallService.endActiveCall).toHaveBeenCalledWith({
+    expect(endActiveCall).toHaveBeenCalledWith({
       sessionId: 'session-1',
       userId: 'user-1',
       reason: 'Verification complete',
     });
-    expect(sessionService.end).toHaveBeenCalledWith(
+    expect(sessionEnd).toHaveBeenCalledWith(
       'session-1',
       { reason: 'phone_call_completed:assistant-ended-call' },
       'user-1',
@@ -305,16 +357,14 @@ describe('PhoneCallWebhookController', () => {
       },
     });
 
-    expect(vapiContext.verifyToken).toHaveBeenCalledWith('signed-token');
-    expect(
-      phoneCallService.syncPhoneCallRuntimeFromWebhook,
-    ).not.toHaveBeenCalled();
-    expect(sessionService.end).not.toHaveBeenCalled();
+    expect(verifyToken).toHaveBeenCalledWith('signed-token');
+    expect(syncPhoneCallRuntimeFromWebhook).not.toHaveBeenCalled();
+    expect(sessionEnd).not.toHaveBeenCalled();
     expect(response).toEqual({ ok: true });
   });
 
   it('ends the session for terminal failure status updates', async () => {
-    sessionService.end.mockResolvedValue({ id: 'session-1' } as never);
+    sessionEnd.mockResolvedValue({ id: 'session-1' } as never);
 
     const response = await controller.handleVapiServerEvent('signed-token', {
       message: {
@@ -327,9 +377,7 @@ describe('PhoneCallWebhookController', () => {
       },
     });
 
-    expect(
-      phoneCallService.syncPhoneCallRuntimeFromWebhook,
-    ).toHaveBeenCalledWith(
+    expect(syncPhoneCallRuntimeFromWebhook).toHaveBeenCalledWith(
       expect.objectContaining({
         sessionId: 'session-1',
         callId: 'call-2',
@@ -337,7 +385,7 @@ describe('PhoneCallWebhookController', () => {
         endedReason: 'upstream-timeout',
       }),
     );
-    expect(sessionService.end).toHaveBeenCalledWith(
+    expect(sessionEnd).toHaveBeenCalledWith(
       'session-1',
       { reason: 'phone_call_terminated:failed:upstream-timeout' },
       'user-1',
@@ -346,7 +394,7 @@ describe('PhoneCallWebhookController', () => {
   });
 
   it('ends the session when Vapi sends an end-of-call report', async () => {
-    sessionService.end.mockResolvedValue({ id: 'session-1' } as never);
+    sessionEnd.mockResolvedValue({ id: 'session-1' } as never);
 
     const response = await controller.handleVapiServerEvent('signed-token', {
       message: {
@@ -355,7 +403,7 @@ describe('PhoneCallWebhookController', () => {
       },
     });
 
-    expect(sessionService.end).toHaveBeenCalledWith(
+    expect(sessionEnd).toHaveBeenCalledWith(
       'session-1',
       { reason: 'phone_call_completed:assistant-ended-call' },
       'user-1',
@@ -364,7 +412,7 @@ describe('PhoneCallWebhookController', () => {
   });
 
   it('ends the session when Vapi sends a terminal status update', async () => {
-    sessionService.end.mockResolvedValue({ id: 'session-1' } as never);
+    sessionEnd.mockResolvedValue({ id: 'session-1' } as never);
 
     const response = await controller.handleVapiServerEvent('signed-token', {
       message: {
@@ -381,9 +429,7 @@ describe('PhoneCallWebhookController', () => {
       },
     });
 
-    expect(
-      phoneCallService.syncPhoneCallRuntimeFromWebhook,
-    ).toHaveBeenCalledWith(
+    expect(syncPhoneCallRuntimeFromWebhook).toHaveBeenCalledWith(
       expect.objectContaining({
         sessionId: 'session-1',
         callId: 'call-1',
@@ -393,7 +439,7 @@ describe('PhoneCallWebhookController', () => {
         listenUrl: 'wss://control.vapi.ai/call-1/listen',
       }),
     );
-    expect(sessionService.end).toHaveBeenCalledWith(
+    expect(sessionEnd).toHaveBeenCalledWith(
       'session-1',
       { reason: 'phone_call_completed:customer-ended-call' },
       'user-1',
@@ -402,7 +448,7 @@ describe('PhoneCallWebhookController', () => {
   });
 
   it('ends the session when Vapi sends a hang event', async () => {
-    sessionService.end.mockResolvedValue({ id: 'session-1' } as never);
+    sessionEnd.mockResolvedValue({ id: 'session-1' } as never);
 
     await controller.handleVapiServerEvent('signed-token', {
       message: {
@@ -410,7 +456,7 @@ describe('PhoneCallWebhookController', () => {
       },
     });
 
-    expect(sessionService.end).toHaveBeenCalledWith(
+    expect(sessionEnd).toHaveBeenCalledWith(
       'session-1',
       { reason: 'phone_call_hang' },
       'user-1',
@@ -418,7 +464,7 @@ describe('PhoneCallWebhookController', () => {
   });
 
   it('does not throw when session shutdown fails', async () => {
-    sessionService.end.mockRejectedValue(new Error('already closed'));
+    sessionEnd.mockRejectedValue(new Error('already closed'));
 
     await expect(
       controller.handleVapiServerEvent('signed-token', {

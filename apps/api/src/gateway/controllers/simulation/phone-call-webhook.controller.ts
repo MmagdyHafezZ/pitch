@@ -230,8 +230,6 @@ export class PhoneCallWebhookController {
 
     switch (type) {
       case 'status-update': {
-        if (status === 'connected' || status === 'in-progress') {
-        }
         if (
           status === 'failed' ||
           status === 'busy' ||

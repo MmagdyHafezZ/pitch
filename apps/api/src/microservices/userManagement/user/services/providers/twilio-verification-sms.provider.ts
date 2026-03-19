@@ -69,7 +69,7 @@ export class TwilioVerificationSmsProvider implements VerificationSmsSender {
       return undefined;
     }
 
-    const responseData = error.response?.data;
+    const responseData: unknown = error.response?.data;
     if (
       responseData &&
       typeof responseData === 'object' &&

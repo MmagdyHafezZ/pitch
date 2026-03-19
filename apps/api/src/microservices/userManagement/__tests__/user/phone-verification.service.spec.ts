@@ -85,7 +85,10 @@ describe('PhoneVerificationService', () => {
         },
         $transaction: jest.fn(async (input: unknown) => {
           if (typeof input === 'function') {
-            return input(prisma.client as any);
+            const callback = input as (
+              tx: typeof prisma.client,
+            ) => Promise<unknown>;
+            return await callback(prisma.client);
           }
           if (Array.isArray(input)) {
             return Promise.all(input);

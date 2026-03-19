@@ -580,6 +580,7 @@ describe('PhoneCallService', () => {
     ttsService.synthesizeStream.mockResolvedValue({
       contentType: 'audio/pcm;rate=24000;channels=1',
       audioStream: (async function* () {
+        await Promise.resolve();
         yield audioBuffer;
       })(),
     });
