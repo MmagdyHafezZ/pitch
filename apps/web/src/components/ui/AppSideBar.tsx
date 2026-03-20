@@ -9,6 +9,7 @@ import {
   IconHelp,
   IconSettings,
   IconTrophy,
+  IconShield,
 } from '@tabler/icons-react'
 import { Dispatch, SetStateAction, useState } from 'react'
 import { useRouter } from 'next/navigation'
@@ -125,6 +126,26 @@ export function AppSidebar({
                 }}
               />
             ))}
+            <Divider my="xs" color="var(--pitch-nav-text-dim)" />
+            <NavLink
+              onClick={() => {
+                router.push('/admin')
+                onNavigate?.()
+              }}
+              leftSection={<IconShield size={18} />}
+              label={
+                <Text size="sm" className={classes.navLabel}>
+                  Admin
+                </Text>
+              }
+              variant="subtle"
+              classNames={{
+                root: classes.navLink,
+                section: classes.navSection,
+                body: classes.navBody,
+                label: classes.navLabel,
+              }}
+            />
             <Box
               mt="auto"
               pt="lg"

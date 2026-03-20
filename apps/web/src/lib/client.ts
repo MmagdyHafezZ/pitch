@@ -463,6 +463,20 @@ export const api = {
   plans: {
     getAll: () => apiRequest<any[]>('/plans'),
     getById: (id: string) => apiRequest<any>(`/plans/${id}`),
+    create: (data: any) =>
+      apiRequest<any>('/plans', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    update: (id: string, data: any) =>
+      apiRequest<any>(`/plans/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      }),
+    delete: (id: string) =>
+      apiRequest<any>(`/plans/${id}`, {
+        method: 'DELETE',
+      }),
   },
 
   subscriptions: {
