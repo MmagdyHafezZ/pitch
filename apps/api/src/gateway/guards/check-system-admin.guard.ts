@@ -2,56 +2,59 @@ import {
   Injectable,
   CanActivate,
   ExecutionContext,
+  ForbiddenException,
   UnauthorizedException,
   Logger,
 } from '@nestjs/common';
-import { JwtService } from '@nestjs/jwt';
-import type {
-  RequestWithHeaders,
-  RequestWithUser,
-} from '@pitch/shared-backend/interfaces/request.interface';
-import { JwtPayload } from './global-jwt-auth.guard';
-import { extractBearer } from './global-jwt-auth.guard';
-import { normalizeError } from '@pitch/shared-backend/helpers/exceptions';
-import { ServiceError } from '@pitch/shared-backend/interfaces/error.interface';
+import type { RequestWithUser } from '@pitch/shared-backend/interfaces/request.interface';
+
+const DEFAULT_DEV_BYPASS_EMAIL = 'dev@local';
+
+function parseEmails(raw: string | undefined): string[] {
+  return (raw ?? '')
+    .split(',')
+    .map((email) => email.trim().toLowerCase())
+    .filter((email) => email.length > 0);
+}
 
 @Injectable()
 export class CheckSystemAdmin implements CanActivate {
   private readonly logger = new Logger(CheckSystemAdmin.name);
 
-  constructor(private readonly jwtService: JwtService) {}
+  async canActivate(context: ExecutionContext): Promise<boolean> {
+    const req = context.switchToHttp().getRequest<RequestWithUser>();
+    const email = req.user?.email?.trim().toLowerCase();
 
-  canActivate(context: ExecutionContext): Promise<boolean> {
-    const req = context
-      .switchToHttp()
-      .getRequest<RequestWithHeaders & RequestWithUser>();
-
-    const token = extractBearer(req.headers.authorization);
-    if (!token) throw new UnauthorizedException('Access token is required');
-
-    try {
-      const payload = this.jwtService.verify<JwtPayload>(token, {
-        secret: process.env.JWT_SECRET || 'secret',
-      });
-      if (payload.email && process.env.SUPER_ADMIN_EMAILS) {
-        const superAdminEmails = process.env.SUPER_ADMIN_EMAILS.split(',').map(
-          (email) => email.trim().toLowerCase(),
-        );
-        if (superAdminEmails.includes(payload.email.toLowerCase())) {
-          this.logger.log(`User ${payload.email} is a system admin.`);
-          return Promise.resolve(true);
-        }
-      }
-      return Promise.resolve(false);
-    } catch (error) {
-      const normalized = normalizeError(error) as ServiceError & {
-        name?: string;
-      };
-      this.logger.warn(
-        `JWT validation failed: ${normalized.message ?? 'Unknown error'}`,
-      );
-
-      return Promise.resolve(false);
+    if (!email) {
+      this.logger.warn('System admin check failed: authenticated user missing');
+      throw new UnauthorizedException('Access token is required');
     }
+
+    if (this.isAllowed(email)) {
+      this.logger.log(`User ${email} is a system admin.`);
+      return true;
+    }
+
+    this.logger.warn(`System admin check failed for ${email}`);
+    throw new ForbiddenException('System administrator access is required');
+  }
+
+  private isAllowed(email: string): boolean {
+    const configuredAdmins = parseEmails(process.env.SUPER_ADMIN_EMAILS);
+    if (configuredAdmins.includes(email)) return true;
+
+    if (process.env.DEV_BYPASS_ENABLED === 'true') {
+      const bypassEmail = (
+        process.env.DEV_BYPASS_EMAIL ?? DEFAULT_DEV_BYPASS_EMAIL
+      )
+        .trim()
+        .toLowerCase();
+      if (email === bypassEmail) {
+        this.logger.warn(`Allowing DEV_BYPASS_EMAIL ${email} as system admin`);
+        return true;
+      }
+    }
+
+    return false;
   }
 }

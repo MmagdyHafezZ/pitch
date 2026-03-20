@@ -6,6 +6,7 @@ import { AuthGatewayController } from './controllers/userManagement/auth-gateway
 import { TeamGatewayController } from './controllers/userManagement/team-gateway.controller';
 import { PlanGatewayController } from './controllers/userManagement/plans.controller';
 import { SubscriptionGatewayController } from './controllers/userManagement/subscription.controller';
+import { AdminGatewayController } from './controllers/admin/admin-gateway.controller';
 import { SalesforceGatewayController } from './controllers/crm/salesforce-gateway.controller';
 import { SessionGatewayController } from './controllers/simulation/session-gateway.controller';
 import { InvitationGatewayController } from './controllers/simulation/invitation-gateway.controller';
@@ -37,6 +38,7 @@ import { ChallengesGatewayController } from './controllers/challenges/challenges
 import { SupportChatGatewayController } from './controllers/support/support-chat-gateway.controller';
 import { SupportAttachmentGatewayController } from './controllers/support/support-attachment-gateway.controller';
 import { CoachStreamService } from './controllers/support/coach-stream.service';
+import { CheckSystemAdmin } from './guards/check-system-admin.guard';
 
 @Module({
   imports: [
@@ -60,6 +62,7 @@ import { CoachStreamService } from './controllers/support/coach-stream.service';
     SimulationModule,
   ],
   controllers: [
+    AdminGatewayController,
     UserGatewayController,
     AuthGatewayController,
     TeamGatewayController,
@@ -84,6 +87,7 @@ import { CoachStreamService } from './controllers/support/coach-stream.service';
   ],
   providers: [
     { provide: APP_GUARD, useClass: GlobalJwtAuthGuard },
+    CheckSystemAdmin,
     UserClaimsInterceptor,
     SimulationWsGateway,
     CoachStreamService,

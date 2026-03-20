@@ -53,6 +53,7 @@ import { TtsModule } from './tts/tts.module';
 import { AssessmentModule } from './assessment/assessment.module';
 import { PhoneModule } from './phone/phone.module';
 import { RagModule } from './rag/rag.module';
+import { CheckSystemAdmin } from '../../gateway/guards/check-system-admin.guard';
 
 @Module({
   imports: [
@@ -86,6 +87,7 @@ import { RagModule } from './rag/rag.module';
     ChallengeController,
   ],
   providers: [
+    CheckSystemAdmin,
     SimulationPrismaService,
     MongoConnectionService,
     LLMProviderRegistry,
