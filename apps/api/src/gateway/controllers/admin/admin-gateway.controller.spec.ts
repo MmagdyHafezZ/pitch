@@ -7,6 +7,7 @@ import {
 } from '@pitch/shared-backend/interfaces/message-patterns.interface';
 import type { UserClaims } from '@pitch/shared-backend/interfaces/user-claims.interface';
 import { AdminGatewayController } from './admin-gateway.controller';
+import { AdminGatewayService } from './admin-gateway.service';
 
 type MockResponse = ReturnType<ClientProxy['send']>;
 
@@ -22,6 +23,7 @@ describe('AdminGatewayController', () => {
   let controller: AdminGatewayController;
   let userClient: jest.Mocked<ClientProxy>;
   let simulationClient: jest.Mocked<ClientProxy>;
+  let adminService: jest.Mocked<AdminGatewayService>;
 
   const userClaims: UserClaims = {
     id: 'admin-1',
@@ -36,8 +38,13 @@ describe('AdminGatewayController', () => {
     simulationClient = {
       send: jest.fn(),
     } as unknown as jest.Mocked<ClientProxy>;
+    adminService = {} as jest.Mocked<AdminGatewayService>;
 
-    controller = new AdminGatewayController(userClient, simulationClient);
+    controller = new AdminGatewayController(
+      userClient,
+      simulationClient,
+      adminService,
+    );
   });
 
   it('returns admin identity payload', () => {
@@ -433,5 +440,124 @@ describe('AdminGatewayController', () => {
       message: 'Failed to get plans',
       status: 503,
     });
+  });
+
+  it('delegates dependency health to the admin service', async () => {
+    adminService.getDependenciesHealth = jest.fn().mockResolvedValue({
+      status: 'ok',
+    } as never);
+
+    await expect(controller.getDependenciesHealth()).resolves.toEqual({
+      status: 'ok',
+    });
+    expect(
+      (adminService.getDependenciesHealth as jest.Mock).mock.calls,
+    ).toEqual([[]]);
+  });
+
+  it('delegates feature flag updates to the admin service', async () => {
+    adminService.updateFeatureFlag = jest.fn().mockResolvedValue({
+      key: 'admin-ui',
+      enabled: true,
+    } as never);
+
+    await expect(
+      controller.patchFeatureFlag('admin-ui', { enabled: true }, userClaims),
+    ).resolves.toEqual({
+      key: 'admin-ui',
+      enabled: true,
+    });
+    expect((adminService.updateFeatureFlag as jest.Mock).mock.calls).toEqual([
+      ['admin-ui', { enabled: true }, userClaims],
+    ]);
+  });
+
+  it('parses user session list filters before delegating to the admin service', async () => {
+    adminService.getUserSessions = jest.fn().mockResolvedValue({
+      sessions: [],
+      total: 0,
+    } as never);
+
+    await controller.getUserSessions('user-9', {
+      limit: '20',
+      offset: '4',
+      status: 'active',
+      type: 'phone',
+    });
+
+    expect((adminService.getUserSessions as jest.Mock).mock.calls).toEqual([
+      [
+        'user-9',
+        {
+          limit: 20,
+          offset: 4,
+          status: 'active',
+          type: 'phone',
+        },
+      ],
+    ]);
+  });
+
+  it('parses assessment run filters before delegating to the admin service', async () => {
+    adminService.listAssessmentRuns = jest.fn().mockResolvedValue({
+      runs: [],
+      total: 0,
+    } as never);
+
+    await controller.listAssessmentRuns({
+      limit: '50',
+      offset: '10',
+      status: 'completed',
+      sessionId: 'session-1',
+      iterationId: 'iter-1',
+      sessionMemberId: 'member-1',
+    });
+
+    expect((adminService.listAssessmentRuns as jest.Mock).mock.calls).toEqual([
+      [
+        {
+          limit: 50,
+          offset: 10,
+          status: 'completed',
+          sessionId: 'session-1',
+          iterationId: 'iter-1',
+          sessionMemberId: 'member-1',
+        },
+      ],
+    ]);
+  });
+
+  it('parses webhook list limits before delegating to the admin service', () => {
+    adminService.listWebhooks = jest.fn().mockReturnValue({
+      providers: [],
+    } as never);
+
+    controller.listWebhooks({ limit: '15' });
+
+    expect((adminService.listWebhooks as jest.Mock).mock.calls).toEqual([
+      [{ limit: 15 }],
+    ]);
+  });
+
+  it('delegates queue retries to the admin service', async () => {
+    adminService.retryDeadLetters = jest.fn().mockResolvedValue({
+      queueName: 'simulation_queue',
+      retried: 2,
+    } as never);
+
+    await expect(
+      controller.retryDeadLetters(
+        'simulation_queue',
+        { maxMessages: 2 },
+        userClaims,
+      ),
+    ).resolves.toEqual({
+      queueName: 'simulation_queue',
+      retried: 2,
+    });
+
+    expect((adminService.retryDeadLetters as jest.Mock).mock.calls).toEqual([
+      ['simulation_queue', { maxMessages: 2 }, userClaims],
+    ]);
   });
 });

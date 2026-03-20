@@ -57,6 +57,7 @@ describe('microservices.config', () => {
         noAck: true,
         prefetchCount: 10,
         queueOptions: { durable: true },
+        socketOptions: { heartbeatIntervalInSeconds: 60 },
       },
     });
   });

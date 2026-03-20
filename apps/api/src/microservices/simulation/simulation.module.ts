@@ -138,6 +138,7 @@ import { CheckSystemAdmin } from '../../gateway/guards/check-system-admin.guard'
   ],
   exports: [
     LLMService,
+    LLMRoutingConfigService,
     StreamingConversationService,
     ConversationOrchestrationService,
     SessionService,
@@ -147,8 +148,11 @@ import { CheckSystemAdmin } from '../../gateway/guards/check-system-admin.guard'
     PersonaMediaService,
     HintsService,
     SimulationPrismaService,
+    SimulationRedisService,
     MongoConnectionService,
     VideoGenerationService,
+    AssessmentModule,
+    PhoneModule,
     RagModule,
   ],
 })

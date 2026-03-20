@@ -7,6 +7,7 @@ import {
   HttpStatus,
   Inject,
   Param,
+  Patch,
   Post,
   Put,
   Query,
@@ -23,6 +24,7 @@ import { catchError, timeout } from 'rxjs/operators';
 import { SystemAdminOnly } from '../../decorators/system-admin.decorator';
 import { UserClaims } from '../../decorators/user-claims.decorator';
 import { normalizeError } from '@pitch/shared-backend/helpers/exceptions';
+import { AdminGatewayService } from './admin-gateway.service';
 
 type SessionListQuery = {
   userId?: string;
@@ -55,6 +57,7 @@ export class AdminGatewayController {
     @Inject('USER_SERVICE') private readonly userService: ClientProxy,
     @Inject('SIMULATION_SERVICE')
     private readonly simulationService: ClientProxy,
+    private readonly adminService: AdminGatewayService,
   ) {}
 
   @Get('me')
@@ -141,6 +144,45 @@ export class AdminGatewayController {
     };
   }
 
+  @Get('health/dependencies')
+  @ApiOperation({ summary: 'Get dependency health for the admin console' })
+  @ApiResponse({ status: 200, description: 'Dependency health returned' })
+  async getDependenciesHealth() {
+    return this.adminService.getDependenciesHealth();
+  }
+
+  @Get('version')
+  @ApiOperation({ summary: 'Get API build and version metadata' })
+  @ApiResponse({ status: 200, description: 'Version information returned' })
+  async getVersion() {
+    return this.adminService.getVersion();
+  }
+
+  @Get('runtime-config')
+  @ApiOperation({ summary: 'Get safe runtime configuration values' })
+  @ApiResponse({ status: 200, description: 'Runtime configuration returned' })
+  async getRuntimeConfig() {
+    return this.adminService.getRuntimeConfig();
+  }
+
+  @Get('feature-flags')
+  @ApiOperation({ summary: 'List admin feature flags' })
+  @ApiResponse({ status: 200, description: 'Feature flags returned' })
+  async getFeatureFlags() {
+    return this.adminService.getFeatureFlags();
+  }
+
+  @Patch('feature-flags/:key')
+  @ApiOperation({ summary: 'Update an admin feature flag override' })
+  @ApiResponse({ status: 200, description: 'Feature flag updated' })
+  async patchFeatureFlag(
+    @Param('key') key: string,
+    @Body() body: Record<string, unknown>,
+    @UserClaims() userClaims: UserClaimsType,
+  ) {
+    return this.adminService.updateFeatureFlag(key, body, userClaims);
+  }
+
   @Get('users')
   @ApiOperation({ summary: 'List users for admin console' })
   @ApiResponse({ status: 200, description: 'Users returned' })
@@ -150,6 +192,42 @@ export class AdminGatewayController {
       { userClaims },
       'Failed to get users',
     );
+  }
+
+  @Get('users/:userId/activity')
+  @ApiOperation({ summary: 'Get user activity for admin console' })
+  @ApiResponse({ status: 200, description: 'User activity returned' })
+  async getUserActivity(@Param('userId') userId: string) {
+    return this.adminService.getUserActivity(userId);
+  }
+
+  @Get('users/:userId/sessions')
+  @ApiOperation({ summary: 'List user sessions for admin console' })
+  @ApiResponse({ status: 200, description: 'User sessions returned' })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiQuery({ name: 'offset', required: false, type: Number })
+  @ApiQuery({ name: 'status', required: false, type: String })
+  @ApiQuery({ name: 'type', required: false, type: String })
+  async getUserSessions(
+    @Param('userId') userId: string,
+    @Query() query: Record<string, string | undefined>,
+  ) {
+    return this.adminService.getUserSessions(userId, {
+      limit: this.parseNumber(query.limit),
+      offset: this.parseNumber(query.offset),
+      status: query.status,
+      type: query.type,
+    });
+  }
+
+  @Post('users/:userId/impersonate')
+  @ApiOperation({ summary: 'Create an impersonation access token for a user' })
+  @ApiResponse({ status: 201, description: 'Impersonation token created' })
+  async impersonateUser(
+    @Param('userId') userId: string,
+    @UserClaims() userClaims: UserClaimsType,
+  ) {
+    return this.adminService.impersonateUser(userId, userClaims);
   }
 
   @Get('users/:userId')
@@ -218,6 +296,24 @@ export class AdminGatewayController {
       { teamId, userClaims },
       'Failed to get team',
     );
+  }
+
+  @Get('teams/:teamId/usage')
+  @ApiOperation({ summary: 'Get team usage for admin console' })
+  @ApiResponse({ status: 200, description: 'Team usage returned' })
+  async getTeamUsage(@Param('teamId') teamId: string) {
+    return this.adminService.getTeamUsage(teamId);
+  }
+
+  @Post('teams/:teamId/transfer-owner')
+  @ApiOperation({ summary: 'Transfer team ownership from the admin console' })
+  @ApiResponse({ status: 200, description: 'Team ownership transferred' })
+  async transferTeamOwner(
+    @Param('teamId') teamId: string,
+    @Body() body: Record<string, unknown>,
+    @UserClaims() userClaims: UserClaimsType,
+  ) {
+    return this.adminService.transferTeamOwner(teamId, body, userClaims);
   }
 
   @Get('plans')
@@ -297,6 +393,20 @@ export class AdminGatewayController {
       { userClaims },
       'Failed to get subscriptions',
     );
+  }
+
+  @Get('subscriptions/audit')
+  @ApiOperation({ summary: 'Get subscription audit metadata' })
+  @ApiResponse({ status: 200, description: 'Subscription audit returned' })
+  @ApiQuery({ name: 'teamId', required: false, type: String })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  async getSubscriptionAudit(
+    @Query() query: Record<string, string | undefined>,
+  ) {
+    return this.adminService.getSubscriptionAudit({
+      teamId: query.teamId,
+      limit: this.parseNumber(query.limit),
+    });
   }
 
   @Get('subscriptions/teams/:teamId')
@@ -447,6 +557,68 @@ export class AdminGatewayController {
     );
   }
 
+  @Get('sessions/:id/events')
+  @ApiOperation({ summary: 'Get session events for admin console' })
+  @ApiResponse({ status: 200, description: 'Session events returned' })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  async getSessionEvents(
+    @Param('id') id: string,
+    @Query('limit') limit: string | undefined,
+  ) {
+    return this.adminService.getSessionEvents(id, this.parseNumber(limit));
+  }
+
+  @Get('sessions/:id/transcript')
+  @ApiOperation({ summary: 'Get session transcripts for admin console' })
+  @ApiResponse({ status: 200, description: 'Session transcripts returned' })
+  async getSessionTranscript(@Param('id') id: string) {
+    return this.adminService.getSessionTranscript(id);
+  }
+
+  @Get('sessions/:id/llm-calls')
+  @ApiOperation({ summary: 'Get session LLM calls for admin console' })
+  @ApiResponse({ status: 200, description: 'Session LLM calls returned' })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  async getSessionLlmCalls(
+    @Param('id') id: string,
+    @Query('limit') limit: string | undefined,
+  ) {
+    return this.adminService.getSessionLlmCalls(id, this.parseNumber(limit));
+  }
+
+  @Post('sessions/:id/force-end')
+  @ApiOperation({ summary: 'Force-end a session from the admin console' })
+  @ApiResponse({ status: 200, description: 'Session force-ended' })
+  async forceEndSession(
+    @Param('id') id: string,
+    @Body() body: Record<string, unknown>,
+    @UserClaims() userClaims: UserClaimsType,
+  ) {
+    return this.adminService.forceEndSession(id, body, userClaims);
+  }
+
+  @Post('sessions/:id/recompute-assessment')
+  @ApiOperation({ summary: 'Recompute assessments for a session' })
+  @ApiResponse({ status: 200, description: 'Assessment recompute triggered' })
+  async recomputeAssessment(
+    @Param('id') id: string,
+    @Body() body: Record<string, unknown>,
+    @UserClaims() userClaims: UserClaimsType,
+  ) {
+    return this.adminService.recomputeAssessment(id, body, userClaims);
+  }
+
+  @Post('sessions/:id/replay')
+  @ApiOperation({ summary: 'Replay a session from the admin console' })
+  @ApiResponse({ status: 200, description: 'Session replay started' })
+  async replaySession(
+    @Param('id') id: string,
+    @Body() body: Record<string, unknown>,
+    @UserClaims() userClaims: UserClaimsType,
+  ) {
+    return this.adminService.replaySession(id, body, userClaims);
+  }
+
   @Get('sessions/:id')
   @ApiOperation({ summary: 'Get session by ID for admin console' })
   @ApiResponse({ status: 200, description: 'Session returned' })
@@ -459,6 +631,277 @@ export class AdminGatewayController {
       { id, userClaims },
       'Failed to get session',
     );
+  }
+
+  @Get('assessments/runs')
+  @ApiOperation({ summary: 'List assessment runs for admin console' })
+  @ApiResponse({ status: 200, description: 'Assessment runs returned' })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiQuery({ name: 'offset', required: false, type: Number })
+  @ApiQuery({ name: 'status', required: false, type: String })
+  @ApiQuery({ name: 'sessionId', required: false, type: String })
+  @ApiQuery({ name: 'iterationId', required: false, type: String })
+  @ApiQuery({ name: 'sessionMemberId', required: false, type: String })
+  async listAssessmentRuns(@Query() query: Record<string, string | undefined>) {
+    return this.adminService.listAssessmentRuns({
+      limit: this.parseNumber(query.limit),
+      offset: this.parseNumber(query.offset),
+      status: query.status,
+      sessionId: query.sessionId,
+      iterationId: query.iterationId,
+      sessionMemberId: query.sessionMemberId,
+    });
+  }
+
+  @Get('llm/requests')
+  @ApiOperation({ summary: 'List LLM requests for admin console' })
+  @ApiResponse({ status: 200, description: 'LLM requests returned' })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiQuery({ name: 'provider', required: false, type: String })
+  @ApiQuery({ name: 'orgId', required: false, type: String })
+  @ApiQuery({ name: 'userId', required: false, type: String })
+  @ApiQuery({ name: 'sessionId', required: false, type: String })
+  async getLlmRequests(@Query() query: Record<string, string | undefined>) {
+    return this.adminService.getLlmRequests({
+      limit: this.parseNumber(query.limit),
+      provider: query.provider,
+      orgId: query.orgId,
+      userId: query.userId,
+      sessionId: query.sessionId,
+    });
+  }
+
+  @Get('llm/usage')
+  @ApiOperation({ summary: 'Get LLM usage metrics for admin console' })
+  @ApiResponse({ status: 200, description: 'LLM usage returned' })
+  @ApiQuery({ name: 'provider', required: false, type: String })
+  @ApiQuery({ name: 'orgId', required: false, type: String })
+  @ApiQuery({ name: 'userId', required: false, type: String })
+  @ApiQuery({ name: 'sessionId', required: false, type: String })
+  @ApiQuery({ name: 'hours', required: false, type: Number })
+  async getLlmUsage(@Query() query: Record<string, string | undefined>) {
+    return this.adminService.getLlmUsage({
+      provider: query.provider,
+      orgId: query.orgId,
+      userId: query.userId,
+      sessionId: query.sessionId,
+      hours: this.parseNumber(query.hours),
+    });
+  }
+
+  @Get('llm/routing')
+  @ApiOperation({ summary: 'Get LLM routing state for admin console' })
+  @ApiResponse({ status: 200, description: 'LLM routing returned' })
+  @ApiQuery({ name: 'scope', required: false, type: String })
+  @ApiQuery({ name: 'orgId', required: false, type: String })
+  @ApiQuery({ name: 'userId', required: false, type: String })
+  async getLlmRouting(@Query() query: Record<string, string | undefined>) {
+    return this.adminService.getLlmRouting({
+      scope: query.scope as 'global' | 'org' | 'user' | undefined,
+      orgId: query.orgId,
+      userId: query.userId,
+    });
+  }
+
+  @Patch('llm/routing')
+  @ApiOperation({ summary: 'Update LLM routing from admin console' })
+  @ApiResponse({ status: 200, description: 'LLM routing updated' })
+  async patchLlmRouting(
+    @Body() body: Record<string, unknown>,
+    @UserClaims() userClaims: UserClaimsType,
+  ) {
+    return this.adminService.updateLlmRouting(body, userClaims);
+  }
+
+  @Post('llm/routing/reload')
+  @ApiOperation({ summary: 'Reload LLM routing cache' })
+  @ApiResponse({ status: 200, description: 'LLM routing cache reloaded' })
+  async reloadLlmRouting(
+    @Body() body: Record<string, unknown>,
+    @UserClaims() userClaims: UserClaimsType,
+  ) {
+    return this.adminService.reloadLlmRouting(body, userClaims);
+  }
+
+  @Get('phone-calls')
+  @ApiOperation({ summary: 'List phone calls for admin console' })
+  @ApiResponse({ status: 200, description: 'Phone calls returned' })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiQuery({ name: 'offset', required: false, type: Number })
+  @ApiQuery({ name: 'status', required: false, type: String })
+  async listPhoneCalls(@Query() query: Record<string, string | undefined>) {
+    return this.adminService.listPhoneCalls({
+      limit: this.parseNumber(query.limit),
+      offset: this.parseNumber(query.offset),
+      status: query.status,
+    });
+  }
+
+  @Get('phone-calls/:callId')
+  @ApiOperation({ summary: 'Get phone call details for admin console' })
+  @ApiResponse({ status: 200, description: 'Phone call returned' })
+  async getPhoneCall(@Param('callId') callId: string) {
+    return this.adminService.getPhoneCall(callId);
+  }
+
+  @Get('phone-calls/:callId/events')
+  @ApiOperation({ summary: 'Get phone call events for admin console' })
+  @ApiResponse({ status: 200, description: 'Phone call events returned' })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  async getPhoneCallEvents(
+    @Param('callId') callId: string,
+    @Query('limit') limit: string | undefined,
+  ) {
+    return this.adminService.getPhoneCallEvents(
+      callId,
+      this.parseNumber(limit),
+    );
+  }
+
+  @Post('phone-calls/:callId/redial')
+  @ApiOperation({ summary: 'Redial a phone call from admin console' })
+  @ApiResponse({ status: 200, description: 'Phone call redialed' })
+  async redialPhoneCall(
+    @Param('callId') callId: string,
+    @Body() body: Record<string, unknown>,
+    @UserClaims() userClaims: UserClaimsType,
+  ) {
+    return this.adminService.redialPhoneCall(callId, body, userClaims);
+  }
+
+  @Get('jobs')
+  @ApiOperation({ summary: 'List admin jobs' })
+  @ApiResponse({ status: 200, description: 'Admin jobs returned' })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  async listJobs(@Query() query: Record<string, string | undefined>) {
+    return this.adminService.listJobs({
+      limit: this.parseNumber(query.limit),
+    });
+  }
+
+  @Get('jobs/:jobId')
+  @ApiOperation({ summary: 'Get an admin job definition or run' })
+  @ApiResponse({ status: 200, description: 'Admin job returned' })
+  getJob(@Param('jobId') jobId: string) {
+    return this.adminService.getJob(jobId);
+  }
+
+  @Post('jobs/:jobName/run')
+  @ApiOperation({ summary: 'Run an admin job immediately' })
+  @ApiResponse({ status: 201, description: 'Admin job started' })
+  async runJob(
+    @Param('jobName') jobName: string,
+    @UserClaims() userClaims: UserClaimsType,
+  ) {
+    return this.adminService.runJob(jobName, userClaims);
+  }
+
+  @Get('queues')
+  @ApiOperation({ summary: 'List queue status for admin console' })
+  @ApiResponse({ status: 200, description: 'Queue status returned' })
+  async listQueues() {
+    return this.adminService.listQueues();
+  }
+
+  @Post('queues/:queueName/retry-dead-letters')
+  @ApiOperation({ summary: 'Retry dead-lettered queue messages' })
+  @ApiResponse({ status: 200, description: 'Dead-letter retry finished' })
+  async retryDeadLetters(
+    @Param('queueName') queueName: string,
+    @Body() body: Record<string, unknown>,
+    @UserClaims() userClaims: UserClaimsType,
+  ) {
+    return this.adminService.retryDeadLetters(queueName, body, userClaims);
+  }
+
+  @Get('webhooks')
+  @ApiOperation({ summary: 'List webhook providers for admin console' })
+  @ApiResponse({ status: 200, description: 'Webhook providers returned' })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  listWebhooks(@Query() query: Record<string, string | undefined>) {
+    return this.adminService.listWebhooks({
+      limit: this.parseNumber(query.limit),
+    });
+  }
+
+  @Get('webhooks/:provider/events')
+  @ApiOperation({ summary: 'List webhook events for a provider' })
+  @ApiResponse({ status: 200, description: 'Webhook events returned' })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  getWebhookEvents(
+    @Param('provider') provider: string,
+    @Query() query: Record<string, string | undefined>,
+  ) {
+    return this.adminService.getWebhookEvents(provider, {
+      limit: this.parseNumber(query.limit),
+    });
+  }
+
+  @Post('webhooks/:provider/events/:id/replay')
+  @ApiOperation({ summary: 'Replay a webhook event' })
+  @ApiResponse({ status: 201, description: 'Webhook replay completed' })
+  async replayWebhookEvent(
+    @Param('provider') provider: string,
+    @Param('id') id: string,
+  ) {
+    return this.adminService.replayWebhookEvent(provider, id);
+  }
+
+  @Get('audit-logs')
+  @ApiOperation({ summary: 'List admin audit logs' })
+  @ApiResponse({ status: 200, description: 'Audit logs returned' })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  listAuditLogs(@Query() query: Record<string, string | undefined>) {
+    return this.adminService.listAuditLogs({
+      limit: this.parseNumber(query.limit),
+    });
+  }
+
+  @Get('errors')
+  @ApiOperation({ summary: 'List recent admin-observed errors' })
+  @ApiResponse({ status: 200, description: 'Recent errors returned' })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  listErrors(@Query() query: Record<string, string | undefined>) {
+    return this.adminService.listErrors({
+      limit: this.parseNumber(query.limit),
+    });
+  }
+
+  @Get('request-logs')
+  @ApiOperation({ summary: 'List recent HTTP request logs' })
+  @ApiResponse({ status: 200, description: 'Request logs returned' })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  listRequestLogs(@Query() query: Record<string, string | undefined>) {
+    return this.adminService.listRequestLogs({
+      limit: this.parseNumber(query.limit),
+    });
+  }
+
+  @Post('cache/invalidate')
+  @ApiOperation({ summary: 'Invalidate admin-managed caches' })
+  @ApiResponse({ status: 200, description: 'Cache invalidation completed' })
+  async invalidateCache(
+    @Body() body: Record<string, unknown>,
+    @UserClaims() userClaims: UserClaimsType,
+  ) {
+    return this.adminService.invalidateCache(body, userClaims);
+  }
+
+  @Post('data-fixes/:name/preview')
+  @ApiOperation({ summary: 'Preview a data fix' })
+  @ApiResponse({ status: 200, description: 'Data fix preview returned' })
+  async previewDataFix(@Param('name') name: string) {
+    return this.adminService.previewDataFix(name);
+  }
+
+  @Post('data-fixes/:name/apply')
+  @ApiOperation({ summary: 'Apply a data fix' })
+  @ApiResponse({ status: 200, description: 'Data fix applied' })
+  async applyDataFix(
+    @Param('name') name: string,
+    @UserClaims() userClaims: UserClaimsType,
+  ) {
+    return this.adminService.applyDataFix(name, userClaims);
   }
 
   private async sendUserRequest<T>(

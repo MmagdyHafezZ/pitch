@@ -30,7 +30,7 @@ import {
   getJwtSecret,
   getJwtAccessExpiration,
 } from '@pitch/shared-backend/config/jwt.config';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { SimulationWsGateway } from './controllers/simulation/simulation-ws.gateway';
 import { SimulationModule } from '@microservices/simulation/simulation.module';
 import { RagController } from '@microservices/simulation/rag/rag.controller';
@@ -39,6 +39,11 @@ import { SupportChatGatewayController } from './controllers/support/support-chat
 import { SupportAttachmentGatewayController } from './controllers/support/support-attachment-gateway.controller';
 import { CoachStreamService } from './controllers/support/coach-stream.service';
 import { CheckSystemAdmin } from './guards/check-system-admin.guard';
+import { AdminGatewayService } from './controllers/admin/admin-gateway.service';
+import { AdminObservabilityService } from './controllers/admin/admin-observability.service';
+import { RabbitMqAdminService } from './controllers/admin/rabbitmq-admin.service';
+import { AdminObservabilityInterceptor } from './interceptors/admin-observability.interceptor';
+import { PhoneCallWebhookService } from './controllers/simulation/phone-call-webhook.service';
 
 @Module({
   imports: [
@@ -87,10 +92,15 @@ import { CheckSystemAdmin } from './guards/check-system-admin.guard';
   ],
   providers: [
     { provide: APP_GUARD, useClass: GlobalJwtAuthGuard },
+    { provide: APP_INTERCEPTOR, useClass: AdminObservabilityInterceptor },
     CheckSystemAdmin,
     UserClaimsInterceptor,
     SimulationWsGateway,
     CoachStreamService,
+    AdminGatewayService,
+    AdminObservabilityService,
+    RabbitMqAdminService,
+    PhoneCallWebhookService,
   ],
 })
 export class GatewayModule {}
