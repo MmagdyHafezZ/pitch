@@ -1,25 +1,9 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import {
-  ActionIcon,
-  Badge,
-  Box,
-  Group,
-  Paper,
-  Stack,
-  Text,
-  ThemeIcon,
-  Title,
-} from '@mantine/core'
+import { ActionIcon, Badge, Box, Group, Paper, Stack, Text, ThemeIcon, Title } from '@mantine/core'
 import { Dropzone } from '@mantine/dropzone'
-import {
-  IconAlertCircle,
-  IconCheck,
-  IconFile,
-  IconTrash,
-  IconUpload,
-} from '@tabler/icons-react'
+import { IconAlertCircle, IconCheck, IconFile, IconTrash, IconUpload } from '@tabler/icons-react'
 import {
   BLOCKED_EXTENSIONS,
   MAX_FILE_SIZE_MB,
@@ -312,7 +296,12 @@ export function UploadSection({
               </Paper>
             ) : (
               pendingFiles.map((item, index) => (
-                <Paper withBorder radius="md" p="md" key={`${item.file.name}-${item.file.size}-${index}`}>
+                <Paper
+                  withBorder
+                  radius="md"
+                  p="md"
+                  key={`${item.file.name}-${item.file.size}-${index}`}
+                >
                   <Group justify="space-between" align="flex-start" wrap="nowrap">
                     <Group gap="sm" align="flex-start" wrap="nowrap">
                       <ThemeIcon size="lg" radius="md" variant="light" color="gray">

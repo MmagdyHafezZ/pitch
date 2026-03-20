@@ -1,4 +1,15 @@
 import { QueryClient } from '@tanstack/react-query'
+import type {
+  CreateScenarioInput,
+  GenerateScenarioBatchRequest,
+  GenerateScenarioRequest,
+  Scenario,
+  ScenarioDraft,
+  ScenarioDraftListResponse,
+  ScenarioListParams,
+  ScenarioListResponse,
+  UpdateScenarioInput,
+} from '@/features/scenarios/types/scenario.types'
 
 export const API_CONFIG = {
   baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1',
@@ -490,11 +501,7 @@ export const api = {
   },
 
   s3: {
-    presignUpload: (input: {
-      bucket: string
-      key: string
-      expiresIn?: number
-    }) =>
+    presignUpload: (input: { bucket: string; key: string; expiresIn?: number }) =>
       apiRequest<{ url: string }>('/s3/presigned/upload', {
         method: 'POST',
         body: JSON.stringify({
@@ -645,24 +652,43 @@ export const api = {
   },
 
   scenarios: {
-    getAll: (params?: { orgId?: string }) => {
+    list: (params?: ScenarioListParams) => {
       const query = new URLSearchParams()
       if (params?.orgId) query.set('orgId', params.orgId)
+      if (params?.scope) query.set('scope', params.scope)
+      if (params?.query) query.set('query', params.query)
       const queryString = query.toString()
-      return apiRequest<any>(`/simulation/scenarios${queryString ? `?${queryString}` : ''}`)
+      return apiRequest<ScenarioListResponse>(
+        `/simulation/scenarios${queryString ? `?${queryString}` : ''}`
+      )
     },
-    getById: (id: string) => apiRequest<any>(`/simulation/scenarios/${id}`),
-    generate: (data: any) =>
-      apiRequest<any>('/simulation/scenarios/generate', {
+    getAll: (params?: ScenarioListParams) => api.scenarios.list(params),
+    getById: (id: string) => apiRequest<Scenario>(`/simulation/scenarios/${id}`),
+    generate: (data: GenerateScenarioRequest) =>
+      apiRequest<ScenarioDraft>('/simulation/scenarios/generate', {
         method: 'POST',
         body: JSON.stringify(data),
         timeoutMs: 30000,
       }),
-    generateBatch: (data: any) =>
-      apiRequest<any>('/simulation/scenarios/generate/batch', {
+    generateBatch: (data: GenerateScenarioBatchRequest) =>
+      apiRequest<ScenarioDraftListResponse>('/simulation/scenarios/generate/batch', {
         method: 'POST',
         body: JSON.stringify(data),
         timeoutMs: 30000,
+      }),
+    create: (data: CreateScenarioInput) =>
+      apiRequest<Scenario>('/simulation/scenarios', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    update: (id: string, data: UpdateScenarioInput) =>
+      apiRequest<Scenario>(`/simulation/scenarios/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      }),
+    delete: (id: string) =>
+      apiRequest<void>(`/simulation/scenarios/${id}`, {
+        method: 'DELETE',
       }),
   },
 

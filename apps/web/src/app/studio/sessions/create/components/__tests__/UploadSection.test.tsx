@@ -111,9 +111,7 @@ describe('UploadSection', () => {
         expiresIn: 300,
       })
     )
-    expect(presignUploadMock.mock.calls[0]?.[0]?.key).toMatch(
-      /^sessions\/.+\/\d+-proposal\.pdf$/
-    )
+    expect(presignUploadMock.mock.calls[0]?.[0]?.key).toMatch(/^sessions\/.+\/\d+-proposal\.pdf$/)
     expect(global.fetch).toHaveBeenCalledWith(
       'https://upload.test/presigned',
       expect.objectContaining({
