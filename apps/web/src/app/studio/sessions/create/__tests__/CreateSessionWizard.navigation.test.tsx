@@ -185,7 +185,7 @@ describe('CreateSessionWizard - Navigation', () => {
     })
 
     expect(screen.getByText('Pick a session type')).toBeInTheDocument()
-    expect(screen.queryByText('Scenario Library')).not.toBeInTheDocument()
+    expect(screen.queryByText('Choose a Scenario')).not.toBeInTheDocument()
   })
 
   it('advances to step 1 (Scenario) when session type is selected', async () => {
@@ -205,7 +205,7 @@ describe('CreateSessionWizard - Navigation', () => {
     // Should advance to Scenario step
     await waitFor(
       () => {
-        expect(screen.getByText('Scenario Library')).toBeInTheDocument()
+        expect(screen.getByText('Choose a Scenario')).toBeInTheDocument()
       },
       { timeout: 3000 }
     )
@@ -233,7 +233,7 @@ describe('CreateSessionWizard - Navigation', () => {
     await user.click(screen.getByRole('button', { name: /next/i }))
 
     await waitFor(() => {
-      expect(screen.getByText('Scenario Library')).toBeInTheDocument()
+      expect(screen.getByText('Choose a Scenario')).toBeInTheDocument()
     })
 
     // Back button should be enabled
