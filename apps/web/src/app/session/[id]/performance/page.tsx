@@ -302,6 +302,7 @@ export default function SessionPerformancePage() {
   const [error, setError] = useState<string | null>(null)
   const [hasRequestedLiveRun, setHasRequestedLiveRun] = useState(false)
   const [recalculating, setRecalculating] = useState(false)
+  const [retaking, setRetaking] = useState(false)
 
   const rawScore = assessment?.summary?.totalScore ?? report?.totalScore ?? assessment?.totalScore
   const score = typeof rawScore === 'number' ? rawScore : null
@@ -562,6 +563,21 @@ export default function SessionPerformancePage() {
     }
   }, [sessionId])
 
+  const handleRetake = useCallback(async () => {
+    setRetaking(true)
+    setError(null)
+    try {
+      await api.sessions.restart(sessionId, {
+        reason: 'restart_from_scratch',
+      })
+      router.push(`/session/${sessionId}?entry=retake`)
+    } catch {
+      setError('Failed to start a fresh iteration.')
+    } finally {
+      setRetaking(false)
+    }
+  }, [router, sessionId])
+
   const pollAssessment = useCallback(async () => {
     try {
       setError(null)
@@ -700,6 +716,15 @@ export default function SessionPerformancePage() {
               visibleFrom="sm"
             >
               Past performances
+            </Button>
+            <Button
+              variant="light"
+              color="blue"
+              leftSection={<IconRefresh size={16} />}
+              loading={retaking}
+              onClick={() => void handleRetake()}
+            >
+              Retake session
             </Button>
             <Button
               variant="light"

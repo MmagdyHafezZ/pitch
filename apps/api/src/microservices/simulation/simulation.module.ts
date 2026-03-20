@@ -135,6 +135,8 @@ import { RagModule } from './rag/rag.module';
     ConversationOrchestrationService,
   ],
   exports: [
+    PhoneModule,
+    TtsModule,
     LLMService,
     StreamingConversationService,
     ConversationOrchestrationService,

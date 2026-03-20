@@ -35,11 +35,20 @@ enum PlanLevel {
   ENTERPRISE
 }
 
+enum PhoneVerificationStatus {
+  pending
+  verified
+  expired
+  cancelled
+}
+
 model User {
   id        String   @id @default(cuid())
   email     String   @unique
   name      String
   avatar    String?                 // URL to avatar image
+  phoneNumber String? @unique
+  phoneVerifiedAt DateTime?
   settings  Json?
   isActive  Boolean  @default(true) // Is the account active, i.e. allowed to operate
   createdAt DateTime @default(now())
@@ -50,8 +59,29 @@ model User {
   refreshTokens RefreshToken[]
   oauthAccounts OAuthAccount[]
   memberships    TeamMembership[]
+  phoneVerificationChallenges PhoneVerificationChallenge[]
 
   @@map("users")
+}
+
+model PhoneVerificationChallenge {
+  id           String                  @id @default(cuid())
+  userId       String
+  user         User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  phoneNumber  String
+  codeHash     String
+  status       PhoneVerificationStatus @default(pending)
+  expiresAt    DateTime
+  lastSentAt   DateTime
+  sendCount    Int                     @default(1)
+  attemptCount Int                     @default(0)
+  verifiedAt   DateTime?
+  createdAt    DateTime                @default(now())
+  updatedAt    DateTime                @updatedAt
+
+  @@index([userId, status, createdAt])
+  @@index([phoneNumber, status, createdAt])
+  @@map("phone_verification_challenges")
 }
 
 model OAuthAccount {

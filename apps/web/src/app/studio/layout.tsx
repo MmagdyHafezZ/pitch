@@ -28,6 +28,7 @@ export default function ClientLayerComponent({ children }: { children: React.Rea
   const pathname = usePathname()
   const router = useRouter()
   const searchParams = useSearchParams()
+  const isCreatingTeam = searchParams.get('mode') === 'create'
   const user = useAuthStore((state) => state.user)
 
   // Guard: redirect to onboarding if user is loaded but hasn't completed it
@@ -195,12 +196,13 @@ export default function ClientLayerComponent({ children }: { children: React.Rea
 
   useEffect(() => {
     if (!pathname?.startsWith('/studio/team-config')) return
+    if (isCreatingTeam) return
     if (teamsLoading) return
 
     if (!activeTeam || !canAccessTeamConfig) {
       router.replace('/studio/home')
     }
-  }, [activeTeam, canAccessTeamConfig, pathname, router, teamsLoading])
+  }, [activeTeam, canAccessTeamConfig, isCreatingTeam, pathname, router, teamsLoading])
 
   return (
     <>
