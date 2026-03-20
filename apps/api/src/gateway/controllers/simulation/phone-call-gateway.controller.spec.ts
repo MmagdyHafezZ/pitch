@@ -299,4 +299,64 @@ describe('PhoneCallGatewayController', () => {
     expect(thrown?.message).toBe('Vapi unavailable');
     expect(thrown?.getStatus()).toBe(503);
   });
+
+  it('ends an active phone call through the simulation service', async () => {
+    simulationService.send.mockReturnValue(
+      of({
+        ok: true,
+        sessionId: 'session-1',
+        provider: 'vapi',
+        callId: 'call-1',
+      }) as never,
+    );
+
+    const result = await controller.endCall(
+      {
+        sessionId: 'session-1',
+        reason: 'user_requested_hangup',
+      },
+      userClaims,
+    );
+
+    expect(simulationSend).toHaveBeenCalledWith(
+      SIMULATION_SERVICE_PATTERNS.PHONE_CALL_END,
+      {
+        sessionId: 'session-1',
+        reason: 'user_requested_hangup',
+        userClaims,
+      },
+    );
+    expect(result).toEqual({
+      ok: true,
+      sessionId: 'session-1',
+      provider: 'vapi',
+      callId: 'call-1',
+    });
+  });
+
+  it('normalizes downstream phone hangup errors into HTTP exceptions', async () => {
+    simulationService.send.mockReturnValue(
+      throwError(() => ({
+        status: 409,
+        message: 'No active phone call is registered.',
+      })) as never,
+    );
+
+    let thrown: HttpException | null = null;
+    try {
+      await controller.endCall(
+        {
+          sessionId: 'session-1',
+          reason: 'user_requested_hangup',
+        },
+        userClaims,
+      );
+    } catch (error) {
+      thrown = error as HttpException;
+    }
+
+    expect(thrown).toBeInstanceOf(HttpException);
+    expect(thrown?.message).toBe('No active phone call is registered.');
+    expect(thrown?.getStatus()).toBe(409);
+  });
 });

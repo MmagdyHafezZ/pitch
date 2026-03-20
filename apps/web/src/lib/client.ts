@@ -579,6 +579,11 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(data),
       }),
+    end: (data: { sessionId: string; reason?: string }) =>
+      apiRequest<any>('/simulation/phone-calls/end', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
   },
 
   assessments: {

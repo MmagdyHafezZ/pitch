@@ -29,7 +29,7 @@ import {
   IconPhone,
   IconSparkles,
 } from '@tabler/icons-react'
-import { useRouter, useParams } from 'next/navigation'
+import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import { useConversation, useVisualState, CameraEngagementIndicator } from '@/features/conversation'
 import { type GlobeState } from '@/features/conversation/components/GlobeVisualizer'
 import VoiceOrbSession from '@/features/conversation/components/VoiceOrbSession'
@@ -65,6 +65,7 @@ interface PhoneVerificationState {
 }
 
 type EntryPromptMode = 'resume' | 'retake'
+type PhoneRetakeChoice = 'undecided' | 'saved' | 'different'
 
 interface PhoneCallRuntimeState {
   callId: string | null
@@ -664,7 +665,9 @@ function PhoneCallSetupCard({
   onPhoneNumberChange,
   callError,
   editingVerifiedPhone,
+  forceFreshPhoneEntry,
   activeVerifiedPhoneNumber,
+  savedVerifiedPhoneNumber,
   isTransientVerifiedPhone,
   verificationCode,
   onVerificationCodeChange,
@@ -674,6 +677,9 @@ function PhoneCallSetupCard({
   onResendPhoneVerification,
   onVerifyPhoneCode,
   onEditVerifiedPhone,
+  showRetakeSavedPhoneChoice,
+  onUseSavedPhoneNumber,
+  onUseDifferentPhoneNumber,
   onStartPhoneCall,
   callLoading,
   callStarted,
@@ -691,7 +697,9 @@ function PhoneCallSetupCard({
   onPhoneNumberChange: (value: string) => void
   callError: string | null
   editingVerifiedPhone: boolean
+  forceFreshPhoneEntry: boolean
   activeVerifiedPhoneNumber: string | null
+  savedVerifiedPhoneNumber: string | null
   isTransientVerifiedPhone: boolean
   verificationCode: string
   onVerificationCodeChange: (value: string) => void
@@ -701,13 +709,17 @@ function PhoneCallSetupCard({
   onResendPhoneVerification: () => void
   onVerifyPhoneCode: () => void
   onEditVerifiedPhone: () => void
+  showRetakeSavedPhoneChoice: boolean
+  onUseSavedPhoneNumber: () => void
+  onUseDifferentPhoneNumber: () => void
   onStartPhoneCall: () => void
   callLoading: boolean
   callStarted: boolean
   phoneCallRuntime: PhoneCallRuntimeState
 }) {
   const pendingPhoneNumber = phoneVerification?.pendingPhoneNumber ?? null
-  const showVerificationStep = Boolean(pendingPhoneNumber) && editingVerifiedPhone
+  const showVerificationStep =
+    Boolean(pendingPhoneNumber) && editingVerifiedPhone && !forceFreshPhoneEntry
   const pendingExpiryMs = phoneVerification?.pendingExpiresAt
     ? new Date(phoneVerification.pendingExpiresAt).getTime() - Date.now()
     : null
@@ -725,7 +737,18 @@ function PhoneCallSetupCard({
   const hasVerifiedPhone = Boolean(activeVerifiedPhoneNumber)
   const canResendCode = Boolean(showVerificationStep && !resendCooldownIn)
   const canStartCall =
-    hasVerifiedPhone && sessionStatus !== 'ended' && !callStarted && !editingVerifiedPhone
+    hasVerifiedPhone &&
+    sessionStatus !== 'ended' &&
+    !callStarted &&
+    !editingVerifiedPhone &&
+    !showRetakeSavedPhoneChoice
+  const startCallHelperText = callStarted
+    ? 'A phone call is already in progress.'
+    : showRetakeSavedPhoneChoice
+      ? 'Choose whether to reuse your saved number or verify a different one.'
+      : sessionStatus === 'ended'
+        ? 'This session has already ended.'
+        : 'Verify the code first to unlock dialing.'
 
   return (
     <Paper
@@ -891,7 +914,66 @@ function PhoneCallSetupCard({
             </Group>
           ) : (
             <Stack gap="md">
-              {activeVerifiedPhoneNumber && !editingVerifiedPhone ? (
+              {showRetakeSavedPhoneChoice ? (
+                <Paper
+                  withBorder
+                  radius="xl"
+                  p="md"
+                  style={{
+                    background:
+                      'linear-gradient(135deg, color-mix(in srgb, var(--pitch-selected) 14%, transparent) 0%, color-mix(in srgb, var(--pitch-info) 10%, transparent) 100%)',
+                    borderColor: 'color-mix(in srgb, var(--pitch-selected) 26%, transparent)',
+                  }}
+                >
+                  <Stack gap="md">
+                    <Stack gap={4}>
+                      <Text size="xs" fw={700} tt="uppercase" c="var(--pitch-surface-text-dim)">
+                        Retake setup
+                      </Text>
+                      <Text fw={700} size="lg" c="var(--pitch-surface-text)">
+                        Which number should we use for this retake?
+                      </Text>
+                      <Text size="sm" c="var(--pitch-surface-text-dim)">
+                        Use your already verified number, or switch to a different number for this
+                        attempt.
+                      </Text>
+                    </Stack>
+                    <Group grow>
+                      <Button
+                        radius="xl"
+                        onClick={onUseSavedPhoneNumber}
+                        styles={{
+                          root: {
+                            background:
+                              'linear-gradient(90deg, var(--pitch-accent) 0%, var(--pitch-accent-strong) 100%)',
+                            boxShadow:
+                              '0 16px 28px color-mix(in srgb, var(--pitch-accent-strong) 32%, transparent)',
+                          },
+                        }}
+                      >
+                        Use saved phone number
+                      </Button>
+                      <Button
+                        radius="xl"
+                        onClick={onUseDifferentPhoneNumber}
+                        styles={{
+                          root: {
+                            background:
+                              'linear-gradient(90deg, color-mix(in srgb, var(--pitch-selected) 24%, var(--pitch-surface-bg)) 0%, color-mix(in srgb, var(--pitch-accent-soft) 26%, var(--pitch-surface-bg)) 100%)',
+                            color: 'var(--pitch-surface-text)',
+                            border:
+                              '1px solid color-mix(in srgb, var(--pitch-selected) 42%, transparent)',
+                            boxShadow:
+                              '0 12px 24px color-mix(in srgb, var(--pitch-selected) 18%, transparent), inset 0 1px 0 color-mix(in srgb, var(--pitch-surface-text) 8%, transparent)',
+                          },
+                        }}
+                      >
+                        Use a different number
+                      </Button>
+                    </Group>
+                  </Stack>
+                </Paper>
+              ) : activeVerifiedPhoneNumber && !editingVerifiedPhone ? (
                 <Paper
                   withBorder
                   radius="xl"
@@ -1078,36 +1160,40 @@ function PhoneCallSetupCard({
             </Group>
           )}
 
-          <Group grow>
-            <Button
-              size="md"
-              radius="xl"
-              onClick={onStartPhoneCall}
-              loading={callLoading}
-              disabled={!canStartCall}
-              leftSection={<IconPhone size={16} />}
-              styles={{
-                root: {
-                  background: canStartCall
-                    ? 'linear-gradient(90deg, var(--pitch-accent) 0%, var(--pitch-accent-strong) 100%)'
-                    : 'var(--pitch-input-bg)',
-                  color: canStartCall
-                    ? 'var(--pitch-nav-text, white)'
-                    : 'var(--pitch-surface-text-dim)',
-                  border: canStartCall ? 'none' : '1px solid var(--pitch-border)',
-                  boxShadow: canStartCall
-                    ? '0 16px 32px color-mix(in srgb, var(--pitch-accent-strong) 36%, transparent)'
-                    : 'none',
-                },
-              }}
-            >
-              {callStarted ? 'Call already in progress' : 'Start phone call'}
-            </Button>
-          </Group>
-          {!canStartCall && (
-            <Text size="xs" ta="center" c="var(--pitch-surface-text-dim)">
-              Verify the code first to unlock dialing.
-            </Text>
+          {!showRetakeSavedPhoneChoice && (
+            <>
+              <Group grow>
+                <Button
+                  size="md"
+                  radius="xl"
+                  onClick={onStartPhoneCall}
+                  loading={callLoading}
+                  disabled={!canStartCall}
+                  leftSection={<IconPhone size={16} />}
+                  styles={{
+                    root: {
+                      background: canStartCall
+                        ? 'linear-gradient(90deg, var(--pitch-accent) 0%, var(--pitch-accent-strong) 100%)'
+                        : 'var(--pitch-input-bg)',
+                      color: canStartCall
+                        ? 'var(--pitch-nav-text, white)'
+                        : 'var(--pitch-surface-text-dim)',
+                      border: canStartCall ? 'none' : '1px solid var(--pitch-border)',
+                      boxShadow: canStartCall
+                        ? '0 16px 32px color-mix(in srgb, var(--pitch-accent-strong) 36%, transparent)'
+                        : 'none',
+                    },
+                  }}
+                >
+                  {callStarted ? 'Call already in progress' : 'Start phone call'}
+                </Button>
+              </Group>
+              {!canStartCall && (
+                <Text size="xs" ta="center" c="var(--pitch-surface-text-dim)">
+                  {startCallHelperText}
+                </Text>
+              )}
+            </>
           )}
         </Stack>
       </Stack>
@@ -1302,7 +1388,9 @@ function PhoneTranscriptPanel({
 export default function LiveSessionPage() {
   const router = useRouter()
   const params = useParams()
+  const searchParams = useSearchParams()
   const sessionId = params.id as string
+  const entrySource = searchParams.get('entry')
   const isMobile = useMediaQuery('(max-width: 768px)')
   const [time, setTime] = useState(0)
   const [textInput, setTextInput] = useState('')
@@ -1339,6 +1427,9 @@ export default function LiveSessionPage() {
     null
   )
   const [editingVerifiedPhone, setEditingVerifiedPhone] = useState(false)
+  const [forceFreshPhoneEntry, setForceFreshPhoneEntry] = useState(false)
+  const [phoneSetupRetakeMode, setPhoneSetupRetakeMode] = useState(entrySource === 'retake')
+  const [phoneRetakeChoice, setPhoneRetakeChoice] = useState<PhoneRetakeChoice>('saved')
   const [phoneCallRuntime, setPhoneCallRuntime] =
     useState<PhoneCallRuntimeState>(EMPTY_PHONE_CALL_RUNTIME)
   const [phoneTranscriptMessages, setPhoneTranscriptMessages] = useState<TranscriptMessage[]>([])
@@ -1598,9 +1689,15 @@ export default function LiveSessionPage() {
       setPhoneVerification(status)
       if (status.verified && status.phoneNumber) {
         setEditingVerifiedPhone(false)
+        setForceFreshPhoneEntry(false)
         setPhoneNumber(status.phoneNumber)
       } else if (status.pendingPhoneNumber) {
+        setEditingVerifiedPhone(true)
+        setForceFreshPhoneEntry(false)
         setPhoneNumber(status.pendingPhoneNumber)
+      } else {
+        setEditingVerifiedPhone(false)
+        setForceFreshPhoneEntry(false)
       }
       setCallError(null)
     } catch (error) {
@@ -1642,6 +1739,9 @@ export default function LiveSessionPage() {
     setSavePhoneForFutureUse(true)
     setTransientVerifiedPhoneNumber(null)
     setEditingVerifiedPhone(false)
+    setForceFreshPhoneEntry(false)
+    setPhoneSetupRetakeMode(entrySource === 'retake')
+    setPhoneRetakeChoice(entrySource === 'retake' ? 'undecided' : 'saved')
     setPhoneCallRuntime(EMPTY_PHONE_CALL_RUNTIME)
     setPhoneTranscriptMessages([])
     setPhoneTranscriptError(null)
@@ -1656,6 +1756,27 @@ export default function LiveSessionPage() {
         setLoadedSessionRecord(sessionRecord)
         const status = normalizeSessionStatus(session)
         const isPhoneSession = sessionRecord.type === 'phone'
+
+        if (status === 'ended' && isPhoneSession && entrySource === 'retake') {
+          try {
+            const restartedSession = await api.sessions.restart(sessionId, {
+              reason: 'restart_from_scratch',
+            })
+            if (cancelled) return
+
+            const restartedRecord = isRecord(restartedSession) ? restartedSession : {}
+            setLoadedSessionRecord(restartedRecord)
+            syncSessionState(restartedSession)
+            setPhoneSetupRetakeMode(true)
+            setPhoneRetakeChoice('undecided')
+            setResumePromptOpen(false)
+            setEntryPromptMode(null)
+            setAutoConnectConversation(false)
+            return
+          } catch {
+            if (cancelled) return
+          }
+        }
 
         if (status === 'ended') {
           syncSessionState(session)
@@ -1712,7 +1833,7 @@ export default function LiveSessionPage() {
     return () => {
       cancelled = true
     }
-  }, [sessionId, syncSessionState])
+  }, [entrySource, sessionId, syncSessionState])
 
   useEffect(() => {
     if (sessionType !== 'phone' || sessionStatus === 'ended') return
@@ -1783,6 +1904,7 @@ export default function LiveSessionPage() {
       setPhoneTranscriptError(null)
       setCallStarted(false)
       setCallError(null)
+      setForceFreshPhoneEntry(false)
       speechBufferRef.current = ''
       assistantInterruptTriggeredRef.current = false
       resetTranscript()
@@ -1819,8 +1941,12 @@ export default function LiveSessionPage() {
       })
       setResumePromptOpen(false)
       if (restartedRecord.type === 'phone') {
+        setPhoneSetupRetakeMode(true)
+        setPhoneRetakeChoice('undecided')
         setAutoConnectConversation(false)
       } else {
+        setPhoneSetupRetakeMode(false)
+        setPhoneRetakeChoice('saved')
         setAutoConnectConversation(true)
       }
     } catch (error) {
@@ -1919,6 +2045,7 @@ export default function LiveSessionPage() {
       setPhoneVerification(status)
       setTransientVerifiedPhoneNumber(null)
       setEditingVerifiedPhone(true)
+      setForceFreshPhoneEntry(false)
       setVerificationCode('')
       notifications.show({
         title: 'Verification code sent',
@@ -1947,6 +2074,7 @@ export default function LiveSessionPage() {
       setPhoneVerification(status)
       setTransientVerifiedPhoneNumber(null)
       setEditingVerifiedPhone(true)
+      setForceFreshPhoneEntry(false)
       setVerificationCode('')
       notifications.show({
         title: 'Verification code resent',
@@ -1982,6 +2110,7 @@ export default function LiveSessionPage() {
       })) as PhoneVerificationState
       setPhoneVerification(status)
       setEditingVerifiedPhone(false)
+      setForceFreshPhoneEntry(false)
       setVerificationCode('')
       setTransientVerifiedPhoneNumber(
         savePhoneForFutureUse ? null : (status.temporaryVerifiedPhoneNumber ?? phoneNumber.trim())
@@ -2026,6 +2155,8 @@ export default function LiveSessionPage() {
         phoneNumber: activeVerifiedPhoneNumber,
       })
       setSessionStatus('active')
+      setPhoneSetupRetakeMode(false)
+      setPhoneRetakeChoice('saved')
       notifications.show({
         title: 'Calling now',
         message: `We’re calling ${activeVerifiedPhoneNumber}. Answer your phone to begin.`,
@@ -2049,10 +2180,13 @@ export default function LiveSessionPage() {
 
   const handleEditVerifiedPhone = () => {
     setEditingVerifiedPhone(true)
+    setForceFreshPhoneEntry(true)
+    setPhoneRetakeChoice('different')
     setVerificationCode('')
     setCallError(null)
     setSavePhoneForFutureUse(true)
     setTransientVerifiedPhoneNumber(null)
+    setPhoneNumber('')
   }
 
   const handleClosePhoneSetupModal = () => {
@@ -2062,13 +2196,49 @@ export default function LiveSessionPage() {
     if (phoneVerification?.verified && phoneVerification.phoneNumber) {
       setPhoneNumber(phoneVerification.phoneNumber)
       setEditingVerifiedPhone(false)
+      setForceFreshPhoneEntry(false)
     }
   }
 
+  const handleUseSavedPhoneNumber = () => {
+    const savedPhoneNumber = phoneVerification?.verified
+      ? (phoneVerification.phoneNumber ?? null)
+      : null
+    setPhoneRetakeChoice('saved')
+    setEditingVerifiedPhone(false)
+    setForceFreshPhoneEntry(false)
+    setVerificationCode('')
+    setCallError(null)
+    if (savedPhoneNumber) {
+      setPhoneNumber(savedPhoneNumber)
+    }
+  }
+
+  const handleUseDifferentPhoneNumber = () => {
+    setPhoneRetakeChoice('different')
+    setEditingVerifiedPhone(true)
+    setForceFreshPhoneEntry(true)
+    setVerificationCode('')
+    setCallError(null)
+    setSavePhoneForFutureUse(true)
+    setTransientVerifiedPhoneNumber(null)
+    setPhoneNumber('')
+  }
+
+  const savedVerifiedPhoneNumber =
+    phoneVerification?.verified && phoneVerification.phoneNumber
+      ? phoneVerification.phoneNumber
+      : null
   const activeVerifiedPhoneNumber =
     transientVerifiedPhoneNumber ?? phoneVerification?.phoneNumber ?? null
   const isTransientVerifiedPhone = Boolean(
     transientVerifiedPhoneNumber && transientVerifiedPhoneNumber !== phoneVerification?.phoneNumber
+  )
+  const showRetakeSavedPhoneChoice = Boolean(
+    phoneSetupRetakeMode &&
+      savedVerifiedPhoneNumber &&
+      phoneRetakeChoice === 'undecided' &&
+      !forceFreshPhoneEntry
   )
 
   const formatTime = (seconds: number) => {
@@ -2415,17 +2585,46 @@ export default function LiveSessionPage() {
     if (isListening) {
       stopListening()
     }
+
     try {
+      if (sessionType === 'phone' && phoneCallRuntime.callId) {
+        try {
+          await api.phoneCalls.end({
+            sessionId,
+            reason: 'user_requested_hangup',
+          })
+        } catch (err) {
+          const message = err instanceof Error ? err.message : ''
+          if (!message.includes('No active phone call is registered')) {
+            throw err
+          }
+        }
+      }
+
       await api.sessions.end(sessionId, { reason: 'hangup' })
       setSessionStatus('ended')
+      setCallStarted(false)
+      hangUp()
+      router.push(`/session/${sessionId}/performance`)
     } catch (err) {
-      console.warn('Failed to end session', err)
+      const message = err instanceof Error ? err.message : 'Unable to hang up the phone call.'
+      notifications.show({
+        title: 'Hang up failed',
+        message,
+        color: 'red',
+      })
+      console.warn('Failed to hang up session', err)
     }
-
-    hangUp()
-    setCallStarted(false)
-    router.push(`/session/${sessionId}/performance`)
-  }, [clearSpeechFinalizeState, hangUp, isListening, router, sessionId, stopListening])
+  }, [
+    clearSpeechFinalizeState,
+    hangUp,
+    isListening,
+    phoneCallRuntime.callId,
+    router,
+    sessionId,
+    sessionType,
+    stopListening,
+  ])
 
   useEffect(() => {
     if (sessionType === 'phone' && sessionStatus === 'ended' && entryPromptMode !== 'retake') {
@@ -2529,7 +2728,9 @@ export default function LiveSessionPage() {
           }}
           callError={callError}
           editingVerifiedPhone={editingVerifiedPhone}
+          forceFreshPhoneEntry={forceFreshPhoneEntry}
           activeVerifiedPhoneNumber={activeVerifiedPhoneNumber}
+          savedVerifiedPhoneNumber={savedVerifiedPhoneNumber}
           isTransientVerifiedPhone={isTransientVerifiedPhone}
           verificationCode={verificationCode}
           onVerificationCodeChange={(value) => {
@@ -2544,6 +2745,9 @@ export default function LiveSessionPage() {
           onResendPhoneVerification={handleResendPhoneVerification}
           onVerifyPhoneCode={handleVerifyPhoneCode}
           onEditVerifiedPhone={handleEditVerifiedPhone}
+          showRetakeSavedPhoneChoice={showRetakeSavedPhoneChoice}
+          onUseSavedPhoneNumber={handleUseSavedPhoneNumber}
+          onUseDifferentPhoneNumber={handleUseDifferentPhoneNumber}
           onStartPhoneCall={handleStartPhoneCall}
           callLoading={callLoading}
           callStarted={callStarted}

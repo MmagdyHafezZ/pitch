@@ -570,7 +570,7 @@ export default function SessionPerformancePage() {
       await api.sessions.restart(sessionId, {
         reason: 'restart_from_scratch',
       })
-      router.push(`/session/${sessionId}`)
+      router.push(`/session/${sessionId}?entry=retake`)
     } catch {
       setError('Failed to start a fresh iteration.')
     } finally {

@@ -23,8 +23,9 @@ export interface CreateInvitationData {
 export class InvitationRepository {
   constructor(private readonly mongo: MongoConnectionService) {}
 
-  private get model(): Model<ISessionInvitation> {
-    if (!this.mongo.isConnected()) {
+  private async getModel(): Promise<Model<ISessionInvitation>> {
+    const connected = await this.mongo.waitUntilConnected(10000);
+    if (!connected) {
       throw new Error('MongoDB connection is not initialized');
     }
 
@@ -35,7 +36,8 @@ export class InvitationRepository {
   }
 
   async create(data: CreateInvitationData): Promise<ISessionInvitation> {
-    const doc = await this.model.create({
+    const model = await this.getModel();
+    const doc = await model.create({
       _id: new Types.ObjectId().toHexString(),
       sessionId: data.sessionId,
       inviterId: data.inviterId,
@@ -67,7 +69,8 @@ export class InvitationRepository {
       status: 'pending',
     }));
 
-    const result = await this.model.insertMany(docs, {
+    const model = await this.getModel();
+    const result = await model.insertMany(docs, {
       ordered: false,
     });
 
@@ -75,13 +78,15 @@ export class InvitationRepository {
   }
 
   async findById(id: string): Promise<ISessionInvitation | null> {
-    return (await this.model
+    const model = await this.getModel();
+    return (await model
       .findById(id)
       .lean()) as unknown as ISessionInvitation | null;
   }
 
   async findBySessionId(sessionId: string): Promise<ISessionInvitation[]> {
-    return (await this.model
+    const model = await this.getModel();
+    return (await model
       .find({ sessionId })
       .sort({ createdAt: -1 })
       .lean()) as unknown as ISessionInvitation[];
@@ -91,12 +96,13 @@ export class InvitationRepository {
     inviteeId: string,
     status?: string,
   ): Promise<ISessionInvitation[]> {
+    const model = await this.getModel();
     const query: Record<string, any> = { inviteeId };
     if (status) {
       query.status = status;
     }
 
-    return (await this.model
+    return (await model
       .find(query)
       .sort({ createdAt: -1 })
       .lean()) as unknown as ISessionInvitation[];
@@ -106,20 +112,22 @@ export class InvitationRepository {
     inviterId: string,
     status?: string,
   ): Promise<ISessionInvitation[]> {
+    const model = await this.getModel();
     const query: Record<string, any> = { inviterId };
     if (status) {
       query.status = status;
     }
 
-    return (await this.model
+    return (await model
       .find(query)
       .sort({ createdAt: -1 })
       .lean()) as unknown as ISessionInvitation[];
   }
 
   async updateStatus(id: string, status: string): Promise<ISessionInvitation> {
+    const model = await this.getModel();
     const respondedAt = status !== 'pending' ? new Date() : null;
-    const updated = (await this.model
+    const updated = (await model
       .findByIdAndUpdate(id, { status, respondedAt }, { new: true })
       .lean()) as unknown as ISessionInvitation | null;
 
@@ -134,17 +142,20 @@ export class InvitationRepository {
     sessionId: string,
     inviteeId: string,
   ): Promise<ISessionInvitation | null> {
-    return (await this.model
+    const model = await this.getModel();
+    return (await model
       .findOne({ sessionId, inviteeId })
       .lean()) as unknown as ISessionInvitation | null;
   }
 
   async delete(id: string): Promise<void> {
-    await this.model.findByIdAndDelete(id);
+    const model = await this.getModel();
+    await model.findByIdAndDelete(id);
   }
 
   async countPendingForInvitee(inviteeId: string): Promise<number> {
-    return await this.model.countDocuments({
+    const model = await this.getModel();
+    return await model.countDocuments({
       inviteeId,
       status: 'pending',
     });
@@ -154,11 +165,12 @@ export class InvitationRepository {
     sessionId: string,
     status?: string,
   ): Promise<number> {
+    const model = await this.getModel();
     const query: Record<string, any> = { sessionId };
     if (status) {
       query.status = status;
     }
 
-    return await this.model.countDocuments(query);
+    return await model.countDocuments(query);
   }
 }

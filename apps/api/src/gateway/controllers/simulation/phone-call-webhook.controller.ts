@@ -203,8 +203,8 @@ export class PhoneCallWebhookController {
     @Body() body: VapiServerEnvelope,
   ) {
     const context = this.vapiContext.verifyToken(token);
-    const message = body.message ?? {};
-    const type = typeof message.type === 'string' ? message.type : 'unknown';
+    const message = this.extractServerEventPayload(body);
+    const type = this.extractServerEventType(body, message);
     const status = this.extractStatus(message);
     const endedReason = this.extractEndReasonOrUndefined(message);
     const callId = this.extractCallId(body);
@@ -240,7 +240,10 @@ export class PhoneCallWebhookController {
             `vapi.event.failure session=${context.sessionId} user=${context.userId} call=${callId ?? 'unknown'} status=${status} endedReason=${endedReason ?? 'unknown'} payload=${this.safeJson(message)}`,
           );
         }
-        if (this.isTerminalStatus(status)) {
+        if (
+          this.isTerminalStatus(status) ||
+          this.shouldEndSessionForDisconnectReason(endedReason)
+        ) {
           const reason = this.buildStatusEndReason(status, endedReason);
           await this.endSessionIfNeeded(
             context.sessionId,
@@ -584,13 +587,76 @@ export class PhoneCallWebhookController {
     const normalizedStatus = status ?? 'unknown';
     const normalizedReason = endedReason?.trim();
 
-    if (normalizedStatus === 'ended') {
+    if (
+      normalizedStatus === 'ended' &&
+      !this.shouldEndSessionForDisconnectReason(normalizedReason)
+    ) {
       return `phone_call_completed:${normalizedReason ?? normalizedStatus}`;
     }
 
     return normalizedReason
       ? `phone_call_terminated:${normalizedStatus}:${normalizedReason}`
       : `phone_call_terminated:${normalizedStatus}`;
+  }
+
+  private shouldEndSessionForDisconnectReason(
+    endedReason: string | undefined,
+  ): boolean {
+    if (!endedReason) {
+      return false;
+    }
+
+    const normalizedReason = endedReason.trim().toLowerCase();
+    if (!normalizedReason) {
+      return false;
+    }
+
+    return [
+      'failed',
+      'failure',
+      'error',
+      'busy',
+      'no-answer',
+      'no answer',
+      'did-not-answer',
+      'did not answer',
+      'did-not-connect',
+      'did not connect',
+      'not connected',
+      'unanswered',
+      'unreachable',
+      'auto hangup',
+      'auto-hangup',
+      'hangup',
+      'hang up',
+      'cancel',
+      'disconnected',
+      'dropped',
+    ].some((keyword) => normalizedReason.includes(keyword));
+  }
+
+  private extractServerEventPayload(
+    payload: VapiServerEnvelope,
+  ): Record<string, unknown> {
+    if (payload.message && typeof payload.message === 'object') {
+      return payload.message as Record<string, unknown>;
+    }
+
+    return payload as Record<string, unknown>;
+  }
+
+  private extractServerEventType(
+    payload: VapiServerEnvelope,
+    message: Record<string, unknown>,
+  ): string {
+    const rootPayload = payload as Record<string, unknown>;
+
+    return (
+      this.readString(message, 'type') ??
+      this.readString(rootPayload, 'type') ??
+      this.readNestedString(rootPayload, 'artifact', 'type') ??
+      'unknown'
+    );
   }
 
   private extractEndReasonOrUndefined(

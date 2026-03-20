@@ -109,4 +109,40 @@ export class PhoneCallGatewayController {
       throw new HttpException(message, status);
     }
   }
+
+  @Post('end')
+  @ApiOperation({ summary: 'End an active phone call for a session' })
+  @ApiResponse({ status: 200, description: 'Call ended successfully' })
+  @ApiResponse({ status: 400, description: 'No active phone call found' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  async endCall(
+    @Body() payload: { sessionId: string; reason?: string },
+    @UserClaims() userClaims: UserClaimsType,
+  ): Promise<{
+    ok: true;
+    callId: string;
+    provider: string;
+    sessionId: string;
+  }> {
+    try {
+      return await lastValueFrom(
+        this.simulationService
+          .send<{
+            ok: true;
+            callId: string;
+            provider: string;
+            sessionId: string;
+          }>(SIMULATION_SERVICE_PATTERNS.PHONE_CALL_END, {
+            ...payload,
+            userClaims,
+          })
+          .pipe(timeout(10000)),
+      );
+    } catch (err: unknown) {
+      const error = normalizeError(err);
+      const message = error.message ?? 'Failed to end phone call';
+      const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
+      throw new HttpException(message, status);
+    }
+  }
 }

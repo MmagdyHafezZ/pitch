@@ -69,6 +69,7 @@ describe('HintsRepository', () => {
           provide: MongoConnectionService,
           useValue: {
             isConnected: jest.fn().mockReturnValue(true),
+            waitUntilConnected: jest.fn().mockResolvedValue(true),
             getModel: jest.fn().mockReturnValue(mockModel),
           },
         },
@@ -115,7 +116,7 @@ describe('HintsRepository', () => {
     });
 
     it('should throw error when MongoDB is not connected', async () => {
-      mongoService.isConnected.mockReturnValue(false);
+      mongoService.waitUntilConnected.mockResolvedValue(false);
 
       await expect(repository.create(mockHintData)).rejects.toThrow(
         'MongoDB connection is not initialized',
@@ -313,7 +314,7 @@ describe('HintsRepository', () => {
 
   describe('error handling', () => {
     it('should throw error when MongoDB connection fails', async () => {
-      mongoService.isConnected.mockReturnValue(false);
+      mongoService.waitUntilConnected.mockResolvedValue(false);
 
       await expect(repository.findBySessionId('session_1')).rejects.toThrow(
         'MongoDB connection is not initialized',
