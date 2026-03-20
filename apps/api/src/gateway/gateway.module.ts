@@ -8,6 +8,7 @@ import { PlanGatewayController } from './controllers/userManagement/plans.contro
 import { SubscriptionGatewayController } from './controllers/userManagement/subscription.controller';
 import { SalesforceGatewayController } from './controllers/crm/salesforce-gateway.controller';
 import { SessionGatewayController } from './controllers/simulation/session-gateway.controller';
+import { ScenarioGatewayController } from './controllers/simulation/scenario-gateway.controller';
 import { InvitationGatewayController } from './controllers/simulation/invitation-gateway.controller';
 import { HintsGatewayController } from './controllers/simulation/hints-gateway.controller';
 import { AssessmentGatewayController } from './controllers/simulation/assessment-gateway.controller';
@@ -69,6 +70,7 @@ import { CoachStreamService } from './controllers/support/coach-stream.service';
     SalesforceGatewayController,
     TtsGatewayController,
     SessionGatewayController,
+    ScenarioGatewayController,
     InvitationGatewayController,
     HintsGatewayController,
     AssessmentGatewayController,

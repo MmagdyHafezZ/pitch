@@ -11,7 +11,7 @@ import { InvitationController } from './controllers/invitation.controller';
 import { InvitationHttpController } from './controllers/invitation-http.controller';
 import { ConversationController } from './controllers/conversation.controller';
 import { PersonaHttpController } from './controllers/persona-http.controller';
-import { ScenarioHttpController } from './controllers/scenario-http.controller';
+import { ScenarioController } from './controllers/scenario.controller';
 import { HintsController } from './controllers/hints.controller';
 import { TimelineController } from './controllers/timeline.controller';
 import { ChallengeController } from './controllers/challenge.controller';
@@ -85,6 +85,19 @@ import {
         }),
         inject: [ConfigService],
       },
+      {
+        name: 'USER_SERVICE',
+        imports: [ConfigModule],
+        useFactory: (_configService: ConfigService) => ({
+          transport: Transport.RMQ,
+          options: {
+            urls: [getRabbitMQUrl()],
+            queue: 'user_queue',
+            queueOptions: getQueueOptions(),
+          },
+        }),
+        inject: [ConfigService],
+      },
     ]),
     TtsModule,
     PhoneModule,
@@ -102,7 +115,7 @@ import {
     InvitationHttpController,
     ConversationController,
     PersonaHttpController,
-    ScenarioHttpController,
+    ScenarioController,
     HintsController,
     TimelineController,
     ChallengeController,
