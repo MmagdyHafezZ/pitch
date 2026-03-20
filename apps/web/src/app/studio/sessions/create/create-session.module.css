@@ -128,6 +128,7 @@
 }
 
 .personaTrack {
+  position: relative;
   display: flex;
   gap: 16px;
   overflow-x: auto;
@@ -344,6 +345,108 @@
     color-mix(in srgb, var(--mantine-color-blue-6) 14%, var(--mantine-color-dark-8)),
     var(--mantine-color-dark-8)
   );
+}
+
+.scenarioEditorShell {
+  min-height: 100%;
+}
+
+/* ── Scenario list items ─────────────────────────────────────────────────── */
+.scenarioItem {
+  padding: 10px 12px;
+  border-radius: 10px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition:
+    background 140ms ease,
+    border-color 140ms ease;
+  outline: none;
+}
+
+.scenarioItem:hover {
+  background: color-mix(in srgb, var(--mantine-color-dark-6) 55%, transparent);
+  border-color: color-mix(in srgb, var(--mantine-color-dark-4) 30%, transparent);
+}
+
+.scenarioItem:focus-visible {
+  border-color: var(--mantine-color-blue-5);
+}
+
+.scenarioItemSelected {
+  background: color-mix(in srgb, var(--mantine-color-blue-9) 40%, transparent) !important;
+  border-color: color-mix(in srgb, var(--mantine-color-blue-6) 38%, transparent) !important;
+}
+
+/* ── Scenario list scroll container ────────────────────────────────────────*/
+.scenarioList {
+  max-height: 420px;
+  overflow-y: auto;
+  padding-right: 2px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.scenarioList::-webkit-scrollbar {
+  width: 4px;
+}
+
+.scenarioList::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--mantine-color-dark-4) 60%, transparent);
+  border-radius: 999px;
+}
+
+/* ── Role row (selected scenario preview) ───────────────────────────────── */
+.scenarioRoleRow {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 14px 18px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--mantine-color-dark-8) 65%, transparent);
+  border: 1px solid color-mix(in srgb, var(--mantine-color-dark-4) 30%, transparent);
+}
+
+/* ── Empty state action cards ───────────────────────────────────────────── */
+.scenarioStartGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+@media (max-width: 600px) {
+  .scenarioStartGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.scenarioStartCard {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 24px 20px;
+  border-radius: 16px;
+  cursor: pointer;
+  text-align: left;
+  background: color-mix(in srgb, var(--mantine-color-dark-8) 80%, transparent);
+  border: 1.5px solid color-mix(in srgb, var(--mantine-color-dark-4) 40%, transparent);
+  transition:
+    background 180ms ease,
+    border-color 180ms ease,
+    transform 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.scenarioStartCard:hover {
+  background: color-mix(in srgb, var(--mantine-color-blue-9) 22%, var(--mantine-color-dark-8));
+  border-color: color-mix(in srgb, var(--mantine-color-blue-5) 48%, transparent);
+  transform: translateY(-2px);
+  box-shadow: 0 12px 32px color-mix(in srgb, var(--mantine-color-dark-9) 45%, transparent);
+}
+
+.scenarioStartCard:focus-visible {
+  outline: 2px solid var(--mantine-color-blue-5);
+  outline-offset: 2px;
 }
 .crmCard {
   background: color-mix(in srgb, var(--mantine-color-dark-8) 94%, transparent);
@@ -598,6 +701,40 @@
 .reviewRow:last-child {
   border-bottom: none;
   padding-bottom: 0;
+}
+
+.uploadCard {
+  background: color-mix(in srgb, var(--mantine-color-dark-8) 94%, transparent);
+  border: 1px solid color-mix(in srgb, var(--mantine-color-dark-4) 40%, transparent);
+}
+
+.uploadDropzone {
+  border: 2px dashed color-mix(in srgb, var(--mantine-color-blue-6) 45%, transparent);
+  border-radius: 20px;
+  padding: 28px 20px;
+  min-height: 180px;
+  background: color-mix(in srgb, var(--mantine-color-dark-9) 70%, transparent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    border-color 180ms ease,
+    transform 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.uploadDropzone:hover {
+  border-color: color-mix(in srgb, var(--mantine-color-blue-6) 65%, transparent);
+  box-shadow: 0 18px 32px color-mix(in srgb, var(--mantine-color-dark-9) 50%, transparent);
+}
+
+.uploadEmptyState {
+  background: color-mix(in srgb, var(--mantine-color-dark-9) 55%, transparent);
+  border: 1px dashed color-mix(in srgb, var(--mantine-color-dark-4) 45%, transparent);
+}
+
+.uploadFileName {
+  word-break: break-word;
 }
 
 @keyframes brainFloat {

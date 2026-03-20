@@ -93,6 +93,9 @@ export default function ClientLayerComponent({ children }: { children: React.Rea
     if (pathname.startsWith('/studio/sessions')) {
       return { page: 'Sessions' as const, nav: 'Sessions' as const }
     }
+    if (pathname.startsWith('/studio/scenarios')) {
+      return { page: 'Sessions' as const, nav: 'Sessions' as const }
+    }
     if (pathname.startsWith('/studio/analytics')) {
       return { page: 'Analytics' as const, nav: 'Analytics' as const }
     }

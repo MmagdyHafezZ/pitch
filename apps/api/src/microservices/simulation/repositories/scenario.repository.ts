@@ -1,9 +1,13 @@
 import { Injectable } from '@nestjs/common';
-import { Scenario, Prisma } from '@prisma/simulation-client';
+import {
+  Prisma,
+  Scenario,
+  ScenarioVisibility,
+} from '@prisma/simulation-client';
 import { SimulationPrismaService } from '../prisma/simulation-prisma.service';
 
 export interface FindScenarioFilters {
-  orgId?: string;
+  where?: Prisma.ScenarioWhereInput;
 }
 
 @Injectable()
@@ -11,15 +15,9 @@ export class ScenarioRepository {
   constructor(private readonly prisma: SimulationPrismaService) {}
 
   async findMany(filters?: FindScenarioFilters): Promise<Scenario[]> {
-    const where: Prisma.ScenarioWhereInput = {};
-
-    if (filters?.orgId) {
-      where.orgId = filters.orgId;
-    }
-
     return await this.prisma.client.scenario.findMany({
-      where,
-      orderBy: { createdAt: 'desc' },
+      where: filters?.where,
+      orderBy: [{ updatedAt: 'desc' }, { createdAt: 'desc' }],
     });
   }
 
@@ -31,6 +29,8 @@ export class ScenarioRepository {
 
   async create(data: {
     orgId: string;
+    createdByUserId?: string | null;
+    visibility: ScenarioVisibility;
     name: string;
     description?: string | null;
     config?: Prisma.InputJsonValue | null;
@@ -38,10 +38,43 @@ export class ScenarioRepository {
     return await this.prisma.client.scenario.create({
       data: {
         orgId: data.orgId,
+        createdByUserId: data.createdByUserId ?? undefined,
+        visibility: data.visibility,
         name: data.name,
         description: data.description ?? undefined,
         config: data.config ?? undefined,
       },
+    });
+  }
+
+  async update(
+    id: string,
+    data: {
+      visibility?: ScenarioVisibility;
+      name?: string;
+      description?: string | null;
+      config?: Prisma.InputJsonValue | null;
+    },
+  ): Promise<Scenario> {
+    return await this.prisma.client.scenario.update({
+      where: { id },
+      data: {
+        visibility: data.visibility,
+        name: data.name,
+        description: data.description,
+        config:
+          data.config === null
+            ? Prisma.JsonNull
+            : data.config === undefined
+              ? undefined
+              : data.config,
+      },
+    });
+  }
+
+  async delete(id: string): Promise<Scenario> {
+    return await this.prisma.client.scenario.delete({
+      where: { id },
     });
   }
 }

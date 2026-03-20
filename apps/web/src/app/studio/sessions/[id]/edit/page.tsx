@@ -39,7 +39,7 @@ import { useTtsProviders } from '@/features/tts'
 import { useLLMProviders } from '@/features/sessions/hooks/useLLMProviders'
 import { useCrm } from '@/features/crm'
 import { BasicsStep } from '../../create/components/BasicsStep'
-import { ScenarioStep, type ScenarioOption } from '../../create/components/ScenarioStep'
+import { ScenarioStep } from '../../create/components/ScenarioStep'
 import { PersonaStep } from '../../create/components/PersonaStep'
 import { AIBrainStep } from '../../create/components/AIBrainStep'
 import { CrmStep } from '../../create/components/CrmStep'
@@ -49,6 +49,20 @@ import { SessionConfigForm, Persona, PersonaTraits } from '../../create/lib/type
 import { getBrainCompatibleModels, getPreferredBrainModel } from '../../create/lib/brain-models'
 import classes from '../../create/create-session.module.css'
 import { useI18n } from '@/features/i18n'
+import type {
+  EditableScenarioDraft,
+  Scenario,
+  ScenarioListScope,
+} from '@/features/scenarios/types/scenario.types'
+import {
+  alignPitchRolePair,
+  buildInlineSessionScenario,
+  createEditableScenarioDraft,
+  draftFromScenario,
+  draftFromSessionScenario,
+  getScenarioSummary,
+  inferScenarioRolePair,
+} from '@/features/scenarios/utils/scenario-editor'
 import {
   getSavedCrmSessionConnections,
   normalizeCrmSelections,
@@ -68,48 +82,18 @@ const resolveConfig = (session: Session | null) => {
   return session.sessionConfig as Record<string, any>
 }
 
-const COUNTERPART_ROLE_PATTERN =
-  /client|customer|buyer|prospect|stakeholder|procurement|decision maker|decision-maker|economic buyer|cto|cfo|cio|vp/i
+const mergeScenarios = (...groups: Scenario[][]): Scenario[] => {
+  const unique = new Map<string, Scenario>()
 
-const PITCHER_ROLE_PATTERN =
-  /sales|seller|pitch|account executive|account manager|sales rep|representative|bdr|sdr|business development|founder|consultant/i
-
-const pickString = (value: unknown): string | undefined =>
-  typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined
-
-const normalizeRole = (value: string | undefined): string | undefined =>
-  value ? value.trim().replace(/\s+/g, ' ').toLowerCase() : undefined
-
-const alignPitchRolePair = (
-  aiRole?: string,
-  userRole?: string
-): { aiRole?: string; userRole?: string } => {
-  let resolvedAiRole = pickString(aiRole)
-  let resolvedUserRole = pickString(userRole)
-
-  if (
-    resolvedAiRole &&
-    resolvedUserRole &&
-    PITCHER_ROLE_PATTERN.test(resolvedAiRole.toLowerCase()) &&
-    COUNTERPART_ROLE_PATTERN.test(resolvedUserRole.toLowerCase())
-  ) {
-    const previousAiRole = resolvedAiRole
-    resolvedAiRole = resolvedUserRole
-    resolvedUserRole = previousAiRole
+  for (const group of groups) {
+    for (const scenario of group) {
+      unique.set(scenario.id, scenario)
+    }
   }
 
-  if (
-    resolvedAiRole &&
-    resolvedUserRole &&
-    normalizeRole(resolvedAiRole) === normalizeRole(resolvedUserRole)
-  ) {
-    resolvedAiRole = undefined
-  }
-
-  return {
-    aiRole: resolvedAiRole,
-    userRole: resolvedUserRole,
-  }
+  return Array.from(unique.values()).sort(
+    (left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime()
+  )
 }
 
 const scrollTrackByCard = (container: HTMLDivElement, direction: 'left' | 'right') => {
@@ -204,9 +188,15 @@ export default function EditSessionPage() {
   const [language, setLanguage] = useState('en-US')
   const [durationMinutes, setDurationMinutes] = useState(30)
 
-  const [scenarios, setScenarios] = useState<ScenarioOption[]>([])
+  const [savedScenarios, setSavedScenarios] = useState<Scenario[]>([])
   const [scenariosLoading, setScenariosLoading] = useState(false)
+  const [scenarioScope, setScenarioScope] = useState<ScenarioListScope>('mine')
+  const [scenarioSearchQuery, setScenarioSearchQuery] = useState('')
+  const [scenarioWorkspaceId, setScenarioWorkspaceId] = useState<string | null>(null)
   const [selectedScenarioId, setSelectedScenarioId] = useState<string | null>(null)
+  const [drafts, setDrafts] = useState<EditableScenarioDraft[]>([])
+  const [activeDraftId, setActiveDraftId] = useState<string | null>(null)
+  const [selectedDraftId, setSelectedDraftId] = useState<string | null>(null)
   const [scenarioTopic, setScenarioTopic] = useState('')
   const [scenarioObjective, setScenarioObjective] = useState('')
   const [scenarioContext, setScenarioContext] = useState('')
@@ -214,6 +204,7 @@ export default function EditSessionPage() {
   const [userRole, setUserRole] = useState('')
   const [scenarioGenerating, setScenarioGenerating] = useState(false)
   const [scenarioCount, setScenarioCount] = useState(3)
+  const [isSavingDraft, setIsSavingDraft] = useState(false)
 
   const [llmProvider, setLlmProvider] = useState<string | null>(null)
   const [llmModel, setLlmModel] = useState<string | null>(null)
@@ -251,9 +242,13 @@ export default function EditSessionPage() {
   const personaScrollRef = useRef<HTMLDivElement | null>(null)
   const modelScrollRef = useRef<HTMLDivElement | null>(null)
   const languageTouchedRef = useRef(false)
+  const scenarioWorkspaceTouchedRef = useRef(false)
 
   const session = currentSession?.id === sessionId ? currentSession : null
   const isReadOnlySession = Boolean(session && user?.id && session.userId !== user.id)
+  const selectedSavedScenario =
+    savedScenarios.find((scenario) => scenario.id === selectedScenarioId) ?? null
+  const selectedDraft = drafts.find((draft) => draft.draftId === selectedDraftId) ?? null
 
   useEffect(() => {
     if (!session && !languageTouchedRef.current) {
@@ -310,27 +305,93 @@ export default function EditSessionPage() {
   }, [crmStatus?.providerEmail])
 
   useEffect(() => {
-    const orgId = selectedTeamId || user?.id
-    if (!orgId) return
+    if (scenarioWorkspaceTouchedRef.current) {
+      return
+    }
+
+    if (session) {
+      setScenarioWorkspaceId(teams.some((team) => team.id === session.orgId) ? session.orgId : null)
+      return
+    }
+
+    if (selectedTeamId !== null) {
+      setScenarioWorkspaceId(selectedTeamId)
+      return
+    }
+
+    if (activeTeamId) {
+      setScenarioWorkspaceId(activeTeamId)
+    }
+  }, [activeTeamId, selectedTeamId, session, teams])
+
+  useEffect(() => {
+    if (!user?.id) return
+
+    if (scenarioScope === 'team' && !scenarioWorkspaceId) {
+      setSavedScenarios((current) => {
+        if (!selectedScenarioId) {
+          return []
+        }
+
+        const selectedScenario = current.find((scenario) => scenario.id === selectedScenarioId)
+        return selectedScenario ? [selectedScenario] : []
+      })
+      return
+    }
+
+    let cancelled = false
     const fetchScenarios = async () => {
       setScenariosLoading(true)
       try {
-        const response = await api.scenarios.getAll({ orgId })
-        const list = response?.scenarios ?? response ?? []
-        setScenarios(list)
-      } catch (err) {
-        notifications.show({
-          title: 'Warning',
-          message: 'Failed to load scenarios.',
-          color: 'yellow',
+        const response = await api.scenarios.list({
+          scope: scenarioScope,
+          orgId:
+            scenarioScope === 'public'
+              ? undefined
+              : scenarioWorkspaceId || selectedTeamId || user.id,
+          query: scenarioSearchQuery.trim() || undefined,
         })
+
+        if (!cancelled) {
+          const nextScenarios = response.scenarios ?? []
+          setSavedScenarios((current) => {
+            if (!selectedScenarioId) {
+              return nextScenarios
+            }
+
+            const selectedScenario = current.find((scenario) => scenario.id === selectedScenarioId)
+            return selectedScenario
+              ? mergeScenarios(nextScenarios, [selectedScenario])
+              : nextScenarios
+          })
+        }
+      } catch (err) {
+        if (!cancelled) {
+          notifications.show({
+            title: 'Warning',
+            message: 'Failed to load scenarios.',
+            color: 'yellow',
+          })
+        }
       } finally {
-        setScenariosLoading(false)
+        if (!cancelled) {
+          setScenariosLoading(false)
+        }
       }
     }
 
-    fetchScenarios()
-  }, [selectedTeamId, user?.id])
+    void fetchScenarios()
+    return () => {
+      cancelled = true
+    }
+  }, [
+    scenarioScope,
+    scenarioSearchQuery,
+    scenarioWorkspaceId,
+    selectedScenarioId,
+    selectedTeamId,
+    user?.id,
+  ])
 
   useEffect(() => {
     const fetchPersonas = async () => {
@@ -355,12 +416,11 @@ export default function EditSessionPage() {
   useEffect(() => {
     if (!session) return
 
-    setSelectedTeamId(session.orgId ?? activeTeamId ?? null)
+    setSelectedTeamId(teams.some((team) => team.id === session.orgId) ? session.orgId : null)
     setSessionName(session.name ?? '')
     setSessionType(session.type ?? null)
     setTags(session.tags ?? [])
     setLanguage(session.language ?? locale)
-    setSelectedScenarioId(session.scenarioId ?? null)
     setSelectedPersona(session.personaId ?? null)
 
     const config = resolveConfig(session)
@@ -399,13 +459,32 @@ export default function EditSessionPage() {
       setTtsModel(config.ttsModel)
     }
 
+    const resolvedScenarioId =
+      config.scenario?.scenarioId || session.scenarioId || session.scenario?.id || null
+
     if (config.scenario) {
       setScenarioTopic(config.scenario.topic || '')
       setScenarioObjective(config.scenario.objective || '')
       setScenarioContext(config.scenario.context || '')
-      if (config.scenario.scenarioId) {
-        setSelectedScenarioId(config.scenario.scenarioId)
+      if (resolvedScenarioId) {
+        setSelectedScenarioId(resolvedScenarioId)
+        setSelectedDraftId(null)
+        setActiveDraftId(null)
+        setDrafts([])
+      } else {
+        const sessionDraft = draftFromSessionScenario(config.scenario, session.name ?? undefined)
+        if (sessionDraft) {
+          setDrafts([sessionDraft])
+          setActiveDraftId(sessionDraft.draftId)
+          setSelectedDraftId(sessionDraft.draftId)
+          setSelectedScenarioId(null)
+        }
       }
+    } else {
+      setSelectedScenarioId(resolvedScenarioId)
+      setSelectedDraftId(null)
+      setActiveDraftId(null)
+      setDrafts([])
     }
 
     if (config.crm?.selections) {
@@ -414,13 +493,44 @@ export default function EditSessionPage() {
       setSelectedLeads(config.crm.selections.leads ?? [])
       setSelectedContacts(config.crm.selections.contacts ?? [])
     }
-  }, [session, activeTeamId, locale])
+  }, [session, locale, teams])
 
   useEffect(() => {
     if (activeTeamId && selectedTeamId === null && !session) {
       setSelectedTeamId(activeTeamId)
     }
   }, [activeTeamId, selectedTeamId, session])
+
+  useEffect(() => {
+    if (!selectedScenarioId) return
+
+    if (savedScenarios.some((scenario) => scenario.id === selectedScenarioId)) {
+      return
+    }
+
+    let cancelled = false
+    const loadScenario = async () => {
+      try {
+        const scenario = await api.scenarios.getById(selectedScenarioId)
+        if (!cancelled) {
+          setSavedScenarios((current) => mergeScenarios(current, [scenario]))
+        }
+      } catch {
+        if (!cancelled) {
+          notifications.show({
+            title: 'Scenario unavailable',
+            message: 'The saved scenario attached to this session could not be loaded.',
+            color: 'yellow',
+          })
+        }
+      }
+    }
+
+    void loadScenario()
+    return () => {
+      cancelled = true
+    }
+  }, [selectedScenarioId, savedScenarios])
 
   useEffect(() => {
     if (ttsLoading || ttsProviders.length === 0) {
@@ -466,6 +576,19 @@ export default function EditSessionPage() {
     const derivedAccent = traits.voice?.language || traits.voiceProfile || 'Persona-based'
     setAccent(derivedAccent)
   }, [selectedPersonaData])
+
+  useEffect(() => {
+    const source = selectedDraft ?? selectedSavedScenario
+    if (!source) return
+
+    const inferredRoles = inferScenarioRolePair(source.config)
+    if (!aiRole.trim() && inferredRoles.aiRole) {
+      setAiRole(inferredRoles.aiRole)
+    }
+    if (!userRole.trim() && inferredRoles.userRole) {
+      setUserRole(inferredRoles.userRole)
+    }
+  }, [selectedDraft, selectedSavedScenario, aiRole, userRole])
 
   const filteredPersonas = personas.filter((persona) => {
     const term = personaSearch.trim().toLowerCase()
@@ -624,6 +747,136 @@ export default function EditSessionPage() {
     setErrors({})
   }
 
+  const applyScenarioSummaryToBrief = (
+    summary: ReturnType<typeof getScenarioSummary>,
+    fallbackName?: string
+  ) => {
+    if (!summary) return
+
+    setScenarioTopic(fallbackName || summary.name || '')
+    setScenarioObjective(summary.objective || '')
+    setScenarioContext(summary.background || '')
+
+    const alignedRoles = alignPitchRolePair(summary.aiRole, summary.userRole)
+    setAiRole(alignedRoles.aiRole || '')
+    setUserRole(alignedRoles.userRole || '')
+
+    if (summary.durationMinutes) {
+      setDurationMinutes(summary.durationMinutes)
+    }
+  }
+
+  const handleSelectSavedScenario = (scenarioId: string | null) => {
+    setActiveDraftId(null)
+    setSelectedScenarioId(scenarioId)
+    setSelectedDraftId(null)
+
+    if (!scenarioId) {
+      return
+    }
+
+    const scenario = savedScenarios.find((entry) => entry.id === scenarioId)
+    applyScenarioSummaryToBrief(getScenarioSummary(scenario), scenario?.name)
+  }
+
+  const handleSelectDraft = (draftId: string) => {
+    setActiveDraftId(draftId)
+  }
+
+  const handleCreateDraft = () => {
+    const rolePair = alignPitchRolePair(aiRole, userRole)
+    const draft = createEditableScenarioDraft({
+      name: scenarioTopic.trim() || session?.name || 'New scenario',
+      description: scenarioContext.trim(),
+      config: {
+        objective: scenarioObjective,
+        background: scenarioContext,
+        context: scenarioContext,
+        durationMinutes,
+        language,
+        roles: {
+          user: rolePair.userRole,
+          assistant: rolePair.aiRole,
+        },
+      },
+    })
+
+    setDrafts((current) => [draft, ...current])
+    setActiveDraftId(draft.draftId)
+    setSelectedScenarioId(null)
+    setSelectedDraftId(null)
+  }
+
+  const handleChangeActiveDraft = (value: EditableScenarioDraft) => {
+    setDrafts((current) =>
+      current.map((draft) => (draft.draftId === value.draftId ? value : draft))
+    )
+  }
+
+  const handleUseActiveDraft = () => {
+    const activeDraft = drafts.find((draft) => draft.draftId === activeDraftId)
+    if (!activeDraft) {
+      return
+    }
+
+    setSelectedScenarioId(null)
+    setSelectedDraftId(activeDraft.draftId)
+    applyScenarioSummaryToBrief(getScenarioSummary(activeDraft), activeDraft.name)
+  }
+
+  const handleSaveActiveDraft = async () => {
+    const orgId = scenarioWorkspaceId || selectedTeamId || user?.id || session?.orgId
+    const activeDraft = drafts.find((draft) => draft.draftId === activeDraftId)
+
+    if (!orgId || !activeDraft) {
+      notifications.show({
+        title: 'Draft unavailable',
+        message: 'Choose a workspace and a draft before saving to the library.',
+        color: 'yellow',
+      })
+      return
+    }
+
+    setIsSavingDraft(true)
+    try {
+      const scenario = await api.scenarios.create({
+        orgId,
+        name: activeDraft.name,
+        description: activeDraft.description ?? '',
+        visibility:
+          activeDraft.visibility === 'TEAM' && !scenarioWorkspaceId
+            ? 'PRIVATE'
+            : activeDraft.visibility,
+        config: activeDraft.config ?? {},
+      })
+
+      setSavedScenarios((current) => mergeScenarios([scenario], current))
+      setActiveDraftId(null)
+      setSelectedScenarioId(scenario.id)
+      setSelectedDraftId(null)
+      applyScenarioSummaryToBrief(getScenarioSummary(scenario), scenario.name)
+
+      notifications.show({
+        title: 'Scenario saved',
+        message: `${scenario.name} is now available in your scenario library.`,
+        color: 'green',
+      })
+    } catch (err) {
+      notifications.show({
+        title: 'Save failed',
+        message: err instanceof Error ? err.message : 'Unable to save this draft right now.',
+        color: 'red',
+      })
+    } finally {
+      setIsSavingDraft(false)
+    }
+  }
+
+  const handleScenarioWorkspaceChange = (value: string | null) => {
+    scenarioWorkspaceTouchedRef.current = true
+    setScenarioWorkspaceId(value)
+  }
+
   const handleGenerateScenario = async () => {
     const orgId = selectedTeamId || user?.id
     if (!orgId) {
@@ -654,9 +907,23 @@ export default function EditSessionPage() {
         sessionConfig: {
           difficulty,
           durationMinutes,
+          ...alignPitchRolePair(aiRole, userRole),
         },
         personaId: selectedPersona || undefined,
-        crmContextId: session?.crmContextId,
+        personaSnapshot: selectedPersonaData
+          ? {
+              id: selectedPersonaData.id,
+              name: selectedPersonaData.name,
+              traits: selectedPersonaData.traits ?? {},
+            }
+          : undefined,
+        crmContextId: session?.crmContextId ?? undefined,
+        crmSelections: {
+          accounts: selectedAccounts,
+          opportunities: selectedOpportunities,
+          leads: selectedLeads,
+          contacts: selectedContacts,
+        },
         userSnapshot: user
           ? {
               id: user.id,
@@ -672,24 +939,18 @@ export default function EditSessionPage() {
         orgSnapshot: session?.orgSnapshot ?? undefined,
         objective: scenarioObjective,
         context: scenarioContext,
-        requestedBy: user?.id,
         count: scenarioCount,
       })
 
-      const generated = response?.scenarios ?? []
+      const generated = (response?.scenarios ?? []).map((scenario) => draftFromScenario(scenario))
       if (generated.length > 0) {
-        setSelectedScenarioId(generated[0].id)
-        setScenarios((current) => {
-          const existingIds = new Set(current.map((scenario) => scenario.id))
-          const next = [
-            ...generated.filter((scenario: ScenarioOption) => !existingIds.has(scenario.id)),
-            ...current,
-          ]
-          return next
-        })
+        setDrafts((current) => [...generated, ...current])
+        setActiveDraftId(generated[0]?.draftId ?? null)
+        setSelectedScenarioId(null)
+        setSelectedDraftId(null)
         notifications.show({
           title: 'Scenario generated',
-          message: `We created ${generated.length} scenarios and selected one.`,
+          message: `We created ${generated.length} editable drafts.`,
           color: 'green',
         })
       }
@@ -812,6 +1073,8 @@ export default function EditSessionPage() {
     setIsSubmitting(true)
 
     try {
+      const persistedScenarioId = selectedSavedScenario?.id
+
       if (saveCrmForFutureUse && user?.id && crmStatus?.connected) {
         const nextConnection: SavedCrmSessionConnection = {
           id: `${Date.now()}`,
@@ -864,12 +1127,13 @@ export default function EditSessionPage() {
         }
       }
 
-      sessionConfig.scenario = {
+      sessionConfig.scenario = buildInlineSessionScenario({
         topic: scenarioTopic,
         objective: scenarioObjective,
         context: scenarioContext,
-        scenarioId: selectedScenarioId,
-      }
+        selectedScenario: selectedSavedScenario,
+        draft: selectedDraft,
+      })
 
       sessionConfig.crm = {
         provider: 'salesforce',
@@ -908,7 +1172,7 @@ export default function EditSessionPage() {
         type: sessionType as SessionType,
         tags: tags.length > 0 ? tags : undefined,
         language: language || undefined,
-        scenarioId: selectedScenarioId ?? undefined,
+        scenarioId: persistedScenarioId ?? undefined,
         personaId: selectedPersona ?? undefined,
         crmContextId: session.crmContextId ?? undefined,
         sessionConfig,
@@ -978,10 +1242,26 @@ export default function EditSessionPage() {
       icon: <IconSparkles size={18} />,
       content: (
         <ScenarioStep
-          scenariosLoading={scenariosLoading}
-          scenarios={scenarios}
+          teams={teams}
+          savedScenariosLoading={scenariosLoading}
+          savedScenarios={savedScenarios}
+          scenarioScope={scenarioScope}
+          onScenarioScopeChange={setScenarioScope}
+          scenarioSearchQuery={scenarioSearchQuery}
+          onScenarioSearchQueryChange={setScenarioSearchQuery}
+          scenarioWorkspaceId={scenarioWorkspaceId}
+          onScenarioWorkspaceChange={handleScenarioWorkspaceChange}
           selectedScenarioId={selectedScenarioId}
-          setSelectedScenarioId={setSelectedScenarioId}
+          onSelectSavedScenario={handleSelectSavedScenario}
+          drafts={drafts}
+          activeDraftId={activeDraftId}
+          selectedDraftId={selectedDraftId}
+          onSelectDraft={handleSelectDraft}
+          onChangeActiveDraft={handleChangeActiveDraft}
+          onUseActiveDraft={handleUseActiveDraft}
+          onSaveActiveDraft={handleSaveActiveDraft}
+          onCreateDraft={handleCreateDraft}
+          isSavingDraft={isSavingDraft}
           scenarioTopic={scenarioTopic}
           setScenarioTopic={setScenarioTopic}
           scenarioObjective={scenarioObjective}
@@ -998,6 +1278,7 @@ export default function EditSessionPage() {
           setScenarioCount={setScenarioCount}
           onGenerate={handleGenerateScenario}
           isGenerating={scenarioGenerating}
+          allowTeamVisibility={Boolean(scenarioWorkspaceId)}
           errors={errors}
         />
       ),
@@ -1123,8 +1404,8 @@ export default function EditSessionPage() {
           scenarioTopic={scenarioTopic}
           scenarioObjective={scenarioObjective}
           scenarioContext={scenarioContext}
-          scenarioId={selectedScenarioId}
-          scenarios={scenarios}
+          selectedScenario={selectedSavedScenario}
+          selectedDraft={selectedDraft}
           aiRole={aiRole}
           userRole={userRole}
           durationMinutes={durationMinutes}

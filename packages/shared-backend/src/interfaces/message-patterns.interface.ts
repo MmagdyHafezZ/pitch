@@ -131,6 +131,8 @@ export const SIMULATION_SERVICE_PATTERNS = {
 
   GET_SCENARIO: 'simulation.scenario.get',
   LIST_SCENARIOS: 'simulation.scenario.list',
+  GENERATE_SCENARIO: 'simulation.scenario.generate',
+  GENERATE_SCENARIO_BATCH: 'simulation.scenario.generateBatch',
   CREATE_SCENARIO: 'simulation.scenario.create',
   UPDATE_SCENARIO: 'simulation.scenario.update',
   DELETE_SCENARIO: 'simulation.scenario.delete',
