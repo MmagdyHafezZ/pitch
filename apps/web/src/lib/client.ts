@@ -490,6 +490,22 @@ export const api = {
       }),
   },
 
+  s3: {
+    presignUpload: (input: {
+      bucket: string
+      key: string
+      expiresIn?: number
+    }) =>
+      apiRequest<{ url: string }>('/s3/presigned/upload', {
+        method: 'POST',
+        body: JSON.stringify({
+          bucket: input.bucket,
+          key: input.key,
+          expiresInSeconds: input.expiresIn,
+        }),
+      }),
+  },
+
   sessions: {
     getAll: (params?: {
       userId?: string
