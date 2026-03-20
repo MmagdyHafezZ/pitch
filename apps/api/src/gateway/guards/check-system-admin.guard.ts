@@ -21,22 +21,26 @@ function parseEmails(raw: string | undefined): string[] {
 export class CheckSystemAdmin implements CanActivate {
   private readonly logger = new Logger(CheckSystemAdmin.name);
 
-  async canActivate(context: ExecutionContext): Promise<boolean> {
+  canActivate(context: ExecutionContext): Promise<boolean> {
     const req = context.switchToHttp().getRequest<RequestWithUser>();
     const email = req.user?.email?.trim().toLowerCase();
 
     if (!email) {
       this.logger.warn('System admin check failed: authenticated user missing');
-      throw new UnauthorizedException('Access token is required');
+      return Promise.reject(
+        new UnauthorizedException('Access token is required'),
+      );
     }
 
     if (this.isAllowed(email)) {
       this.logger.log(`User ${email} is a system admin.`);
-      return true;
+      return Promise.resolve(true);
     }
 
     this.logger.warn(`System admin check failed for ${email}`);
-    throw new ForbiddenException('System administrator access is required');
+    return Promise.reject(
+      new ForbiddenException('System administrator access is required'),
+    );
   }
 
   private isAllowed(email: string): boolean {

@@ -524,7 +524,9 @@ export class AdminGatewayController {
     }
 
     const data = Array.isArray(result.value)
-      ? (result.value.filter(this.isRecord) as Array<Record<string, unknown>>)
+      ? result.value.filter((item): item is Record<string, unknown> =>
+          this.isRecord(item),
+        )
       : [];
     return {
       status: 'ok',
@@ -555,12 +557,14 @@ export class AdminGatewayController {
 
   private extractSessionItems(value: unknown): Array<Record<string, unknown>> {
     if (Array.isArray(value)) {
-      return value.filter(this.isRecord) as Array<Record<string, unknown>>;
+      return value.filter((item): item is Record<string, unknown> =>
+        this.isRecord(item),
+      );
     }
     if (this.isRecord(value) && Array.isArray(value.sessions)) {
-      return value.sessions.filter(this.isRecord) as Array<
-        Record<string, unknown>
-      >;
+      return value.sessions.filter((item): item is Record<string, unknown> =>
+        this.isRecord(item),
+      );
     }
     return [];
   }

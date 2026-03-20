@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import { HttpException } from '@nestjs/common';
 import type { ClientProxy } from '@nestjs/microservices';
 import { of, throwError } from 'rxjs';
@@ -8,6 +7,16 @@ import {
 } from '@pitch/shared-backend/interfaces/message-patterns.interface';
 import type { UserClaims } from '@pitch/shared-backend/interfaces/user-claims.interface';
 import { AdminGatewayController } from './admin-gateway.controller';
+
+type MockResponse = ReturnType<ClientProxy['send']>;
+
+function responseOf<T>(value: T): MockResponse {
+  return of(value) as MockResponse;
+}
+
+function errorResponse(error: unknown): MockResponse {
+  return throwError(() => error) as MockResponse;
+}
 
 describe('AdminGatewayController', () => {
   let controller: AdminGatewayController;
@@ -41,25 +50,25 @@ describe('AdminGatewayController', () => {
   it('aggregates overview metrics and warnings', async () => {
     userClient.send
       .mockReturnValueOnce(
-        of([
+        responseOf([
           { id: 'u1', isActive: true },
           { id: 'u2', isActive: false },
-        ]) as any,
+        ]),
       )
-      .mockReturnValueOnce(of([{ id: 't1' }]) as any)
-      .mockReturnValueOnce(of([{ id: 'p1' }, { id: 'p2' }]) as any)
+      .mockReturnValueOnce(responseOf([{ id: 't1' }]))
+      .mockReturnValueOnce(responseOf([{ id: 'p1' }, { id: 'p2' }]))
       .mockReturnValueOnce(
-        throwError(() => new Error('subscriptions unavailable')) as any,
+        errorResponse(new Error('subscriptions unavailable')),
       );
 
     simulationClient.send.mockReturnValue(
-      of({
+      responseOf({
         sessions: [
           { id: 's1', status: 'active' },
           { id: 's2', status: 'ended' },
         ],
         total: 2,
-      }) as any,
+      }),
     );
 
     const result = await controller.getOverview(userClaims);
@@ -78,29 +87,28 @@ describe('AdminGatewayController', () => {
   });
 
   it('forwards getUsers through the admin namespace', async () => {
-    userClient.send.mockReturnValue(of([{ id: 'user-1' }]) as any);
+    userClient.send.mockReturnValue(responseOf([{ id: 'user-1' }]));
 
     const result = await controller.getUsers(userClaims);
 
     expect(result).toEqual([{ id: 'user-1' }]);
-    expect(userClient.send).toHaveBeenCalledWith(
-      USER_SERVICE_PATTERNS.GET_USERS,
-      { userClaims },
-    );
+    expect(userClient.send.mock.calls).toEqual([
+      [USER_SERVICE_PATTERNS.GET_USERS, { userClaims }],
+    ]);
   });
 
   it('aggregates overview metrics when all dependencies succeed', async () => {
     userClient.send
-      .mockReturnValueOnce(of([{ id: 'u1', isActive: true }]) as any)
-      .mockReturnValueOnce(of([{ id: 't1' }, { id: 't2' }]) as any)
-      .mockReturnValueOnce(of([{ id: 'p1' }]) as any)
-      .mockReturnValueOnce(of([{ id: 'sub-1' }]) as any);
+      .mockReturnValueOnce(responseOf([{ id: 'u1', isActive: true }]))
+      .mockReturnValueOnce(responseOf([{ id: 't1' }, { id: 't2' }]))
+      .mockReturnValueOnce(responseOf([{ id: 'p1' }]))
+      .mockReturnValueOnce(responseOf([{ id: 'sub-1' }]));
 
     simulationClient.send.mockReturnValue(
-      of([
+      responseOf([
         { id: 's1', status: 'active' },
         { id: 's2', status: 'queued' },
-      ]) as any,
+      ]),
     );
 
     const result = await controller.getOverview(userClaims);
@@ -120,15 +128,15 @@ describe('AdminGatewayController', () => {
 
   it('ignores malformed overview payloads instead of inflating counts', async () => {
     userClient.send
-      .mockReturnValueOnce(of([{ id: 'u1' }, null, 'bad-data']) as any)
-      .mockReturnValueOnce(of('not-an-array') as any)
-      .mockReturnValueOnce(of([{ id: 'p1' }, 42]) as any)
-      .mockReturnValueOnce(of(undefined) as any);
+      .mockReturnValueOnce(responseOf([{ id: 'u1' }, null, 'bad-data']))
+      .mockReturnValueOnce(responseOf('not-an-array'))
+      .mockReturnValueOnce(responseOf([{ id: 'p1' }, 42]))
+      .mockReturnValueOnce(responseOf(undefined));
 
     simulationClient.send.mockReturnValue(
-      of({
+      responseOf({
         sessions: [{ id: 's1', status: 'active' }, null, 'bad-event'],
-      }) as any,
+      }),
     );
 
     const result = await controller.getOverview(userClaims);
@@ -283,18 +291,18 @@ describe('AdminGatewayController', () => {
   ])(
     '%s forwards to the user microservice correctly',
     async (_name, invoke, pattern, payload, response) => {
-      userClient.send.mockReturnValue(of(response) as any);
+      userClient.send.mockReturnValue(responseOf(response));
 
       const result = await invoke();
 
       expect(result).toEqual(response);
-      expect(userClient.send).toHaveBeenCalledWith(pattern, payload);
+      expect(userClient.send.mock.calls).toEqual([[pattern, payload]]);
     },
   );
 
   it('listSessions parses numeric filters before forwarding', async () => {
     simulationClient.send.mockReturnValue(
-      of({ sessions: [], total: 0 }) as any,
+      responseOf({ sessions: [], total: 0 }),
     );
 
     await controller.listSessions(
@@ -307,21 +315,23 @@ describe('AdminGatewayController', () => {
       userClaims,
     );
 
-    expect(simulationClient.send).toHaveBeenCalledWith(
-      SIMULATION_SERVICE_PATTERNS.LIST_SESSIONS,
-      {
-        limit: 25,
-        offset: 10,
-        status: 'active',
-        type: 'phone',
-        userClaims,
-      },
-    );
+    expect(simulationClient.send.mock.calls).toEqual([
+      [
+        SIMULATION_SERVICE_PATTERNS.LIST_SESSIONS,
+        {
+          limit: 25,
+          offset: 10,
+          status: 'active',
+          type: 'phone',
+          userClaims,
+        },
+      ],
+    ]);
   });
 
   it('listSessions drops invalid numeric filters', async () => {
     simulationClient.send.mockReturnValue(
-      of({ sessions: [], total: 0 }) as any,
+      responseOf({ sessions: [], total: 0 }),
     );
 
     await controller.listSessions(
@@ -329,15 +339,17 @@ describe('AdminGatewayController', () => {
       userClaims,
     );
 
-    expect(simulationClient.send).toHaveBeenCalledWith(
-      SIMULATION_SERVICE_PATTERNS.LIST_SESSIONS,
-      {
-        limit: undefined,
-        offset: undefined,
-        orgId: 'org-1',
-        userClaims,
-      },
-    );
+    expect(simulationClient.send.mock.calls).toEqual([
+      [
+        SIMULATION_SERVICE_PATTERNS.LIST_SESSIONS,
+        {
+          limit: undefined,
+          offset: undefined,
+          orgId: 'org-1',
+          userClaims,
+        },
+      ],
+    ]);
   });
 
   it.each([
@@ -358,47 +370,51 @@ describe('AdminGatewayController', () => {
   ])(
     '%s forwards to the simulation microservice correctly',
     async (_name, invoke, pattern, payload, response) => {
-      simulationClient.send.mockReturnValue(of(response) as any);
+      simulationClient.send.mockReturnValue(responseOf(response));
 
       const result = await invoke();
 
       expect(result).toEqual(response);
-      expect(simulationClient.send).toHaveBeenCalledWith(pattern, payload);
+      expect(simulationClient.send.mock.calls).toEqual([[pattern, payload]]);
     },
   );
 
   it('getSessionTimeline parses numeric limits before forwarding', async () => {
-    simulationClient.send.mockReturnValue(of([{ id: 'evt-1' }]) as any);
+    simulationClient.send.mockReturnValue(responseOf([{ id: 'evt-1' }]));
 
     await controller.getSessionTimeline('session-1', '15', userClaims);
 
-    expect(simulationClient.send).toHaveBeenCalledWith(
-      SIMULATION_SERVICE_PATTERNS.SESSION_TIMELINE,
-      {
-        sessionId: 'session-1',
-        limit: 15,
-        userClaims,
-      },
-    );
+    expect(simulationClient.send.mock.calls).toEqual([
+      [
+        SIMULATION_SERVICE_PATTERNS.SESSION_TIMELINE,
+        {
+          sessionId: 'session-1',
+          limit: 15,
+          userClaims,
+        },
+      ],
+    ]);
   });
 
   it('getSessionTimeline drops invalid numeric limits', async () => {
-    simulationClient.send.mockReturnValue(of([{ id: 'evt-1' }]) as any);
+    simulationClient.send.mockReturnValue(responseOf([{ id: 'evt-1' }]));
 
     await controller.getSessionTimeline('session-1', 'bad', userClaims);
 
-    expect(simulationClient.send).toHaveBeenCalledWith(
-      SIMULATION_SERVICE_PATTERNS.SESSION_TIMELINE,
-      {
-        sessionId: 'session-1',
-        limit: undefined,
-        userClaims,
-      },
-    );
+    expect(simulationClient.send.mock.calls).toEqual([
+      [
+        SIMULATION_SERVICE_PATTERNS.SESSION_TIMELINE,
+        {
+          sessionId: 'session-1',
+          limit: undefined,
+          userClaims,
+        },
+      ],
+    ]);
   });
 
   it('maps upstream failures to HttpException instances', async () => {
-    userClient.send.mockReturnValue(throwError(() => new Error('boom')) as any);
+    userClient.send.mockReturnValue(errorResponse(new Error('boom')));
 
     await expect(controller.getPlans(userClaims)).rejects.toBeInstanceOf(
       HttpException,
@@ -410,7 +426,7 @@ describe('AdminGatewayController', () => {
 
   it('falls back to the route-level error message when the upstream error has none', async () => {
     userClient.send.mockReturnValue(
-      throwError(() => ({ status: 503, code: 'SERVICE_DOWN' })) as any,
+      errorResponse({ status: 503, code: 'SERVICE_DOWN' }),
     );
 
     await expect(controller.getPlans(userClaims)).rejects.toMatchObject({
