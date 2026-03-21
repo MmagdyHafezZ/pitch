@@ -1309,7 +1309,7 @@ const richSessionSeeds = [
     sessionConfig: {
       multiTurnEnabled: true,
       durationMinutes: 24,
-      phoneProvider: 'twilio',
+      phoneProvider: 'vapi',
       voice: { provider: 'elevenlabs', style: 'calm' },
       stages: ['Risk Framing', 'Controls', 'Governance', 'Validation'],
     },
@@ -2195,7 +2195,7 @@ const richSessionSeeds = [
     sessionConfig: {
       multiTurnEnabled: true,
       durationMinutes: 18,
-      phone: { provider: 'twilio' },
+      phone: { provider: 'vapi' },
       stages: ['Recap', 'Objection', 'Proof', 'Commitment'],
     },
     conversation: [

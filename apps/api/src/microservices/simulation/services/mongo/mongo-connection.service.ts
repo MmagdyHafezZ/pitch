@@ -11,25 +11,24 @@ import mongoose, { Connection, Model, Schema } from 'mongoose';
 export class MongoConnectionService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(MongoConnectionService.name);
   private connection: Connection | null = null;
+  private mongoUrl: string | null = null;
+  private connectPromise: Promise<void> | null = null;
 
   constructor(private readonly configService: ConfigService) {}
 
   async onModuleInit() {
-    const mongoUrl =
-      this.configService.get<string>('MONGODB_URL') || process.env.MONGODB_URL;
+    const configuredMongoUrl =
+      this.configService.get<string>('MONGODB_URL') ??
+      process.env.MONGODB_URL ??
+      null;
+    this.mongoUrl = configuredMongoUrl;
 
-    if (!mongoUrl) {
+    if (!this.mongoUrl) {
       this.logger.warn('MONGODB_URL not configured; MongoDB disabled.');
       return;
     }
 
-    try {
-      this.connection = await mongoose.createConnection(mongoUrl).asPromise();
-      this.logger.log('Connected to MongoDB for simulation service.');
-    } catch (error) {
-      this.logger.error('Failed to connect to MongoDB:', error);
-      this.connection = null;
-    }
+    await this.connect();
   }
 
   async onModuleDestroy() {
@@ -37,6 +36,8 @@ export class MongoConnectionService implements OnModuleInit, OnModuleDestroy {
       await this.connection.close();
       this.connection = null;
     }
+
+    this.connectPromise = null;
   }
 
   isConnected(): boolean {
@@ -44,6 +45,58 @@ export class MongoConnectionService implements OnModuleInit, OnModuleDestroy {
       !!this.connection &&
       this.connection.readyState === mongoose.ConnectionStates.connected
     );
+  }
+
+  async waitUntilConnected(timeoutMs = 10000): Promise<boolean> {
+    if (this.isConnected()) {
+      return true;
+    }
+
+    if (!this.mongoUrl) {
+      return false;
+    }
+
+    const startedAt = Date.now();
+    while (Date.now() - startedAt < timeoutMs) {
+      if (this.isConnected()) {
+        return true;
+      }
+
+      await this.connect();
+
+      if (this.isConnected()) {
+        return true;
+      }
+
+      await new Promise<void>((resolve) => {
+        setTimeout(resolve, 250);
+      });
+    }
+
+    return this.isConnected();
+  }
+
+  private async connect(): Promise<void> {
+    if (this.isConnected() || this.connectPromise || !this.mongoUrl) {
+      return;
+    }
+
+    this.connectPromise = mongoose
+      .createConnection(this.mongoUrl)
+      .asPromise()
+      .then((connection) => {
+        this.connection = connection;
+        this.logger.log('Connected to MongoDB for simulation service.');
+      })
+      .catch((error: unknown) => {
+        this.logger.error('Failed to connect to MongoDB:', error);
+        this.connection = null;
+      })
+      .finally(() => {
+        this.connectPromise = null;
+      });
+
+    await this.connectPromise;
   }
 
   getModel<T>(name: string, schema: Schema<T>): Model<T> {

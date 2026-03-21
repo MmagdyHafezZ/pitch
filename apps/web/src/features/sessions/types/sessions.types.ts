@@ -150,6 +150,15 @@ export interface PhoneConfig {
   number: string
 }
 
+export type SessionAttachment = {
+  bucket: string
+  key: string
+  filename: string
+  contentType: string
+  size: number
+  uploadedAt: string
+}
+
 export interface VideoRuntimeConfig {
   status?: 'idle' | 'queued' | 'rendering' | 'ready' | 'failed' | string
   provider?: string
@@ -176,6 +185,7 @@ export interface SessionConfigData {
   llm?: LLMConfig
   voice?: VoiceConfig
   phone?: PhoneConfig
+  attachments?: SessionAttachment[]
   video?: VideoConfig
   multiTurnEnabled?: boolean
   tone?: string

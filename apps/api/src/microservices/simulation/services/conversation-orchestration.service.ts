@@ -253,6 +253,8 @@ export class ConversationOrchestrationService {
     const { sessionId, userId } = envelope;
     const payload = envelope.payload;
     const startAsAssistant = payload.startAsAssistant === true;
+    const starterPrompt = payload.starterPrompt?.trim();
+    const skipTts = payload.skipTts === true;
 
     if (!sessionId || !userId) {
       throw new Error('sessionId and userId are required');
@@ -477,7 +479,9 @@ export class ConversationOrchestrationService {
       messages.push({
         role: 'user',
         content:
-          'Start the conversation by greeting the user and setting the scene.',
+          starterPrompt && starterPrompt.length > 0
+            ? starterPrompt
+            : 'Start the conversation by greeting the user and setting the scene.',
       });
     }
 
@@ -570,24 +574,26 @@ export class ConversationOrchestrationService {
             }
             isFirstChunk = false;
 
-            const detected = sentenceDetector.addText(chunk.delta);
-            for (const sentenceChunk of detected) {
-              const idx = sentenceIndex++;
-              sentenceTtsJobs.push(
-                this.processSentenceTts(
-                  idx,
-                  sentenceChunk.sentence,
-                  resolvedTts.provider,
-                  resolvedTts.voice,
-                  resolvedTts.language,
-                  resolvedTts.model,
-                  undefined,
-                  undefined,
-                  ttsSemaphore,
-                  subscriber,
-                  requestState,
-                ),
-              );
+            if (!skipTts) {
+              const detected = sentenceDetector.addText(chunk.delta);
+              for (const sentenceChunk of detected) {
+                const idx = sentenceIndex++;
+                sentenceTtsJobs.push(
+                  this.processSentenceTts(
+                    idx,
+                    sentenceChunk.sentence,
+                    resolvedTts.provider,
+                    resolvedTts.voice,
+                    resolvedTts.language,
+                    resolvedTts.model,
+                    undefined,
+                    undefined,
+                    ttsSemaphore,
+                    subscriber,
+                    requestState,
+                  ),
+                );
+              }
             }
           }
 
@@ -652,24 +658,26 @@ export class ConversationOrchestrationService {
 
     requestState.fullText = fullText;
 
-    const remaining = sentenceDetector.flush();
-    if (remaining?.sentence) {
-      const idx = sentenceIndex++;
-      sentenceTtsJobs.push(
-        this.processSentenceTts(
-          idx,
-          remaining.sentence,
-          resolvedTts.provider,
-          resolvedTts.voice,
-          resolvedTts.language,
-          resolvedTts.model,
-          undefined,
-          undefined,
-          ttsSemaphore,
-          subscriber,
-          requestState,
-        ),
-      );
+    if (!skipTts) {
+      const remaining = sentenceDetector.flush();
+      if (remaining?.sentence) {
+        const idx = sentenceIndex++;
+        sentenceTtsJobs.push(
+          this.processSentenceTts(
+            idx,
+            remaining.sentence,
+            resolvedTts.provider,
+            resolvedTts.voice,
+            resolvedTts.language,
+            resolvedTts.model,
+            undefined,
+            undefined,
+            ttsSemaphore,
+            subscriber,
+            requestState,
+          ),
+        );
+      }
     }
 
     const totalSentences = sentenceIndex;
@@ -743,7 +751,9 @@ export class ConversationOrchestrationService {
         );
       });
 
-    await Promise.all(sentenceTtsJobs);
+    if (!skipTts) {
+      await Promise.all(sentenceTtsJobs);
+    }
     this.throwIfCancelled(requestState, subscriber);
 
     const progress = this.calculateProgress(

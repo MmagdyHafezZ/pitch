@@ -11,6 +11,8 @@ describe('UserService', () => {
     email: 'user@example.com',
     name: 'Test User',
     avatar: null,
+    phoneNumber: null,
+    phoneVerifiedAt: null,
     settings: null,
     isActive: true,
     createdAt: new Date(),

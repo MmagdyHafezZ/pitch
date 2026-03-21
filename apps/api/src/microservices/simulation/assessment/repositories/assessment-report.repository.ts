@@ -24,8 +24,9 @@ export interface CreateAssessmentReportData {
 export class AssessmentReportRepository {
   constructor(private readonly mongo: MongoConnectionService) {}
 
-  private get model(): Model<IAssessmentReport> {
-    if (!this.mongo.isConnected()) {
+  private async getModel(): Promise<Model<IAssessmentReport>> {
+    const connected = await this.mongo.waitUntilConnected(10000);
+    if (!connected) {
       throw new Error('MongoDB connection is not initialized');
     }
 
@@ -36,6 +37,7 @@ export class AssessmentReportRepository {
   }
 
   async upsert(data: CreateAssessmentReportData): Promise<IAssessmentReport> {
+    const model = await this.getModel();
     const payload = {
       _id: data.runId || new Types.ObjectId().toHexString(),
       runId: data.runId,
@@ -50,7 +52,7 @@ export class AssessmentReportRepository {
       trace: data.trace,
     };
 
-    const doc = (await this.model
+    const doc = (await model
       .findOneAndUpdate({ runId: data.runId }, payload, {
         new: true,
         upsert: true,
@@ -62,7 +64,8 @@ export class AssessmentReportRepository {
   }
 
   async findByRunId(runId: string): Promise<IAssessmentReport | null> {
-    return (await this.model
+    const model = await this.getModel();
+    return (await model
       .findOne({ runId })
       .lean()) as unknown as IAssessmentReport | null;
   }

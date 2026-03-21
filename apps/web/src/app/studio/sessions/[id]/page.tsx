@@ -300,7 +300,13 @@ export default function SessionDetailPage() {
               variant="filled"
               color="brand"
               leftSection={<IconPlayerPlay size={15} />}
-              onClick={() => router.push(`/session/${session.id}`)}
+              onClick={() =>
+                router.push(
+                  session.type === 'phone' && session.status === 'ended'
+                    ? `/session/${session.id}?entry=retake`
+                    : `/session/${session.id}`
+                )
+              }
             >
               Launch
             </Button>

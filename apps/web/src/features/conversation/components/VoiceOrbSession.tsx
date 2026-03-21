@@ -45,6 +45,7 @@ interface VoiceOrbSessionProps {
   currentAudioUrl?: string | null
   // resume prompt (replaces Mantine Modal)
   resumePromptOpen?: boolean
+  entryPromptMode?: 'resume' | 'retake' | null
   onResume?: () => void
   onStartOver?: () => void
   startOverLoading?: boolean
@@ -915,6 +916,7 @@ export default function VoiceOrbSession({
   onPauseReplay,
   currentAudioUrl,
   resumePromptOpen,
+  entryPromptMode,
   onResume,
   onStartOver,
   startOverLoading,
@@ -932,6 +934,7 @@ export default function VoiceOrbSession({
   const isVideoMode = mode === 'video'
   const isTextMode = mode === 'text'
   const isAlwaysOpen = isTextMode || isVideoMode
+  const isRetakePrompt = entryPromptMode === 'retake'
   const [isOpen, setIsOpen] = useState(false)
   const [latestMsgId, setLatestMsgId] = useState<string | null>(null)
   const userClosedRef = useRef(false)
@@ -1280,25 +1283,30 @@ export default function VoiceOrbSession({
             {/* Resume prompt — appears as a speech bubble above the orb */}
             {resumePromptOpen && (
               <div className="vos-speech-bubble">
-                <p className="vos-bubble-heading">Resume previous progress?</p>
+                <p className="vos-bubble-heading">
+                  {isRetakePrompt ? 'Retake this session?' : 'Resume previous progress?'}
+                </p>
                 <p className="vos-bubble-desc">
-                  You have an in-progress session with saved turns. Pick up where you left off, or
-                  start fresh.
+                  {isRetakePrompt
+                    ? 'This session has already ended. Start a fresh iteration with the same setup when you are ready.'
+                    : 'You have an in-progress session with saved turns. Pick up where you left off, or start fresh.'}
                 </p>
                 <div className="vos-bubble-actions">
-                  <button
-                    className="vos-bubble-btn vos-bubble-btn-secondary"
-                    onClick={onStartOver}
-                    disabled={startOverLoading}
-                  >
-                    Start Over
-                  </button>
+                  {!isRetakePrompt && (
+                    <button
+                      className="vos-bubble-btn vos-bubble-btn-secondary"
+                      onClick={onStartOver}
+                      disabled={startOverLoading}
+                    >
+                      Start Over
+                    </button>
+                  )}
                   <button
                     className="vos-bubble-btn vos-bubble-btn-primary"
-                    onClick={onResume}
+                    onClick={isRetakePrompt ? onStartOver : onResume}
                     disabled={startOverLoading}
                   >
-                    Resume
+                    {isRetakePrompt ? 'Retake Session' : 'Resume'}
                   </button>
                 </div>
               </div>

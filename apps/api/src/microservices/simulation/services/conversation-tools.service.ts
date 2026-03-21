@@ -45,7 +45,7 @@ export class ConversationToolsService {
         function: {
           name: 'end_call',
           description:
-            'Signal that the conversation has naturally concluded. Use only when the exchange is genuinely finished — both parties have said goodbye, or further dialogue serves no purpose.',
+            'Signal that the conversation has naturally concluded. Use only when the exchange is genuinely finished — both parties have said goodbye, or further dialogue serves no purpose. Never use it just because the latest input is brief, ambiguous, silent, or keypad-like.',
           parameters: {
             type: 'object',
             properties: {
