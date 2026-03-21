@@ -37,6 +37,7 @@ import { ChallengesGatewayController } from './controllers/challenges/challenges
 import { SupportChatGatewayController } from './controllers/support/support-chat-gateway.controller';
 import { SupportAttachmentGatewayController } from './controllers/support/support-attachment-gateway.controller';
 import { CoachStreamService } from './controllers/support/coach-stream.service';
+import { AdminGatewayController } from './controllers/admin/admin-gateway.controller';
 
 @Module({
   imports: [
@@ -81,6 +82,7 @@ import { CoachStreamService } from './controllers/support/coach-stream.service';
     ChallengesGatewayController,
     SupportChatGatewayController,
     SupportAttachmentGatewayController,
+    AdminGatewayController,
   ],
   providers: [
     { provide: APP_GUARD, useClass: GlobalJwtAuthGuard },

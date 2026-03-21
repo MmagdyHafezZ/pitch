@@ -26,6 +26,20 @@ let accessToken: string | null = null
 let refreshPromise: Promise<string | null> | null = null
 let accessTokenListener: ((token: string | null) => void) | null = null
 
+export type ApiErrorPayload = {
+  timestamp: string
+  method: string
+  endpoint: string
+  status: number
+  message: string
+}
+
+let apiErrorListener: ((error: ApiErrorPayload) => void) | null = null
+
+export const setApiErrorListener = (fn: typeof apiErrorListener) => {
+  apiErrorListener = fn
+}
+
 export const setAccessToken = (token: string | null) => {
   accessToken = token
   if (accessTokenListener) {
@@ -135,6 +149,15 @@ export async function apiRequest<T>(
     if (response) {
       const message =
         resolvedError?.errorData?.message || `HTTP ${response.status}: ${response.statusText}`
+      if (response.status >= 400) {
+        apiErrorListener?.({
+          timestamp: new Date().toISOString(),
+          method: (options.method ?? 'GET').toUpperCase(),
+          endpoint,
+          status: response.status,
+          message,
+        })
+      }
       throw new Error(message)
     }
 
@@ -520,11 +543,7 @@ export const api = {
   },
 
   s3: {
-    presignUpload: (input: {
-      bucket: string
-      key: string
-      expiresIn?: number
-    }) =>
+    presignUpload: (input: { bucket: string; key: string; expiresIn?: number }) =>
       apiRequest<{ url: string }>('/s3/presigned/upload', {
         method: 'POST',
         body: JSON.stringify({
@@ -922,5 +941,24 @@ export const api = {
           }>
         }>
       }>('/simulation/llm/providers'),
+  },
+
+  admin: {
+    check: () => apiRequest<{ isAdmin: true }>('/admin/check'),
+    healthServices: () =>
+      apiRequest<{
+        services: Array<{
+          name: string
+          status: 'online' | 'degraded' | 'offline'
+          latency: number
+        }>
+        containers: Array<{
+          id: string
+          name: string
+          image: string
+          state: string
+          status: string
+        }>
+      }>('/admin/health'),
   },
 }

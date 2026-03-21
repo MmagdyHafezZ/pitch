@@ -11,12 +11,13 @@ import {
   IconTrophy,
   IconShield,
 } from '@tabler/icons-react'
-import { Dispatch, SetStateAction, useState } from 'react'
+import { Dispatch, SetStateAction, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { WeekCalendar } from '@/components/ui/WeekCalendar'
 import { SettingsModal } from './SettingsModal'
 import classes from './AppSideBar.module.css'
 import { useI18n } from '@/features/i18n'
+import { useAdminStore } from '@/app/admin/stores/admin.store'
 
 export type SidebarLink = {
   icon: React.ComponentType<{ size?: number }>
@@ -58,6 +59,12 @@ export function AppSidebar({
   const router = useRouter()
   const { t } = useI18n()
   const [settingsOpened, setSettingsOpened] = useState(false)
+  const { isAdmin, check } = useAdminStore()
+
+  useEffect(() => {
+    check()
+  }, [check])
+
   const resolvedMainLinks = showTeamConfig
     ? mainLinks
     : mainLinks.filter((link) => link.label !== 'Team Config')
@@ -126,26 +133,30 @@ export function AppSidebar({
                 }}
               />
             ))}
-            <Divider my="xs" color="var(--pitch-nav-text-dim)" />
-            <NavLink
-              onClick={() => {
-                router.push('/admin')
-                onNavigate?.()
-              }}
-              leftSection={<IconShield size={18} />}
-              label={
-                <Text size="sm" className={classes.navLabel}>
-                  Admin
-                </Text>
-              }
-              variant="subtle"
-              classNames={{
-                root: classes.navLink,
-                section: classes.navSection,
-                body: classes.navBody,
-                label: classes.navLabel,
-              }}
-            />
+            {isAdmin === true && (
+              <>
+                <Divider my="xs" color="var(--pitch-nav-text-dim)" />
+                <NavLink
+                  onClick={() => {
+                    router.push('/admin')
+                    onNavigate?.()
+                  }}
+                  leftSection={<IconShield size={18} />}
+                  label={
+                    <Text size="sm" className={classes.navLabel}>
+                      Admin
+                    </Text>
+                  }
+                  variant="subtle"
+                  classNames={{
+                    root: classes.navLink,
+                    section: classes.navSection,
+                    body: classes.navBody,
+                    label: classes.navLabel,
+                  }}
+                />
+              </>
+            )}
             <Box
               mt="auto"
               pt="lg"

@@ -12,9 +12,12 @@ import {
   ThemeIcon,
   Divider,
   Stack,
+  Loader,
+  Center,
   rem,
 } from '@mantine/core'
 import { useDisclosure } from '@mantine/hooks'
+import { notifications } from '@mantine/notifications'
 import { useAuthStore } from '@/features/auth/stores/auth.store'
 import {
   IconDashboard,
@@ -24,7 +27,10 @@ import {
   IconDeviceDesktopAnalytics,
   IconArrowLeft,
   IconShield,
+  IconAlertTriangle,
 } from '@tabler/icons-react'
+import { useAdminStore } from './stores/admin.store'
+import { initializeErrorInterceptor } from './stores/error-log.store'
 
 const NAV_ITEMS = [
   { label: 'Overview', href: '/admin', icon: IconDashboard },
@@ -32,19 +38,38 @@ const NAV_ITEMS = [
   { label: 'Users', href: '/admin/users', icon: IconUsers },
   { label: 'Teams', href: '/admin/teams', icon: IconUsersGroup },
   { label: 'Sessions', href: '/admin/sessions', icon: IconDeviceDesktopAnalytics },
+  { label: 'Errors', href: '/admin/errors', icon: IconAlertTriangle },
 ]
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const pathname = usePathname()
   const user = useAuthStore((s) => s.user)
-  const [opened, { toggle, close }] = useDisclosure()
+  const [opened, { close }] = useDisclosure()
+  const { isAdmin, checking, check } = useAdminStore()
 
   useEffect(() => {
     if (user && !user.settings?.onboarding?.completed) {
       router.replace('/onboarding')
     }
   }, [user, router])
+
+  useEffect(() => {
+    initializeErrorInterceptor()
+    check()
+  }, [check])
+
+  // Once check is done and user is not admin, redirect
+  useEffect(() => {
+    if (!checking && isAdmin === false) {
+      notifications.show({
+        title: 'Access Denied',
+        message: 'You do not have admin access.',
+        color: 'red',
+      })
+      router.replace('/studio/home')
+    }
+  }, [checking, isAdmin, router])
 
   const activeItem = useMemo(() => {
     if (!pathname) return '/admin'
@@ -53,6 +78,20 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     )
     return match?.href ?? '/admin'
   }, [pathname])
+
+  // Show loader while the admin check is in-flight or not yet resolved
+  if (checking || isAdmin === null) {
+    return (
+      <Center h="100vh">
+        <Loader size="lg" />
+      </Center>
+    )
+  }
+
+  // Non-admin: return null while redirect fires
+  if (isAdmin === false) {
+    return null
+  }
 
   return (
     <AppShell

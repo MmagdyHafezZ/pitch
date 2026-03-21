@@ -11,7 +11,7 @@ import {
   ThemeIcon,
   RingProgress,
   Skeleton,
-  Badge,
+  Center,
 } from '@mantine/core'
 import {
   IconUsers,
@@ -22,6 +22,7 @@ import {
   IconUserCheck,
 } from '@tabler/icons-react'
 import { api } from '@/lib/client'
+import { ServiceStatusPanel } from './components/ServiceStatusPanel'
 
 type Stats = {
   totalUsers: number
@@ -125,9 +126,7 @@ export default function AdminOverview() {
             Platform overview and management
           </Text>
         </div>
-        <Badge variant="dot" color="green" size="lg">
-          System Online
-        </Badge>
+        <ServiceStatusPanel />
       </Group>
 
       <SimpleGrid cols={{ base: 1, xs: 2, md: 4 }} spacing="md">
@@ -157,9 +156,11 @@ export default function AdminOverview() {
                     roundCaps
                     sections={[{ value: card.progress, color: card.color }]}
                     label={
-                      <ThemeIcon size="lg" radius="xl" variant="light" color={card.color}>
-                        <card.icon size={18} />
-                      </ThemeIcon>
+                      <Center>
+                        <ThemeIcon size="lg" radius="xl" variant="light" color={card.color}>
+                          <card.icon size={18} />
+                        </ThemeIcon>
+                      </Center>
                     }
                   />
                 </Group>
