@@ -25,6 +25,7 @@ import { catchError, timeout } from 'rxjs/operators';
 import { lastValueFrom, throwError } from 'rxjs';
 import { SIMULATION_SERVICE_PATTERNS } from '@pitch/shared-backend/interfaces/message-patterns.interface';
 import { GlobalJwtAuthGuard } from '../../guards/global-jwt-auth.guard';
+import { Public } from '../../../microservices/userManagement/decorators/public.decorator';
 import { UserClaimsInterceptor } from '../../interceptors/user-claims.interceptor';
 import { UserClaims } from '../../decorators/user-claims.decorator';
 import type { UserClaims as UserClaimsType } from '@pitch/shared-backend/interfaces/user-claims.interface';
@@ -82,6 +83,23 @@ export class SessionGatewayController {
           return throwError(() => new HttpException(message, status));
         }),
       );
+  }
+
+  /**
+   * Liveness probe — no auth required
+   *
+   * GET /v1/simulation/sessions/health
+   */
+  @Get('health')
+  @Public()
+  @ApiOperation({ summary: 'Health check for simulation sessions service' })
+  @ApiResponse({ status: 200, description: 'Service is healthy' })
+  health() {
+    return {
+      status: 'ok',
+      service: 'simulation-sessions',
+      timestamp: new Date().toISOString(),
+    };
   }
 
   /**
