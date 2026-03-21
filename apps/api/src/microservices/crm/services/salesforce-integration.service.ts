@@ -35,8 +35,9 @@ interface SalesforceQueryResult<
  * Salesforce Integration Service
  *
  * Handles Salesforce API interactions using stored OAuth tokens.
+ * Provides LIVE data from Salesforce API (not stored locally).
  * Automatically refreshes expired tokens.
- * Stores integration data in PostgreSQL database via Prisma.
+ * Stores only OAuth tokens in PostgreSQL database via Prisma.
  *
  * This service is called by the CRM controller via RabbitMQ message patterns.
  */
