@@ -17,7 +17,7 @@
   position: relative;
   min-height: 100vh;
   overflow-x: clip;
-  padding: 1.1rem clamp(0.95rem, 3vw, 3.6rem) 2.6rem;
+  padding: 1.1rem clamp(0.95rem, 3vw, 3.6rem) 0;
   color: var(--text);
   font-family: var(--font-body), 'Avenir Next', 'Segoe UI', sans-serif;
   background: var(--bg-0);
@@ -280,7 +280,14 @@
 
 .screenFinal {
   min-height: calc(100svh - 7.2rem);
-  padding-bottom: 2rem;
+  padding-bottom: 0;
+  align-items: stretch;
+}
+
+.screenFinal .screenInner {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
 }
 
 .reveal {
@@ -1072,9 +1079,10 @@
 }
 
 .finalCard {
-  max-width: 58rem;
+  max-width: 64rem;
   margin: 0 auto;
-  padding: clamp(1.15rem, 2.4vw, 1.9rem);
+  min-height: clamp(22rem, 34vw, 28rem);
+  padding: clamp(3rem, 5vw, 4rem);
   text-align: center;
   background:
     radial-gradient(circle at 14% 10%, rgba(150, 221, 255, 0.14), transparent 26%),
@@ -1085,7 +1093,7 @@
 .finalCard h2 {
   margin: 0.95rem 0 0;
   font-family: var(--font-heading), 'Futura PT', sans-serif;
-  font-size: clamp(1.7rem, 3vw, 2.5rem);
+  font-size: clamp(1.9rem, 3.3vw, 2.85rem);
   line-height: 1.16;
 }
 
@@ -1101,7 +1109,8 @@
 }
 
 .footer {
-  margin-top: 1rem;
+  margin-top: auto;
+  padding-top: 0.5rem;
   display: flex;
   justify-content: space-between;
   flex-wrap: wrap;
