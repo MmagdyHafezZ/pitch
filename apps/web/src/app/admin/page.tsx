@@ -40,25 +40,15 @@ export default function AdminOverview() {
   useEffect(() => {
     const fetchStats = async () => {
       try {
-        const [users, teams, sessions, plans] = await Promise.all([
-          api.users.getAll().catch(() => []),
-          api.teams.getAll().catch(() => []),
-          api.sessions.getAll({ limit: 1000 }).catch(() => ({ sessions: [], total: 0 })),
-          api.plans.getAll().catch(() => []),
-        ])
-
-        const userList = Array.isArray(users) ? users : []
-        const teamList = Array.isArray(teams) ? teams : []
-        const sessionData = sessions?.sessions ?? (Array.isArray(sessions) ? sessions : [])
-        const planList = Array.isArray(plans) ? plans : []
+        const overview = await api.admin.overview()
 
         setStats({
-          totalUsers: userList.length,
-          activeUsers: userList.filter((u: any) => u.isActive !== false).length,
-          totalTeams: teamList.length,
-          totalSessions: sessionData.length,
-          activeSessions: sessionData.filter((s: any) => s.status === 'active').length,
-          totalPlans: planList.length,
+          totalUsers: overview.userCount,
+          activeUsers: overview.userCount,
+          totalTeams: overview.teamCount,
+          totalSessions: overview.sessionCount,
+          activeSessions: 0,
+          totalPlans: overview.planCount,
         })
       } catch {
         setStats({
