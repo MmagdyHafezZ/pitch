@@ -151,9 +151,6 @@ export function PillNav({ items, className }: PillNavProps) {
                     />
                     <span className={styles.labelStack}>
                       <span className={styles.label}>{item.label}</span>
-                      <span className={styles.labelHover} aria-hidden="true">
-                        {item.label}
-                      </span>
                     </span>
                   </a>
                 </li>

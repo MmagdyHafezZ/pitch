@@ -72,6 +72,7 @@
 .pill:focus-visible {
   transform: translateY(-1px);
   background: rgba(16, 22, 49, 0.92);
+  color: var(--hover-text);
   outline: none;
 }
 
@@ -103,40 +104,19 @@
   z-index: 2;
 }
 
-.label,
-.labelHover {
+.label {
   display: inline-block;
   font-size: 0.74rem;
   font-weight: 700;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  will-change: transform, opacity;
+  will-change: opacity;
   transition:
-    transform 0.34s cubic-bezier(0.22, 1, 0.36, 1),
     opacity 0.28s ease;
 }
 
 .label {
   position: relative;
-}
-
-.labelHover {
-  position: absolute;
-  inset: 0 auto auto 0;
-  color: #061324;
-  opacity: 0;
-  transform: translateY(calc(100% + 0.72rem));
-}
-
-.pill:hover .label,
-.pill:focus-visible .label {
-  transform: translateY(calc(-100% - 0.48rem));
-}
-
-.pill:hover .labelHover,
-.pill:focus-visible .labelHover {
-  opacity: 1;
-  transform: translateY(0);
 }
 
 .pillActive {
@@ -300,7 +280,6 @@
   .pill,
   .hoverCircle,
   .label,
-  .labelHover,
   .mobileButton,
   .mobileLine,
   .mobileLink {
