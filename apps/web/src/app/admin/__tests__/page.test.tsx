@@ -11,10 +11,9 @@ jest.mock('next/navigation', () => ({
 
 jest.mock('@/lib/client', () => ({
   api: {
-    users: { getAll: jest.fn() },
-    teams: { getAll: jest.fn() },
-    sessions: { getAll: jest.fn() },
-    plans: { getAll: jest.fn() },
+    admin: {
+      overview: jest.fn(),
+    },
   },
 }))
 
@@ -39,10 +38,7 @@ describe('AdminOverview (dashboard page)', () => {
   })
 
   it('shows skeletons while data is loading', () => {
-    api.users.getAll.mockReturnValue(new Promise(() => {}))
-    api.teams.getAll.mockReturnValue(new Promise(() => {}))
-    api.sessions.getAll.mockReturnValue(new Promise(() => {}))
-    api.plans.getAll.mockReturnValue(new Promise(() => {}))
+    api.admin.overview.mockReturnValue(new Promise(() => {}))
 
     const AdminOverview = require('../page').default
 
@@ -54,42 +50,17 @@ describe('AdminOverview (dashboard page)', () => {
       )
     })
 
-    // Mantine Skeleton renders with role="presentation" or as a div; check for multiple
     const skeletons = document.querySelectorAll('[class*="Skeleton"]')
     expect(skeletons.length).toBeGreaterThan(0)
   })
 
   it('renders stat cards after data loads', async () => {
-    api.users.getAll.mockResolvedValue([
-      { id: 'u1', name: 'Alice', email: 'alice@test.com', isActive: true },
-      { id: 'u2', name: 'Bob', email: 'bob@test.com', isActive: false },
-    ])
-    api.teams.getAll.mockResolvedValue([
-      { id: 't1', name: 'Team A', slug: 'team-a', isActive: true, createdAt: '2024-01-01' },
-    ])
-    api.sessions.getAll.mockResolvedValue({
-      sessions: [
-        {
-          id: 's1',
-          status: 'active',
-          type: 'text',
-          createdAt: '2024-01-01',
-          userId: 'u1',
-          orgId: 'o1',
-        },
-      ],
-      total: 1,
+    api.admin.overview.mockResolvedValue({
+      userCount: 2,
+      teamCount: 1,
+      sessionCount: 3,
+      planCount: 4,
     })
-    api.plans.getAll.mockResolvedValue([
-      {
-        id: 'p1',
-        name: 'Pro',
-        planLevel: 'PRO',
-        maxCoins: 500,
-        isActive: true,
-        createdAt: '2024-01-01',
-      },
-    ])
 
     const AdminOverview = require('../page').default
 
@@ -105,14 +76,12 @@ describe('AdminOverview (dashboard page)', () => {
       expect(screen.getByText('Admin Dashboard')).toBeInTheDocument()
     })
 
-    // Stat card titles
     expect(screen.getByText('Total Users')).toBeInTheDocument()
     expect(screen.getByText('Teams')).toBeInTheDocument()
     expect(screen.getByText('Sessions')).toBeInTheDocument()
     expect(screen.getByText('Plans')).toBeInTheDocument()
 
-    // Numeric values — use getAllByText since same count may appear in multiple cards
-    expect(screen.getAllByText('2').length).toBeGreaterThan(0) // totalUsers
-    expect(screen.getAllByText('1').length).toBeGreaterThan(0) // totalTeams / totalPlans
+    expect(screen.getAllByText('2').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('1').length).toBeGreaterThan(0)
   })
 })

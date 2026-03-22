@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import {
   Title,
   Text,
@@ -67,6 +68,8 @@ export default function AdminOverview() {
     fetchStats()
   }, [])
 
+  const router = useRouter()
+
   const cards = stats
     ? [
         {
@@ -74,8 +77,9 @@ export default function AdminOverview() {
           value: stats.totalUsers,
           subtitle: `${stats.activeUsers} active`,
           icon: IconUsers,
-          color: 'blue',
+          color: 'brand',
           progress: stats.totalUsers > 0 ? (stats.activeUsers / stats.totalUsers) * 100 : 0,
+          href: '/admin/users',
         },
         {
           title: 'Teams',
@@ -84,6 +88,7 @@ export default function AdminOverview() {
           icon: IconUsersGroup,
           color: 'teal',
           progress: 100,
+          href: '/admin/teams',
         },
         {
           title: 'Sessions',
@@ -93,6 +98,7 @@ export default function AdminOverview() {
           color: 'violet',
           progress:
             stats.totalSessions > 0 ? (stats.activeSessions / stats.totalSessions) * 100 : 0,
+          href: '/admin/sessions',
         },
         {
           title: 'Plans',
@@ -101,6 +107,7 @@ export default function AdminOverview() {
           icon: IconCreditCard,
           color: 'orange',
           progress: 100,
+          href: '/admin/plans',
         },
       ]
     : []
@@ -127,7 +134,27 @@ export default function AdminOverview() {
               </Card>
             ))
           : cards.map((card) => (
-              <Card key={card.title} withBorder radius="md" p="lg">
+              <Card
+                key={card.title}
+                withBorder
+                radius="md"
+                p="lg"
+                shadow="sm"
+                style={{
+                  cursor: 'pointer',
+                  transition: 'border-color 0.15s, box-shadow 0.15s',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                }}
+                onClick={() => router.push(card.href)}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.borderColor = 'var(--mantine-color-brand-6)'
+                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.2)'
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.borderColor = ''
+                  e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.1)'
+                }}
+              >
                 <Group justify="space-between" align="flex-start">
                   <div>
                     <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
@@ -159,9 +186,9 @@ export default function AdminOverview() {
       </SimpleGrid>
 
       <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
-        <Card withBorder radius="md" p="lg">
+        <Card withBorder radius="md" p="lg" shadow="sm">
           <Group gap="sm" mb="md">
-            <ThemeIcon size="md" variant="light" color="blue">
+            <ThemeIcon size="md" variant="light" color="brand">
               <IconActivity size={16} />
             </ThemeIcon>
             <Text fw={600}>Quick Actions</Text>
@@ -173,7 +200,7 @@ export default function AdminOverview() {
           </Stack>
         </Card>
 
-        <Card withBorder radius="md" p="lg">
+        <Card withBorder radius="md" p="lg" shadow="sm">
           <Group gap="sm" mb="md">
             <ThemeIcon size="md" variant="light" color="teal">
               <IconUserCheck size={16} />

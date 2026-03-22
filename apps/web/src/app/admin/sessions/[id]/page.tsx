@@ -54,8 +54,8 @@ export default function SessionDetail() {
     const fetchData = async () => {
       try {
         const [sessionData, timelineData] = await Promise.all([
-          api.sessions.getById(id),
-          api.sessions.timeline(id, 200).catch(() => []),
+          api.admin.sessions.get(id),
+          api.admin.sessions.getEvents(id, { limit: 200 }).catch(() => []),
         ])
         setSession(sessionData)
         setTimeline(Array.isArray(timelineData) ? timelineData : (timelineData?.events ?? []))
@@ -138,13 +138,13 @@ export default function SessionDetail() {
             ID: {session.id}
           </Text>
         </div>
-        <Badge color={statusColor(session.status)} variant="filled" size="lg">
+        <Badge color={statusColor(session.status)} variant="light" size="lg" radius="sm">
           {session.status}
         </Badge>
       </Group>
 
       <SimpleGrid cols={{ base: 1, xs: 2, md: 4 }} spacing="md">
-        <Card withBorder radius="md" p="md">
+        <Card withBorder radius="md" p="md" shadow="sm">
           <Group gap="sm">
             <ThemeIcon variant="light" color="blue" size="lg">
               <IconUser size={18} />
@@ -160,7 +160,7 @@ export default function SessionDetail() {
           </Group>
         </Card>
 
-        <Card withBorder radius="md" p="md">
+        <Card withBorder radius="md" p="md" shadow="sm">
           <Group gap="sm">
             <ThemeIcon variant="light" color="violet" size="lg">
               <IconDeviceDesktopAnalytics size={18} />
@@ -176,7 +176,7 @@ export default function SessionDetail() {
           </Group>
         </Card>
 
-        <Card withBorder radius="md" p="md">
+        <Card withBorder radius="md" p="md" shadow="sm">
           <Group gap="sm">
             <ThemeIcon variant="light" color="teal" size="lg">
               <IconClock size={18} />
@@ -194,7 +194,7 @@ export default function SessionDetail() {
           </Group>
         </Card>
 
-        <Card withBorder radius="md" p="md">
+        <Card withBorder radius="md" p="md" shadow="sm">
           <Group gap="sm">
             <ThemeIcon variant="light" color="orange" size="lg">
               <IconPlayerPlay size={18} />
@@ -214,7 +214,7 @@ export default function SessionDetail() {
       {(session.scenario || session.persona) && (
         <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
           {session.scenario && (
-            <Card withBorder radius="md" p="md">
+            <Card withBorder radius="md" p="md" shadow="sm">
               <Text size="xs" c="dimmed" tt="uppercase" fw={700} mb="xs">
                 Scenario
               </Text>
@@ -229,7 +229,7 @@ export default function SessionDetail() {
             </Card>
           )}
           {session.persona && (
-            <Card withBorder radius="md" p="md">
+            <Card withBorder radius="md" p="md" shadow="sm">
               <Text size="xs" c="dimmed" tt="uppercase" fw={700} mb="xs">
                 Persona
               </Text>
@@ -242,7 +242,7 @@ export default function SessionDetail() {
       )}
 
       {assessment && (
-        <Card withBorder radius="md" p="lg">
+        <Card withBorder radius="md" p="lg" shadow="sm">
           <Text size="xs" c="dimmed" tt="uppercase" fw={700} mb="md">
             Assessment Results
           </Text>
@@ -323,7 +323,7 @@ export default function SessionDetail() {
       </Card>
 
       {session.sessionConfig && (
-        <Card withBorder radius="md" p="lg">
+        <Card withBorder radius="md" p="lg" shadow="sm">
           <Text size="xs" c="dimmed" tt="uppercase" fw={700} mb="md">
             Session Configuration
           </Text>

@@ -11,10 +11,12 @@ jest.mock('next/navigation', () => ({
 
 jest.mock('@/lib/client', () => ({
   api: {
-    users: {
-      getAll: jest.fn(),
-      update: jest.fn(),
-      delete: jest.fn(),
+    admin: {
+      users: {
+        list: jest.fn(),
+        update: jest.fn(),
+        delete: jest.fn(),
+      },
     },
   },
 }))
@@ -55,7 +57,7 @@ describe('UsersManagement page', () => {
   })
 
   it('shows skeletons while loading', () => {
-    api.users.getAll.mockReturnValue(new Promise(() => {}))
+    api.admin.users.list.mockReturnValue(new Promise(() => {}))
 
     const UsersPage = require('../../users/page').default
 
@@ -72,7 +74,7 @@ describe('UsersManagement page', () => {
   })
 
   it('renders user email in table after load', async () => {
-    api.users.getAll.mockResolvedValue([
+    api.admin.users.list.mockResolvedValue([
       makeUser({ id: 'u1', name: 'Alice Smith', email: 'alice@example.com' }),
       makeUser({ id: 'u2', name: 'Bob Jones', email: 'bob@example.com' }),
     ])
@@ -94,7 +96,7 @@ describe('UsersManagement page', () => {
   })
 
   it('search input filters users by name/email', async () => {
-    api.users.getAll.mockResolvedValue([
+    api.admin.users.list.mockResolvedValue([
       makeUser({ id: 'u1', name: 'Alice Smith', email: 'alice@example.com' }),
       makeUser({ id: 'u2', name: 'Bob Jones', email: 'bob@example.com' }),
     ])

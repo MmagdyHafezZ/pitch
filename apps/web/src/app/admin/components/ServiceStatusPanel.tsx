@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react'
 import {
-  Badge,
   Button,
   Group,
   Text,
@@ -10,8 +9,8 @@ import {
   Stack,
   ThemeIcon,
   Loader,
-  Divider,
   Tooltip,
+  Divider,
   ScrollArea,
 } from '@mantine/core'
 import {
@@ -19,8 +18,6 @@ import {
   IconCircleX,
   IconAlertTriangle,
   IconRefresh,
-  IconServer,
-  IconBrandDocker,
   IconChevronDown,
 } from '@tabler/icons-react'
 import { api } from '@/lib/client'
@@ -31,41 +28,26 @@ type ServiceStatus = {
   latency: number
 }
 
-type ContainerInfo = {
-  id: string
-  name: string
-  image: string
-  state: string
-  status: string
-}
-
-const SERVICE_STATUS_CONFIG = {
+const STATUS_CONFIG = {
   online: { color: 'teal', icon: IconCircleCheck, label: 'Online' },
   degraded: { color: 'yellow', icon: IconAlertTriangle, label: 'Degraded' },
   offline: { color: 'red', icon: IconCircleX, label: 'Offline' },
 } as const
 
-const CONTAINER_STATE_CONFIG: Record<
-  string,
-  { color: string; icon: typeof IconCircleCheck; label: string }
-> = {
-  running: { color: 'teal', icon: IconCircleCheck, label: 'Running' },
-  exited: { color: 'red', icon: IconCircleX, label: 'Exited' },
-  paused: { color: 'yellow', icon: IconAlertTriangle, label: 'Paused' },
-  restarting: { color: 'orange', icon: IconAlertTriangle, label: 'Restarting' },
-  dead: { color: 'red', icon: IconCircleX, label: 'Dead' },
-  created: { color: 'gray', icon: IconAlertTriangle, label: 'Created' },
-}
-
-function containerConfig(state: string) {
-  return (
-    CONTAINER_STATE_CONFIG[state.toLowerCase()] ?? {
-      color: 'gray',
-      icon: IconAlertTriangle,
-      label: state,
-    }
-  )
-}
+const SERVICE_GROUPS: { label: string; names: string[] }[] = [
+  {
+    label: 'Gateway & Simulation',
+    names: ['Gateway API', 'Simulation Sessions', 'Simulation Invitations', 'LLM Service'],
+  },
+  {
+    label: 'Core Services',
+    names: ['User Service', 'Analytics Service', 'Support Service'],
+  },
+  {
+    label: 'Infrastructure',
+    names: ['CRM Service', 'LTI Service', 'S3 Service'],
+  },
+]
 
 function overallStatus(services: ServiceStatus[]): 'online' | 'degraded' | 'offline' {
   if (services.length === 0) return 'offline'
@@ -76,19 +58,17 @@ function overallStatus(services: ServiceStatus[]): 'online' | 'degraded' | 'offl
 
 export function ServiceStatusPanel() {
   const [services, setServices] = useState<ServiceStatus[]>([])
-  const [containers, setContainers] = useState<ContainerInfo[]>([])
   const [loading, setLoading] = useState(true)
   const [lastChecked, setLastChecked] = useState<Date | null>(null)
 
   const fetchHealth = async () => {
+    setLoading(true)
     try {
       const data = await api.admin.healthServices()
       setServices(data.services)
-      setContainers(data.containers ?? [])
       setLastChecked(new Date())
     } catch {
       setServices([])
-      setContainers([])
     } finally {
       setLoading(false)
     }
@@ -100,7 +80,7 @@ export function ServiceStatusPanel() {
     return () => clearInterval(interval)
   }, [])
 
-  if (loading) {
+  if (loading && services.length === 0) {
     return (
       <Group gap="xs">
         <Loader size="xs" />
@@ -112,9 +92,11 @@ export function ServiceStatusPanel() {
   }
 
   const overall = overallStatus(services)
-  const { color: overallColor } = SERVICE_STATUS_CONFIG[overall]
+  const { color: overallColor } = STATUS_CONFIG[overall]
+  const onlineCount = services.filter((s) => s.status === 'online').length
 
-  const runningCount = containers.filter((c) => c.state.toLowerCase() === 'running').length
+  // Build a map for quick lookup
+  const serviceMap = new Map(services.map((s) => [s.name, s]))
 
   return (
     <>
@@ -148,10 +130,9 @@ export function ServiceStatusPanel() {
                 <Tooltip label="Refresh" withArrow>
                   <IconRefresh
                     size={12}
-                    style={{ opacity: 0.6 }}
+                    style={{ opacity: 0.6, cursor: 'pointer' }}
                     onClick={(e) => {
                       e.stopPropagation()
-                      setLoading(true)
                       fetchHealth()
                     }}
                   />
@@ -160,125 +141,81 @@ export function ServiceStatusPanel() {
               </Group>
             }
           >
-            System Status
+            {loading ? 'Checking…' : `${onlineCount}/${services.length} Online`}
           </Button>
         </Popover.Target>
 
-        <Popover.Dropdown>
-          <Stack gap="sm">
-            {/* Header */}
-            <Group justify="space-between">
-              <Text size="xs" fw={700} tt="uppercase" c="dimmed">
-                System Health
-              </Text>
-              {lastChecked && (
-                <Text size="xs" c="dimmed">
-                  {lastChecked.toLocaleTimeString()}
+        <Popover.Dropdown p={0}>
+          <ScrollArea.Autosize mah={480}>
+            <Stack gap={0} p="sm">
+              <Group justify="space-between" mb="xs">
+                <Text size="xs" fw={700} tt="uppercase" c="dimmed">
+                  System Status
                 </Text>
-              )}
-            </Group>
-
-            {/* API Services */}
-            <div>
-              <Group gap="xs" mb={6}>
-                <IconServer size={13} opacity={0.6} />
-                <Text size="xs" fw={600} c="dimmed" tt="uppercase">
-                  API Services
-                </Text>
-              </Group>
-              <Stack gap={6}>
-                {services.length === 0 ? (
-                  <Text size="sm" c="dimmed" ta="center" py={4}>
-                    No data
-                  </Text>
-                ) : (
-                  services.map((svc) => {
-                    const cfg = SERVICE_STATUS_CONFIG[svc.status]
-                    const Icon = cfg.icon
-                    return (
-                      <Group key={svc.name} justify="space-between" wrap="nowrap">
-                        <Group gap="xs" wrap="nowrap">
-                          <ThemeIcon size="sm" variant="light" color={cfg.color} radius="xl">
-                            <Icon size={12} />
-                          </ThemeIcon>
-                          <Text size="sm">{svc.name}</Text>
-                        </Group>
-                        <Group gap="xs" wrap="nowrap">
-                          <Badge size="xs" variant="light" color={cfg.color}>
-                            {cfg.label}
-                          </Badge>
-                          <Text size="xs" c="dimmed" style={{ whiteSpace: 'nowrap' }}>
-                            {svc.latency}ms
-                          </Text>
-                        </Group>
-                      </Group>
-                    )
-                  })
-                )}
-              </Stack>
-            </div>
-
-            {/* Docker Containers */}
-            <Divider />
-            <div>
-              <Group gap="xs" mb={6} justify="space-between">
-                <Group gap="xs">
-                  <IconBrandDocker size={13} opacity={0.6} />
-                  <Text size="xs" fw={600} c="dimmed" tt="uppercase">
-                    Containers
-                  </Text>
-                </Group>
-                {containers.length > 0 && (
+                {lastChecked && (
                   <Text size="xs" c="dimmed">
-                    {runningCount}/{containers.length} running
+                    {lastChecked.toLocaleTimeString()}
                   </Text>
                 )}
               </Group>
-              {containers.length === 0 ? (
-                <Text size="sm" c="dimmed" ta="center" py={4}>
-                  Docker not available
+
+              {services.length === 0 ? (
+                <Text size="sm" c="dimmed" ta="center" py="md">
+                  No data available
                 </Text>
               ) : (
-                <ScrollArea.Autosize mah={180}>
-                  <Stack gap={6}>
-                    {containers.map((c) => {
-                      const cfg = containerConfig(c.state)
-                      const Icon = cfg.icon
-                      return (
-                        <Group key={c.id} justify="space-between" wrap="nowrap">
-                          <Group gap="xs" wrap="nowrap" style={{ minWidth: 0 }}>
-                            <ThemeIcon size="sm" variant="light" color={cfg.color} radius="xl">
-                              <Icon size={12} />
-                            </ThemeIcon>
-                            <Stack gap={0} style={{ minWidth: 0 }}>
-                              <Text size="sm" truncate>
-                                {c.name}
-                              </Text>
-                              <Text size="xs" c="dimmed" truncate>
-                                {c.image}
-                              </Text>
-                            </Stack>
-                          </Group>
-                          <Badge
-                            size="xs"
-                            variant="light"
-                            color={cfg.color}
-                            style={{ whiteSpace: 'nowrap', flexShrink: 0 }}
-                          >
-                            {cfg.label}
-                          </Badge>
-                        </Group>
-                      )
-                    })}
-                  </Stack>
-                </ScrollArea.Autosize>
-              )}
-            </div>
+                SERVICE_GROUPS.map((group, gi) => {
+                  const groupServices = group.names
+                    .map((n) => serviceMap.get(n))
+                    .filter(Boolean) as ServiceStatus[]
 
-            <Text size="xs" c="dimmed" ta="center">
-              Auto-refreshes every 30s
-            </Text>
-          </Stack>
+                  if (groupServices.length === 0) return null
+
+                  return (
+                    <div key={group.label}>
+                      {gi > 0 && <Divider my="xs" />}
+                      <Text size="xs" c="dimmed" tt="uppercase" fw={600} mb={6}>
+                        {group.label}
+                      </Text>
+                      <Stack gap={4}>
+                        {groupServices.map((svc) => {
+                          const cfg = STATUS_CONFIG[svc.status]
+                          const Icon = cfg.icon
+                          return (
+                            <Group key={svc.name} justify="space-between" wrap="nowrap">
+                              <Group gap="xs" wrap="nowrap">
+                                <ThemeIcon size="sm" variant="light" color={cfg.color} radius="xl">
+                                  <Icon size={11} />
+                                </ThemeIcon>
+                                <Text size="sm">{svc.name}</Text>
+                              </Group>
+                              <Group gap={6} wrap="nowrap">
+                                <Text
+                                  size="xs"
+                                  fw={500}
+                                  c={cfg.color === 'teal' ? 'teal' : cfg.color}
+                                >
+                                  {cfg.label}
+                                </Text>
+                                <Text size="xs" c="dimmed" style={{ whiteSpace: 'nowrap' }}>
+                                  {svc.latency}ms
+                                </Text>
+                              </Group>
+                            </Group>
+                          )
+                        })}
+                      </Stack>
+                    </div>
+                  )
+                })
+              )}
+
+              <Divider my="xs" />
+              <Text size="xs" c="dimmed" ta="center">
+                Auto-refreshes every 30s
+              </Text>
+            </Stack>
+          </ScrollArea.Autosize>
         </Popover.Dropdown>
       </Popover>
     </>

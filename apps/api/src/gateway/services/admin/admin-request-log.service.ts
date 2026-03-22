@@ -33,10 +33,10 @@ export class AdminRequestLogService {
         .sort({ timestamp: -1 })
         .skip(offset)
         .limit(limit)
-        .lean()
+        .lean<IAdminRequestLog[]>()
         .exec(),
       this.model.countDocuments().exec(),
     ]);
-    return { logs: logs as unknown as IAdminRequestLog[], total };
+    return { logs, total };
   }
 }

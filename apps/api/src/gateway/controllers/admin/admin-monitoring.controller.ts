@@ -107,14 +107,4 @@ export class AdminMonitoringController {
       offset ? parseInt(offset, 10) : 0,
     );
   }
-
-  @Get('audit')
-  async getAuditLogs(
-    @Query('limit') limit?: string,
-    @Query('offset') offset?: string,
-  ) {
-    // Audit log is written by application code using AdminAuditLogModel.
-    // For now return a placeholder response since no writes are wired yet.
-    return { logs: [], total: 0, limit: limit ?? 50, offset: offset ?? 0 };
-  }
 }

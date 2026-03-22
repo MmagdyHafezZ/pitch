@@ -14,9 +14,14 @@ jest.mock('next/navigation', () => ({
 
 jest.mock('@/lib/client', () => ({
   api: {
-    sessions: {
-      getAll: jest.fn(),
-      delete: jest.fn(),
+    admin: {
+      sessions: {
+        list: jest.fn(),
+        delete: jest.fn(),
+      },
+      users: {
+        list: jest.fn(),
+      },
     },
   },
 }))
@@ -62,10 +67,11 @@ const makeSession = (
 describe('SessionsManagement page', () => {
   beforeEach(() => {
     jest.clearAllMocks()
+    api.admin.users.list.mockResolvedValue([])
   })
 
   it('shows skeletons while loading', () => {
-    api.sessions.getAll.mockReturnValue(new Promise(() => {}))
+    api.admin.sessions.list.mockReturnValue(new Promise(() => {}))
 
     const SessionsPage = require('../../sessions/page').default
 
@@ -82,7 +88,7 @@ describe('SessionsManagement page', () => {
   })
 
   it('renders sessions after load', async () => {
-    api.sessions.getAll.mockResolvedValue({
+    api.admin.sessions.list.mockResolvedValue({
       sessions: [
         makeSession({ id: 'session-001', name: 'Alpha Session', status: 'active' }),
         makeSession({ id: 'session-002', name: 'Beta Session', status: 'ended' }),

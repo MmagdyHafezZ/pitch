@@ -26,20 +26,6 @@ let accessToken: string | null = null
 let refreshPromise: Promise<string | null> | null = null
 let accessTokenListener: ((token: string | null) => void) | null = null
 
-export type ApiErrorPayload = {
-  timestamp: string
-  method: string
-  endpoint: string
-  status: number
-  message: string
-}
-
-let apiErrorListener: ((error: ApiErrorPayload) => void) | null = null
-
-export const setApiErrorListener = (fn: typeof apiErrorListener) => {
-  apiErrorListener = fn
-}
-
 export const setAccessToken = (token: string | null) => {
   accessToken = token
   if (accessTokenListener) {
@@ -149,15 +135,6 @@ export async function apiRequest<T>(
     if (response) {
       const message =
         resolvedError?.errorData?.message || `HTTP ${response.status}: ${response.statusText}`
-      if (response.status >= 400) {
-        apiErrorListener?.({
-          timestamp: new Date().toISOString(),
-          method: (options.method ?? 'GET').toUpperCase(),
-          endpoint,
-          status: response.status,
-          message,
-        })
-      }
       throw new Error(message)
     }
 
@@ -952,13 +929,6 @@ export const api = {
           status: 'online' | 'degraded' | 'offline'
           latency: number
         }>
-        containers: Array<{
-          id: string
-          name: string
-          image: string
-          state: string
-          status: string
-        }>
       }>('/admin/health'),
     overview: () =>
       apiRequest<{
@@ -1042,6 +1012,22 @@ export const api = {
           method: 'POST',
           body: JSON.stringify({ newOwnerId }),
         }),
+      addMember: (id: string, data: { userId: string; role?: string; tokenLimit?: number }) =>
+        apiRequest<any>(`/admin/teams/${id}/members`, {
+          method: 'POST',
+          body: JSON.stringify(data),
+        }),
+      updateMember: (
+        id: string,
+        userId: string,
+        data: { role?: string; tokenLimit?: number; isActive?: boolean }
+      ) =>
+        apiRequest<any>(`/admin/teams/${id}/members/${userId}`, {
+          method: 'PUT',
+          body: JSON.stringify(data),
+        }),
+      removeMember: (id: string, userId: string) =>
+        apiRequest<any>(`/admin/teams/${id}/members/${userId}`, { method: 'DELETE' }),
     },
     sessions: {
       list: (params?: {
@@ -1082,6 +1068,7 @@ export const api = {
         apiRequest<any>(`/admin/sessions/${id}/force-end`, { method: 'POST' }),
       recompute: (id: string) =>
         apiRequest<any>(`/admin/sessions/${id}/recompute`, { method: 'POST' }),
+      delete: (id: string) => apiRequest<any>(`/admin/sessions/${id}`, { method: 'DELETE' }),
     },
     monitoring: {
       assessments: (params?: { limit?: number; offset?: number }) => {
@@ -1099,13 +1086,6 @@ export const api = {
         if (params?.offset) q.set('offset', String(params.offset))
         const qs = q.toString()
         return apiRequest<any>(`/admin/monitoring/request-logs${qs ? `?${qs}` : ''}`)
-      },
-      audit: (params?: { limit?: number; offset?: number }) => {
-        const q = new URLSearchParams()
-        if (params?.limit) q.set('limit', String(params.limit))
-        if (params?.offset) q.set('offset', String(params.offset))
-        const qs = q.toString()
-        return apiRequest<any>(`/admin/monitoring/audit${qs ? `?${qs}` : ''}`)
       },
     },
   },

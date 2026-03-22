@@ -21,7 +21,7 @@ import {
 } from '@mantine/core'
 import { useDisclosure } from '@mantine/hooks'
 import { notifications } from '@mantine/notifications'
-import { IconPencil, IconTrash, IconSearch } from '@tabler/icons-react'
+import { IconPencil, IconSearch } from '@tabler/icons-react'
 import { api } from '@/lib/client'
 
 type User = {
@@ -40,12 +40,12 @@ export default function UsersManagement() {
   const [search, setSearch] = useState('')
   const [opened, { open, close }] = useDisclosure(false)
   const [editingUser, setEditingUser] = useState<User | null>(null)
-  const [form, setForm] = useState({ name: '', email: '', isActive: true })
+  const [form, setForm] = useState({ name: '', isActive: true })
   const [saving, setSaving] = useState(false)
 
   const fetchUsers = useCallback(async () => {
     try {
-      const data = await api.users.getAll()
+      const data = await api.admin.users.list({ limit: 200 })
       setUsers(Array.isArray(data) ? data : [])
     } catch {
       notifications.show({ title: 'Error', message: 'Failed to load users', color: 'red' })
@@ -70,7 +70,7 @@ export default function UsersManagement() {
 
   const openEdit = (user: User) => {
     setEditingUser(user)
-    setForm({ name: user.name, email: user.email, isActive: user.isActive })
+    setForm({ name: user.name, isActive: user.isActive })
     open()
   }
 
@@ -78,9 +78,8 @@ export default function UsersManagement() {
     if (!editingUser) return
     setSaving(true)
     try {
-      await api.users.update(editingUser.id, {
+      await api.admin.users.update(editingUser.id, {
         name: form.name,
-        email: form.email,
         isActive: form.isActive,
       })
       notifications.show({ title: 'Success', message: 'User updated', color: 'teal' })
@@ -94,27 +93,6 @@ export default function UsersManagement() {
       })
     } finally {
       setSaving(false)
-    }
-  }
-
-  const handleDelete = async (user: User) => {
-    if (!window.confirm(`Delete user "${user.name}" (${user.email})? This cannot be undone.`))
-      return
-
-    try {
-      await api.users.delete(user.id)
-      notifications.show({
-        title: 'Deleted',
-        message: `User "${user.name}" deleted`,
-        color: 'teal',
-      })
-      fetchUsers()
-    } catch (err: any) {
-      notifications.show({
-        title: 'Error',
-        message: err?.message || 'Failed to delete user',
-        color: 'red',
-      })
     }
   }
 
@@ -138,7 +116,7 @@ export default function UsersManagement() {
         onChange={(e) => setSearch(e.currentTarget.value)}
       />
 
-      <Card withBorder radius="md" p={0}>
+      <Card withBorder radius="md" p={0} shadow="sm">
         {loading ? (
           <Stack p="lg" gap="sm">
             {Array.from({ length: 5 }).map((_, i) => (
@@ -182,7 +160,12 @@ export default function UsersManagement() {
                     <Text size="sm">{user.email}</Text>
                   </Table.Td>
                   <Table.Td>
-                    <Badge color={user.isActive ? 'green' : 'red'} variant="dot" size="sm">
+                    <Badge
+                      color={user.isActive ? 'teal' : 'red'}
+                      variant="light"
+                      size="sm"
+                      radius="sm"
+                    >
                       {user.isActive ? 'Active' : 'Inactive'}
                     </Badge>
                   </Table.Td>
@@ -192,23 +175,11 @@ export default function UsersManagement() {
                     </Text>
                   </Table.Td>
                   <Table.Td>
-                    <Group gap={4}>
-                      <Tooltip label="Edit">
-                        <ActionIcon variant="subtle" size="sm" onClick={() => openEdit(user)}>
-                          <IconPencil size={14} />
-                        </ActionIcon>
-                      </Tooltip>
-                      <Tooltip label="Delete">
-                        <ActionIcon
-                          variant="subtle"
-                          color="red"
-                          size="sm"
-                          onClick={() => handleDelete(user)}
-                        >
-                          <IconTrash size={14} />
-                        </ActionIcon>
-                      </Tooltip>
-                    </Group>
+                    <Tooltip label="Edit">
+                      <ActionIcon variant="subtle" size="sm" onClick={() => openEdit(user)}>
+                        <IconPencil size={14} />
+                      </ActionIcon>
+                    </Tooltip>
                   </Table.Td>
                 </Table.Tr>
               ))}
@@ -219,20 +190,19 @@ export default function UsersManagement() {
 
       <Modal opened={opened} onClose={close} title="Edit User" centered size="md">
         <Stack gap="md">
+          <TextInput label="Email" value={editingUser?.email ?? ''} disabled />
           <TextInput
             label="Name"
             value={form.name}
             onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
           />
-          <TextInput
-            label="Email"
-            value={form.email}
-            onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-          />
           <Switch
             label="Active"
             checked={form.isActive}
-            onChange={(e) => setForm((f) => ({ ...f, isActive: e.currentTarget.checked }))}
+            onChange={(e) => {
+              const checked = e.currentTarget.checked
+              setForm((f) => ({ ...f, isActive: checked }))
+            }}
           />
           <Group justify="flex-end" mt="sm">
             <Button variant="subtle" onClick={close}>

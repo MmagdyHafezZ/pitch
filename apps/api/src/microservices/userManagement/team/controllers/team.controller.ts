@@ -74,7 +74,7 @@ export class TeamController {
   ) {
     try {
       this.logger.log(
-        `Updating team - Requested by: ${data.userClaims.email} (${data.userClaims.id})`,
+        `Updating team - Requested by: ${data.userClaims?.email ?? 'admin'} (${data.userClaims?.id ?? 'N/A'})`,
       );
       const { userClaims: _userClaims, teamId, ...updateData } = data;
 
@@ -88,7 +88,13 @@ export class TeamController {
         metadata: updateData.metadata as unknown as TeamMetadata,
       };
 
-      return await this.teamService.updateTeam(teamId, dto, _userClaims.id);
+      const isAdmin = (data as any).isAdmin === true;
+      return await this.teamService.updateTeam(
+        teamId,
+        dto,
+        _userClaims?.id ?? '',
+        isAdmin,
+      );
     } catch (error) {
       throw toRpcException(error);
     }
@@ -102,9 +108,12 @@ export class TeamController {
   ) {
     try {
       this.logger.log(
-        `Deleting team ${data.teamId} - Requested by: ${data.userClaims.email} (${data.userClaims.id})`,
+        `Deleting team ${data.teamId} - Requested by: ${data.userClaims?.email ?? 'admin'} (${data.userClaims?.id ?? 'N/A'})`,
       );
-      return await this.teamService.removeTeam(data.teamId, data.userClaims.id);
+      return await this.teamService.removeTeam(
+        data.teamId,
+        data.userClaims?.id ?? '',
+      );
     } catch (error) {
       throw toRpcException(error);
     }
@@ -117,7 +126,7 @@ export class TeamController {
   ) {
     try {
       this.logger.log(
-        `Getting team ${data.teamId} - Requested by: ${data.userClaims.email} (${data.userClaims.id})`,
+        `Getting team ${data.teamId} - Requested by: ${data.userClaims?.email ?? 'admin'} (${data.userClaims?.id ?? 'N/A'})`,
       );
       return await this.teamService.findById(data.teamId);
     } catch (error) {
@@ -129,7 +138,7 @@ export class TeamController {
   async getTeams(@Payload() data: userClaimsInterface.MessageWithUserClaims) {
     try {
       this.logger.log(
-        `Getting teams - Requested by: ${data.userClaims.email} (${data.userClaims.id})`,
+        `Getting teams - Requested by: ${data.userClaims?.email ?? 'admin'} (${data.userClaims?.id ?? 'N/A'})`,
       );
       return await this.teamService.findAll();
     } catch (error) {
@@ -161,7 +170,7 @@ export class TeamController {
   ) {
     try {
       this.logger.log(
-        `Adding team member - Requested by: ${data.userClaims.email} (${data.userClaims.id})`,
+        `Adding team member - Requested by: ${data.userClaims?.email ?? 'admin'} (${data.userClaims?.id ?? 'N/A'})`,
       );
       const { userClaims: _userClaims, teamId, ...addMemberDto } = data;
       const dto: AddMemberDto = {
@@ -170,10 +179,15 @@ export class TeamController {
         role: addMemberDto.role,
         tokenLimit: addMemberDto.tokenLimit,
         isActive: addMemberDto.isActive,
-        invitedByUserId: _userClaims.id,
+        invitedByUserId: _userClaims?.id ?? '',
       };
 
-      return await this.teamService.addMember(dto, _userClaims.id);
+      const isAdmin = (data as any).isAdmin === true;
+      return await this.teamService.addMember(
+        dto,
+        _userClaims?.id ?? '',
+        isAdmin,
+      );
     } catch (error) {
       throw toRpcException(error);
     }
@@ -193,10 +207,9 @@ export class TeamController {
   ) {
     try {
       this.logger.log(
-        `Updating team member - Requested by: ${data.userClaims.email} (${data.userClaims.id})`,
+        `Updating team member - Requested by: ${data.userClaims?.email ?? 'admin'} (${data.userClaims?.id ?? 'N/A'})`,
       );
       const { userClaims: _userClaims, teamId, userId, ...addMemberDto } = data;
-      void _userClaims;
       const dto: UpdateMemberDto = {
         teamId: teamId,
         userId: userId,
@@ -205,7 +218,12 @@ export class TeamController {
         isActive: addMemberDto.isActive,
       };
 
-      return await this.teamService.updateMember(dto, _userClaims.id);
+      const isAdmin = (data as any).isAdmin === true;
+      return await this.teamService.updateMember(
+        dto,
+        _userClaims?.id ?? '',
+        isAdmin,
+      );
     } catch (error) {
       throw toRpcException(error);
     }
@@ -223,12 +241,14 @@ export class TeamController {
   ) {
     try {
       this.logger.log(
-        `Removing user ${data.userId} from ${data.teamId} - Requested by: ${data.userClaims.email} (${data.userClaims.id})`,
+        `Removing user ${data.userId} from ${data.teamId} - Requested by: ${data.userClaims?.email ?? 'admin'} (${data.userClaims?.id ?? 'N/A'})`,
       );
+      const isAdmin = (data as any).isAdmin === true;
       return await this.teamService.removeTeamMember(
         data.teamId,
         data.userId,
-        data.userClaims.id,
+        data.userClaims?.id ?? '',
+        isAdmin,
       );
     } catch (error) {
       throw toRpcException(error);

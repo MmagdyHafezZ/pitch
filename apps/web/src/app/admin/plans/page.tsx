@@ -22,7 +22,7 @@ import {
 } from '@mantine/core'
 import { useDisclosure } from '@mantine/hooks'
 import { notifications } from '@mantine/notifications'
-import { IconPlus, IconPencil, IconTrash } from '@tabler/icons-react'
+import { IconPlus, IconPencil } from '@tabler/icons-react'
 import { api } from '@/lib/client'
 
 type Plan = {
@@ -120,22 +120,6 @@ export default function PlansManagement() {
     }
   }
 
-  const handleDelete = async (plan: Plan) => {
-    if (!window.confirm(`Delete plan "${plan.name}"? This will deactivate it.`)) return
-
-    try {
-      await api.plans.delete(plan.id)
-      notifications.show({ title: 'Deleted', message: `"${plan.name}" removed`, color: 'teal' })
-      fetchPlans()
-    } catch (err: any) {
-      notifications.show({
-        title: 'Error',
-        message: err?.message || 'Failed to delete plan',
-        color: 'red',
-      })
-    }
-  }
-
   const levelColor = (level: string) => {
     const map: Record<string, string> = {
       FREE: 'gray',
@@ -157,12 +141,12 @@ export default function PlansManagement() {
             Create and manage subscription plans
           </Text>
         </div>
-        <Button leftSection={<IconPlus size={16} />} onClick={openCreate}>
+        <Button leftSection={<IconPlus size={16} />} onClick={openCreate} color="brand">
           Create Plan
         </Button>
       </Group>
 
-      <Card withBorder radius="md" p={0}>
+      <Card withBorder radius="md" p={0} shadow="sm">
         {loading ? (
           <Stack p="lg" gap="sm">
             {Array.from({ length: 3 }).map((_, i) => (
@@ -201,7 +185,7 @@ export default function PlansManagement() {
                     </div>
                   </Table.Td>
                   <Table.Td>
-                    <Badge color={levelColor(plan.planLevel)} variant="light" size="sm">
+                    <Badge color={levelColor(plan.planLevel)} variant="light" size="sm" radius="sm">
                       {plan.planLevel}
                     </Badge>
                   </Table.Td>
@@ -209,7 +193,12 @@ export default function PlansManagement() {
                     <Text size="sm">{plan.maxCoins.toLocaleString()}</Text>
                   </Table.Td>
                   <Table.Td>
-                    <Badge color={plan.isActive ? 'green' : 'red'} variant="dot" size="sm">
+                    <Badge
+                      color={plan.isActive ? 'teal' : 'red'}
+                      variant="light"
+                      size="sm"
+                      radius="sm"
+                    >
                       {plan.isActive ? 'Active' : 'Inactive'}
                     </Badge>
                   </Table.Td>
@@ -219,23 +208,11 @@ export default function PlansManagement() {
                     </Text>
                   </Table.Td>
                   <Table.Td>
-                    <Group gap={4}>
-                      <Tooltip label="Edit">
-                        <ActionIcon variant="subtle" size="sm" onClick={() => openEdit(plan)}>
-                          <IconPencil size={14} />
-                        </ActionIcon>
-                      </Tooltip>
-                      <Tooltip label="Delete">
-                        <ActionIcon
-                          variant="subtle"
-                          color="red"
-                          size="sm"
-                          onClick={() => handleDelete(plan)}
-                        >
-                          <IconTrash size={14} />
-                        </ActionIcon>
-                      </Tooltip>
-                    </Group>
+                    <Tooltip label="Edit">
+                      <ActionIcon variant="subtle" size="sm" onClick={() => openEdit(plan)}>
+                        <IconPencil size={14} />
+                      </ActionIcon>
+                    </Tooltip>
                   </Table.Td>
                 </Table.Tr>
               ))}
@@ -283,7 +260,10 @@ export default function PlansManagement() {
           <Switch
             label="Active"
             checked={form.isActive}
-            onChange={(e) => setForm((f) => ({ ...f, isActive: e.currentTarget.checked }))}
+            onChange={(e) => {
+              const checked = e.currentTarget.checked
+              setForm((f) => ({ ...f, isActive: checked }))
+            }}
           />
           <Group justify="flex-end" mt="sm">
             <Button variant="subtle" onClick={close}>

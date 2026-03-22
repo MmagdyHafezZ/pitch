@@ -11,10 +11,13 @@ jest.mock('next/navigation', () => ({
 
 jest.mock('@/lib/client', () => ({
   api: {
-    teams: {
-      getAll: jest.fn(),
-      update: jest.fn(),
-      delete: jest.fn(),
+    admin: {
+      teams: {
+        list: jest.fn(),
+        getMembers: jest.fn(),
+        update: jest.fn(),
+        delete: jest.fn(),
+      },
     },
   },
 }))
@@ -56,10 +59,11 @@ const makeTeam = (
 describe('TeamsManagement page', () => {
   beforeEach(() => {
     jest.clearAllMocks()
+    api.admin.teams.getMembers.mockResolvedValue([])
   })
 
   it('shows skeletons while loading', () => {
-    api.teams.getAll.mockReturnValue(new Promise(() => {}))
+    api.admin.teams.list.mockReturnValue(new Promise(() => {}))
 
     const TeamsPage = require('../../teams/page').default
 
@@ -76,7 +80,7 @@ describe('TeamsManagement page', () => {
   })
 
   it('renders team name after load', async () => {
-    api.teams.getAll.mockResolvedValue([
+    api.admin.teams.list.mockResolvedValue([
       makeTeam({ id: 't1', name: 'Acme Corp', slug: 'acme-corp' }),
       makeTeam({ id: 't2', name: 'Beta Ltd', slug: 'beta-ltd' }),
     ])

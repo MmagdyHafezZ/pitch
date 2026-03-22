@@ -33,6 +33,7 @@ type Session = {
   endedAt?: string | null
   scenario?: { name?: string } | null
   persona?: { name?: string } | null
+  user?: { id: string; name?: string | null; email?: string | null } | null
 }
 
 const PAGE_SIZE = 25
@@ -40,6 +41,7 @@ const PAGE_SIZE = 25
 export default function SessionsManagement() {
   const router = useRouter()
   const [sessions, setSessions] = useState<Session[]>([])
+  const [userMap, setUserMap] = useState<Map<string, { name?: string; email?: string }>>(new Map())
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -57,10 +59,21 @@ export default function SessionsManagement() {
       if (statusFilter) params.status = statusFilter
       if (typeFilter) params.type = typeFilter
 
-      const data = await api.sessions.getAll(params)
+      const [data, users] = await Promise.all([
+        api.admin.sessions.list(params),
+        api.admin.users.list({ limit: 500 }).catch(() => []),
+      ])
       const list = data?.sessions ?? (Array.isArray(data) ? data : [])
       setSessions(list)
       setTotal(data?.total ?? list.length)
+
+      const map = new Map<string, { name?: string; email?: string }>()
+      if (Array.isArray(users)) {
+        for (const u of users) {
+          if (u?.id) map.set(u.id, { name: u.name, email: u.email })
+        }
+      }
+      setUserMap(map)
     } catch {
       notifications.show({ title: 'Error', message: 'Failed to load sessions', color: 'red' })
     } finally {
@@ -87,7 +100,7 @@ export default function SessionsManagement() {
   const handleDelete = async (session: Session) => {
     if (!window.confirm(`Delete session "${session.name || session.id}"?`)) return
     try {
-      await api.sessions.delete(session.id)
+      await api.admin.sessions.delete(session.id)
       notifications.show({ title: 'Deleted', message: 'Session deleted', color: 'teal' })
       fetchSessions()
     } catch (err: any) {
@@ -182,7 +195,7 @@ export default function SessionsManagement() {
         />
       </Group>
 
-      <Card withBorder radius="md" p={0}>
+      <Card withBorder radius="md" p={0} shadow="sm">
         {loading ? (
           <Stack p="lg" gap="sm">
             {Array.from({ length: 6 }).map((_, i) => (
@@ -202,6 +215,7 @@ export default function SessionsManagement() {
             <Table.Thead>
               <Table.Tr>
                 <Table.Th>Session</Table.Th>
+                <Table.Th>Created by</Table.Th>
                 <Table.Th>Type</Table.Th>
                 <Table.Th>Status</Table.Th>
                 <Table.Th>Scenario</Table.Th>
@@ -224,12 +238,31 @@ export default function SessionsManagement() {
                     </div>
                   </Table.Td>
                   <Table.Td>
-                    <Badge color={typeColor(session.type)} variant="light" size="sm">
+                    <div>
+                      <Text size="sm">
+                        {userMap.get(session.userId)?.name ??
+                          userMap.get(session.userId)?.email ??
+                          session.userId}
+                      </Text>
+                      {userMap.get(session.userId)?.name && userMap.get(session.userId)?.email && (
+                        <Text size="xs" c="dimmed">
+                          {userMap.get(session.userId)!.email}
+                        </Text>
+                      )}
+                    </div>
+                  </Table.Td>
+                  <Table.Td>
+                    <Badge color={typeColor(session.type)} variant="light" size="sm" radius="sm">
                       {session.type}
                     </Badge>
                   </Table.Td>
                   <Table.Td>
-                    <Badge color={statusColor(session.status)} variant="dot" size="sm">
+                    <Badge
+                      color={statusColor(session.status)}
+                      variant="light"
+                      size="sm"
+                      radius="sm"
+                    >
                       {session.status}
                     </Badge>
                   </Table.Td>

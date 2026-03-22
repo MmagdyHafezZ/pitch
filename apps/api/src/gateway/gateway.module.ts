@@ -52,10 +52,6 @@ import {
   AdminRequestLogModel,
 } from './schemas/admin-request-log.schema';
 import {
-  AdminAuditLogSchema,
-  AdminAuditLogModel,
-} from './schemas/admin-audit-log.schema';
-import {
   EventLogSchema,
   EventLogModel,
 } from '../microservices/simulation/schemas/mongodb/event-log.schema';
@@ -101,7 +97,6 @@ import {
     MongooseModule.forFeature(
       [
         { name: AdminRequestLogModel, schema: AdminRequestLogSchema },
-        { name: AdminAuditLogModel, schema: AdminAuditLogSchema },
         { name: EventLogModel, schema: EventLogSchema },
         { name: EnrichedTranscriptModel, schema: EnrichedTranscriptSchema },
         { name: LLMTraceModel, schema: LLMTraceSchema },

@@ -20,10 +20,6 @@ jest.mock('@/features/auth/stores/auth.store', () => ({
     }),
 }))
 
-jest.mock('../stores/error-log.store', () => ({
-  initializeErrorInterceptor: jest.fn(),
-}))
-
 function Wrapper({ children }: { children: React.ReactNode }) {
   return (
     <MantineProvider>
@@ -36,7 +32,6 @@ function Wrapper({ children }: { children: React.ReactNode }) {
 describe('AdminLayout', () => {
   beforeEach(() => {
     jest.clearAllMocks()
-    // Reset admin store before each test
     act(() => {
       useAdminStore.setState({ isAdmin: null, checking: false })
     })
@@ -102,26 +97,6 @@ describe('AdminLayout', () => {
     await waitFor(() => {
       expect(mockReplace).toHaveBeenCalledWith('/studio/home')
     })
-  })
-
-  it('renders Errors nav item for admin', () => {
-    act(() => {
-      useAdminStore.setState({ isAdmin: true, checking: false })
-    })
-
-    const AdminLayout = require('../layout').default
-
-    act(() => {
-      render(
-        <Wrapper>
-          <AdminLayout>
-            <div>content</div>
-          </AdminLayout>
-        </Wrapper>
-      )
-    })
-
-    expect(screen.getByText('Errors')).toBeInTheDocument()
   })
 
   it('does not render children when not admin', () => {

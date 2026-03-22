@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Delete,
   Param,
   Query,
   Inject,
@@ -80,7 +81,7 @@ export class AdminSessionsController {
   @Get(':id')
   getSession(@Param('id') id: string) {
     return this.simulationService
-      .send(SIMULATION_SERVICE_PATTERNS.GET_SESSION, { sessionId: id })
+      .send(SIMULATION_SERVICE_PATTERNS.GET_SESSION, { id })
       .pipe(
         timeout(5000),
         catchError((err: unknown) => {
@@ -107,13 +108,13 @@ export class AdminSessionsController {
 
     const [events, total] = await Promise.all([
       this.eventLogModel
-        .find({ 'context.sessionId': id })
-        .sort({ createdAt: -1 })
+        .find({ iterationId: id })
+        .sort({ createdAt: 1 })
         .skip(skip)
         .limit(lim)
         .lean()
         .exec(),
-      this.eventLogModel.countDocuments({ 'context.sessionId': id }).exec(),
+      this.eventLogModel.countDocuments({ iterationId: id }).exec(),
     ]);
 
     return { events, total };
@@ -195,6 +196,25 @@ export class AdminSessionsController {
             () =>
               new HttpException(
                 error.message ?? 'Failed to recompute assessment',
+                error.status ?? HttpStatus.INTERNAL_SERVER_ERROR,
+              ),
+          );
+        }),
+      );
+  }
+
+  @Delete(':id')
+  deleteSession(@Param('id') id: string) {
+    return this.simulationService
+      .send(SIMULATION_SERVICE_PATTERNS.DELETE_SESSION, { id })
+      .pipe(
+        timeout(5000),
+        catchError((err: unknown) => {
+          const error = normalizeError(err);
+          return throwError(
+            () =>
+              new HttpException(
+                error.message ?? 'Failed to delete session',
                 error.status ?? HttpStatus.INTERNAL_SERVER_ERROR,
               ),
           );

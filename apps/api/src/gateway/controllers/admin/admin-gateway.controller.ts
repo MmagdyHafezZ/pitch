@@ -11,7 +11,6 @@ import {
   Inject,
 } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
-import * as http from 'http';
 import { catchError, timeout } from 'rxjs/operators';
 import { throwError, firstValueFrom } from 'rxjs';
 import { CheckSystemAdmin } from '../../guards/check-system-admin.guard';
@@ -19,40 +18,7 @@ import {
   USER_SERVICE_PATTERNS,
   SIMULATION_SERVICE_PATTERNS,
 } from '@pitch/shared-backend/interfaces/message-patterns.interface';
-import { normalizeError } from '@pitch/shared-backend/helpers/exceptions';
 import { AdminFeatureFlagsService } from '../../services/admin/admin-feature-flags.service';
-
-interface DockerContainer {
-  Id: string;
-  Names: string[];
-  Image: string;
-  State: string;
-  Status: string;
-}
-
-function dockerRequest<T>(path: string): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const req = http.request(
-      { socketPath: '/var/run/docker.sock', path, method: 'GET' },
-      (res) => {
-        const chunks: Buffer[] = [];
-        res.on('data', (chunk: Buffer) => chunks.push(chunk));
-        res.on('end', () => {
-          try {
-            resolve(JSON.parse(Buffer.concat(chunks).toString()) as T);
-          } catch {
-            reject(new Error('Invalid JSON from Docker API'));
-          }
-        });
-      },
-    );
-    req.on('error', reject);
-    req.setTimeout(3000, () =>
-      req.destroy(new Error('Docker request timeout')),
-    );
-    req.end();
-  });
-}
 
 @Controller({ path: 'admin', version: '1' })
 @UseGuards(CheckSystemAdmin)
@@ -61,6 +27,13 @@ export class AdminGatewayController {
     @Inject('USER_SERVICE') private readonly userService: ClientProxy,
     @Inject('SIMULATION_SERVICE')
     private readonly simulationService: ClientProxy,
+    @Inject('ANALYTICS_SERVICE')
+    private readonly analyticsService: ClientProxy,
+    @Inject('SUPPORT_SERVICE')
+    private readonly supportService: ClientProxy,
+    @Inject('CRM_SERVICE') private readonly crmService: ClientProxy,
+    @Inject('LTI_SERVICE') private readonly ltiService: ClientProxy,
+    @Inject('S3_SERVICE') private readonly s3Service: ClientProxy,
     private readonly featureFlagsService: AdminFeatureFlagsService,
   ) {}
 
@@ -74,7 +47,8 @@ export class AdminGatewayController {
     const port = process.env.PORT ?? 8000;
     const baseUrl = `http://localhost:${port}/api/v1`;
 
-    const serviceEndpoints = [
+    // ── HTTP checks (simulation services run in-process) ──────────────────────
+    const httpChecks = [
       { name: 'Gateway API', path: '/health' },
       { name: 'Simulation Sessions', path: '/simulation/sessions/health' },
       {
@@ -84,8 +58,8 @@ export class AdminGatewayController {
       { name: 'LLM Service', path: '/simulation/llm/health' },
     ];
 
-    const serviceResults = await Promise.allSettled(
-      serviceEndpoints.map(async ({ name, path }) => {
+    const httpResults = await Promise.allSettled(
+      httpChecks.map(async ({ name, path }) => {
         const start = Date.now();
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 3000);
@@ -93,12 +67,11 @@ export class AdminGatewayController {
           const res = await fetch(`${baseUrl}${path}`, {
             signal: controller.signal,
           });
-          const latency = Date.now() - start;
           clearTimeout(timeoutId);
           return {
             name,
             status: res.ok ? ('online' as const) : ('degraded' as const),
-            latency,
+            latency: Date.now() - start,
           };
         } catch {
           clearTimeout(timeoutId);
@@ -111,40 +84,66 @@ export class AdminGatewayController {
       }),
     );
 
-    const services = serviceResults.map((r, i) =>
-      r.status === 'fulfilled'
-        ? r.value
-        : {
-            name: serviceEndpoints[i].name,
-            status: 'offline' as const,
-            latency: 0,
-          },
-    );
+    // ── RabbitMQ health checks (separate microservices) ───────────────────────
+    const rpcCheck = async (
+      name: string,
+      client: ClientProxy,
+      pattern: string,
+    ) => {
+      const start = Date.now();
+      try {
+        await firstValueFrom(
+          client.send(pattern, {}).pipe(
+            timeout(3000),
+            catchError(() => throwError(() => new Error('timeout'))),
+          ),
+        );
+        return { name, status: 'online' as const, latency: Date.now() - start };
+      } catch {
+        return {
+          name,
+          status: 'offline' as const,
+          latency: Date.now() - start,
+        };
+      }
+    };
 
-    let containers: Array<{
-      id: string;
-      name: string;
-      image: string;
-      state: string;
-      status: string;
-    }> = [];
+    const rpcResults = await Promise.allSettled([
+      rpcCheck('User Service', this.userService, 'health'),
+      rpcCheck('Analytics Service', this.analyticsService, 'health'),
+      rpcCheck('Support Service', this.supportService, 'health'),
+      rpcCheck('CRM Service', this.crmService, 'health'),
+      rpcCheck('LTI Service', this.ltiService, 'health'),
+      rpcCheck('S3 Service', this.s3Service, 's3.health'),
+    ]);
 
-    try {
-      const raw = await dockerRequest<DockerContainer[]>(
-        '/containers/json?all=1',
-      );
-      containers = raw.map((c) => ({
-        id: c.Id.slice(0, 12),
-        name: (c.Names[0] ?? c.Id.slice(0, 12)).replace(/^\//, ''),
-        image: c.Image,
-        state: c.State,
-        status: c.Status,
-      }));
-    } catch {
-      // Docker socket not available or permission denied — return empty list
-    }
+    const rpcServices = [
+      'User Service',
+      'Analytics Service',
+      'Support Service',
+      'CRM Service',
+      'LTI Service',
+      'S3 Service',
+    ];
 
-    return { services, containers };
+    const services = [
+      ...httpResults.map((r, i) =>
+        r.status === 'fulfilled'
+          ? r.value
+          : {
+              name: httpChecks[i].name,
+              status: 'offline' as const,
+              latency: 0,
+            },
+      ),
+      ...rpcResults.map((r, i) =>
+        r.status === 'fulfilled'
+          ? r.value
+          : { name: rpcServices[i], status: 'offline' as const, latency: 0 },
+      ),
+    ];
+
+    return { services };
   }
 
   @Get('overview')

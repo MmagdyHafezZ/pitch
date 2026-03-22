@@ -1,53 +1,63 @@
-import { EventEmitter } from 'events';
-import * as http from 'http';
+import { Test, TestingModule } from '@nestjs/testing';
+import { of, throwError } from 'rxjs';
+import { JwtService } from '@nestjs/jwt';
 import { AdminGatewayController } from './admin-gateway.controller';
+import { AdminFeatureFlagsService } from '../../services/admin/admin-feature-flags.service';
+import { CheckSystemAdmin } from '../../guards/check-system-admin.guard';
 
-jest.mock('http');
-
-const mockedHttp = jest.mocked(http);
-
-function makeDockerSocket(containers: object[]) {
-  const json = JSON.stringify(containers);
-
-  mockedHttp.request.mockImplementation((_opts: any, callback: any) => {
-    const res = new EventEmitter() as any;
-    const req = new EventEmitter() as any;
-    req.setTimeout = jest.fn((_ms: number, cb: () => void) => {
-      req._timeoutCb = cb;
-    });
-    req.end = jest.fn(() => {
-      if (callback) callback(res);
-      setImmediate(() => {
-        res.emit('data', Buffer.from(json));
-        res.emit('end');
-      });
-    });
-    req.destroy = jest.fn();
-    return req;
-  });
-}
-
-function makeDockerError() {
-  mockedHttp.request.mockImplementation((_opts: any, _callback: any) => {
-    const req = new EventEmitter() as any;
-    req.setTimeout = jest.fn();
-    req.end = jest.fn(() => {
-      setImmediate(() => {
-        req.emit('error', new Error('connect ENOENT /var/run/docker.sock'));
-      });
-    });
-    req.destroy = jest.fn();
-    return req;
-  });
+function makeClientProxy(sendResult: any = { status: 'ok' }) {
+  return {
+    send: jest.fn().mockReturnValue(of(sendResult)),
+  };
 }
 
 describe('AdminGatewayController', () => {
   let controller: AdminGatewayController;
+  let userService: ReturnType<typeof makeClientProxy>;
+  let simulationService: ReturnType<typeof makeClientProxy>;
+  let analyticsService: ReturnType<typeof makeClientProxy>;
+  let supportService: ReturnType<typeof makeClientProxy>;
+  let crmService: ReturnType<typeof makeClientProxy>;
+  let ltiService: ReturnType<typeof makeClientProxy>;
+  let s3Service: ReturnType<typeof makeClientProxy>;
+  let featureFlagsService: AdminFeatureFlagsService;
 
-  beforeEach(() => {
-    jest.clearAllMocks();
-    controller = new AdminGatewayController();
-    global.fetch = jest.fn();
+  beforeEach(async () => {
+    userService = makeClientProxy([]);
+    simulationService = makeClientProxy({ sessions: [], total: 0 });
+    analyticsService = makeClientProxy({ status: 'ok' });
+    supportService = makeClientProxy({ status: 'ok' });
+    crmService = makeClientProxy({ status: 'ok' });
+    ltiService = makeClientProxy({ status: 'ok' });
+    s3Service = makeClientProxy({ status: 'ok' });
+
+    const module: TestingModule = await Test.createTestingModule({
+      controllers: [AdminGatewayController],
+      providers: [
+        AdminFeatureFlagsService,
+        CheckSystemAdmin,
+        {
+          provide: JwtService,
+          useValue: {
+            verify: jest.fn().mockReturnValue({ email: 'admin@test.com' }),
+          },
+        },
+        { provide: 'USER_SERVICE', useValue: userService },
+        { provide: 'SIMULATION_SERVICE', useValue: simulationService },
+        { provide: 'ANALYTICS_SERVICE', useValue: analyticsService },
+        { provide: 'SUPPORT_SERVICE', useValue: supportService },
+        { provide: 'CRM_SERVICE', useValue: crmService },
+        { provide: 'LTI_SERVICE', useValue: ltiService },
+        { provide: 'S3_SERVICE', useValue: s3Service },
+      ],
+    }).compile();
+
+    controller = module.get<AdminGatewayController>(AdminGatewayController);
+    featureFlagsService = module.get<AdminFeatureFlagsService>(
+      AdminFeatureFlagsService,
+    );
+
+    global.fetch = jest.fn().mockResolvedValue({ ok: true });
   });
 
   afterEach(() => {
@@ -61,130 +71,174 @@ describe('AdminGatewayController', () => {
   });
 
   describe('healthServices()', () => {
-    it('returns all services online + containers when everything succeeds', async () => {
-      const mockContainers = [
-        {
-          Id: 'abcdef123456789',
-          Names: ['/my-container'],
-          Image: 'nginx:latest',
-          State: 'running',
-          Status: 'Up 2 hours',
-        },
-      ];
+    it('returns 10 services total (4 HTTP + 6 RPC)', async () => {
+      const result = await controller.healthServices();
 
-      makeDockerSocket(mockContainers);
+      expect(result.services).toHaveLength(10);
+    });
 
+    it('includes the expected service names', async () => {
+      const result = await controller.healthServices();
+      const names = result.services.map((s) => s.name);
+
+      expect(names).toContain('Gateway API');
+      expect(names).toContain('Simulation Sessions');
+      expect(names).toContain('Simulation Invitations');
+      expect(names).toContain('LLM Service');
+      expect(names).toContain('User Service');
+      expect(names).toContain('Analytics Service');
+      expect(names).toContain('Support Service');
+      expect(names).toContain('CRM Service');
+      expect(names).toContain('LTI Service');
+      expect(names).toContain('S3 Service');
+    });
+
+    it('marks HTTP service as online when fetch returns ok', async () => {
       (global.fetch as jest.Mock).mockResolvedValue({ ok: true });
 
       const result = await controller.healthServices();
+      const gatewayApi = result.services.find((s) => s.name === 'Gateway API');
 
-      expect(result.services).toHaveLength(4);
-      expect(result.services.every((s) => s.status === 'online')).toBe(true);
-      expect(result.services.map((s) => s.name)).toEqual([
-        'Gateway API',
-        'Simulation Sessions',
-        'Simulation Invitations',
-        'LLM Service',
-      ]);
-      expect(result.containers).toHaveLength(1);
-      expect(result.containers[0]).toMatchObject({
-        name: 'my-container',
-        image: 'nginx:latest',
-        state: 'running',
-        status: 'Up 2 hours',
-      });
+      expect(gatewayApi?.status).toBe('online');
     });
 
-    it('marks a service as offline when fetch throws', async () => {
-      makeDockerSocket([]);
-
+    it('marks HTTP service as offline when fetch throws', async () => {
       (global.fetch as jest.Mock)
         .mockRejectedValueOnce(new Error('ECONNREFUSED'))
         .mockResolvedValue({ ok: true });
 
       const result = await controller.healthServices();
+      const gatewayApi = result.services.find((s) => s.name === 'Gateway API');
 
-      expect(result.services[0].name).toBe('Gateway API');
-      expect(result.services[0].status).toBe('offline');
-      expect(result.services[1].status).toBe('online');
-      expect(result.services[2].status).toBe('online');
-      expect(result.services[3].status).toBe('online');
+      expect(gatewayApi?.status).toBe('offline');
     });
 
-    it('marks a service as degraded when response is not ok', async () => {
-      makeDockerSocket([]);
-
+    it('marks HTTP service as degraded when response is not ok', async () => {
       (global.fetch as jest.Mock)
         .mockResolvedValueOnce({ ok: false })
         .mockResolvedValue({ ok: true });
 
       const result = await controller.healthServices();
+      const gatewayApi = result.services.find((s) => s.name === 'Gateway API');
 
-      expect(result.services[0].name).toBe('Gateway API');
-      expect(result.services[0].status).toBe('degraded');
-      expect(result.services[1].status).toBe('online');
+      expect(gatewayApi?.status).toBe('degraded');
     });
 
-    it('returns empty containers when Docker socket errors', async () => {
-      makeDockerError();
-
-      (global.fetch as jest.Mock).mockResolvedValue({ ok: true });
+    it('marks RPC service as offline when send throws', async () => {
+      userService.send.mockReturnValue(throwError(() => new Error('timeout')));
 
       const result = await controller.healthServices();
+      const userSvc = result.services.find((s) => s.name === 'User Service');
 
-      expect(result.containers).toEqual([]);
-      expect(result.services).toHaveLength(4);
+      expect(userSvc?.status).toBe('offline');
     });
 
-    it('strips leading slash from container name', async () => {
-      makeDockerSocket([
-        {
-          Id: 'abc123456789',
-          Names: ['/my-app'],
-          Image: 'myapp:1.0',
-          State: 'running',
-          Status: 'Up 1 hour',
-        },
-      ]);
-
-      (global.fetch as jest.Mock).mockResolvedValue({ ok: true });
-
-      const result = await controller.healthServices();
-
-      expect(result.containers[0].name).toBe('my-app');
-    });
-
-    it('truncates container ID to 12 characters', async () => {
-      const fullId = 'abcdef1234567890';
-      makeDockerSocket([
-        {
-          Id: fullId,
-          Names: ['/test'],
-          Image: 'test:latest',
-          State: 'exited',
-          Status: 'Exited (0) 1 hour ago',
-        },
-      ]);
-
-      (global.fetch as jest.Mock).mockResolvedValue({ ok: true });
-
-      const result = await controller.healthServices();
-
-      expect(result.containers[0].id).toBe(fullId.slice(0, 12));
-      expect(result.containers[0].id).toHaveLength(12);
-    });
-
-    it('returns latency as a number for each service', async () => {
-      makeDockerSocket([]);
-
-      (global.fetch as jest.Mock).mockResolvedValue({ ok: true });
-
+    it('returns latency as a non-negative number for each service', async () => {
       const result = await controller.healthServices();
 
       for (const svc of result.services) {
         expect(typeof svc.latency).toBe('number');
         expect(svc.latency).toBeGreaterThanOrEqual(0);
       }
+    });
+  });
+
+  describe('overview()', () => {
+    it('returns counts from microservices', async () => {
+      userService.send.mockImplementation((pattern: string) => {
+        if (pattern === 'get_users') return of([{ id: 'u1' }, { id: 'u2' }]);
+        if (pattern === 'get_teams') return of([{ id: 't1' }]);
+        if (pattern === 'get_plans')
+          return of([{ id: 'p1' }, { id: 'p2' }, { id: 'p3' }]);
+        return of([]);
+      });
+      simulationService.send.mockReturnValue(of({ sessions: [], total: 5 }));
+
+      const result = await controller.overview();
+
+      expect(result).toMatchObject({
+        userCount: 2,
+        teamCount: 1,
+        sessionCount: 5,
+        planCount: 3,
+      });
+    });
+
+    it('returns zero counts when microservices are unavailable', async () => {
+      userService.send.mockReturnValue(throwError(() => new Error('timeout')));
+      simulationService.send.mockReturnValue(
+        throwError(() => new Error('timeout')),
+      );
+
+      const result = await controller.overview();
+
+      expect(result).toEqual({
+        userCount: 0,
+        teamCount: 0,
+        sessionCount: 0,
+        planCount: 0,
+      });
+    });
+  });
+
+  describe('version()', () => {
+    it('returns version info', () => {
+      const result = controller.version();
+
+      expect(result).toHaveProperty('nodeVersion');
+      expect(result).toHaveProperty('uptime');
+      expect(result).toHaveProperty('environment');
+      expect(result).toHaveProperty('version');
+    });
+  });
+
+  describe('runtimeConfig()', () => {
+    it('returns runtime config with featureFlags array', () => {
+      const result = controller.runtimeConfig();
+
+      expect(result).toHaveProperty('NODE_ENV');
+      expect(result).toHaveProperty('PORT');
+      expect(Array.isArray(result.featureFlags)).toBe(true);
+    });
+  });
+
+  describe('feature flags CRUD', () => {
+    it('listFeatureFlags() returns empty array initially', () => {
+      const result = controller.listFeatureFlags();
+      expect(Array.isArray(result)).toBe(true);
+    });
+
+    it('setFeatureFlag() adds a flag', () => {
+      const result = controller.setFeatureFlag({
+        key: 'test-flag',
+        enabled: true,
+      });
+      expect(result).toEqual({ key: 'test-flag', enabled: true });
+
+      const flags = controller.listFeatureFlags();
+      expect(flags).toContainEqual({ key: 'test-flag', enabled: true });
+    });
+
+    it('setFeatureFlag() throws 400 when body is invalid', () => {
+      expect(() =>
+        controller.setFeatureFlag({ key: '', enabled: true }),
+      ).toThrow();
+      expect(() =>
+        controller.setFeatureFlag({ key: 'x', enabled: 'not-bool' as any }),
+      ).toThrow();
+    });
+
+    it('deleteFeatureFlag() removes an existing flag', () => {
+      controller.setFeatureFlag({ key: 'remove-me', enabled: false });
+      const result = controller.deleteFeatureFlag('remove-me');
+      expect(result).toEqual({ deleted: true });
+
+      const flags = controller.listFeatureFlags();
+      expect(flags.find((f) => f.key === 'remove-me')).toBeUndefined();
+    });
+
+    it('deleteFeatureFlag() throws 404 when flag does not exist', () => {
+      expect(() => controller.deleteFeatureFlag('nonexistent')).toThrow();
     });
   });
 });

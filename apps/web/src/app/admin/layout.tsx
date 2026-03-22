@@ -27,10 +27,8 @@ import {
   IconDeviceDesktopAnalytics,
   IconArrowLeft,
   IconShield,
-  IconAlertTriangle,
 } from '@tabler/icons-react'
 import { useAdminStore } from './stores/admin.store'
-import { initializeErrorInterceptor } from './stores/error-log.store'
 
 const NAV_ITEMS = [
   { label: 'Overview', href: '/admin', icon: IconDashboard },
@@ -38,7 +36,6 @@ const NAV_ITEMS = [
   { label: 'Users', href: '/admin/users', icon: IconUsers },
   { label: 'Teams', href: '/admin/teams', icon: IconUsersGroup },
   { label: 'Sessions', href: '/admin/sessions', icon: IconDeviceDesktopAnalytics },
-  { label: 'Errors', href: '/admin/errors', icon: IconAlertTriangle },
 ]
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -55,7 +52,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   }, [user, router])
 
   useEffect(() => {
-    initializeErrorInterceptor()
     check()
   }, [check])
 
