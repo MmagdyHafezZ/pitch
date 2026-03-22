@@ -489,6 +489,7 @@ export class SessionService {
   async remove(
     id: string,
     requesterUserId?: string,
+    isAdmin = false,
   ): Promise<DeleteSessionResponseDto> {
     this.logger.log(`Deleting session: ${id}`);
 
@@ -498,7 +499,9 @@ export class SessionService {
         throw new NotFoundException(`Session with ID ${id} not found`);
       }
 
-      this.assertOwner(existingSession, requesterUserId);
+      if (!isAdmin) {
+        this.assertOwner(existingSession, requesterUserId);
+      }
 
       await this.sessionRepository.delete(id);
       await this.invalidateSessionFullCache(id);

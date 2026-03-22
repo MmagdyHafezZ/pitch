@@ -17,6 +17,8 @@ import {
   Divider,
   Code,
   ScrollArea,
+  Tooltip,
+  ActionIcon,
 } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
 import {
@@ -27,6 +29,7 @@ import {
   IconUser,
   IconDeviceDesktopAnalytics,
   IconPlayerPlay,
+  IconCopy,
 } from '@tabler/icons-react'
 import { api } from '@/lib/client'
 
@@ -134,9 +137,21 @@ export default function SessionDetail() {
           <Title order={2} fw={700}>
             {session.name || 'Untitled Session'}
           </Title>
-          <Text size="sm" c="dimmed" mt={2}>
-            ID: {session.id}
-          </Text>
+          <Group gap={4} mt={2}>
+            <Text size="sm" c="dimmed">
+              ID: {session.id}
+            </Text>
+            <Tooltip label="Copy ID" withArrow>
+              <ActionIcon
+                variant="subtle"
+                size="xs"
+                c="dimmed"
+                onClick={() => navigator.clipboard.writeText(session.id)}
+              >
+                <IconCopy size={11} />
+              </ActionIcon>
+            </Tooltip>
+          </Group>
         </div>
         <Badge color={statusColor(session.status)} variant="light" size="lg" radius="sm">
           {session.status}
@@ -145,17 +160,35 @@ export default function SessionDetail() {
 
       <SimpleGrid cols={{ base: 1, xs: 2, md: 4 }} spacing="md">
         <Card withBorder radius="md" p="md" shadow="sm">
-          <Group gap="sm">
-            <ThemeIcon variant="light" color="blue" size="lg">
+          <Group gap="sm" wrap="nowrap">
+            <ThemeIcon variant="light" color="blue" size="lg" style={{ flexShrink: 0 }}>
               <IconUser size={18} />
             </ThemeIcon>
-            <div>
+            <div style={{ flex: 1, minWidth: 0 }}>
               <Text size="xs" c="dimmed">
                 User ID
               </Text>
-              <Text size="sm" fw={500} lineClamp={1}>
-                {session.userId}
-              </Text>
+              <Group gap={4} wrap="nowrap">
+                <Tooltip label={session.userId} withArrow>
+                  <Text
+                    size="sm"
+                    fw={500}
+                    style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                  >
+                    {session.userId}
+                  </Text>
+                </Tooltip>
+                <Tooltip label="Copy ID" withArrow>
+                  <ActionIcon
+                    variant="subtle"
+                    size="xs"
+                    style={{ flexShrink: 0 }}
+                    onClick={() => navigator.clipboard.writeText(session.userId)}
+                  >
+                    <IconCopy size={11} />
+                  </ActionIcon>
+                </Tooltip>
+              </Group>
             </div>
           </Group>
         </Card>

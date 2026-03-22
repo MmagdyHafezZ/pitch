@@ -206,7 +206,7 @@ export class AdminSessionsController {
   @Delete(':id')
   deleteSession(@Param('id') id: string) {
     return this.simulationService
-      .send(SIMULATION_SERVICE_PATTERNS.DELETE_SESSION, { id })
+      .send(SIMULATION_SERVICE_PATTERNS.DELETE_SESSION, { id, isAdmin: true })
       .pipe(
         timeout(5000),
         catchError((err: unknown) => {
