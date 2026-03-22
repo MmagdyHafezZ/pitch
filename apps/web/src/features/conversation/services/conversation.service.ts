@@ -1,4 +1,5 @@
 import { io, Socket } from 'socket.io-client'
+import { API_CONFIG } from '@/lib/client'
 import {
   WsEnvelope,
   WsMessageType,
@@ -11,49 +12,167 @@ import {
   ConversationErrorPayload,
   ConversationHangupRequestedPayload,
   ConversationToolExecutedPayload,
+  ConversationCoachingTipPayload,
 } from '../types/conversation.types'
 import type { VisualState } from '../types/visual-state.types'
 
-const WS_URL = process.env.NEXT_PUBLIC_WS_URL || 'http://localhost:8000'
+const DEFAULT_WS_URL = 'http://localhost:8000'
+const INITIAL_CONNECT_TIMEOUT_MS = 6000
+
+export const resolveConversationWsUrl = (
+  configuredWsUrl = process.env.NEXT_PUBLIC_WS_URL,
+  configuredApiUrl = process.env.NEXT_PUBLIC_API_URL || API_CONFIG.baseURL
+) => {
+  const normalizedWsUrl = configuredWsUrl?.trim()
+  if (normalizedWsUrl) {
+    return normalizedWsUrl
+  }
+
+  const normalizedApiUrl = configuredApiUrl?.trim()
+  if (!normalizedApiUrl) {
+    return DEFAULT_WS_URL
+  }
+
+  try {
+    const parsedUrl = new URL(normalizedApiUrl)
+    parsedUrl.pathname = parsedUrl.pathname.replace(/\/api(?:\/v\d+)?\/?$/, '') || '/'
+    parsedUrl.search = ''
+    parsedUrl.hash = ''
+    return parsedUrl.toString().replace(/\/$/, '')
+  } catch {
+    return DEFAULT_WS_URL
+  }
+}
+
+const WS_URL = resolveConversationWsUrl()
 
 export class ConversationService {
   private socket: Socket | null = null
-  private reconnectAttempts = 0
-  private maxReconnectAttempts = 5
-  private reconnectDelay = 1000
+  /** Rejects the in-flight connect() promise when a new connect() supersedes it. */
+  private pendingConnectReject: ((err: Error) => void) | null = null
+  /** Called when the socket drops after a successful connection. */
+  private disconnectCallback: ((reason: string) => void) | null = null
 
   connect(token: string): Promise<void> {
-    return new Promise((resolve, reject) => {
-      if (this.socket?.connected) {
-        resolve()
-        return
-      }
+    // Abort any in-flight connect() promise so it doesn't linger as a zombie.
+    if (this.pendingConnectReject) {
+      this.pendingConnectReject(new Error('Connection superseded'))
+      this.pendingConnectReject = null
+    }
 
-      this.socket = io(`${WS_URL}/simulation`, {
+    if (this.socket?.connected) {
+      return Promise.resolve()
+    }
+
+    if (this.socket) {
+      this.socket.disconnect()
+      this.socket = null
+    }
+
+    return new Promise((resolve, reject) => {
+      this.pendingConnectReject = reject
+
+      const socket = io(`${WS_URL}/simulation`, {
         auth: { token },
         transports: ['websocket'],
-        reconnection: true,
-        reconnectionDelay: this.reconnectDelay,
-        reconnectionAttempts: this.maxReconnectAttempts,
+        reconnection: false,
       })
+      this.socket = socket
 
-      this.socket.on('connect', () => {
-        this.reconnectAttempts = 0
-        resolve()
-      })
+      console.log('[ConversationService] Connecting to', `${WS_URL}/simulation`)
 
-      this.socket.on('connect_error', (error) => {
-        this.reconnectAttempts++
-        if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-          reject(new Error(`Failed to connect after ${this.maxReconnectAttempts} attempts`))
+      let settled = false
+      let timeoutId: ReturnType<typeof setTimeout> | null = setTimeout(() => {
+        console.error(
+          `[ConversationService] Connection timed out after ${INITIAL_CONNECT_TIMEOUT_MS}ms`,
+          { url: `${WS_URL}/simulation` }
+        )
+        cleanup()
+        if (this.socket === socket) {
+          this.socket = null
         }
-      })
+        socket.disconnect()
+        settle(() => reject(new Error('Timed out connecting to conversation service')))
+      }, INITIAL_CONNECT_TIMEOUT_MS)
 
-      this.socket.on('disconnect', (reason) => {})
+      const cleanup = () => {
+        socket.off('connect', handleConnect)
+        socket.off('connect_error', handleConnectError)
+        socket.off('disconnect', handleDisconnectWhileConnecting)
+        if (timeoutId) {
+          clearTimeout(timeoutId)
+          timeoutId = null
+        }
+      }
+
+      const settle = (handler: () => void) => {
+        if (settled) return
+        settled = true
+        this.pendingConnectReject = null
+        cleanup()
+        handler()
+      }
+
+      const handleDisconnectWhileConnecting = () => {
+        settle(() => {
+          console.error('[ConversationService] Disconnected while connecting')
+          if (this.socket === socket) {
+            this.socket = null
+          }
+          reject(new Error('Disconnected while connecting to conversation service'))
+        })
+      }
+
+      const handleConnect = () => {
+        settle(() => {
+          console.log('[ConversationService] Connected successfully')
+          // After connecting, watch for mid-session drops.
+          socket.on('disconnect', (reason: string) => {
+            if (this.socket === socket) {
+              console.warn('[ConversationService] Mid-session disconnect:', reason)
+              this.disconnectCallback?.(reason)
+            }
+          })
+          resolve()
+        })
+      }
+
+      const handleConnectError = (error: Error & { description?: number | string }) => {
+        settle(() => {
+          const statusText =
+            typeof error.description === 'number' ? ` (HTTP ${error.description})` : ''
+          const message = error.message?.trim() || 'Failed to connect to conversation service'
+          console.error('[ConversationService] connect_error:', `${message}${statusText}`, {
+            description: error.description,
+            url: `${WS_URL}/simulation`,
+          })
+          if (this.socket === socket) {
+            this.socket = null
+          }
+          socket.disconnect()
+          reject(new Error(`${message}${statusText}`))
+        })
+      }
+
+      socket.on('connect', handleConnect)
+      socket.on('connect_error', handleConnectError)
+      socket.on('disconnect', handleDisconnectWhileConnecting)
     })
   }
 
+  /** Register a callback invoked when the socket drops after a successful connect. */
+  onSocketDisconnect(callback: (reason: string) => void): void {
+    this.disconnectCallback = callback
+  }
+
+  /** Remove the mid-session disconnect callback (e.g. on intentional hang-up). */
+  clearSocketDisconnect(): void {
+    this.disconnectCallback = null
+  }
+
   disconnect() {
+    this.pendingConnectReject = null
+    this.disconnectCallback = null
     if (this.socket) {
       this.socket.disconnect()
       this.socket = null
@@ -249,6 +368,16 @@ export class ConversationService {
   offConversationToolExecuted() {
     if (!this.socket) return
     this.socket.off(WsMessageType.CONVERSATION_TOOL_EXECUTED)
+  }
+
+  onConversationCoachingTip(callback: (data: WsEnvelope<ConversationCoachingTipPayload>) => void) {
+    if (!this.socket) return
+    this.socket.on(WsMessageType.CONVERSATION_COACHING_TIP, callback)
+  }
+
+  offConversationCoachingTip() {
+    if (!this.socket) return
+    this.socket.off(WsMessageType.CONVERSATION_COACHING_TIP)
   }
 
   isConnected(): boolean {

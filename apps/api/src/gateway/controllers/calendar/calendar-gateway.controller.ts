@@ -22,7 +22,6 @@ import {
   ApiResponse,
   ApiBearerAuth,
   ApiQuery,
-  ApiBody,
 } from '@nestjs/swagger';
 import { catchError, timeout } from 'rxjs/operators';
 import { throwError } from 'rxjs';
@@ -53,16 +52,63 @@ const SIMULATION_SERVICE_PATTERNS = {
     'simulation.calendar.suggestions.dismiss',
 } as const;
 
+type GatewayServiceError = ServiceError & {
+  statusCode?: unknown;
+};
+
 @ApiTags('Calendar Integration')
 @Controller({ path: 'calendar', version: VERSION_NEUTRAL })
 export class CalendarGatewayController {
   private readonly logger = new Logger(CalendarGatewayController.name);
+  private readonly pitchAppUrl =
+    process.env.PITCH_APP_URL ??
+    process.env.NEXT_PUBLIC_FRONTEND_URL ??
+    process.env.FRONTEND_URL ??
+    'http://localhost:3000';
 
   constructor(
     @Inject('CRM_SERVICE') private readonly crmService: ClientProxy,
     @Inject('SIMULATION_SERVICE')
     private readonly simulationService: ClientProxy,
   ) {}
+
+  private getCalendarRedirectUrl(params?: Record<string, string>): string {
+    const redirectUrl = new URL('/studio/calendar', this.pitchAppUrl);
+    if (params) {
+      for (const [key, value] of Object.entries(params)) {
+        redirectUrl.searchParams.set(key, value);
+      }
+    }
+    return redirectUrl.toString();
+  }
+
+  private getErrorStatus(
+    error: GatewayServiceError,
+    fallback: HttpStatus = HttpStatus.INTERNAL_SERVER_ERROR,
+  ): number {
+    if (typeof error.status === 'number') {
+      return error.status;
+    }
+
+    if (typeof error.statusCode === 'number') {
+      return error.statusCode;
+    }
+
+    return fallback;
+  }
+
+  private toHttpException(
+    err: unknown,
+    fallbackMessage: string,
+    fallbackStatus: HttpStatus = HttpStatus.INTERNAL_SERVER_ERROR,
+  ): HttpException {
+    const error = err as GatewayServiceError;
+    const status = this.getErrorStatus(error, fallbackStatus);
+    const message =
+      typeof error.message === 'string' ? error.message : fallbackMessage;
+
+    return new HttpException(message, status);
+  }
 
   @Get('google/connect')
   @ApiBearerAuth('bearer')
@@ -80,12 +126,11 @@ export class CalendarGatewayController {
             `Google connect failed for user ${userId}`,
             error.stack ?? JSON.stringify(err),
           );
-          return throwError(
-            () =>
-              new HttpException(
-                error.message ?? 'Failed to get Google Calendar connect URL',
-                error.status ?? HttpStatus.INTERNAL_SERVER_ERROR,
-              ),
+          return throwError(() =>
+            this.toHttpException(
+              err,
+              'Failed to get Google Calendar connect URL',
+            ),
           );
         }),
       );
@@ -106,12 +151,16 @@ export class CalendarGatewayController {
 
     if (error) {
       return res.redirect(
-        `/studio/calendar?error=google_${encodeURIComponent(error)}`,
+        this.getCalendarRedirectUrl({
+          error: `google_${error}`,
+        }),
       );
     }
 
     if (!code || !state) {
-      return res.redirect('/studio/calendar?error=missing_params');
+      return res.redirect(
+        this.getCalendarRedirectUrl({ error: 'missing_params' }),
+      );
     }
 
     try {
@@ -120,9 +169,11 @@ export class CalendarGatewayController {
         .pipe(timeout(15000))
         .toPromise();
 
-      return res.redirect('/studio/calendar?connected=google');
+      return res.redirect(this.getCalendarRedirectUrl({ connected: 'google' }));
     } catch {
-      return res.redirect('/studio/calendar?error=google_callback_failed');
+      return res.redirect(
+        this.getCalendarRedirectUrl({ error: 'google_callback_failed' }),
+      );
     }
   }
 
@@ -135,13 +186,8 @@ export class CalendarGatewayController {
       .pipe(
         timeout(10000),
         catchError((err: unknown) => {
-          const error = err as ServiceError;
-          return throwError(
-            () =>
-              new HttpException(
-                error.message ?? 'Failed to get Google Calendar status',
-                error.status ?? HttpStatus.INTERNAL_SERVER_ERROR,
-              ),
+          return throwError(() =>
+            this.toHttpException(err, 'Failed to get Google Calendar status'),
           );
         }),
       );
@@ -157,13 +203,8 @@ export class CalendarGatewayController {
       .pipe(
         timeout(10000),
         catchError((err: unknown) => {
-          const error = err as ServiceError;
-          return throwError(
-            () =>
-              new HttpException(
-                error.message ?? 'Failed to disconnect Google Calendar',
-                error.status ?? HttpStatus.INTERNAL_SERVER_ERROR,
-              ),
+          return throwError(() =>
+            this.toHttpException(err, 'Failed to disconnect Google Calendar'),
           );
         }),
       );
@@ -191,13 +232,8 @@ export class CalendarGatewayController {
       .pipe(
         timeout(15000),
         catchError((err: unknown) => {
-          const error = err as ServiceError;
-          return throwError(
-            () =>
-              new HttpException(
-                error.message ?? 'Failed to get Google Calendar events',
-                error.status ?? HttpStatus.INTERNAL_SERVER_ERROR,
-              ),
+          return throwError(() =>
+            this.toHttpException(err, 'Failed to get Google Calendar events'),
           );
         }),
       );
@@ -213,13 +249,11 @@ export class CalendarGatewayController {
       .pipe(
         timeout(10000),
         catchError((err: unknown) => {
-          const error = err as ServiceError;
-          return throwError(
-            () =>
-              new HttpException(
-                error.message ?? 'Failed to get Microsoft Calendar connect URL',
-                error.status ?? HttpStatus.INTERNAL_SERVER_ERROR,
-              ),
+          return throwError(() =>
+            this.toHttpException(
+              err,
+              'Failed to get Microsoft Calendar connect URL',
+            ),
           );
         }),
       );
@@ -240,12 +274,16 @@ export class CalendarGatewayController {
 
     if (error) {
       return res.redirect(
-        `/studio/calendar?error=microsoft_${encodeURIComponent(error)}`,
+        this.getCalendarRedirectUrl({
+          error: `microsoft_${error}`,
+        }),
       );
     }
 
     if (!code || !state) {
-      return res.redirect('/studio/calendar?error=missing_params');
+      return res.redirect(
+        this.getCalendarRedirectUrl({ error: 'missing_params' }),
+      );
     }
 
     try {
@@ -257,9 +295,13 @@ export class CalendarGatewayController {
         .pipe(timeout(15000))
         .toPromise();
 
-      return res.redirect('/studio/calendar?connected=microsoft');
+      return res.redirect(
+        this.getCalendarRedirectUrl({ connected: 'microsoft' }),
+      );
     } catch {
-      return res.redirect('/studio/calendar?error=microsoft_callback_failed');
+      return res.redirect(
+        this.getCalendarRedirectUrl({ error: 'microsoft_callback_failed' }),
+      );
     }
   }
 
@@ -272,13 +314,11 @@ export class CalendarGatewayController {
       .pipe(
         timeout(10000),
         catchError((err: unknown) => {
-          const error = err as ServiceError;
-          return throwError(
-            () =>
-              new HttpException(
-                error.message ?? 'Failed to get Microsoft Calendar status',
-                error.status ?? HttpStatus.INTERNAL_SERVER_ERROR,
-              ),
+          return throwError(() =>
+            this.toHttpException(
+              err,
+              'Failed to get Microsoft Calendar status',
+            ),
           );
         }),
       );
@@ -294,13 +334,11 @@ export class CalendarGatewayController {
       .pipe(
         timeout(10000),
         catchError((err: unknown) => {
-          const error = err as ServiceError;
-          return throwError(
-            () =>
-              new HttpException(
-                error.message ?? 'Failed to disconnect Microsoft Calendar',
-                error.status ?? HttpStatus.INTERNAL_SERVER_ERROR,
-              ),
+          return throwError(() =>
+            this.toHttpException(
+              err,
+              'Failed to disconnect Microsoft Calendar',
+            ),
           );
         }),
       );
@@ -328,13 +366,11 @@ export class CalendarGatewayController {
       .pipe(
         timeout(15000),
         catchError((err: unknown) => {
-          const error = err as ServiceError;
-          return throwError(
-            () =>
-              new HttpException(
-                error.message ?? 'Failed to get Microsoft Calendar events',
-                error.status ?? HttpStatus.INTERNAL_SERVER_ERROR,
-              ),
+          return throwError(() =>
+            this.toHttpException(
+              err,
+              'Failed to get Microsoft Calendar events',
+            ),
           );
         }),
       );
@@ -356,13 +392,8 @@ export class CalendarGatewayController {
       .pipe(
         timeout(15000),
         catchError((err: unknown) => {
-          const error = err as ServiceError;
-          return throwError(
-            () =>
-              new HttpException(
-                error.message ?? 'Failed to get upcoming events',
-                error.status ?? HttpStatus.INTERNAL_SERVER_ERROR,
-              ),
+          return throwError(() =>
+            this.toHttpException(err, 'Failed to get upcoming events'),
           );
         }),
       );
@@ -383,13 +414,8 @@ export class CalendarGatewayController {
       .pipe(
         timeout(10000),
         catchError((err: unknown) => {
-          const error = err as ServiceError;
-          return throwError(
-            () =>
-              new HttpException(
-                error.message ?? 'Failed to list suggestions',
-                error.status ?? HttpStatus.INTERNAL_SERVER_ERROR,
-              ),
+          return throwError(() =>
+            this.toHttpException(err, 'Failed to list suggestions'),
           );
         }),
       );
@@ -411,13 +437,8 @@ export class CalendarGatewayController {
       .pipe(
         timeout(10000),
         catchError((err: unknown) => {
-          const error = err as ServiceError;
-          return throwError(
-            () =>
-              new HttpException(
-                error.message ?? 'Failed to accept suggestion',
-                error.status ?? HttpStatus.INTERNAL_SERVER_ERROR,
-              ),
+          return throwError(() =>
+            this.toHttpException(err, 'Failed to accept suggestion'),
           );
         }),
       );
@@ -439,13 +460,8 @@ export class CalendarGatewayController {
       .pipe(
         timeout(10000),
         catchError((err: unknown) => {
-          const error = err as ServiceError;
-          return throwError(
-            () =>
-              new HttpException(
-                error.message ?? 'Failed to dismiss suggestion',
-                error.status ?? HttpStatus.INTERNAL_SERVER_ERROR,
-              ),
+          return throwError(() =>
+            this.toHttpException(err, 'Failed to dismiss suggestion'),
           );
         }),
       );

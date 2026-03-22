@@ -4,6 +4,7 @@ import { AppSidebar } from '@/components/ui/AppSideBar'
 import { AppTopBar } from '@/components/ui/AppTopBar'
 import { TeamSideBar } from '@/components/ui/TeamSideBar'
 import { CoachChatWidget } from '@/components/ui/CoachChatWidget'
+import { ProactiveCalendarNudge } from '@/features/proactive/ProactiveCalendarNudge'
 import { useTeams } from '@/features/teams/hooks/useTeams'
 import { useAuthStore } from '@/features/auth/stores/auth.store'
 import { Box } from '@mantine/core'
@@ -14,14 +15,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 
 export default function ClientLayerComponent({ children }: { children: React.ReactNode }) {
   const [active, setActive] = useState<
-    | 'Home'
-    | 'Sessions'
-    | 'Teams'
-    | 'Analytics'
-    | 'Settings'
-    | 'Team Config'
-    | 'Challenges'
-    | 'Calendar'
+    'Home' | 'Sessions' | 'Teams' | 'Analytics' | 'Settings' | 'Team Config' | 'Challenges'
   >('Home')
   const [selectedDate, setSelectedDate] = useState<Date | null>(new Date())
   const {
@@ -44,22 +38,18 @@ export default function ClientLayerComponent({ children }: { children: React.Rea
   }, [user, router])
 
   const [tabsByPage, setTabsByPage] = useState<
-    Record<
-      'Home' | 'Sessions' | 'Teams' | 'Analytics' | 'Challenges' | 'Calendar' | 'Settings',
-      string
-    >
+    Record<'Home' | 'Sessions' | 'Teams' | 'Analytics' | 'Challenges' | 'Settings', string>
   >({
     Home: 'All',
     Sessions: 'All',
     Teams: 'All',
     Analytics: 'Overview',
     Challenges: '',
-    Calendar: '',
     Settings: '',
   })
 
   const handleTabChange = (
-    page: 'Home' | 'Sessions' | 'Teams' | 'Analytics' | 'Challenges' | 'Calendar' | 'Settings'
+    page: 'Home' | 'Sessions' | 'Teams' | 'Analytics' | 'Challenges' | 'Settings'
   ) => {
     return (tab: string) => {
       setTabsByPage((prev) => ({ ...prev, [page]: tab }))
@@ -108,9 +98,6 @@ export default function ClientLayerComponent({ children }: { children: React.Rea
     if (pathname.startsWith('/studio/challenges')) {
       return { page: 'Challenges' as const, nav: 'Challenges' as const }
     }
-    if (pathname.startsWith('/studio/calendar')) {
-      return { page: 'Calendar' as const, nav: 'Calendar' as const }
-    }
     return { page: 'Home' as const, nav: 'Home' as const }
   }, [pathname])
 
@@ -128,8 +115,6 @@ export default function ClientLayerComponent({ children }: { children: React.Rea
     selectedTab = analyticsTab
   } else if (pageInfo.page === 'Challenges') {
     selectedTab = challengesPeriod
-  } else if (pageInfo.page === 'Calendar') {
-    selectedTab = tabsByPage['Calendar']
   } else {
     selectedTab = tabsByPage[pageInfo.page as keyof typeof tabsByPage] ?? ''
   }
@@ -258,7 +243,13 @@ export default function ClientLayerComponent({ children }: { children: React.Rea
       >
         {children}
       </AppLayout>
-      <CoachChatWidget context={{ page: pathname ?? undefined }} />
+      <CoachChatWidget
+        context={{
+          page: pathname ?? undefined,
+          sessionId: pathname?.match(/^\/studio\/sessions\/([^/]+)$/)?.[1] ?? undefined,
+        }}
+      />
+      <ProactiveCalendarNudge />
     </>
   )
 }

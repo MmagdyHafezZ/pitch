@@ -16,9 +16,23 @@ import {
   Loader,
   Modal,
   Button,
+  RingProgress,
+  Tooltip,
+  Progress,
+  ThemeIcon,
+  Divider,
 } from '@mantine/core'
-import { IconPhone, IconArrowRight } from '@tabler/icons-react'
-import { useRouter, useParams } from 'next/navigation'
+import {
+  IconPhone,
+  IconArrowRight,
+  IconSparkles,
+  IconX,
+  IconTarget,
+  IconTrophy,
+  IconRefresh,
+  IconCheck,
+} from '@tabler/icons-react'
+import { useParams, useRouter } from 'next/navigation'
 import { useConversation, useVisualState, CameraEngagementIndicator } from '@/features/conversation'
 import { type GlobeState } from '@/features/conversation/components/GlobeVisualizer'
 import VoiceOrbSession from '@/features/conversation/components/VoiceOrbSession'
@@ -28,6 +42,8 @@ import { useSpeechToText } from '@/features/stt'
 import { API_CONFIG, api } from '@/lib/client'
 import { notifications } from '@mantine/notifications'
 import type { SessionType } from '@/features/sessions'
+import type { SessionAttachment } from '@/features/sessions/types/sessions.types'
+import { UploadSection } from '@/app/studio/sessions/create/components/UploadSection'
 
 type AvatarVideoStatus = 'idle' | 'queued' | 'rendering' | 'ready' | 'failed'
 
@@ -108,26 +124,203 @@ const buildSessionVideoStreamUrl = (sessionId: string, token: string, jobId?: st
   return url.toString()
 }
 
+const isSessionAttachment = (value: unknown): value is SessionAttachment =>
+  isRecord(value) &&
+  typeof value.bucket === 'string' &&
+  typeof value.key === 'string' &&
+  typeof value.filename === 'string' &&
+  typeof value.contentType === 'string' &&
+  typeof value.size === 'number' &&
+  Number.isFinite(value.size) &&
+  typeof value.uploadedAt === 'string'
+
+const readSessionAttachments = (session: Record<string, unknown> | null): SessionAttachment[] => {
+  if (!session) return []
+
+  const sessionConfig = isRecord(session.sessionConfig) ? session.sessionConfig : {}
+  const attachments = sessionConfig.attachments
+  if (!Array.isArray(attachments)) return []
+
+  return attachments.filter(isSessionAttachment)
+}
+
+const mergeSessionAttachments = (
+  existing: SessionAttachment[],
+  incoming: SessionAttachment[]
+): SessionAttachment[] => {
+  const byKey = new Map<string, SessionAttachment>()
+
+  for (const attachment of [...existing, ...incoming]) {
+    byKey.set(`${attachment.bucket}:${attachment.key}`, attachment)
+  }
+
+  return [...byKey.values()]
+}
+
+type EntryFlowMode = 'auto' | 'resume'
+
+type TimelineStage = {
+  order: number
+  label: string
+  description?: string
+  estimatedDuration?: number
+  active: boolean
+  completed: boolean
+}
+
+const clampProgress = (value: unknown): number => {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return 0
+  }
+
+  return Math.max(0, Math.min(100, Math.round(value)))
+}
+
+const readText = (...values: unknown[]): string | undefined => {
+  for (const value of values) {
+    if (typeof value === 'string' && value.trim().length > 0) {
+      return value.trim()
+    }
+  }
+
+  return undefined
+}
+
+const normalizeTimelinePlan = (
+  rawStages: unknown
+): Array<{ order: number; label: string; description?: string; estimatedDuration?: number }> => {
+  if (!Array.isArray(rawStages)) {
+    return []
+  }
+
+  return rawStages
+    .map((stage, index) => {
+      if (typeof stage === 'string') {
+        const label = stage.trim()
+        return label
+          ? {
+              order: index + 1,
+              label,
+            }
+          : null
+      }
+
+      if (!isRecord(stage)) {
+        return null
+      }
+
+      const label = readText(stage.label, stage.name, stage.title, `Stage ${index + 1}`)
+      if (!label) {
+        return null
+      }
+
+      const description = readText(stage.description, stage.goal, stage.summary)
+      const estimatedDuration =
+        typeof stage.estimatedDuration === 'number' && Number.isFinite(stage.estimatedDuration)
+          ? stage.estimatedDuration
+          : typeof stage.duration === 'number' && Number.isFinite(stage.duration)
+            ? stage.duration
+            : undefined
+
+      return {
+        order: index + 1,
+        label,
+        description,
+        estimatedDuration,
+      }
+    })
+    .filter(
+      (
+        stage
+      ): stage is {
+        order: number
+        label: string
+        description?: string
+        estimatedDuration?: number
+      } => Boolean(stage)
+    )
+}
+
+const extractTimelinePlanFromSession = (
+  session: Record<string, unknown> | null
+): Array<{ order: number; label: string; description?: string; estimatedDuration?: number }> => {
+  if (!session) {
+    return []
+  }
+
+  const sessionConfig = isRecord(session.sessionConfig) ? session.sessionConfig : {}
+  const scenario = isRecord(session.scenario) ? session.scenario : {}
+  const scenarioConfig = isRecord(scenario.config) ? scenario.config : {}
+  const embeddedScenario = isRecord(sessionConfig.scenario) ? sessionConfig.scenario : {}
+
+  const sources = [
+    scenarioConfig.stages,
+    scenarioConfig.phases,
+    scenarioConfig.plan,
+    embeddedScenario.stages,
+    embeddedScenario.phases,
+    embeddedScenario.plan,
+    sessionConfig.stages,
+  ]
+
+  for (const source of sources) {
+    const normalized = normalizeTimelinePlan(source)
+    if (normalized.length > 0) {
+      return normalized
+    }
+  }
+
+  return []
+}
+
+const buildTimelineStages = (
+  plannedStages: unknown,
+  progress: unknown,
+  totalTurns: unknown,
+  fallbackSession: Record<string, unknown> | null
+): TimelineStage[] => {
+  const normalizedProgress = clampProgress(progress)
+  const normalizedTotalTurns =
+    typeof totalTurns === 'number' && Number.isFinite(totalTurns) ? Math.max(0, totalTurns) : 0
+  const plan =
+    normalizeTimelinePlan(plannedStages).length > 0
+      ? normalizeTimelinePlan(plannedStages)
+      : extractTimelinePlanFromSession(fallbackSession)
+
+  if (plan.length === 0) {
+    return []
+  }
+
+  const activeIndex =
+    normalizedTotalTurns === 0
+      ? 0
+      : Math.min(plan.length - 1, Math.floor((normalizedProgress / 100) * plan.length))
+
+  return plan.map((stage, index) => ({
+    ...stage,
+    active: index === activeIndex,
+    completed: normalizedTotalTurns > 0 && index < activeIndex,
+  }))
+}
+
 export default function LiveSessionPage() {
-  const router = useRouter()
   const params = useParams()
   const sessionId = params.id as string
+  const router = useRouter()
   const isMobile = useMediaQuery('(max-width: 768px)')
   const [time, setTime] = useState(0)
+  const [sessionDuration, setSessionDuration] = useState(0) // total seconds; 0 = no limit
+  const [successModalOpen, setSuccessModalOpen] = useState(false)
+  const [finalScore, setFinalScore] = useState<number | null>(null)
+  const [timeAtSuccess, setTimeAtSuccess] = useState<number | null>(null)
+  const successTriggeredRef = useRef(false)
   const [textInput, setTextInput] = useState('')
   const [hints, setHints] = useState<string[]>([])
-  const [timelineStages, setTimelineStages] = useState<
-    Array<{
-      order: number
-      label: string
-      description?: string
-      active: boolean
-      completed: boolean
-    }>
-  >([])
+  const [timelineStages, setTimelineStages] = useState<TimelineStage[]>([])
   const [currentProgress, setCurrentProgress] = useState(0)
   const [hintsError, setHintsError] = useState<string | null>(null)
   const [timelineError, setTimelineError] = useState<string | null>(null)
+  const [timelineLoading, setTimelineLoading] = useState(false)
   const [sessionType, setSessionType] = useState<SessionType | null>(null)
   const [sessionStatus, setSessionStatus] = useState<string | null>(null)
   const [sessionName, setSessionName] = useState<string>('')
@@ -146,12 +339,25 @@ export default function LiveSessionPage() {
   const [avatarVideoError, setAvatarVideoError] = useState<string | null>(null)
   const [avatarVideoJobId, setAvatarVideoJobId] = useState<string | null>(null)
   const [autoConnectConversation, setAutoConnectConversation] = useState(false)
+  const [conversationConnectKey, setConversationConnectKey] = useState(0)
   const [resumePromptOpen, setResumePromptOpen] = useState(false)
   const [entryDecisionLoading, setEntryDecisionLoading] = useState(true)
   const [startOverLoading, setStartOverLoading] = useState(false)
   const [loadedSessionRecord, setLoadedSessionRecord] = useState<Record<string, unknown> | null>(
     null
   )
+  // Keep a ref always in sync with loadedSessionRecord so useCallback functions
+  // (like loadTimeline) can read the latest value without listing it as a dep.
+  // Updated every render — always current when async code reads it.
+  const loadedSessionRecordRef = useRef<Record<string, unknown> | null>(null)
+  loadedSessionRecordRef.current = loadedSessionRecord
+  const [sessionAttachments, setSessionAttachments] = useState<SessionAttachment[]>([])
+  const [launchAttachments, setLaunchAttachments] = useState<SessionAttachment[]>([])
+  const [launchAttachmentsUploading, setLaunchAttachmentsUploading] = useState(false)
+  const [launchAttachmentErrors, setLaunchAttachmentErrors] = useState(false)
+  const [prelaunchModalOpen, setPrelaunchModalOpen] = useState(false)
+  const [prelaunchSaving, setPrelaunchSaving] = useState(false)
+  const [pendingEntryMode, setPendingEntryMode] = useState<EntryFlowMode | null>(null)
   const [sttCommitRemainingMs, setSttCommitRemainingMs] = useState(0)
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const latestMessagesRef = useRef<Array<{ role: 'user' | 'assistant'; text: string }>>([])
@@ -260,10 +466,13 @@ export default function LiveSessionPage() {
     clearHangupRequest,
     clearToolEvents,
     toolEvents,
+    coachingTip,
+    clearCoachingTip,
     audioElementRef,
   } = useConversation({
     sessionId,
     autoConnect: autoConnectConversation,
+    autoConnectKey: conversationConnectKey,
     audioOutput: 'browser',
     onError: () => {},
   })
@@ -359,6 +568,14 @@ export default function LiveSessionPage() {
           ? buildSessionVideoStreamUrl(session.id, avatarState.playbackToken, avatarState.jobId)
           : avatarState.url
 
+      const rawDuration =
+        typeof config.durationMinutes === 'number'
+          ? config.durationMinutes
+          : typeof config.duration === 'number'
+            ? config.duration
+            : 0
+      if (rawDuration > 0) setSessionDuration(rawDuration * 60)
+
       setIsMultiTurn(Boolean(config.multiTurnEnabled))
       setSessionType(session?.type ?? null)
       setSessionStatus(normalizedStatus)
@@ -381,10 +598,165 @@ export default function LiveSessionPage() {
       setCallProvider(
         resolvedProvider === 'vapi' || resolvedProvider === 'twilio' ? resolvedProvider : 'twilio'
       )
-      setCallModalOpen(session?.type === 'phone' && normalizedStatus !== 'ended')
     },
     []
   )
+
+  const loadTimeline = useCallback(
+    async (limit = 50, sessionRecord?: Record<string, unknown> | null) => {
+      if (!sessionId) {
+        return { totalTurns: 0, stages: [] as TimelineStage[] }
+      }
+
+      setTimelineLoading(true)
+
+      try {
+        const response = await api.sessions.timeline(sessionId, limit)
+        const stages = buildTimelineStages(
+          response?.plannedStages,
+          response?.currentProgress,
+          response?.total,
+          sessionRecord ?? loadedSessionRecordRef.current
+        )
+
+        setTimelineStages(stages)
+        setCurrentProgress(clampProgress(response?.currentProgress))
+        setTimelineError(null)
+
+        return {
+          totalTurns: typeof response?.total === 'number' ? response.total : 0,
+          stages,
+          conversationHistory: Array.isArray(response?.conversationHistory)
+            ? response.conversationHistory
+            : [],
+        }
+      } catch {
+        const stages = buildTimelineStages(
+          [],
+          0,
+          0,
+          sessionRecord ?? loadedSessionRecordRef.current
+        )
+        setTimelineStages(stages)
+        setCurrentProgress(0)
+        setTimelineError('Unable to load timeline')
+        return {
+          totalTurns: 0,
+          stages,
+          conversationHistory: [],
+        }
+      } finally {
+        setTimelineLoading(false)
+      }
+    },
+    [sessionId]
+  )
+
+  const requestConversationConnect = useCallback(() => {
+    setAutoConnectConversation(true)
+    setConversationConnectKey((current) => current + 1)
+  }, [])
+
+  const pauseConversationConnect = useCallback(() => {
+    setAutoConnectConversation(false)
+  }, [])
+
+  const completeEntryFlow = useCallback(
+    (mode: EntryFlowMode, sessionRecord?: Record<string, unknown> | null) => {
+      const effectiveRecord = sessionRecord ?? loadedSessionRecord
+      const effectiveType =
+        typeof effectiveRecord?.type === 'string' ? effectiveRecord.type : sessionType
+      const effectiveStatus = normalizeSessionStatus(effectiveRecord) ?? sessionStatus
+
+      setPrelaunchModalOpen(false)
+      setPendingEntryMode(null)
+      setCallModalOpen(effectiveType === 'phone' && effectiveStatus !== 'ended')
+
+      if (mode === 'resume') {
+        setResumePromptOpen(true)
+        pauseConversationConnect()
+        return
+      }
+
+      setResumePromptOpen(false)
+      requestConversationConnect()
+    },
+    [
+      loadedSessionRecord,
+      pauseConversationConnect,
+      requestConversationConnect,
+      sessionStatus,
+      sessionType,
+    ]
+  )
+
+  const handleSkipPrelaunch = useCallback(() => {
+    if (!pendingEntryMode || launchAttachmentsUploading || prelaunchSaving) {
+      return
+    }
+
+    setLaunchAttachments([])
+    setLaunchAttachmentErrors(false)
+    completeEntryFlow(pendingEntryMode)
+  }, [completeEntryFlow, launchAttachmentsUploading, pendingEntryMode, prelaunchSaving])
+
+  const handleContinueFromPrelaunch = useCallback(async () => {
+    if (
+      !pendingEntryMode ||
+      !loadedSessionRecord ||
+      launchAttachmentsUploading ||
+      launchAttachmentErrors ||
+      prelaunchSaving
+    ) {
+      return
+    }
+
+    setPrelaunchSaving(true)
+
+    try {
+      if (launchAttachments.length > 0) {
+        const currentConfig = isRecord(loadedSessionRecord.sessionConfig)
+          ? loadedSessionRecord.sessionConfig
+          : {}
+        const mergedAttachments = mergeSessionAttachments(sessionAttachments, launchAttachments)
+        const updatedSession = await api.sessions.update(sessionId, {
+          sessionConfig: {
+            ...currentConfig,
+            attachments: mergedAttachments,
+          },
+        })
+        const updatedRecord = isRecord(updatedSession) ? updatedSession : loadedSessionRecord
+
+        setLoadedSessionRecord(updatedRecord)
+        setSessionAttachments(readSessionAttachments(updatedRecord))
+        syncSessionState(updatedSession)
+        completeEntryFlow(pendingEntryMode, updatedRecord)
+        return
+      }
+
+      completeEntryFlow(pendingEntryMode)
+    } catch (error) {
+      notifications.show({
+        title: 'Unable to save documents',
+        message:
+          error instanceof Error ? error.message : 'The session context could not be updated.',
+        color: 'red',
+      })
+    } finally {
+      setPrelaunchSaving(false)
+    }
+  }, [
+    completeEntryFlow,
+    launchAttachmentErrors,
+    launchAttachments,
+    launchAttachmentsUploading,
+    loadedSessionRecord,
+    pendingEntryMode,
+    prelaunchSaving,
+    sessionAttachments,
+    sessionId,
+    syncSessionState,
+  ])
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -397,11 +769,19 @@ export default function LiveSessionPage() {
     if (!sessionId) return
 
     let cancelled = false
-    setAutoConnectConversation(false)
+    pauseConversationConnect()
     setResumePromptOpen(false)
     setEntryDecisionLoading(true)
     setStartOverLoading(false)
     setLoadedSessionRecord(null)
+    setSessionAttachments([])
+    setLaunchAttachments([])
+    setLaunchAttachmentsUploading(false)
+    setLaunchAttachmentErrors(false)
+    setPrelaunchModalOpen(false)
+    setPrelaunchSaving(false)
+    setPendingEntryMode(null)
+    setCallModalOpen(false)
 
     const loadSession = async () => {
       try {
@@ -410,11 +790,13 @@ export default function LiveSessionPage() {
 
         const sessionRecord = isRecord(session) ? session : {}
         setLoadedSessionRecord(sessionRecord)
+        setSessionAttachments(readSessionAttachments(sessionRecord))
         const status = normalizeSessionStatus(session)
 
         if (status === 'ended') {
           syncSessionState(session, { launchFreshIteration: true })
-          setAutoConnectConversation(true)
+          setPendingEntryMode('resume')
+          setResumePromptOpen(true)
           return
         }
 
@@ -422,10 +804,10 @@ export default function LiveSessionPage() {
 
         let hasExistingProgress = false
         try {
-          const timeline = await api.sessions.timeline(sessionId, 1)
+          const timeline = await loadTimeline(1, sessionRecord)
           if (cancelled) return
-          const totalTurns = typeof timeline?.total === 'number' ? timeline.total : 0
-          const history = Array.isArray(timeline?.conversationHistory)
+          const totalTurns = timeline.totalTurns
+          const history = Array.isArray(timeline.conversationHistory)
             ? timeline.conversationHistory
             : []
           hasExistingProgress = totalTurns > 0 || history.length > 0
@@ -436,15 +818,16 @@ export default function LiveSessionPage() {
         if (cancelled) return
 
         if (hasExistingProgress) {
+          setPendingEntryMode('resume')
           setResumePromptOpen(true)
-          setAutoConnectConversation(false)
         } else {
-          setAutoConnectConversation(true)
+          setPendingEntryMode('auto')
+          setPrelaunchModalOpen(true)
         }
       } catch {
         if (cancelled) return
         setIsMultiTurn(false)
-        setAutoConnectConversation(true)
+        requestConversationConnect()
       } finally {
         if (!cancelled) {
           setEntryDecisionLoading(false)
@@ -457,12 +840,13 @@ export default function LiveSessionPage() {
     return () => {
       cancelled = true
     }
-  }, [sessionId, syncSessionState])
-
-  const handleResumeSession = useCallback(() => {
-    setResumePromptOpen(false)
-    setAutoConnectConversation(true)
-  }, [])
+  }, [
+    loadTimeline,
+    pauseConversationConnect,
+    requestConversationConnect,
+    sessionId,
+    syncSessionState,
+  ])
 
   const handleStartOver = useCallback(async () => {
     if (!loadedSessionRecord || startOverLoading) return
@@ -481,6 +865,10 @@ export default function LiveSessionPage() {
       clearMessages()
       clearToolEvents()
       clearHangupRequest()
+      successTriggeredRef.current = false
+      setFinalScore(null)
+      setTimeAtSuccess(null)
+      setTime(0)
       setTextInput('')
       setHints([])
       setHintsError(null)
@@ -509,37 +897,7 @@ export default function LiveSessionPage() {
       }
 
       if (timelineEnabled) {
-        try {
-          const response = await api.sessions.timeline(sessionId, 50)
-          const plannedStages = response?.plannedStages ?? []
-          const progress = response?.currentProgress ?? 0
-          const totalTurns = response?.total ?? 0
-
-          if (plannedStages.length === 0) {
-            setTimelineStages([])
-            setCurrentProgress(0)
-            setTimelineError(null)
-          } else {
-            const currentStageIndex = Math.min(
-              plannedStages.length - 1,
-              Math.floor((progress / 100) * plannedStages.length)
-            )
-
-            const stages = plannedStages.map((stage: any, index: number) => ({
-              order: stage.order,
-              label: stage.label,
-              description: stage.description,
-              active: index === currentStageIndex && totalTurns > 0,
-              completed: index < currentStageIndex,
-            }))
-
-            setTimelineStages(stages)
-            setCurrentProgress(progress)
-            setTimelineError(null)
-          }
-        } catch {
-          setTimelineError('Unable to load timeline')
-        }
+        await loadTimeline(50, restartedRecord)
       }
 
       notifications.show({
@@ -548,7 +906,7 @@ export default function LiveSessionPage() {
         color: 'green',
       })
       setResumePromptOpen(false)
-      setAutoConnectConversation(true)
+      requestConversationConnect()
     } catch (error) {
       const message =
         error instanceof Error ? error.message : 'Unable to start a new iteration right now.'
@@ -567,14 +925,26 @@ export default function LiveSessionPage() {
     hintsEnabled,
     interrupt,
     loadedSessionRecord,
+    requestConversationConnect,
     resetTranscript,
     sessionId,
     startOverLoading,
     stopAudio,
     stopListening,
     syncSessionState,
+    loadTimeline,
     timelineEnabled,
   ])
+
+  const handleResumeSession = useCallback(() => {
+    if (normalizeSessionStatus(loadedSessionRecord) === 'ended') {
+      void handleStartOver()
+      return
+    }
+
+    setResumePromptOpen(false)
+    requestConversationConnect()
+  }, [handleStartOver, loadedSessionRecord, requestConversationConnect])
 
   // Hidden pose camera for MediaPipe across session types.
   // The visible video area is reserved for the AI avatar on video sessions.
@@ -799,43 +1169,8 @@ export default function LiveSessionPage() {
       return
     }
 
-    const loadTimeline = async () => {
-      try {
-        const response = await api.sessions.timeline(sessionId, 50)
-        const plannedStages = response?.plannedStages ?? []
-        const progress = response?.currentProgress ?? 0
-        const totalTurns = response?.total ?? 0
-
-        if (plannedStages.length === 0) {
-          setTimelineStages([])
-          setCurrentProgress(0)
-          setTimelineError(null)
-          return
-        }
-
-        const currentStageIndex = Math.min(
-          plannedStages.length - 1,
-          Math.floor((progress / 100) * plannedStages.length)
-        )
-
-        const stages = plannedStages.map((stage: any, index: number) => ({
-          order: stage.order,
-          label: stage.label,
-          description: stage.description,
-          active: index === currentStageIndex && totalTurns > 0,
-          completed: index < currentStageIndex,
-        }))
-
-        setTimelineStages(stages)
-        setCurrentProgress(progress)
-        setTimelineError(null)
-      } catch (err) {
-        setTimelineError('Unable to load timeline')
-      }
-    }
-
-    void loadTimeline()
-  }, [sessionId, timelineEnabled])
+    void loadTimeline(50)
+  }, [loadTimeline, sessionId, timelineEnabled])
 
   useEffect(() => {
     return () => {
@@ -859,16 +1194,17 @@ export default function LiveSessionPage() {
 
   useEffect(() => {
     if (sessionStatus === 'ended') return
-    if (!isMultiTurn || !isConnected) return
+    if (!isConnected) return
     if (messages.length > 0) return
+    if (sessionType === 'phone') return
 
     if (assistantStartTimerRef.current) {
       clearTimeout(assistantStartTimerRef.current)
     }
     assistantStartTimerRef.current = setTimeout(() => {
       startAssistantTurn()
-    }, 600)
-  }, [isMultiTurn, isConnected, messages.length, startAssistantTurn, sessionStatus])
+    }, 800)
+  }, [isConnected, messages.length, startAssistantTurn, sessionStatus, sessionType])
 
   useEffect(() => {
     const shouldPauseMicWhileAssistantSpeaks = sessionType !== 'voice' && sessionType !== 'video'
@@ -964,38 +1300,9 @@ export default function LiveSessionPage() {
   useEffect(() => {
     if (!timelineEnabled) return
     if (messages.length > 0 && sessionId) {
-      const loadTimeline = async () => {
-        try {
-          const response = await api.sessions.timeline(sessionId, 50)
-          const plannedStages = response?.plannedStages ?? []
-          const progress = response?.currentProgress ?? 0
-          const totalTurns = response?.total ?? 0
-
-          if (plannedStages.length === 0) return
-
-          const currentStageIndex = Math.min(
-            plannedStages.length - 1,
-            Math.floor((progress / 100) * plannedStages.length)
-          )
-
-          const stages = plannedStages.map((stage: any, index: number) => ({
-            order: stage.order,
-            label: stage.label,
-            description: stage.description,
-            active: index === currentStageIndex && totalTurns > 0,
-            completed: index < currentStageIndex,
-          }))
-
-          setTimelineStages(stages)
-          setCurrentProgress(progress)
-        } catch {
-          // Silently fail on updates
-        }
-      }
-
-      void loadTimeline()
+      void loadTimeline(50)
     }
-  }, [messages.length, sessionId, timelineEnabled])
+  }, [loadTimeline, messages.length, sessionId, timelineEnabled])
 
   const handleHangUp = async () => {
     clearSpeechFinalizeState()
@@ -1003,22 +1310,37 @@ export default function LiveSessionPage() {
     if (isListening) {
       stopListening()
     }
-    try {
-      await api.sessions.end(sessionId, { reason: 'hangup' })
-      setSessionStatus('ended')
-    } catch (err) {
-      console.warn('Failed to end session', err)
-    }
-
     hangUp()
-    router.push(`/session/${sessionId}/performance`)
-  }
 
-  useEffect(() => {
-    if (sessionType === 'phone' && sessionStatus === 'ended') {
-      router.push(`/session/${sessionId}/performance`)
+    const hasConversation = messages.length > 0
+    const needsExplicitEnd =
+      hasConversation && normalizeSessionStatus(loadedSessionRecord) !== 'ended'
+
+    if (needsExplicitEnd) {
+      try {
+        const endedSession = await api.sessions.end(sessionId, {
+          reason: 'user_hangup',
+        })
+        const endedRecord = isRecord(endedSession) ? endedSession : loadedSessionRecord
+        setLoadedSessionRecord(endedRecord)
+        syncSessionState(endedRecord)
+      } catch (error) {
+        notifications.show({
+          title: 'Unable to finish the session',
+          message:
+            error instanceof Error ? error.message : 'The session could not be marked as ended.',
+          color: 'red',
+        })
+        return
+      }
     }
-  }, [sessionType, sessionStatus, sessionId, router])
+
+    if (hasConversation) {
+      router.push(`/session/${sessionId}/performance`)
+    } else {
+      window.history.back()
+    }
+  }
 
   const sttCommitProgress = Math.min(1, Math.max(0, sttCommitRemainingMs / speechFinalizeDelayMs))
 
@@ -1039,6 +1361,13 @@ export default function LiveSessionPage() {
   // ── Tool event derived UI state ────────────────────────────────────────────
   const latestMoodEvent = toolEvents.findLast((e) => e.tool === 'update_mood')
   const currentMood = latestMoodEvent ? (latestMoodEvent.args.mood as string) : null
+  const currentEmotion = latestMoodEvent
+    ? (latestMoodEvent.args.emotion as string | undefined)
+    : undefined
+  const currentMoodTrigger =
+    latestMoodEvent && latestMoodEvent.args.trigger != null
+      ? String(latestMoodEvent.args.trigger)
+      : null
   const moodDotColor =
     currentMood === 'interested' || currentMood === 'satisfied'
       ? 'green'
@@ -1047,6 +1376,174 @@ export default function LiveSessionPage() {
         : currentMood === 'impatient' || currentMood === 'frustrated'
           ? 'red'
           : 'gray'
+
+  const latestPersuasionEvent = toolEvents.findLast((e) => e.tool === 'update_persuasion_score')
+  const currentPersuasionScore = latestPersuasionEvent
+    ? Math.min(100, Math.max(0, Number(latestPersuasionEvent.args.score)))
+    : null
+  const persuasionReasoning = latestPersuasionEvent
+    ? (latestPersuasionEvent.args.reasoning as string)
+    : null
+
+  const EMOTION_EMOJI: Record<string, string> = {
+    neutral: '😐',
+    happy: '😊',
+    excited: '🤩',
+    curious: '🤔',
+    surprised: '😮',
+    confused: '😕',
+    skeptical: '🤨',
+    nervous: '😰',
+    bored: '😒',
+    frustrated: '😤',
+    angry: '😠',
+    sad: '😔',
+    impressed: '🌟',
+  }
+
+  const renderTimelineContent = () => (
+    <Stack gap="md">
+      <Group justify="space-between" align="center">
+        <Stack gap={2}>
+          <Title order={4}>Timeline</Title>
+          <Text size="xs" c="dimmed">
+            Session plan and current stage
+          </Text>
+        </Stack>
+        {timelineLoading ? <Loader size="sm" /> : null}
+      </Group>
+
+      {!timelineError && timelineStages.length > 0 ? (
+        <Paper
+          radius="md"
+          p="sm"
+          style={{
+            background: 'linear-gradient(135deg, rgba(59,130,246,0.15), rgba(147,51,234,0.08))',
+            border: '1px solid rgba(255,255,255,0.08)',
+          }}
+        >
+          <Group justify="space-between" align="center">
+            <Text size="sm" fw={600}>
+              Progress
+            </Text>
+            <Badge variant="light" color="blue" size="lg">
+              {currentProgress}% Complete
+            </Badge>
+          </Group>
+          <Progress value={currentProgress} color="blue" radius="xl" mt="sm" />
+        </Paper>
+      ) : null}
+
+      {timelineError ? (
+        <Text size="xs" c="red">
+          {timelineError}
+        </Text>
+      ) : null}
+
+      {!timelineLoading && !timelineError && timelineStages.length === 0 ? (
+        <Text size="sm" c="dimmed">
+          Timeline unavailable for this session yet.
+        </Text>
+      ) : null}
+
+      <Stack gap="sm">
+        {timelineStages.map((stage, index) => (
+          <Box
+            key={`${stage.order}-${stage.label}`}
+            style={{ position: 'relative', paddingLeft: 44 }}
+          >
+            {index < timelineStages.length - 1 ? (
+              <Box
+                style={{
+                  position: 'absolute',
+                  left: 13,
+                  top: 28,
+                  bottom: -16,
+                  width: 2,
+                  backgroundColor:
+                    stage.completed || stage.active
+                      ? 'rgba(59,130,246,0.45)'
+                      : 'rgba(255,255,255,0.12)',
+                }}
+              />
+            ) : null}
+            <Box
+              style={{
+                position: 'absolute',
+                left: 0,
+                top: 8,
+                width: 28,
+                height: 28,
+                borderRadius: '50%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: stage.completed
+                  ? 'var(--mantine-color-green-6)'
+                  : stage.active
+                    ? 'var(--mantine-color-blue-6)'
+                    : 'rgba(255,255,255,0.08)',
+                border: stage.active
+                  ? '2px solid rgba(191,219,254,0.95)'
+                  : '1px solid rgba(255,255,255,0.12)',
+                color: 'white',
+                zIndex: 1,
+              }}
+            >
+              {stage.completed ? (
+                <IconCheck size={15} />
+              ) : (
+                <Text size="xs" fw={700}>
+                  {stage.order}
+                </Text>
+              )}
+            </Box>
+
+            <Paper
+              radius="md"
+              p="sm"
+              withBorder
+              style={{
+                backgroundColor: stage.active ? 'rgba(59,130,246,0.09)' : 'rgba(255,255,255,0.02)',
+                borderColor: stage.active ? 'rgba(59,130,246,0.45)' : 'rgba(255,255,255,0.08)',
+              }}
+            >
+              <Group justify="space-between" align="flex-start" wrap="nowrap" gap="xs">
+                <Box style={{ minWidth: 0 }}>
+                  <Text
+                    size="sm"
+                    fw={stage.active ? 700 : 600}
+                    c={stage.completed ? 'green.4' : stage.active ? 'blue.2' : 'white'}
+                  >
+                    {stage.label}
+                  </Text>
+                  {stage.description ? (
+                    <Text size="xs" c="dimmed" mt={4} style={{ lineHeight: 1.45 }}>
+                      {stage.description}
+                    </Text>
+                  ) : null}
+                </Box>
+                {stage.estimatedDuration ? (
+                  <Badge variant="dot" color={stage.active ? 'blue' : 'gray'} size="sm">
+                    {stage.estimatedDuration}m
+                  </Badge>
+                ) : null}
+              </Group>
+            </Paper>
+          </Box>
+        ))}
+      </Stack>
+    </Stack>
+  )
+
+  const persuasionColor =
+    currentPersuasionScore === null
+      ? 'gray'
+      : currentPersuasionScore >= 70
+        ? 'green'
+        : currentPersuasionScore >= 40
+          ? 'yellow'
+          : 'red'
 
   const activeObjections = toolEvents.filter((e) => e.tool === 'raise_objection')
   const latestNextStep = toolEvents.findLast((e) => e.tool === 'propose_next_step') ?? null
@@ -1063,6 +1560,24 @@ export default function LiveSessionPage() {
     })
   }, [toolEvents])
 
+  // Detect persuasion = 100 → compute score + show success modal
+  useEffect(() => {
+    if (currentPersuasionScore === null || currentPersuasionScore < 100) return
+    if (successTriggeredRef.current) return
+    successTriggeredRef.current = true
+
+    const elapsed = time
+    const total = sessionDuration > 0 ? sessionDuration : 600 // fallback 10 min
+    const timeRemaining = Math.max(0, total - elapsed)
+    const speedRatio = timeRemaining / total
+    const score = Math.round(65 + speedRatio * 35)
+
+    setTimeAtSuccess(elapsed)
+    setFinalScore(score)
+    setSuccessModalOpen(true)
+    stopAudio()
+  }, [currentPersuasionScore, time, sessionDuration, stopAudio])
+
   return (
     <Box
       style={{
@@ -1074,6 +1589,68 @@ export default function LiveSessionPage() {
       }}
     >
       {/* Resume prompt is now rendered inside VoiceOrbSession as an orb speech bubble */}
+      <Modal
+        opened={prelaunchModalOpen}
+        onClose={() => {}}
+        title="Add documents before you start"
+        centered
+        size="lg"
+        withCloseButton={false}
+        closeOnClickOutside={false}
+        closeOnEscape={false}
+      >
+        <Stack gap="md">
+          <Text size="sm" c="dimmed">
+            Would you like to upload documents into this session&apos;s context before the
+            simulation begins? These files stay attached to the session so you can launch with the
+            right background material.
+          </Text>
+
+          {sessionAttachments.length > 0 ? (
+            <Stack gap="xs">
+              <Text size="sm" fw={600}>
+                Already attached
+              </Text>
+              <Group gap="xs">
+                {sessionAttachments.map((attachment) => (
+                  <Badge
+                    key={`${attachment.bucket}:${attachment.key}`}
+                    variant="light"
+                    color="blue"
+                  >
+                    {attachment.filename}
+                  </Badge>
+                ))}
+              </Group>
+            </Stack>
+          ) : null}
+
+          <UploadSection
+            sessionDraftId={sessionId}
+            onAttachmentsChange={setLaunchAttachments}
+            onUploadingChange={setLaunchAttachmentsUploading}
+            onHasErrorsChange={setLaunchAttachmentErrors}
+          />
+
+          <Group justify="flex-end">
+            <Button
+              variant="default"
+              onClick={handleSkipPrelaunch}
+              disabled={launchAttachmentsUploading || prelaunchSaving}
+            >
+              Skip for now
+            </Button>
+            <Button
+              onClick={() => void handleContinueFromPrelaunch()}
+              loading={prelaunchSaving}
+              disabled={launchAttachmentsUploading || launchAttachmentErrors}
+            >
+              Continue
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+
       <Modal
         opened={callModalOpen && sessionType === 'phone'}
         onClose={() => setCallModalOpen(false)}
@@ -1153,6 +1730,133 @@ export default function LiveSessionPage() {
         </Stack>
       </Modal>
 
+      {/* ── Success Modal ───────────────────────────────────────────── */}
+      <Modal
+        opened={successModalOpen}
+        onClose={() => {}}
+        withCloseButton={false}
+        closeOnClickOutside={false}
+        closeOnEscape={false}
+        centered
+        size="sm"
+        radius="lg"
+        styles={{
+          content: { background: 'var(--mantine-color-dark-7)', overflow: 'hidden' },
+        }}
+      >
+        <Stack align="center" gap="md" py="sm">
+          {/* Trophy icon */}
+          <ThemeIcon
+            size={72}
+            radius="xl"
+            variant="gradient"
+            gradient={{ from: 'yellow.5', to: 'orange.5', deg: 135 }}
+          >
+            <IconTrophy size={38} />
+          </ThemeIcon>
+
+          <Stack gap={4} align="center">
+            <Title order={2} ta="center">
+              You did it!
+            </Title>
+            <Text c="dimmed" ta="center" size="sm">
+              You successfully convinced the AI
+              {personaName ? ` — ${personaName}` : ''}.
+            </Text>
+          </Stack>
+
+          <Divider w="100%" />
+
+          {/* Score ring */}
+          <Stack align="center" gap={6}>
+            <RingProgress
+              size={120}
+              thickness={10}
+              roundCaps
+              sections={[
+                {
+                  value: finalScore ?? 0,
+                  color:
+                    (finalScore ?? 0) >= 90 ? 'green' : (finalScore ?? 0) >= 75 ? 'teal' : 'yellow',
+                },
+              ]}
+              label={
+                <Stack gap={0} align="center">
+                  <Text fw={800} size="xl" lh={1}>
+                    {finalScore ?? 0}
+                  </Text>
+                  <Text size="xs" c="dimmed">
+                    / 100
+                  </Text>
+                </Stack>
+              }
+            />
+            <Text fw={600} size="md" ta="center">
+              {(finalScore ?? 0) >= 95
+                ? 'Perfect — lightning fast!'
+                : (finalScore ?? 0) >= 85
+                  ? 'Excellent — very convincing!'
+                  : (finalScore ?? 0) >= 75
+                    ? 'Great work!'
+                    : 'Good job — you got there!'}
+            </Text>
+          </Stack>
+
+          {/* Speed bar */}
+          {sessionDuration > 0 && timeAtSuccess !== null && (
+            <Box w="100%">
+              <Group justify="space-between" mb={4}>
+                <Text size="xs" c="dimmed">
+                  Time used
+                </Text>
+                <Text size="xs" fw={600}>
+                  {formatTime(timeAtSuccess)} / {formatTime(sessionDuration)}
+                </Text>
+              </Group>
+              <Progress
+                value={(timeAtSuccess / sessionDuration) * 100}
+                color={
+                  timeAtSuccess / sessionDuration <= 0.4
+                    ? 'green'
+                    : timeAtSuccess / sessionDuration <= 0.7
+                      ? 'yellow'
+                      : 'orange'
+                }
+                size="sm"
+                radius="xl"
+              />
+            </Box>
+          )}
+
+          <Divider w="100%" />
+
+          <Group w="100%" grow>
+            <Button
+              variant="default"
+              leftSection={<IconRefresh size={15} />}
+              loading={startOverLoading}
+              onClick={() => {
+                setSuccessModalOpen(false)
+                successTriggeredRef.current = false
+                setFinalScore(null)
+                setTimeAtSuccess(null)
+                void handleStartOver()
+              }}
+            >
+              New Round
+            </Button>
+            <Button
+              variant="gradient"
+              gradient={{ from: 'violet', to: 'blue', deg: 135 }}
+              leftSection={<IconTrophy size={15} />}
+              onClick={() => setSuccessModalOpen(false)}
+            >
+              Keep Going
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+
       {/* Top Bar */}
       <Box
         style={{
@@ -1174,26 +1878,49 @@ export default function LiveSessionPage() {
                   <Text size="xs" c="dimmed">
                     with {personaName}
                   </Text>
-                  {currentMood && (
-                    <Box
-                      title={`Mood: ${currentMood}`}
-                      style={{
-                        width: 8,
-                        height: 8,
-                        borderRadius: '50%',
-                        backgroundColor: `var(--mantine-color-${moodDotColor}-5)`,
-                        flexShrink: 0,
-                        transition: 'background-color 0.4s ease',
-                      }}
-                    />
+                  {(currentEmotion || currentMood) && (
+                    <Tooltip
+                      label={currentMood ? `Mood: ${currentMood}` : ''}
+                      disabled={!currentMood}
+                      position="bottom"
+                    >
+                      <Badge
+                        variant="light"
+                        color={moodDotColor}
+                        size="sm"
+                        style={{
+                          cursor: 'default',
+                          transition: 'all 0.4s ease',
+                          fontWeight: 500,
+                          gap: 4,
+                        }}
+                        leftSection={
+                          currentEmotion ? (EMOTION_EMOJI[currentEmotion] ?? '😐') : undefined
+                        }
+                      >
+                        {currentEmotion ?? currentMood}
+                      </Badge>
+                    </Tooltip>
                   )}
                 </Group>
               )}
             </Stack>
           </Group>
           <Group gap={isMobile ? 'xs' : 'xl'} wrap="nowrap" style={{ flexShrink: 0 }}>
-            <Text size={isMobile ? 'md' : 'xl'} fw={700} c="white">
-              {formatTime(time)}
+            <Text
+              size={isMobile ? 'md' : 'xl'}
+              fw={700}
+              c={
+                sessionDuration > 0 && time > sessionDuration * 0.85
+                  ? 'red'
+                  : sessionDuration > 0 && time > sessionDuration * 0.6
+                    ? 'orange'
+                    : 'white'
+              }
+            >
+              {sessionDuration > 0
+                ? formatTime(Math.max(0, sessionDuration - time))
+                : formatTime(time)}
             </Text>
             {!isMobile && (
               <Group gap="xs">
@@ -1245,6 +1972,16 @@ export default function LiveSessionPage() {
                   onClick={() => setCallModalOpen(true)}
                 >
                   Start call
+                </Button>
+              )}
+              {isMobile && (
+                <Button
+                  size="xs"
+                  variant="light"
+                  color="brand"
+                  onClick={() => setTimelineEnabled(true)}
+                >
+                  Timeline
                 </Button>
               )}
               <ActionIcon
@@ -1356,6 +2093,8 @@ export default function LiveSessionPage() {
             isListening={isListening}
             isProcessing={isProcessing}
             isConnected={isConnected}
+            isConnecting={isConnecting}
+            connectionError={conversationError}
             sessionStatus={sessionStatus}
             isSttSupported={isSttSupported}
             isSttPermissionBlocked={isSttPermissionBlocked}
@@ -1396,13 +2135,14 @@ export default function LiveSessionPage() {
             radius="lg"
             p="lg"
             style={{
-              width: 200,
+              width: 320,
               backgroundColor: 'var(--pitch-surface-bg)',
-              height: 'fit-content',
+              maxHeight: '100%',
+              overflow: 'auto',
               flexShrink: 0,
             }}
           >
-            <Group justify="space-between" mb="xl">
+            <Group justify="space-between" mb="md">
               <Title order={4}>Timeline</Title>
               <Button
                 size="xs"
@@ -1413,72 +2153,7 @@ export default function LiveSessionPage() {
                 Hide
               </Button>
             </Group>
-            <Box style={{ position: 'relative', paddingLeft: 40 }}>
-              <Box
-                style={{
-                  position: 'absolute',
-                  left: 20,
-                  top: 0,
-                  bottom: 0,
-                  width: 2,
-                  backgroundColor: 'var(--mantine-color-gray-4)',
-                }}
-              />
-
-              <Stack gap={60}>
-                {timelineError && (
-                  <Text size="xs" c="red">
-                    {timelineError}
-                  </Text>
-                )}
-                {!timelineError && currentProgress > 0 && (
-                  <Box mb="md">
-                    <Badge variant="filled" color="blue" size="lg">
-                      {currentProgress}% Complete
-                    </Badge>
-                  </Box>
-                )}
-                {!timelineError && timelineStages.length === 0 && (
-                  <Text size="xs" c="dimmed">
-                    Loading session plan...
-                  </Text>
-                )}
-                {timelineStages.map((stage, i) => (
-                  <Box key={i} style={{ position: 'relative' }}>
-                    <Box
-                      style={{
-                        position: 'absolute',
-                        left: -28,
-                        top: -4,
-                        width: stage.active ? 16 : 8,
-                        height: stage.active ? 16 : 8,
-                        borderRadius: '50%',
-                        backgroundColor: stage.completed
-                          ? 'var(--mantine-color-green-6)'
-                          : stage.active
-                            ? 'var(--mantine-color-blue-6)'
-                            : 'var(--mantine-color-gray-5)',
-                        border: stage.active ? '2px solid var(--mantine-color-blue-2)' : 'none',
-                      }}
-                    />
-                    <Box>
-                      <Text
-                        size="sm"
-                        fw={stage.active ? 600 : 400}
-                        c={stage.active ? 'blue' : stage.completed ? 'green' : 'dimmed'}
-                      >
-                        {stage.label}
-                      </Text>
-                      {stage.description && (
-                        <Text size="xs" c="dimmed" mt={4} style={{ lineHeight: 1.3 }}>
-                          {stage.description}
-                        </Text>
-                      )}
-                    </Box>
-                  </Box>
-                ))}
-              </Stack>
-            </Box>
+            {renderTimelineContent()}
           </Paper>
         ) : !isMobile ? (
           <Box
@@ -1495,6 +2170,16 @@ export default function LiveSessionPage() {
           </Box>
         ) : null}
       </Box>
+
+      <Modal
+        opened={Boolean(isMobile && timelineEnabled)}
+        onClose={() => setTimelineEnabled(false)}
+        title="Timeline"
+        centered
+        fullScreen
+      >
+        {renderTimelineContent()}
+      </Modal>
 
       {/* Hidden MediaPipe pose video.
           Must stay within the viewport (opacity:0.001 not display:none) so the
@@ -1529,10 +2214,192 @@ export default function LiveSessionPage() {
         }
       `}</style>
 
+      {/* In-session proactive coaching tip — appears on stage transitions */}
+      {coachingTip && (
+        <Box
+          style={{
+            position: 'fixed',
+            top: 72,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 400,
+            width: 'min(460px, calc(100vw - 32px))',
+            animation: 'coaching-tip-in 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
+          }}
+        >
+          <style>{`
+            @keyframes coaching-tip-in {
+              from { opacity: 0; transform: translateX(-50%) translateY(-12px) scale(0.95); }
+              to   { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+            }
+          `}</style>
+          <Paper withBorder shadow="lg" radius="md" px="md" py="sm">
+            <Group gap="sm" wrap="nowrap" align="flex-start">
+              <Box
+                style={{
+                  width: 30,
+                  height: 30,
+                  borderRadius: '50%',
+                  background: 'linear-gradient(135deg, #7950f2, #4dabf7)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                  marginTop: 2,
+                }}
+              >
+                <IconSparkles size={15} color="white" />
+              </Box>
+              <Stack gap={2} style={{ flex: 1 }}>
+                <Group gap={6} align="center">
+                  <Text size="xs" fw={600} c="violet.6">
+                    Coach tip
+                  </Text>
+                  <Badge size="xs" variant="light" color="violet">
+                    {coachingTip.stage}
+                  </Badge>
+                </Group>
+                <Text size="sm" lh={1.5}>
+                  {coachingTip.tip}
+                </Text>
+              </Stack>
+              <ActionIcon
+                size="sm"
+                variant="subtle"
+                color="gray"
+                onClick={clearCoachingTip}
+                style={{ flexShrink: 0, marginTop: 2 }}
+              >
+                <IconX size={14} />
+              </ActionIcon>
+            </Group>
+          </Paper>
+        </Box>
+      )}
+
+      {/* AI State Panel — always visible on desktop */}
+      {!isMobile && (
+        <Box
+          style={{
+            position: 'fixed',
+            bottom: 24,
+            left: 24,
+            zIndex: 300,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 8,
+            width: 188,
+          }}
+        >
+          {/* Emotion Box */}
+          <Paper withBorder radius="md" px="sm" py="xs" shadow="sm">
+            <Text
+              size="xs"
+              c="dimmed"
+              fw={500}
+              tt="uppercase"
+              mb={6}
+              style={{ letterSpacing: '0.04em' }}
+            >
+              AI Emotion
+            </Text>
+            <Group gap="xs" align="center" wrap="nowrap">
+              <Text size="xl" style={{ lineHeight: 1, flexShrink: 0, transition: 'all 0.4s ease' }}>
+                {EMOTION_EMOJI[currentEmotion ?? ''] ?? EMOTION_EMOJI[currentMood ?? ''] ?? '😐'}
+              </Text>
+              <Stack gap={2} style={{ minWidth: 0 }}>
+                <Text
+                  size="sm"
+                  fw={600}
+                  tt="capitalize"
+                  c={(currentEmotion ?? currentMood) ? undefined : 'dimmed'}
+                  style={{ lineHeight: 1.2, transition: 'all 0.4s ease' }}
+                >
+                  {currentEmotion ?? currentMood ?? 'Neutral'}
+                </Text>
+                {latestMoodEvent?.args.trigger ? (
+                  <Text size="xs" c="dimmed" style={{ lineHeight: 1.3 }} lineClamp={2}>
+                    {String(latestMoodEvent.args.trigger)}
+                  </Text>
+                ) : (
+                  <Text size="xs" c="dimmed" style={{ lineHeight: 1.3 }}>
+                    Waiting for response…
+                  </Text>
+                )}
+              </Stack>
+            </Group>
+          </Paper>
+
+          {/* Persuasion Meter */}
+          <Tooltip
+            label={persuasionReasoning ?? ''}
+            disabled={!persuasionReasoning}
+            position="right"
+            multiline
+            w={200}
+          >
+            <Paper
+              withBorder
+              radius="md"
+              px="sm"
+              py="xs"
+              shadow="sm"
+              style={{ cursor: persuasionReasoning ? 'help' : 'default' }}
+            >
+              <Group gap="xs" mb={6} align="center">
+                <IconTarget size={12} color="var(--mantine-color-dimmed)" />
+                <Text
+                  size="xs"
+                  c="dimmed"
+                  fw={500}
+                  tt="uppercase"
+                  style={{ letterSpacing: '0.04em' }}
+                >
+                  Persuasion
+                </Text>
+              </Group>
+              <Group gap="xs" align="center" wrap="nowrap">
+                <RingProgress
+                  size={52}
+                  thickness={5}
+                  roundCaps
+                  sections={[
+                    {
+                      value: currentPersuasionScore ?? 0,
+                      color: currentPersuasionScore !== null ? persuasionColor : 'gray',
+                    },
+                  ]}
+                  label={
+                    <Text
+                      fw={700}
+                      ta="center"
+                      size="xs"
+                      c={currentPersuasionScore !== null ? persuasionColor : 'dimmed'}
+                    >
+                      {currentPersuasionScore ?? '—'}
+                    </Text>
+                  }
+                />
+                <Text size="xs" c="dimmed" style={{ lineHeight: 1.3 }}>
+                  {currentPersuasionScore === null
+                    ? 'Waiting for response…'
+                    : currentPersuasionScore >= 70
+                      ? 'Almost convinced'
+                      : currentPersuasionScore >= 40
+                        ? 'On the fence'
+                        : 'Not convinced'}
+                </Text>
+              </Group>
+            </Paper>
+          </Tooltip>
+        </Box>
+      )}
+
       <CoachChatWidget
         context={{
           page: 'session',
           sessionId,
+          sessionName: sessionName || undefined,
           recentTurns: messages.slice(-6).map((m) => ({ role: m.role, text: m.text })),
         }}
       />

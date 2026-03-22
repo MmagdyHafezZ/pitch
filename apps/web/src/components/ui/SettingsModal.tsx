@@ -37,7 +37,9 @@ import {
   IconShare2,
   IconDownload,
   IconSparkles,
+  IconCalendarEvent,
 } from '@tabler/icons-react'
+import { CalendarConnectCards } from '@/features/calendar/components/CalendarConnectCards'
 import { modals } from '@mantine/modals'
 import { useMediaQuery } from '@mantine/hooks'
 import { useAuth } from '@/features/auth'
@@ -49,7 +51,13 @@ import { getReadableMutedColor, getReadableTextColor, mixColors } from '@/lib/co
 import classes from './SettingsModal.module.css'
 import inputClasses from './settingsInputs.module.css'
 
-type SettingsSection = 'Account' | 'Notifications' | 'Voice & Video' | 'Appearance' | 'Language'
+type SettingsSection =
+  | 'Account'
+  | 'Notifications'
+  | 'Voice & Video'
+  | 'Appearance'
+  | 'Language'
+  | 'Integrations'
 
 interface SettingsModalProps {
   opened: boolean
@@ -165,6 +173,7 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
     { icon: IconMicrophone, label: 'Voice & Video' },
     { icon: IconPalette, label: 'Appearance' },
     { icon: IconWorld, label: 'Language' },
+    { icon: IconCalendarEvent, label: 'Integrations' },
   ]
 
   const handleLogout = async () => {
@@ -241,7 +250,9 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
                           ? 'Audio'
                           : section.label === 'Appearance'
                             ? 'Theme'
-                            : t('settings.language.title')
+                            : section.label === 'Integrations'
+                              ? 'Calendar'
+                              : t('settings.language.title')
                   return (
                     <Box
                       key={section.label}
@@ -333,7 +344,9 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
                                 ? 'Voice & Video'
                                 : section.label === 'Appearance'
                                   ? 'Appearance'
-                                  : t('settings.language.title')}
+                                  : section.label === 'Integrations'
+                                    ? 'Integrations'
+                                    : t('settings.language.title')}
                         </Text>
                       </Group>
                     </Box>
@@ -762,6 +775,19 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
                     </Stack>
                   </Tabs.Panel>
                 </Tabs>
+              </Stack>
+            )}
+
+            {activeSection === 'Integrations' && (
+              <Stack gap="md">
+                <Text size="xl" fw={600} mb="xs" c="var(--pitch-surface-text)">
+                  Integrations
+                </Text>
+                <Text size="sm" c="var(--pitch-surface-text-dim)" mb="sm">
+                  Connect your work calendars so PITCH can read upcoming meetings and suggest
+                  tailored practice sessions.
+                </Text>
+                <CalendarConnectCards />
               </Stack>
             )}
 

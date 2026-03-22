@@ -734,6 +734,12 @@ export default function CreateSessionPage() {
     setActiveDraftId(draftId)
   }
 
+  const handleOpenScenarioGenerator = () => {
+    setActiveDraftId(null)
+    setSelectedScenarioId(null)
+    setSelectedDraftId(null)
+  }
+
   const handleCreateDraft = () => {
     const rolePair = alignPitchRolePair(aiRole, userRole)
     const draft = createEditableScenarioDraft({
@@ -1270,6 +1276,7 @@ export default function CreateSessionPage() {
           onScenarioWorkspaceChange={handleScenarioWorkspaceChange}
           selectedScenarioId={selectedScenarioId}
           onSelectSavedScenario={handleSelectSavedScenario}
+          onOpenGenerator={handleOpenScenarioGenerator}
           drafts={drafts}
           activeDraftId={activeDraftId}
           selectedDraftId={selectedDraftId}

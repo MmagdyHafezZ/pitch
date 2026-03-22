@@ -138,7 +138,9 @@ export function useSpeechToText(options: UseSpeechToTextOptions = {}) {
 
     if (!SpeechRecognitionAPI) {
       setIsSupported(false)
-      setError('Speech recognition is not supported in this browser')
+      // Don't set an error — unsupported is a structural browser limitation,
+      // not a runtime failure. The mic button already communicates this via
+      // its disabled state and tooltip.
       return
     }
 

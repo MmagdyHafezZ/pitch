@@ -34,6 +34,8 @@ import type { CalendarEvent } from '@/features/calendar/types/calendar.types'
 import { useI18n } from '@/features/i18n'
 import { api } from '@/lib/client'
 import { notifications } from '@mantine/notifications'
+import { useAuth } from '@/features/auth/hooks/useAuth'
+import { useTeams } from '@/features/teams/hooks/useTeams'
 
 const LOOK_AHEAD_OPTIONS = [
   { value: '3', label: '3 days' },
@@ -46,6 +48,8 @@ export default function CalendarPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { t } = useI18n()
+  const { user } = useAuth()
+  const { activeTeamId } = useTeams()
 
   const tabParam = searchParams.get('tab')
   const connectedParam = searchParams.get('connected')
@@ -68,18 +72,38 @@ export default function CalendarPage() {
     if (connectedParam) {
       notifications.show({
         title: 'Calendar connected',
-        message: `Your ${connectedParam === 'google' ? 'Google' : 'Outlook'} calendar has been connected.`,
+        message: `Your ${connectedParam === 'google' ? 'Google' : 'Outlook'} calendar has been connected successfully.`,
         color: 'green',
       })
-      router.replace('/studio/calendar')
+      // Send the user back to home after a successful OAuth connection
+      router.replace('/studio/home')
     }
-  }, [connectedParam])
+    const errorParam = searchParams.get('error')
+    if (errorParam) {
+      notifications.show({
+        title: 'Calendar connection failed',
+        message: 'Could not connect your calendar. Please try again from Settings.',
+        color: 'red',
+      })
+      router.replace('/studio/home')
+    }
+  }, [connectedParam, searchParams, router])
 
   const handleCreateSession = async (event: CalendarEvent) => {
     try {
+      const orgId = activeTeamId || user?.id
+      if (!orgId) {
+        notifications.show({
+          title: 'Missing workspace',
+          message: 'Could not determine which workspace to save the session in.',
+          color: 'red',
+        })
+        return
+      }
+
       const session = await api.sessions.create({
         name: event.title,
-        orgId: '',
+        orgId,
         type: 'text',
         tags: ['calendar-generated'],
         sessionConfig: {

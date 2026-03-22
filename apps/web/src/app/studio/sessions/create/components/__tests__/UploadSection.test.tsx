@@ -6,16 +6,18 @@ import { render, screen, waitFor } from '@/__tests__/utils/test-utils'
 import userEvent from '@testing-library/user-event'
 import type { ReactNode } from 'react'
 
-const presignUploadMock = jest.fn()
+const uploadMock = jest.fn()
 
 jest.mock('@mantine/dropzone', () => ({
   Dropzone: ({
     onDrop,
     disabled,
+    accept,
     children,
   }: {
     onDrop: (files: File[]) => void
     disabled?: boolean
+    accept?: string[]
     children: ReactNode
   }) => (
     <div>
@@ -24,6 +26,7 @@ jest.mock('@mantine/dropzone', () => ({
         type="file"
         multiple
         disabled={disabled}
+        data-accept={accept?.join(',')}
         onChange={(event) => {
           const files = Array.from(event.currentTarget.files ?? [])
           onDrop(files)
@@ -37,22 +40,14 @@ jest.mock('@mantine/dropzone', () => ({
 jest.mock('@/lib/client', () => ({
   api: {
     s3: {
-      presignUpload: (...args: unknown[]) => presignUploadMock(...args),
+      upload: (...args: unknown[]) => uploadMock(...args),
     },
   },
 }))
 
 describe('UploadSection', () => {
-  const originalFetch = global.fetch
-
   beforeEach(() => {
-    process.env.NEXT_PUBLIC_STORAGE_BUCKET = 'test-bucket'
-    presignUploadMock.mockReset()
-    global.fetch = jest.fn() as unknown as typeof fetch
-  })
-
-  afterAll(() => {
-    global.fetch = originalFetch
+    uploadMock.mockReset()
   })
 
   const renderUploadSection = async (onAttachmentsChange: jest.Mock = jest.fn()) => {
@@ -77,16 +72,40 @@ describe('UploadSection', () => {
     await waitFor(() => {
       expect(screen.getByText(/extension are not allowed/i)).toBeInTheDocument()
     })
-    expect(presignUploadMock).not.toHaveBeenCalled()
-    expect(global.fetch).not.toHaveBeenCalled()
+    expect(uploadMock).not.toHaveBeenCalled()
     expect(screen.getByText('error')).toBeInTheDocument()
   })
 
+  it('shows supported file formats in the upload UI', async () => {
+    await renderUploadSection()
+
+    expect(screen.getByText(/supported:/i)).toHaveTextContent('Word (.doc, .docx)')
+    expect(screen.getByText('Excel (.xls, .xlsx, .csv, .tsv)')).toBeInTheDocument()
+    expect(screen.getByText('PowerPoint (.ppt, .pptx)')).toBeInTheDocument()
+  })
+
+  it('rejects unsupported file types client-side and skips upload calls', async () => {
+    const unsupported = new File(['zip'], 'archive.zip', {
+      type: 'application/zip',
+    })
+
+    await uploadFile(unsupported)
+
+    await waitFor(() => {
+      expect(screen.getByText(/unsupported file type/i)).toBeInTheDocument()
+    })
+    expect(uploadMock).not.toHaveBeenCalled()
+  })
+
   it('uploads successfully and emits attachment metadata', async () => {
-    presignUploadMock.mockResolvedValueOnce({ url: 'https://upload.test/presigned' })
-    ;(global.fetch as jest.Mock).mockResolvedValueOnce({
-      ok: true,
-      status: 200,
+    uploadMock.mockResolvedValueOnce({
+      bucket: 'resolved-bucket',
+      key: 'sessions/session-id/proposal.pdf',
+      filename: 'proposal.pdf',
+      contentType: 'application/pdf',
+      size: 5,
+      uploadedAt: '2026-03-21T00:00:00.000Z',
+      textPreview: 'Customer requirements and next steps.',
     })
 
     const onAttachmentsChange = jest.fn()
@@ -100,64 +119,38 @@ describe('UploadSection', () => {
     await user.upload(input, file)
 
     await waitFor(() => {
-      expect(presignUploadMock).toHaveBeenCalledTimes(1)
-      expect(global.fetch).toHaveBeenCalledTimes(1)
+      expect(uploadMock).toHaveBeenCalledTimes(1)
       expect(screen.getByText('uploaded')).toBeInTheDocument()
     })
 
-    expect(presignUploadMock).toHaveBeenCalledWith(
+    expect(uploadMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        bucket: 'test-bucket',
-        expiresIn: 300,
+        file,
       })
     )
-    expect(presignUploadMock.mock.calls[0]?.[0]?.key).toMatch(/^sessions\/.+\/\d+-proposal\.pdf$/)
-    expect(global.fetch).toHaveBeenCalledWith(
-      'https://upload.test/presigned',
-      expect.objectContaining({
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/pdf' },
-        body: file,
-      })
-    )
+    expect(uploadMock.mock.calls[0]?.[0]?.key).toMatch(/^sessions\/.+\/\d+-proposal\.pdf$/)
 
     await waitFor(() => {
       expect(onAttachmentsChange).toHaveBeenLastCalledWith([
         expect.objectContaining({
-          bucket: 'test-bucket',
+          bucket: 'resolved-bucket',
           filename: 'proposal.pdf',
           contentType: 'application/pdf',
           size: file.size,
+          textPreview: 'Customer requirements and next steps.',
         }),
       ])
     })
   })
 
-  it('sets error status when presign upload fails', async () => {
-    presignUploadMock.mockRejectedValueOnce(new Error('presign failed'))
+  it('sets error status when upload fails', async () => {
+    uploadMock.mockRejectedValueOnce(new Error('upload failed'))
     const file = new File(['x'], 'notes.txt', { type: 'text/plain' })
 
     await uploadFile(file)
 
     await waitFor(() => {
-      expect(screen.getByText(/presign failed/i)).toBeInTheDocument()
-    })
-    expect(global.fetch).not.toHaveBeenCalled()
-    expect(screen.getByText('error')).toBeInTheDocument()
-  })
-
-  it('sets error status when PUT upload fails', async () => {
-    presignUploadMock.mockResolvedValueOnce({ url: 'https://upload.test/presigned' })
-    ;(global.fetch as jest.Mock).mockResolvedValueOnce({
-      ok: false,
-      status: 403,
-    })
-    const file = new File(['x'], 'notes.txt', { type: 'text/plain' })
-
-    await uploadFile(file)
-
-    await waitFor(() => {
-      expect(screen.getByText(/upload failed with status 403/i)).toBeInTheDocument()
+      expect(screen.getByText(/upload failed/i)).toBeInTheDocument()
     })
     expect(screen.getByText('error')).toBeInTheDocument()
   })

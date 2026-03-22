@@ -53,6 +53,7 @@ interface ScenarioStepProps {
   onScenarioWorkspaceChange: (value: string | null) => void
   selectedScenarioId: string | null
   onSelectSavedScenario: (id: string | null) => void
+  onOpenGenerator: () => void
   drafts: EditableScenarioDraft[]
   activeDraftId: string | null
   selectedDraftId: string | null
@@ -94,6 +95,7 @@ export function ScenarioStep({
   onScenarioWorkspaceChange,
   selectedScenarioId,
   onSelectSavedScenario,
+  onOpenGenerator,
   drafts,
   activeDraftId,
   selectedDraftId,
@@ -139,7 +141,10 @@ export function ScenarioStep({
     if (activeDraft || selectedSavedScenario) setShowGenerator(false)
   }, [activeDraft, selectedSavedScenario])
 
-  const handleOpenGenerator = () => setShowGenerator(true)
+  const handleOpenGenerator = () => {
+    onOpenGenerator()
+    setShowGenerator(true)
+  }
   const handleSelectSavedScenario = (id: string | null) => {
     setShowGenerator(false)
     onSelectSavedScenario(id)

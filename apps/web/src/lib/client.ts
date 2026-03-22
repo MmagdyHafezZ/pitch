@@ -501,12 +501,36 @@ export const api = {
   },
 
   s3: {
-    presignUpload: (input: { bucket: string; key: string; expiresIn?: number }) =>
-      apiRequest<{ url: string }>('/s3/presigned/upload', {
+    upload: (input: { key: string; file: File }) => {
+      const formData = new FormData()
+      formData.append('key', input.key)
+      formData.append('file', input.file)
+
+      return apiRequest<{
+        bucket: string
+        key: string
+        filename: string
+        contentType: string
+        size: number
+        uploadedAt: string
+        textPreview?: string
+      }>('/s3/upload', {
+        method: 'POST',
+        body: formData,
+      })
+    },
+    presignUpload: (input: {
+      bucket?: string
+      key: string
+      contentType?: string
+      expiresIn?: number
+    }) =>
+      apiRequest<{ url: string; bucket: string }>('/s3/presigned/upload', {
         method: 'POST',
         body: JSON.stringify({
           bucket: input.bucket,
           key: input.key,
+          contentType: input.contentType,
           expiresInSeconds: input.expiresIn,
         }),
       }),
@@ -912,7 +936,15 @@ export const api = {
       context?: {
         page?: string
         sessionId?: string
+        sessionName?: string
         recentTurns?: Array<{ role: string; text: string }>
+        savedAttachments?: Array<{
+          name: string
+          content: string
+          mimeType: string
+          size: number
+          s3Url?: string
+        }>
       }
     }) =>
       apiRequest<{ reply: string }>('/support/chat', {

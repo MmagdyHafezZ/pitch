@@ -56,14 +56,14 @@ export type HeaderProps = {
   searchPlaceholder?: string
   rightSlot?: ReactNode
   teamName?: string
-  currentPage?: 'Home' | 'Sessions' | 'Teams' | 'Analytics' | 'Challenges' | 'Calendar' | 'Settings'
+  currentPage?: 'Home' | 'Sessions' | 'Teams' | 'Analytics' | 'Challenges' | 'Settings'
   selectedTab?: string
   onTabChange?: (tab: string) => void
   onToggleMobileNav?: () => void
   mobileNavOpened?: boolean
 }
 
-type PageKey = 'Home' | 'Sessions' | 'Teams' | 'Analytics' | 'Challenges' | 'Calendar' | 'Settings'
+type PageKey = 'Home' | 'Sessions' | 'Teams' | 'Analytics' | 'Challenges' | 'Settings'
 type ActionBarProps = {
   actionButtons?: ReactNode
   leadingAction?: ReactNode

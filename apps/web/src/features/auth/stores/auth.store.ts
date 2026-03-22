@@ -12,6 +12,10 @@ import { useTeamsStore } from '@/features/teams/stores/teams.store'
 
 export interface AuthStore extends AuthState, AuthActions {}
 
+// Prevents concurrent initializeAuth() calls from firing parallel /auth/me requests.
+// Multiple components (or React Strict Mode's double-invocation) all share this gate.
+let initInFlight: Promise<void> | null = null
+
 const isTokenExpired = (token: string | null) => {
   if (!token) return true
   const expiry = getJwtExpiry(token)
@@ -190,7 +194,11 @@ export const useAuthStore = create<AuthStore>()((set, get) => ({
   },
 
   initializeAuth: () => {
-    api.auth
+    // If an init is already in-flight (e.g. multiple components mounting simultaneously,
+    // or React Strict Mode double-invoking effects), reuse the existing promise.
+    if (initInFlight) return
+
+    initInFlight = api.auth
       .refreshToken()
       .then((response) => {
         set({
@@ -207,6 +215,9 @@ export const useAuthStore = create<AuthStore>()((set, get) => ({
         setAccessToken(null)
         set({ token: null, user: null, isAuthenticated: false })
         useTeamsStore.getState().resetStore()
+      })
+      .finally(() => {
+        initInFlight = null
       })
   },
 }))

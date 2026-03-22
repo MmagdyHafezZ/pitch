@@ -51,11 +51,24 @@ export class CalendarSyncSchedulerService {
       `Found ${connectedUsers.length} users with connected calendars`,
     );
 
-    for (const user of connectedUsers) {
-      this.crmClient.emit('calendar.sync.user', {
-        userId: user.userId,
-        providers: user.providers,
-      });
+    const syncResults = await Promise.allSettled(
+      connectedUsers.map((user) =>
+        this.syncUserCalendar({
+          userId: user.userId,
+          providers: user.providers,
+        }),
+      ),
+    );
+
+    for (const [index, result] of syncResults.entries()) {
+      if (result.status === 'fulfilled') {
+        continue;
+      }
+
+      const userId = connectedUsers[index]?.userId ?? 'unknown';
+      this.logger.warn(
+        `Calendar sync failed for user ${userId}: ${result.reason instanceof Error ? result.reason.message : String(result.reason)}`,
+      );
     }
   }
 
@@ -130,7 +143,7 @@ export class CalendarSyncSchedulerService {
           'simulation.calendar.session.createFromEvent',
           {
             userId,
-            orgId: '',
+            orgId: userId,
             calendarEvent: event,
             mode,
             sessionType,

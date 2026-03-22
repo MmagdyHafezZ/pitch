@@ -25,6 +25,8 @@ interface VoiceOrbSessionProps {
   isListening: boolean
   isProcessing: boolean
   isConnected: boolean
+  isConnecting?: boolean
+  connectionError?: string | null
   sessionStatus: string | null
   isSttSupported: boolean
   isSttPermissionBlocked: boolean
@@ -900,6 +902,8 @@ export default function VoiceOrbSession({
   isListening,
   isProcessing,
   isConnected,
+  isConnecting = false,
+  connectionError = null,
   sessionStatus,
   isSttSupported,
   isSttPermissionBlocked,
@@ -1082,7 +1086,9 @@ export default function VoiceOrbSession({
         ? 'Your Turn'
         : isConnected
           ? 'Ready'
-          : 'Connecting…'
+          : connectionError
+            ? 'Connection error'
+            : 'Connecting…'
 
   // In-panel status shows interrupt hint when AI is talking and user hasn't cut in yet
   const panelStatusLabel =
@@ -1280,10 +1286,9 @@ export default function VoiceOrbSession({
             {/* Resume prompt — appears as a speech bubble above the orb */}
             {resumePromptOpen && (
               <div className="vos-speech-bubble">
-                <p className="vos-bubble-heading">Resume previous progress?</p>
+                <p className="vos-bubble-heading">What would you like to do?</p>
                 <p className="vos-bubble-desc">
-                  You have an in-progress session with saved turns. Pick up where you left off, or
-                  start fresh.
+                  Continue this round where you left off, or start a brand-new iteration.
                 </p>
                 <div className="vos-bubble-actions">
                   <button
@@ -1291,14 +1296,14 @@ export default function VoiceOrbSession({
                     onClick={onStartOver}
                     disabled={startOverLoading}
                   >
-                    Start Over
+                    {startOverLoading ? 'Starting…' : 'New Iteration'}
                   </button>
                   <button
                     className="vos-bubble-btn vos-bubble-btn-primary"
                     onClick={onResume}
                     disabled={startOverLoading}
                   >
-                    Resume
+                    Continue
                   </button>
                 </div>
               </div>
@@ -1417,7 +1422,7 @@ export default function VoiceOrbSession({
                 </div>
               )}
 
-              {sttError && (
+              {sttError && isSttSupported && (
                 <div
                   style={{
                     padding: '2px 14px',
@@ -1488,7 +1493,9 @@ export default function VoiceOrbSession({
                   className="vos-input"
                   placeholder={
                     !isConnected
-                      ? 'Connecting…'
+                      ? connectionError
+                        ? 'Connection error — please refresh'
+                        : 'Connecting…'
                       : sessionStatus === 'ended'
                         ? 'Session ended'
                         : 'Type a message…'

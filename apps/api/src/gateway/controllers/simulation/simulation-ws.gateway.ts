@@ -417,6 +417,21 @@ export class SimulationWsGateway
               envelope.turnId,
             ),
           );
+        } else if (event.type === 'coaching_tip') {
+          client.emit(
+            WsMessageType.CONVERSATION_COACHING_TIP,
+            WsEnvelopeFactory.create(
+              WsMessageType.CONVERSATION_COACHING_TIP,
+              requestId,
+              sessionId,
+              {
+                tip: event.data.tip,
+                stage: event.data.stage,
+                stageIndex: event.data.stageIndex,
+              },
+              envelope.turnId,
+            ),
+          );
         } else if (event.type === 'audio_sentence') {
           // Emit binary audio chunk — Socket.IO transmits Buffer as a binary frame
           client.emit(WsMessageType.CONVERSATION_AUDIO_CHUNK, {

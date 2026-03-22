@@ -39,6 +39,8 @@ import { CalendarGatewayController } from './controllers/calendar/calendar-gatew
 import { SupportChatGatewayController } from './controllers/support/support-chat-gateway.controller';
 import { SupportAttachmentGatewayController } from './controllers/support/support-attachment-gateway.controller';
 import { CoachStreamService } from './controllers/support/coach-stream.service';
+import { SupportAttachmentStorageService } from './controllers/support/support-attachment-storage.service';
+import { S3GatewayController } from './controllers/s3/s3-gateway.controller';
 
 @Module({
   imports: [
@@ -83,6 +85,7 @@ import { CoachStreamService } from './controllers/support/coach-stream.service';
     RagController,
     ChallengesGatewayController,
     CalendarGatewayController,
+    S3GatewayController,
     SupportChatGatewayController,
     SupportAttachmentGatewayController,
   ],
@@ -91,6 +94,7 @@ import { CoachStreamService } from './controllers/support/coach-stream.service';
     UserClaimsInterceptor,
     SimulationWsGateway,
     CoachStreamService,
+    SupportAttachmentStorageService,
   ],
 })
 export class GatewayModule {}

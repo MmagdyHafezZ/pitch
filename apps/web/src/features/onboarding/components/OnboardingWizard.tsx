@@ -10,18 +10,26 @@ import { RoleStep } from './steps/RoleStep'
 import { ManagerSalesforceStep } from './steps/ManagerSalesforceStep'
 import { ManagerInviteStep } from './steps/ManagerInviteStep'
 import { EmployeeCareerStep } from './steps/EmployeeCareerStep'
+import { ConnectCalendarStep } from './steps/ConnectCalendarStep'
 import { TutorialOfferStep } from './steps/TutorialOfferStep'
 import type { OnboardingStep, UserRole, CareerInfo } from '../types'
 
 function buildSteps(role: UserRole | undefined): OnboardingStep[] {
   if (role === 'MANAGER') {
-    return ['welcome', 'role', 'manager-salesforce', 'manager-invite', 'tutorial']
+    return [
+      'welcome',
+      'role',
+      'manager-salesforce',
+      'manager-invite',
+      'connect-calendar',
+      'tutorial',
+    ]
   }
   if (role === 'EMPLOYEE') {
-    return ['welcome', 'role', 'employee-career', 'tutorial']
+    return ['welcome', 'role', 'employee-career', 'connect-calendar', 'tutorial']
   }
   // Role not yet selected — show minimum steps
-  return ['welcome', 'role', 'tutorial']
+  return ['welcome', 'role', 'connect-calendar', 'tutorial']
 }
 
 export function OnboardingWizard() {
@@ -85,6 +93,8 @@ export function OnboardingWizard() {
         return <ManagerInviteStep onNext={goNext} onSkip={goNext} />
       case 'employee-career':
         return <EmployeeCareerStep onNext={handleCareerNext} onSkip={goNext} />
+      case 'connect-calendar':
+        return <ConnectCalendarStep onNext={goNext} onSkip={goNext} />
       case 'tutorial':
         return <TutorialOfferStep onStartTour={handleTutorialStart} onSkip={handleTutorialSkip} />
       default:

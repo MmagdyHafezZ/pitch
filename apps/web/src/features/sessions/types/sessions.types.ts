@@ -168,6 +168,7 @@ export type SessionAttachment = {
   contentType: string
   size: number
   uploadedAt: string
+  textPreview?: string
 }
 
 export interface VideoRuntimeConfig {

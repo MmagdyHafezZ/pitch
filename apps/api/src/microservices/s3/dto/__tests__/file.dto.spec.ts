@@ -15,6 +15,12 @@ describe('S3 file DTOs', () => {
     expect(errors.length).toBeGreaterThan(0);
   });
 
+  it('accepts a presign upload payload without bucket', async () => {
+    const dto = plainToInstance(PresignUploadDto, { key: 'k' });
+    const errors = await validate(dto);
+    expect(errors).toHaveLength(0);
+  });
+
   it('accepts a valid presign download payload', async () => {
     const dto = plainToInstance(PresignDownloadDto, {
       bucket: 'b',

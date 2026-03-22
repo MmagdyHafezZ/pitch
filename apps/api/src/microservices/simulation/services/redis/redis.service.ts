@@ -21,7 +21,10 @@ import {
   IVideoJob,
   IPersonaPreviewAudioAsset,
 } from './redis-key-patterns';
-import type { IMoodState } from '../conversation-tools.service';
+import type {
+  IMoodState,
+  IPersuasionState,
+} from '../conversation-tools.service';
 
 /**
  * SimulationRedisService
@@ -563,6 +566,29 @@ export class SimulationRedisService {
   async setMoodState(sessionId: string, state: IMoodState): Promise<void> {
     const key = RedisKeys.sessionMood(sessionId);
     await this.redis.setex(key, RedisTTL.SESSION_MOOD, JSON.stringify(state));
+  }
+
+  // ── AI persuasion score ────────────────────────────────────────────────────
+
+  async getPersuasionScore(
+    sessionId: string,
+  ): Promise<IPersuasionState | null> {
+    const key = RedisKeys.sessionPersuasion(sessionId);
+    const data = await this.redis.get(key);
+    if (!data) return null;
+    return JSON.parse(data) as IPersuasionState;
+  }
+
+  async setPersuasionScore(
+    sessionId: string,
+    state: IPersuasionState,
+  ): Promise<void> {
+    const key = RedisKeys.sessionPersuasion(sessionId);
+    await this.redis.setex(
+      key,
+      RedisTTL.SESSION_PERSUASION,
+      JSON.stringify(state),
+    );
   }
 
   /**

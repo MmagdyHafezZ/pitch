@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -8,17 +9,25 @@ import {
   Inject,
   Post,
   Query,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
 import {
   ApiBearerAuth,
+  ApiConsumes,
   ApiOperation,
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { catchError, timeout } from 'rxjs/operators';
 import { throwError } from 'rxjs';
 import type { S3ServicePattern } from '@pitch/shared-backend/interfaces/message-patterns.interface';
+import {
+  SupportAttachmentStorageService,
+  type SupportAttachmentUploadFile,
+} from '../support/support-attachment-storage.service';
 const getErrorMessage = (err: unknown, fallback: string): string => {
   if (err instanceof HttpException) return err.message;
   if (err instanceof Error) return err.message;
@@ -41,7 +50,42 @@ const DELETE_PREFIX: S3ServicePattern = 's3.files.deletePrefix';
 @ApiBearerAuth('bearer')
 @Controller({ path: 's3', version: '1' })
 export class S3GatewayController {
-  constructor(@Inject('S3_SERVICE') private s3Service: ClientProxy) {}
+  constructor(
+    @Inject('S3_SERVICE') private s3Service: ClientProxy,
+    private readonly attachmentStorage: SupportAttachmentStorageService,
+  ) {}
+
+  @Post('upload')
+  @ApiOperation({ summary: 'Upload a file to the configured storage bucket' })
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FileInterceptor('file'))
+  async upload(
+    @UploadedFile() file: SupportAttachmentUploadFile,
+    @Body('key') key: string | undefined,
+  ) {
+    if (!file) {
+      throw new BadRequestException('No file provided');
+    }
+    this.attachmentStorage.assertUploadPermitted(file);
+
+    const resolvedKey = key?.trim();
+    if (!resolvedKey) {
+      throw new BadRequestException('Key is required');
+    }
+
+    await this.attachmentStorage.uploadToStorage(resolvedKey, file);
+    const textPreview = await this.attachmentStorage.extractTextPreview(file);
+
+    return {
+      bucket: this.attachmentStorage.bucketName,
+      key: resolvedKey,
+      filename: file.originalname,
+      contentType: file.mimetype || 'application/octet-stream',
+      size: file.size,
+      uploadedAt: new Date().toISOString(),
+      textPreview,
+    };
+  }
 
   @Post('presigned/upload')
   @ApiOperation({ summary: 'Get a presigned upload URL' })
@@ -49,7 +93,7 @@ export class S3GatewayController {
   presignUpload(
     @Body()
     body: {
-      bucket: string;
+      bucket?: string;
       key: string;
       contentType?: string;
       expiresInSeconds?: number;

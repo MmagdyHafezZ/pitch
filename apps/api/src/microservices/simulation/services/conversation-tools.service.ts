@@ -16,8 +16,28 @@ export interface IMoodState {
     | 'impatient'
     | 'frustrated'
     | 'satisfied';
+  emotion?:
+    | 'neutral'
+    | 'happy'
+    | 'excited'
+    | 'curious'
+    | 'surprised'
+    | 'confused'
+    | 'skeptical'
+    | 'nervous'
+    | 'bored'
+    | 'frustrated'
+    | 'angry'
+    | 'sad'
+    | 'impressed';
   intensity: number;
   trigger: string;
+  setAt: string;
+}
+
+export interface IPersuasionState {
+  score: number;
+  reasoning: string;
   setAt: string;
 }
 
@@ -94,43 +114,6 @@ export class ConversationToolsService {
               },
             },
             required: ['type', 'text'],
-          },
-        },
-      },
-      {
-        type: 'function',
-        function: {
-          name: 'update_mood',
-          description:
-            'Update your current emotional state. Call this when your mood shifts meaningfully based on how the conversation is going. This will carry over into future turns.',
-          parameters: {
-            type: 'object',
-            properties: {
-              mood: {
-                type: 'string',
-                enum: [
-                  'neutral',
-                  'interested',
-                  'skeptical',
-                  'impatient',
-                  'frustrated',
-                  'satisfied',
-                ],
-                description: 'Your current emotional state.',
-              },
-              intensity: {
-                type: 'number',
-                minimum: 1,
-                maximum: 10,
-                description:
-                  'How strongly you feel this (1 = mild, 10 = extreme).',
-              },
-              trigger: {
-                type: 'string',
-                description: 'Brief description of what caused the mood shift.',
-              },
-            },
-            required: ['mood', 'intensity', 'trigger'],
           },
         },
       },
@@ -263,9 +246,6 @@ export class ConversationToolsService {
           case 'raise_objection':
             this.executeRaiseObjection(args, context);
             break;
-          case 'update_mood':
-            await this.executeUpdateMood(args, context);
-            break;
           case 'flag_moment':
             this.executeFlagMoment(args, context);
             break;
@@ -310,22 +290,6 @@ export class ConversationToolsService {
   ): void {
     this.logger.log(
       `raise_objection [${String(args.type)}]: ${String(args.text)}`,
-    );
-  }
-
-  private async executeUpdateMood(
-    args: Record<string, unknown>,
-    context: ToolContext,
-  ): Promise<void> {
-    const moodState: IMoodState = {
-      mood: args.mood as IMoodState['mood'],
-      intensity: Number(args.intensity),
-      trigger: String(args.trigger),
-      setAt: new Date().toISOString(),
-    };
-    await this.redis.setMoodState(context.sessionId, moodState);
-    this.logger.log(
-      `update_mood [${moodState.mood} @ ${moodState.intensity}]: ${moodState.trigger}`,
     );
   }
 

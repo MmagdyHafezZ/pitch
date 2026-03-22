@@ -27,6 +27,7 @@ export enum WsMessageType {
   CONVERSATION_VISUAL_STATE = 'conversation.visual_state',
   CONVERSATION_HANGUP_REQUESTED = 'conversation.hangup_requested',
   CONVERSATION_TOOL_EXECUTED = 'conversation.tool_executed',
+  CONVERSATION_COACHING_TIP = 'conversation.coaching_tip',
 
   PING = 'ping',
   PONG = 'pong',
@@ -121,4 +122,10 @@ export interface ConversationToolExecutedPayload {
   tool: string
   args: Record<string, unknown>
   effect?: Record<string, unknown>
+}
+
+export interface ConversationCoachingTipPayload {
+  tip: string
+  stage: string
+  stageIndex: number
 }

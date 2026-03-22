@@ -4,7 +4,6 @@ import { Box, Stack, NavLink, Text, Divider, rem, Group } from '@mantine/core'
 import {
   IconHome,
   IconCalendar,
-  IconCalendarEvent,
   IconChartBar,
   IconUserCog,
   IconHelp,
@@ -20,37 +19,14 @@ import { useI18n } from '@/features/i18n'
 
 export type SidebarLink = {
   icon: React.ComponentType<{ size?: number }>
-  label:
-    | 'Home'
-    | 'Sessions'
-    | 'Teams'
-    | 'Analytics'
-    | 'Settings'
-    | 'Team Config'
-    | 'Challenges'
-    | 'Calendar'
+  label: 'Home' | 'Sessions' | 'Teams' | 'Analytics' | 'Settings' | 'Team Config' | 'Challenges'
 }
 
 type Props = {
-  active:
-    | 'Home'
-    | 'Sessions'
-    | 'Teams'
-    | 'Analytics'
-    | 'Settings'
-    | 'Team Config'
-    | 'Challenges'
-    | 'Calendar'
+  active: 'Home' | 'Sessions' | 'Teams' | 'Analytics' | 'Settings' | 'Team Config' | 'Challenges'
   setActive: Dispatch<
     SetStateAction<
-      | 'Home'
-      | 'Sessions'
-      | 'Teams'
-      | 'Analytics'
-      | 'Settings'
-      | 'Team Config'
-      | 'Challenges'
-      | 'Calendar'
+      'Home' | 'Sessions' | 'Teams' | 'Analytics' | 'Settings' | 'Team Config' | 'Challenges'
     >
   >
   selectedDate: Date | null
@@ -65,7 +41,6 @@ const DEFAULT_MAIN: SidebarLink[] = [
   { icon: IconHome, label: 'Home' },
   { icon: IconCalendar, label: 'Sessions' },
   { icon: IconChartBar, label: 'Analytics' },
-  { icon: IconCalendarEvent, label: 'Calendar' },
   { icon: IconTrophy, label: 'Challenges' },
   { icon: IconUserCog, label: 'Team Config' },
 ]
@@ -138,9 +113,7 @@ export function AppSidebar({
                             ? t('nav.teamConfig')
                             : label === 'Challenges'
                               ? t('nav.challenges')
-                              : label === 'Calendar'
-                                ? t('nav.calendar')
-                                : label}
+                              : label}
                   </Text>
                 }
                 variant="subtle"
