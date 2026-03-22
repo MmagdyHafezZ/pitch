@@ -224,7 +224,10 @@ describe('AdminGatewayController', () => {
         controller.setFeatureFlag({ key: '', enabled: true }),
       ).toThrow();
       expect(() =>
-        controller.setFeatureFlag({ key: 'x', enabled: 'not-bool' as any }),
+        controller.setFeatureFlag({
+          key: 'x',
+          enabled: 'not-bool' as unknown as boolean,
+        }),
       ).toThrow();
     });
 

@@ -69,7 +69,7 @@ export class TeamController {
   )
   async updateTeam(
     @Payload()
-    data: { teamId: string } & UpdateTeamRequestDto &
+    data: { teamId: string; isAdmin?: boolean } & UpdateTeamRequestDto &
       userClaimsInterface.MessageWithUserClaims,
   ) {
     try {
@@ -88,7 +88,7 @@ export class TeamController {
         metadata: updateData.metadata as unknown as TeamMetadata,
       };
 
-      const isAdmin = (data as any).isAdmin === true;
+      const isAdmin = data.isAdmin === true;
       return await this.teamService.updateTeam(
         teamId,
         dto,
@@ -166,7 +166,10 @@ export class TeamController {
   async addTeamMember(
     @Payload()
     data: AddMemberRequestDTO &
-      userClaimsInterface.MessageWithUserClaims & { teamId: string },
+      userClaimsInterface.MessageWithUserClaims & {
+        teamId: string;
+        isAdmin?: boolean;
+      },
   ) {
     try {
       this.logger.log(
@@ -182,7 +185,7 @@ export class TeamController {
         invitedByUserId: _userClaims?.id ?? '',
       };
 
-      const isAdmin = (data as any).isAdmin === true;
+      const isAdmin = data.isAdmin === true;
       return await this.teamService.addMember(
         dto,
         _userClaims?.id ?? '',
@@ -203,6 +206,7 @@ export class TeamController {
     data: UpdateMemberRequestDto &
       userClaimsInterface.MessageWithUserClaims & { teamId: string } & {
         userId: string;
+        isAdmin?: boolean;
       },
   ) {
     try {
@@ -218,7 +222,7 @@ export class TeamController {
         isActive: addMemberDto.isActive,
       };
 
-      const isAdmin = (data as any).isAdmin === true;
+      const isAdmin = data.isAdmin === true;
       return await this.teamService.updateMember(
         dto,
         _userClaims?.id ?? '',
@@ -237,13 +241,14 @@ export class TeamController {
     @Payload()
     data: userClaimsInterface.MessageWithUserClaims & { teamId: string } & {
       userId: string;
+      isAdmin?: boolean;
     },
   ) {
     try {
       this.logger.log(
         `Removing user ${data.userId} from ${data.teamId} - Requested by: ${data.userClaims?.email ?? 'admin'} (${data.userClaims?.id ?? 'N/A'})`,
       );
-      const isAdmin = (data as any).isAdmin === true;
+      const isAdmin = data.isAdmin === true;
       return await this.teamService.removeTeamMember(
         data.teamId,
         data.userId,

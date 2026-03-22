@@ -55,8 +55,18 @@ export class AdminMonitoringController {
 
   @Get('llm')
   async llmUsage() {
+    type LlmAggRow = {
+      _id: { provider: string; model: string };
+      totalPromptTokens: number;
+      totalCompletionTokens: number;
+      totalTokens: number;
+      totalCost: number;
+      callCount: number;
+      avgLatencyMs: number;
+    };
+
     const result = await this.llmTraceModel
-      .aggregate([
+      .aggregate<LlmAggRow>([
         {
           $group: {
             _id: { provider: '$provider', model: '$llmModel' },

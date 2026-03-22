@@ -15,7 +15,7 @@ import {
 } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
 import { catchError, timeout } from 'rxjs/operators';
-import { throwError } from 'rxjs';
+import { throwError, firstValueFrom } from 'rxjs';
 import { CheckSystemAdmin } from '../../guards/check-system-admin.guard';
 import {
   USER_SERVICE_PATTERNS,
@@ -158,22 +158,27 @@ export class AdminUsersController {
     const adminEmail = req.user?.email ?? 'unknown';
 
     // Fetch the target user first
-    const user = await this.userService
-      .send(USER_SERVICE_PATTERNS.GET_USER, { userId: id, isAdmin: true })
-      .pipe(
-        timeout(5000),
-        catchError((err: unknown) => {
-          const error = normalizeError(err);
-          return throwError(
-            () =>
-              new HttpException(
-                error.message ?? 'User not found',
-                error.status ?? HttpStatus.NOT_FOUND,
-              ),
-          );
-        }),
-      )
-      .toPromise();
+    const user = await firstValueFrom(
+      this.userService
+        .send<{
+          id: string;
+          email: string;
+          name: string;
+        }>(USER_SERVICE_PATTERNS.GET_USER, { userId: id, isAdmin: true })
+        .pipe(
+          timeout(5000),
+          catchError((err: unknown) => {
+            const error = normalizeError(err);
+            return throwError(
+              () =>
+                new HttpException(
+                  error.message ?? 'User not found',
+                  error.status ?? HttpStatus.NOT_FOUND,
+                ),
+            );
+          }),
+        ),
+    );
 
     return this.impersonationService.impersonate(
       {
