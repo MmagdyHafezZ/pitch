@@ -201,9 +201,11 @@ const CSS = `
   align-items: center;
   justify-content: center;
   gap: 5px;
-  max-width: none;
+  padding: 4px 12px;
+  width: fit-content;
+  margin-left: auto;
+  margin-right: auto;
   border-radius: 100px;
-  margin: 0 8px 2px;
   font-size: 13px;
   font-weight: 600;
   transition: background 0.4s ease, color 0.4s ease;
