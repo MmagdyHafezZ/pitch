@@ -15,11 +15,20 @@
   position: absolute;
   top: 24px;
   left: 32px;
-  color: #ffffff;
-  font-weight: 700;
-  letter-spacing: 2px;
-  font-size: 14px;
+  z-index: 3;
+}
+
+.brandLogo {
+  margin: 0;
+  font-size: clamp(26px, 2.8vw, 32px);
+  font-weight: 800;
+  letter-spacing: -0.05em;
+  line-height: 1;
   text-transform: uppercase;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(34, 139, 230, 0.85) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
 .page::before {
@@ -220,8 +229,6 @@
   .brand {
     top: 16px;
     left: 20px;
-    font-size: 12px;
-    letter-spacing: 1.6px;
   }
 
   .column {
