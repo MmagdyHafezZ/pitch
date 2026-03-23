@@ -282,6 +282,14 @@ export function useConversation(options: UseConversationOptions) {
   }, [audioOutput, playAudio])
 
   const disconnect = useCallback(() => {
+    // Cancel any scheduled reconnect timer and reset the attempt counter so
+    // stale timers can't fire and race with the next connect() call.
+    if (reconnectTimerRef.current) {
+      clearTimeout(reconnectTimerRef.current)
+      reconnectTimerRef.current = null
+    }
+    reconnectAttemptsRef.current = 0
+
     conversationService.clearSocketDisconnect()
     conversationService.offConversationText()
     conversationService.offConversationStreamDelta()
@@ -297,6 +305,7 @@ export function useConversation(options: UseConversationOptions) {
 
     conversationService.disconnect()
     setIsConnected(false)
+    setIsConnecting(false)
   }, [])
 
   const revokeAudioUrls = useCallback(() => {

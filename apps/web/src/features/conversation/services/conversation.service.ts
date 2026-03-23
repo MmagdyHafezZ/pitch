@@ -171,7 +171,12 @@ export class ConversationService {
   }
 
   disconnect() {
-    this.pendingConnectReject = null
+    // Reject any in-flight connect() with "Connection superseded" so the
+    // useConversation catch block takes the superseded path (no retry timer).
+    if (this.pendingConnectReject) {
+      this.pendingConnectReject(new Error('Connection superseded'))
+      this.pendingConnectReject = null
+    }
     this.disconnectCallback = null
     if (this.socket) {
       this.socket.disconnect()

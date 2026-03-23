@@ -24,7 +24,6 @@ import {
 } from '@mantine/core'
 import {
   IconPhone,
-  IconArrowRight,
   IconSparkles,
   IconX,
   IconTarget,
@@ -317,7 +316,6 @@ export default function LiveSessionPage() {
   const [textInput, setTextInput] = useState('')
   const [hints, setHints] = useState<string[]>([])
   const [timelineStages, setTimelineStages] = useState<TimelineStage[]>([])
-  const [currentProgress, setCurrentProgress] = useState(0)
   const [hintsError, setHintsError] = useState<string | null>(null)
   const [timelineError, setTimelineError] = useState<string | null>(null)
   const [timelineLoading, setTimelineLoading] = useState(false)
@@ -368,7 +366,7 @@ export default function LiveSessionPage() {
   const speechBufferRef = useRef<string>('')
   const assistantInterruptTriggeredRef = useRef(false)
   const hasUserEnabledMicRef = useRef(false)
-  const [isMultiTurn, setIsMultiTurn] = useState(false)
+  const [, setIsMultiTurn] = useState(false)
   const assistantStartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const lastAssistantMessageIdRef = useRef<string | null>(null)
@@ -460,6 +458,7 @@ export default function LiveSessionPage() {
     hangupRequest,
     hangUp,
     interrupt,
+    disconnect,
     stopAudio,
     replayAudio,
     clearMessages,
@@ -620,7 +619,6 @@ export default function LiveSessionPage() {
         )
 
         setTimelineStages(stages)
-        setCurrentProgress(clampProgress(response?.currentProgress))
         setTimelineError(null)
 
         return {
@@ -638,7 +636,6 @@ export default function LiveSessionPage() {
           sessionRecord ?? loadedSessionRecordRef.current
         )
         setTimelineStages(stages)
-        setCurrentProgress(0)
         setTimelineError('Unable to load timeline')
         return {
           totalTurns: 0,
@@ -794,9 +791,23 @@ export default function LiveSessionPage() {
         const status = normalizeSessionStatus(session)
 
         if (status === 'ended') {
+          // Show the session as "active" in the UI while we restart
           syncSessionState(session, { launchFreshIteration: true })
-          setPendingEntryMode('resume')
-          setResumePromptOpen(true)
+          try {
+            const restartedSession = await api.sessions.restart(sessionId, {
+              reason: 'completed_iteration_restart',
+            })
+            if (cancelled) return
+            const restartedRecord = isRecord(restartedSession) ? restartedSession : {}
+            setLoadedSessionRecord(restartedRecord)
+            syncSessionState(restartedSession)
+            requestConversationConnect()
+          } catch {
+            if (cancelled) return
+            // Fallback: show the modal so the user can retry manually
+            setPendingEntryMode('resume')
+            setResumePromptOpen(true)
+          }
           return
         }
 
@@ -854,6 +865,7 @@ export default function LiveSessionPage() {
     setStartOverLoading(true)
     try {
       await interrupt()
+      disconnect()
       stopListening()
       stopAudio()
 
@@ -873,7 +885,6 @@ export default function LiveSessionPage() {
       setHints([])
       setHintsError(null)
       setTimelineStages([])
-      setCurrentProgress(0)
       setTimelineError(null)
       setCallStarted(false)
       setCallError(null)
@@ -922,6 +933,7 @@ export default function LiveSessionPage() {
     clearHangupRequest,
     clearMessages,
     clearToolEvents,
+    disconnect,
     hintsEnabled,
     interrupt,
     loadedSessionRecord,
@@ -1164,7 +1176,6 @@ export default function LiveSessionPage() {
   useEffect(() => {
     if (!sessionId || !timelineEnabled) {
       setTimelineStages([])
-      setCurrentProgress(0)
       setTimelineError(null)
       return
     }
@@ -1364,10 +1375,6 @@ export default function LiveSessionPage() {
   const currentEmotion = latestMoodEvent
     ? (latestMoodEvent.args.emotion as string | undefined)
     : undefined
-  const currentMoodTrigger =
-    latestMoodEvent && latestMoodEvent.args.trigger != null
-      ? String(latestMoodEvent.args.trigger)
-      : null
   const moodDotColor =
     currentMood === 'interested' || currentMood === 'satisfied'
       ? 'green'
@@ -1401,140 +1408,182 @@ export default function LiveSessionPage() {
     impressed: '🌟',
   }
 
-  const renderTimelineContent = () => (
-    <Stack gap="md">
-      <Group justify="space-between" align="center">
-        <Stack gap={2}>
-          <Title order={4}>Timeline</Title>
-          <Text size="xs" c="dimmed">
-            Session plan and current stage
+  const renderTimelineContent = () => {
+    const completedCount = timelineStages.filter((s) => s.completed).length
+
+    return (
+      <Stack gap={0}>
+        {/* Status line */}
+        {timelineLoading ? (
+          <Loader size="xs" color="dimmed" mb="md" />
+        ) : timelineError ? (
+          <Text size="xs" c="red.4" mb="md">
+            {timelineError}
           </Text>
-        </Stack>
-        {timelineLoading ? <Loader size="sm" /> : null}
-      </Group>
+        ) : !timelineLoading && timelineStages.length === 0 ? (
+          <Text size="xs" c="dimmed" mb="md">
+            No plan available yet.
+          </Text>
+        ) : timelineStages.length > 0 ? (
+          <Text size="xs" c="dimmed" mb="lg">
+            {completedCount} of {timelineStages.length} completed
+          </Text>
+        ) : null}
 
-      {!timelineError && timelineStages.length > 0 ? (
-        <Paper
-          radius="md"
-          p="sm"
-          style={{
-            background: 'linear-gradient(135deg, rgba(59,130,246,0.15), rgba(147,51,234,0.08))',
-            border: '1px solid rgba(255,255,255,0.08)',
-          }}
-        >
-          <Group justify="space-between" align="center">
-            <Text size="sm" fw={600}>
-              Progress
-            </Text>
-            <Badge variant="light" color="blue" size="lg">
-              {currentProgress}% Complete
-            </Badge>
-          </Group>
-          <Progress value={currentProgress} color="blue" radius="xl" mt="sm" />
-        </Paper>
-      ) : null}
+        {/* Timeline */}
+        {timelineStages.map((stage, index) => {
+          const isFirst = index === 0
+          const isLast = index === timelineStages.length - 1
+          const prevCompleted = index > 0 && timelineStages[index - 1].completed
 
-      {timelineError ? (
-        <Text size="xs" c="red">
-          {timelineError}
-        </Text>
-      ) : null}
+          // Spine segment colors
+          const topColor = isFirst
+            ? 'transparent'
+            : prevCompleted
+              ? '#4f83cc'
+              : 'rgba(255,255,255,0.1)'
+          const bottomColor = isLast
+            ? 'transparent'
+            : stage.completed
+              ? '#4f83cc'
+              : 'rgba(255,255,255,0.1)'
 
-      {!timelineLoading && !timelineError && timelineStages.length === 0 ? (
-        <Text size="sm" c="dimmed">
-          Timeline unavailable for this session yet.
-        </Text>
-      ) : null}
+          // Node appearance
+          const nodeSize = stage.active ? 22 : stage.completed ? 18 : 12
+          const nodeOffset = (22 - nodeSize) / 2 // keeps spine centered
 
-      <Stack gap="sm">
-        {timelineStages.map((stage, index) => (
-          <Box
-            key={`${stage.order}-${stage.label}`}
-            style={{ position: 'relative', paddingLeft: 44 }}
-          >
-            {index < timelineStages.length - 1 ? (
+          return (
+            <Box key={`${stage.order}-${stage.label}`} style={{ display: 'flex', gap: 14 }}>
+              {/* ── Spine column ── */}
               <Box
                 style={{
-                  position: 'absolute',
-                  left: 13,
-                  top: 28,
-                  bottom: -16,
-                  width: 2,
-                  backgroundColor:
-                    stage.completed || stage.active
-                      ? 'rgba(59,130,246,0.45)'
-                      : 'rgba(255,255,255,0.12)',
+                  width: 22,
+                  flexShrink: 0,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
                 }}
-              />
-            ) : null}
-            <Box
-              style={{
-                position: 'absolute',
-                left: 0,
-                top: 8,
-                width: 28,
-                height: 28,
-                borderRadius: '50%',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                backgroundColor: stage.completed
-                  ? 'var(--mantine-color-green-6)'
-                  : stage.active
-                    ? 'var(--mantine-color-blue-6)'
-                    : 'rgba(255,255,255,0.08)',
-                border: stage.active
-                  ? '2px solid rgba(191,219,254,0.95)'
-                  : '1px solid rgba(255,255,255,0.12)',
-                color: 'white',
-                zIndex: 1,
-              }}
-            >
-              {stage.completed ? (
-                <IconCheck size={15} />
-              ) : (
-                <Text size="xs" fw={700}>
-                  {stage.order}
-                </Text>
-              )}
-            </Box>
+              >
+                {/* top segment */}
+                <Box
+                  style={{
+                    width: 2,
+                    height: isFirst ? 12 : 16,
+                    background: topColor,
+                    borderRadius: 1,
+                    flexShrink: 0,
+                  }}
+                />
 
-            <Paper
-              radius="md"
-              p="sm"
-              withBorder
-              style={{
-                backgroundColor: stage.active ? 'rgba(59,130,246,0.09)' : 'rgba(255,255,255,0.02)',
-                borderColor: stage.active ? 'rgba(59,130,246,0.45)' : 'rgba(255,255,255,0.08)',
-              }}
-            >
-              <Group justify="space-between" align="flex-start" wrap="nowrap" gap="xs">
-                <Box style={{ minWidth: 0 }}>
+                {/* node */}
+                <Box
+                  style={{
+                    position: 'relative',
+                    flexShrink: 0,
+                    marginLeft: nodeOffset,
+                    marginRight: nodeOffset,
+                  }}
+                >
+                  {/* active glow ring */}
+                  {stage.active ? (
+                    <Box
+                      style={{
+                        position: 'absolute',
+                        inset: -5,
+                        borderRadius: '50%',
+                        border: '1.5px solid rgba(79,131,204,0.35)',
+                        animation: 'pulse 2s infinite',
+                      }}
+                    />
+                  ) : null}
+
+                  <Box
+                    style={{
+                      width: nodeSize,
+                      height: nodeSize,
+                      borderRadius: '50%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                      // completed: solid green fill
+                      // active: solid blue fill
+                      // pending: dim outline only
+                      background: stage.completed
+                        ? '#22c55e'
+                        : stage.active
+                          ? '#4f83cc'
+                          : 'transparent',
+                      border: stage.completed
+                        ? 'none'
+                        : stage.active
+                          ? 'none'
+                          : '1.5px solid rgba(255,255,255,0.2)',
+                    }}
+                  >
+                    {stage.completed ? <IconCheck size={10} color="white" strokeWidth={3} /> : null}
+                  </Box>
+                </Box>
+
+                {/* bottom segment */}
+                <Box
+                  style={{
+                    width: 2,
+                    flex: 1,
+                    minHeight: isLast ? 12 : 24,
+                    background: bottomColor,
+                    borderRadius: 1,
+                    flexShrink: 0,
+                  }}
+                />
+              </Box>
+
+              {/* ── Content column ── */}
+              <Box
+                style={{
+                  flex: 1,
+                  minWidth: 0,
+                  paddingTop: isFirst ? 4 : 8,
+                  paddingBottom: isLast ? 4 : 8,
+                }}
+              >
+                <Group justify="space-between" align="flex-start" wrap="nowrap" gap={6}>
                   <Text
                     size="sm"
-                    fw={stage.active ? 700 : 600}
-                    c={stage.completed ? 'green.4' : stage.active ? 'blue.2' : 'white'}
+                    fw={stage.active ? 600 : 400}
+                    c={
+                      stage.completed
+                        ? 'rgba(255,255,255,0.3)'
+                        : stage.active
+                          ? 'white'
+                          : 'rgba(255,255,255,0.4)'
+                    }
+                    style={{ lineHeight: 1.35 }}
                   >
                     {stage.label}
                   </Text>
-                  {stage.description ? (
-                    <Text size="xs" c="dimmed" mt={4} style={{ lineHeight: 1.45 }}>
-                      {stage.description}
+                  {stage.estimatedDuration && !stage.completed ? (
+                    <Text
+                      size="xs"
+                      c="rgba(255,255,255,0.2)"
+                      style={{ flexShrink: 0, lineHeight: 1.4, marginTop: 1 }}
+                    >
+                      {stage.estimatedDuration}m
                     </Text>
                   ) : null}
-                </Box>
-                {stage.estimatedDuration ? (
-                  <Badge variant="dot" color={stage.active ? 'blue' : 'gray'} size="sm">
-                    {stage.estimatedDuration}m
-                  </Badge>
+                </Group>
+                {stage.active && stage.description ? (
+                  <Text size="xs" c="dimmed" mt={4} style={{ lineHeight: 1.55 }}>
+                    {stage.description}
+                  </Text>
                 ) : null}
-              </Group>
-            </Paper>
-          </Box>
-        ))}
+              </Box>
+            </Box>
+          )
+        })}
       </Stack>
-    </Stack>
-  )
+    )
+  }
 
   const persuasionColor =
     currentPersuasionScore === null
@@ -2010,62 +2059,80 @@ export default function LiveSessionPage() {
         }}
       >
         {!isMobile && hintsEnabled ? (
-          <Paper
-            withBorder
-            radius="lg"
-            p="lg"
-            style={{
-              width: 220,
-              backgroundColor: 'var(--pitch-surface-bg)',
-              height: 'fit-content',
-              flexShrink: 0,
-            }}
-          >
-            <Group justify="space-between" mb="md">
-              <Group gap="xs">
-                <Title order={4}>Hints</Title>
-                <Badge size="sm" variant="light">
-                  {hints.length}
-                </Badge>
-              </Group>
-              <Button
-                size="xs"
-                variant="subtle"
-                color="gray"
-                onClick={() => setHintsEnabled(false)}
-              >
-                Hide
-              </Button>
-            </Group>
-            <Stack gap="md">
-              {hintsError && (
-                <Text size="xs" c="red">
-                  {hintsError}
-                </Text>
-              )}
-              {!hintsError && hints.length === 0 && (
-                <Text size="xs" c="dimmed">
-                  No hints yet.
-                </Text>
-              )}
-              {hints.map((hint, i) => (
-                <Group key={i} gap="xs" align="start">
-                  <IconArrowRight size={16} style={{ marginTop: 4, flexShrink: 0 }} />
-                  <Text size="sm">{hint}</Text>
-                </Group>
-              ))}
-            </Stack>
-          </Paper>
-        ) : !isMobile ? (
           <Box
             style={{
-              width: 220,
-              display: 'flex',
-              justifyContent: 'center',
+              width: 224,
               flexShrink: 0,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 16,
+              padding: '20px 16px',
+              borderRadius: 12,
+              background: 'rgba(255,255,255,0.025)',
+              border: '1px solid rgba(255,255,255,0.06)',
+              height: 'fit-content',
             }}
           >
-            <Button variant="light" color="brand" onClick={() => setHintsEnabled(true)}>
+            {/* Header */}
+            <Group justify="space-between" align="center">
+              <Text
+                size="xs"
+                fw={600}
+                tt="uppercase"
+                c="dimmed"
+                style={{ letterSpacing: '0.08em' }}
+              >
+                Hints
+              </Text>
+              <Group gap={6} align="center">
+                {hints.length > 0 ? (
+                  <Text size="xs" c="dimmed">
+                    {hints.length}
+                  </Text>
+                ) : null}
+                <ActionIcon
+                  size="xs"
+                  variant="subtle"
+                  color="gray"
+                  onClick={() => setHintsEnabled(false)}
+                >
+                  <IconX size={12} />
+                </ActionIcon>
+              </Group>
+            </Group>
+
+            {/* Content */}
+            {hintsError ? (
+              <Text size="xs" c="red.4">
+                {hintsError}
+              </Text>
+            ) : hints.length === 0 ? (
+              <Text size="xs" c="rgba(255,255,255,0.2)" style={{ lineHeight: 1.5 }}>
+                Hints appear as the conversation progresses.
+              </Text>
+            ) : (
+              <Stack gap={12}>
+                {hints.map((hint, i) => (
+                  <Box key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                    <Text
+                      size="xs"
+                      c="rgba(79,131,204,0.7)"
+                      fw={700}
+                      style={{ flexShrink: 0, lineHeight: 1.5, minWidth: 14 }}
+                    >
+                      {i + 1}
+                    </Text>
+                    <Text size="xs" c="rgba(255,255,255,0.65)" style={{ lineHeight: 1.6 }}>
+                      {hint}
+                    </Text>
+                  </Box>
+                ))}
+              </Stack>
+            )}
+          </Box>
+        ) : !isMobile ? (
+          <Box style={{ width: 224, flexShrink: 0, display: 'flex', justifyContent: 'center' }}>
+            <Button variant="subtle" color="gray" size="xs" onClick={() => setHintsEnabled(true)}>
               Show hints
             </Button>
           </Box>
@@ -2130,42 +2197,52 @@ export default function LiveSessionPage() {
         </Box>
 
         {!isMobile && timelineEnabled ? (
-          <Paper
-            withBorder
-            radius="lg"
-            p="lg"
+          <Box
             style={{
-              width: 320,
-              backgroundColor: 'var(--pitch-surface-bg)',
-              maxHeight: '100%',
-              overflow: 'auto',
+              width: 272,
               flexShrink: 0,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 0,
+              padding: '20px 16px',
+              borderRadius: 12,
+              background: 'rgba(255,255,255,0.025)',
+              border: '1px solid rgba(255,255,255,0.06)',
+              maxHeight: '100%',
+              overflowY: 'auto',
             }}
           >
-            <Group justify="space-between" mb="md">
-              <Title order={4}>Timeline</Title>
-              <Button
+            {/* Header */}
+            <Group justify="space-between" align="center" mb="lg">
+              <Text
+                size="xs"
+                fw={600}
+                tt="uppercase"
+                c="dimmed"
+                style={{ letterSpacing: '0.08em' }}
+              >
+                Plan
+              </Text>
+              <ActionIcon
                 size="xs"
                 variant="subtle"
                 color="gray"
                 onClick={() => setTimelineEnabled(false)}
               >
-                Hide
-              </Button>
+                <IconX size={12} />
+              </ActionIcon>
             </Group>
             {renderTimelineContent()}
-          </Paper>
+          </Box>
         ) : !isMobile ? (
-          <Box
-            style={{
-              width: 200,
-              display: 'flex',
-              justifyContent: 'center',
-              flexShrink: 0,
-            }}
-          >
-            <Button variant="light" color="brand" onClick={() => setTimelineEnabled(true)}>
-              Show timeline
+          <Box style={{ width: 200, flexShrink: 0, display: 'flex', justifyContent: 'center' }}>
+            <Button
+              variant="subtle"
+              color="gray"
+              size="xs"
+              onClick={() => setTimelineEnabled(true)}
+            >
+              Show plan
             </Button>
           </Box>
         ) : null}
