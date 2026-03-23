@@ -305,7 +305,14 @@ export default function Home() {
             <div className={styles.heroGrid}>
               <div className={`${styles.heroCopy} ${styles.reveal}`} style={withDelay('0.08s')}>
                 <p className={styles.kicker}>
-                  IBM-sponsored capstone • University of Calgary • Built by 6 students
+                  <span className={styles.kickerTrack}>
+                    <span className={styles.kickerText}>
+                      IBM-sponsored capstone • University of Calgary • Built by 6 students
+                    </span>
+                    <span className={styles.kickerText} aria-hidden="true">
+                      IBM-sponsored capstone • University of Calgary • Built by 6 students
+                    </span>
+                  </span>
                 </p>
                 <h1 className={styles.heroTitle}>
                   AI sales rehearsal for teams that need consistent coaching.
