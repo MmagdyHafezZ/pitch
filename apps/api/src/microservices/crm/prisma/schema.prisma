@@ -16,6 +16,8 @@ datasource db {
 enum IntegrationProvider {
   SALESFORCE
   HUBSPOT
+  GOOGLE_CALENDAR
+  MICROSOFT_CALENDAR
 }
 
 // Integration status enum

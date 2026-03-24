@@ -26,14 +26,17 @@ describe('FileController', () => {
 
   it('handles presign upload', async () => {
     const service = createServiceMock();
-    service.createPresignedUploadUrl.mockResolvedValue({ url: 'upload' });
+    service.createPresignedUploadUrl.mockResolvedValue({
+      url: 'upload',
+      bucket: 'resolved-bucket',
+    });
     const controller = new FileController(service);
 
-    await expect(
-      controller.presignUpload({ bucket: 'b', key: 'k' }),
-    ).resolves.toEqual({ url: 'upload' });
+    await expect(controller.presignUpload({ key: 'k' })).resolves.toEqual({
+      url: 'upload',
+      bucket: 'resolved-bucket',
+    });
     expect(service.createPresignedUploadUrl).toHaveBeenCalledWith({
-      bucket: 'b',
       key: 'k',
     });
   });
@@ -86,8 +89,8 @@ describe('FileController', () => {
     toRpcExceptionMock.mockReturnValueOnce(rpcError);
     const controller = new FileController(service);
 
-    await expect(
-      controller.presignUpload({ bucket: 'b', key: 'k' }),
-    ).rejects.toThrow(rpcError);
+    await expect(controller.presignUpload({ key: 'k' })).rejects.toThrow(
+      rpcError,
+    );
   });
 });

@@ -4,6 +4,7 @@ import { AppSidebar } from '@/components/ui/AppSideBar'
 import { AppTopBar } from '@/components/ui/AppTopBar'
 import { TeamSideBar } from '@/components/ui/TeamSideBar'
 import { CoachChatWidget } from '@/components/ui/CoachChatWidget'
+import { ProactiveCalendarNudge } from '@/features/proactive/ProactiveCalendarNudge'
 import { useTeams } from '@/features/teams/hooks/useTeams'
 import { useAuthStore } from '@/features/auth/stores/auth.store'
 import { Box } from '@mantine/core'
@@ -31,7 +32,6 @@ export default function ClientLayerComponent({ children }: { children: React.Rea
   const isCreatingTeam = searchParams.get('mode') === 'create'
   const user = useAuthStore((state) => state.user)
 
-  // Guard: redirect to onboarding if user is loaded but hasn't completed it
   useEffect(() => {
     if (user && !user.settings?.onboarding?.completed) {
       router.replace('/onboarding')
@@ -84,6 +84,9 @@ export default function ClientLayerComponent({ children }: { children: React.Rea
     if (pathname.startsWith('/studio/sessions')) {
       return { page: 'Sessions' as const, nav: 'Sessions' as const }
     }
+    if (pathname.startsWith('/studio/scenarios')) {
+      return { page: 'Sessions' as const, nav: 'Sessions' as const }
+    }
     if (pathname.startsWith('/studio/analytics')) {
       return { page: 'Analytics' as const, nav: 'Analytics' as const }
     }
@@ -114,7 +117,7 @@ export default function ClientLayerComponent({ children }: { children: React.Rea
   } else if (pageInfo.page === 'Challenges') {
     selectedTab = challengesPeriod
   } else {
-    selectedTab = tabsByPage[pageInfo.page]
+    selectedTab = tabsByPage[pageInfo.page as keyof typeof tabsByPage] ?? ''
   }
 
   const activeTeam = useMemo(
@@ -242,7 +245,13 @@ export default function ClientLayerComponent({ children }: { children: React.Rea
       >
         {children}
       </AppLayout>
-      <CoachChatWidget context={{ page: pathname ?? undefined }} />
+      <CoachChatWidget
+        context={{
+          page: pathname ?? undefined,
+          sessionId: pathname?.match(/^\/studio\/sessions\/([^/]+)$/)?.[1] ?? undefined,
+        }}
+      />
+      <ProactiveCalendarNudge />
     </>
   )
 }

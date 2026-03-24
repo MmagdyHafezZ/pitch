@@ -712,9 +712,7 @@ export function AppTopBar({
           })
           return
         }
-      } catch {
-        // Fall through to the original error toast.
-      }
+      } catch {}
 
       notifications.show({
         title: 'Failed to accept invitation',

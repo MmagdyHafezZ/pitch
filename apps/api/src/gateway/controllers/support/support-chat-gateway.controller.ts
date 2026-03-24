@@ -39,6 +39,8 @@ interface CoachChatRequest {
     page?: string;
     sessionId?: string;
     recentTurns?: Array<{ role: string; text: string }>;
+    sessionName?: string;
+    savedAttachments?: Attachment[];
   };
 }
 
@@ -98,7 +100,11 @@ export class SupportChatGatewayController {
     status: 200,
     description: 'Server-sent events stream of token deltas',
   })
-  async chatStream(@Body() body: CoachChatRequest, @Res() res: Response) {
+  async chatStream(
+    @Body() body: CoachChatRequest,
+    @UserClaims() userClaims: UserClaimsType,
+    @Res() res: Response,
+  ) {
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache, no-transform');
     res.setHeader('Connection', 'keep-alive');
@@ -114,6 +120,7 @@ export class SupportChatGatewayController {
       for await (const item of this.coachStreamService.stream(
         body.messages ?? [],
         body.context,
+        userClaims.id,
       )) {
         if (typeof item === 'string') {
           res.write(`data: ${JSON.stringify({ delta: item })}\n\n`);

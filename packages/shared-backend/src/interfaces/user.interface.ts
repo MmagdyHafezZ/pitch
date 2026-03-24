@@ -73,6 +73,13 @@ export interface UserSettings {
     lastSyncAt?: string | null
     autoSync?: boolean
   }
+  calendar?: {
+    mode?: 'auto' | 'suggest' | 'off'
+    lookAheadDays?: number
+    defaultSessionType?: 'text' | 'voice' | 'video' | 'phone'
+    excludedCalendarIds?: string[]
+    lastSyncAt?: string
+  }
   onboarding?: {
     completed?: boolean
     tutorialCompleted?: boolean

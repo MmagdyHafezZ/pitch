@@ -274,7 +274,7 @@ export function PersonaStep({
             >
               <IconChevronRight size={18} />
             </ActionIcon>
-            <div ref={personaScrollRef} className={classes.personaTrack}>
+            <motion.div ref={personaScrollRef} className={classes.personaTrack} layoutScroll>
               <AnimatePresence mode="popLayout">
                 {visiblePersonas.length === 0 ? (
                   <Box className={classes.personaEmptyInline}>
@@ -300,11 +300,11 @@ export function PersonaStep({
                     return (
                       <motion.div
                         key={persona.id}
-                        layout
+                        layout="position"
                         initial={{ opacity: 0, y: 16, scale: 0.98 }}
                         animate={{ opacity: 1, y: 0, scale: 1 }}
-                        exit={{ opacity: 0, y: 12, scale: 0.96 }}
-                        transition={{ duration: 0.24, ease: 'easeOut' }}
+                        exit={{ opacity: 0, y: 160, scale: 0.88 }}
+                        transition={{ duration: 0.38, ease: [0.4, 0, 0.2, 1] }}
                         style={{ flexShrink: 0 }}
                         data-tour-id="create-session-persona-item"
                       >
@@ -338,11 +338,11 @@ export function PersonaStep({
                   })
                 )}
               </AnimatePresence>
-            </div>
+            </motion.div>
           </Box>
 
           <div className={classes.personaDropzone}>
-            <AnimatePresence initial={false}>
+            <AnimatePresence mode="wait">
               {selectedPersonaData ? (
                 (() => {
                   const traits = (selectedPersonaData.traits ?? {}) as PersonaTraits
@@ -357,145 +357,161 @@ export function PersonaStep({
                   const isPreviewPlaying = playingPersonaId === selectedPersonaData.id
 
                   return (
-                    <Paper
-                      withBorder
-                      radius="xl"
-                      p="lg"
-                      className={`${classes.personaPreview} ${classes.personaSelectedCard}`}
-                      onClick={() => setSelectedPersona(null)}
+                    <motion.div
+                      key={selectedPersonaData.id}
+                      initial={{ opacity: 0, y: -80, scale: 0.94 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: 40, scale: 0.96 }}
+                      transition={{ duration: 0.38, ease: [0.4, 0, 0.2, 1] }}
                     >
-                      <Stack gap="md">
-                        <Group align="center" className={classes.personaPreviewHeader}>
-                          <Avatar size={72} radius="lg" src={avatarUrl}>
-                            <IconUser size={34} />
-                          </Avatar>
-                          <Stack gap={2}>
-                            <Text fw={700}>{selectedPersonaData.name}</Text>
-                            <Text size="xs" c="dimmed">
-                              {traits.role ?? 'AI Persona'} · {traits.level ?? 'Expert'}
-                            </Text>
-                            <Group gap={6}>
-                              <Badge size="xs" variant="light">
-                                {archetype}
-                              </Badge>
-                              <Badge size="xs" variant="outline" color={rarityColor}>
-                                {rarity}
-                              </Badge>
-                              <Button
-                                size="xs"
-                                variant={isPreviewPlaying ? 'filled' : 'light'}
-                                color={isPreviewPlaying ? 'red' : 'brand'}
-                                loading={isPreviewLoading}
-                                leftSection={
-                                  isPreviewPlaying ? (
-                                    <IconPlayerPause size={14} />
-                                  ) : (
-                                    <IconPlayerPlay size={14} />
-                                  )
-                                }
-                                onClick={(event) => {
-                                  event.stopPropagation()
-                                  void handlePreviewAudio(selectedPersonaData)
-                                }}
-                              >
-                                {isPreviewPlaying ? 'Stop voice' : 'Play voice'}
-                              </Button>
-                            </Group>
-                          </Stack>
-                        </Group>
-
-                        {traits.personality && (
-                          <Text size="sm" c="dimmed" className={classes.personaPreviewBio}>
-                            {traits.personality}
-                          </Text>
-                        )}
-
-                        <Box className={classes.personaPreviewBlock}>
-                          <Text size="xs" fw={600}>
-                            Voice Profile
-                          </Text>
-                          <Text size="sm" c="dimmed">
-                            {voiceProfile}
-                          </Text>
-                          {traits.voice?.provider && (
-                            <Text size="xs" c="dimmed">
-                              Provider: {traits.voice.provider}
-                            </Text>
-                          )}
-                          {traits.voice?.voiceName && (
-                            <Text size="xs" c="dimmed">
-                              Voice: {traits.voice.voiceName}
-                            </Text>
-                          )}
-                          {traits.voice?.language && (
-                            <Text size="xs" c="dimmed">
-                              Accent: {traits.voice.language}
-                            </Text>
-                          )}
-                        </Box>
-
-                        <Box className={classes.personaPreviewBlock}>
-                          <Text size="xs" fw={600}>
-                            Signature Traits
-                          </Text>
-                          {signatureTraits.length > 0 ? (
-                            <Group gap={6} mt={6}>
-                              {signatureTraits.map((trait) => (
-                                <Badge key={trait} size="xs" variant="light" color="gray">
-                                  {trait}
+                      <Paper
+                        withBorder
+                        radius="xl"
+                        p="lg"
+                        className={`${classes.personaPreview} ${classes.personaSelectedCard}`}
+                        onClick={() => setSelectedPersona(null)}
+                      >
+                        <Stack gap="md">
+                          <Group align="center" className={classes.personaPreviewHeader}>
+                            <Avatar size={72} radius="lg" src={avatarUrl}>
+                              <IconUser size={34} />
+                            </Avatar>
+                            <Stack gap={2}>
+                              <Text fw={700}>{selectedPersonaData.name}</Text>
+                              <Text size="xs" c="dimmed">
+                                {traits.role ?? 'AI Persona'} · {traits.level ?? 'Expert'}
+                              </Text>
+                              <Group gap={6}>
+                                <Badge size="xs" variant="light">
+                                  {archetype}
                                 </Badge>
-                              ))}
-                            </Group>
-                          ) : (
-                            <Text size="xs" c="dimmed" mt={6}>
-                              No signature traits configured.
-                            </Text>
-                          )}
-                        </Box>
-
-                        <Box className={classes.personaPreviewBlock}>
-                          <Text size="xs" fw={600}>
-                            Comparison Metrics
-                          </Text>
-                          {metrics.length > 0 ? (
-                            <Stack gap="xs" mt="xs">
-                              {metrics.map((metric) => (
-                                <Box key={metric.label} className={classes.personaMetric}>
-                                  <Group justify="space-between" align="center" mb={4}>
-                                    <Group gap={6}>
-                                      <ThemeIcon size="xs" variant="light">
-                                        {getMetricIcon(metric.label) ?? <IconStar size={12} />}
-                                      </ThemeIcon>
-                                      <Text size="xs">{metric.label}</Text>
-                                    </Group>
-                                    <Text size="xs" c="dimmed">
-                                      {metric.value}
-                                    </Text>
-                                  </Group>
-                                  <Progress value={metric.value} size="xs" radius="xl" />
-                                </Box>
-                              ))}
+                                <Badge size="xs" variant="outline" color={rarityColor}>
+                                  {rarity}
+                                </Badge>
+                                <Button
+                                  size="xs"
+                                  variant={isPreviewPlaying ? 'filled' : 'light'}
+                                  color={isPreviewPlaying ? 'red' : 'brand'}
+                                  loading={isPreviewLoading}
+                                  leftSection={
+                                    isPreviewPlaying ? (
+                                      <IconPlayerPause size={14} />
+                                    ) : (
+                                      <IconPlayerPlay size={14} />
+                                    )
+                                  }
+                                  onClick={(event) => {
+                                    event.stopPropagation()
+                                    void handlePreviewAudio(selectedPersonaData)
+                                  }}
+                                >
+                                  {isPreviewPlaying ? 'Stop voice' : 'Play voice'}
+                                </Button>
+                              </Group>
                             </Stack>
-                          ) : (
-                            <Text size="xs" c="dimmed" mt={6}>
-                              No metrics configured for this persona yet.
+                          </Group>
+
+                          {traits.personality && (
+                            <Text size="sm" c="dimmed" className={classes.personaPreviewBio}>
+                              {traits.personality}
                             </Text>
                           )}
-                        </Box>
-                      </Stack>
-                    </Paper>
+
+                          <Box className={classes.personaPreviewBlock}>
+                            <Text size="xs" fw={600}>
+                              Voice Profile
+                            </Text>
+                            <Text size="sm" c="dimmed">
+                              {voiceProfile}
+                            </Text>
+                            {traits.voice?.provider && (
+                              <Text size="xs" c="dimmed">
+                                Provider: {traits.voice.provider}
+                              </Text>
+                            )}
+                            {traits.voice?.voiceName && (
+                              <Text size="xs" c="dimmed">
+                                Voice: {traits.voice.voiceName}
+                              </Text>
+                            )}
+                            {traits.voice?.language && (
+                              <Text size="xs" c="dimmed">
+                                Accent: {traits.voice.language}
+                              </Text>
+                            )}
+                          </Box>
+
+                          <Box className={classes.personaPreviewBlock}>
+                            <Text size="xs" fw={600}>
+                              Signature Traits
+                            </Text>
+                            {signatureTraits.length > 0 ? (
+                              <Group gap={6} mt={6}>
+                                {signatureTraits.map((trait) => (
+                                  <Badge key={trait} size="xs" variant="light" color="gray">
+                                    {trait}
+                                  </Badge>
+                                ))}
+                              </Group>
+                            ) : (
+                              <Text size="xs" c="dimmed" mt={6}>
+                                No signature traits configured.
+                              </Text>
+                            )}
+                          </Box>
+
+                          <Box className={classes.personaPreviewBlock}>
+                            <Text size="xs" fw={600}>
+                              Comparison Metrics
+                            </Text>
+                            {metrics.length > 0 ? (
+                              <Stack gap="xs" mt="xs">
+                                {metrics.map((metric) => (
+                                  <Box key={metric.label} className={classes.personaMetric}>
+                                    <Group justify="space-between" align="center" mb={4}>
+                                      <Group gap={6}>
+                                        <ThemeIcon size="xs" variant="light">
+                                          {getMetricIcon(metric.label) ?? <IconStar size={12} />}
+                                        </ThemeIcon>
+                                        <Text size="xs">{metric.label}</Text>
+                                      </Group>
+                                      <Text size="xs" c="dimmed">
+                                        {metric.value}
+                                      </Text>
+                                    </Group>
+                                    <Progress value={metric.value} size="xs" radius="xl" />
+                                  </Box>
+                                ))}
+                              </Stack>
+                            ) : (
+                              <Text size="xs" c="dimmed" mt={6}>
+                                No metrics configured for this persona yet.
+                              </Text>
+                            )}
+                          </Box>
+                        </Stack>
+                      </Paper>
+                    </motion.div>
                   )
                 })()
               ) : (
-                <Stack gap="sm" align="center" className={classes.personaEmpty}>
-                  <Avatar size={68} radius="lg" variant="light">
-                    <IconUser size={28} />
-                  </Avatar>
-                  <Text fw={600}>Choose your character</Text>
-                  <Text size="sm" c="dimmed" ta="center">
-                    Select a persona to dock their full dossier here.
-                  </Text>
-                </Stack>
+                <motion.div
+                  key="empty"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <Stack gap="sm" align="center" className={classes.personaEmpty}>
+                    <Avatar size={68} radius="lg" variant="light">
+                      <IconUser size={28} />
+                    </Avatar>
+                    <Text fw={600}>Choose your character</Text>
+                    <Text size="sm" c="dimmed" ta="center">
+                      Select a persona to dock their full dossier here.
+                    </Text>
+                  </Stack>
+                </motion.div>
               )}
             </AnimatePresence>
           </div>

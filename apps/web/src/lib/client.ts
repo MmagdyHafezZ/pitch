@@ -1,4 +1,15 @@
 import { QueryClient } from '@tanstack/react-query'
+import type {
+  CreateScenarioInput,
+  GenerateScenarioBatchRequest,
+  GenerateScenarioRequest,
+  Scenario,
+  ScenarioDraft,
+  ScenarioDraftListResponse,
+  ScenarioListParams,
+  ScenarioListResponse,
+  UpdateScenarioInput,
+} from '@/features/scenarios/types/scenario.types'
 
 export const API_CONFIG = {
   baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1',
@@ -144,7 +155,6 @@ export async function apiRequest<T>(
 
     throw resolvedError instanceof Error ? resolvedError : new Error('Request failed')
   } finally {
-    // no-op
   }
 }
 
@@ -506,16 +516,36 @@ export const api = {
   },
 
   s3: {
+    upload: (input: { key: string; file: File }) => {
+      const formData = new FormData()
+      formData.append('key', input.key)
+      formData.append('file', input.file)
+
+      return apiRequest<{
+        bucket: string
+        key: string
+        filename: string
+        contentType: string
+        size: number
+        uploadedAt: string
+        textPreview?: string
+      }>('/s3/upload', {
+        method: 'POST',
+        body: formData,
+      })
+    },
     presignUpload: (input: {
-      bucket: string
+      bucket?: string
       key: string
+      contentType?: string
       expiresIn?: number
     }) =>
-      apiRequest<{ url: string }>('/s3/presigned/upload', {
+      apiRequest<{ url: string; bucket: string }>('/s3/presigned/upload', {
         method: 'POST',
         body: JSON.stringify({
           bucket: input.bucket,
           key: input.key,
+          contentType: input.contentType,
           expiresInSeconds: input.expiresIn,
         }),
       }),
@@ -661,24 +691,43 @@ export const api = {
   },
 
   scenarios: {
-    getAll: (params?: { orgId?: string }) => {
+    list: (params?: ScenarioListParams) => {
       const query = new URLSearchParams()
       if (params?.orgId) query.set('orgId', params.orgId)
+      if (params?.scope) query.set('scope', params.scope)
+      if (params?.query) query.set('query', params.query)
       const queryString = query.toString()
-      return apiRequest<any>(`/simulation/scenarios${queryString ? `?${queryString}` : ''}`)
+      return apiRequest<ScenarioListResponse>(
+        `/simulation/scenarios${queryString ? `?${queryString}` : ''}`
+      )
     },
-    getById: (id: string) => apiRequest<any>(`/simulation/scenarios/${id}`),
-    generate: (data: any) =>
-      apiRequest<any>('/simulation/scenarios/generate', {
+    getAll: (params?: ScenarioListParams) => api.scenarios.list(params),
+    getById: (id: string) => apiRequest<Scenario>(`/simulation/scenarios/${id}`),
+    generate: (data: GenerateScenarioRequest) =>
+      apiRequest<ScenarioDraft>('/simulation/scenarios/generate', {
         method: 'POST',
         body: JSON.stringify(data),
         timeoutMs: 30000,
       }),
-    generateBatch: (data: any) =>
-      apiRequest<any>('/simulation/scenarios/generate/batch', {
+    generateBatch: (data: GenerateScenarioBatchRequest) =>
+      apiRequest<ScenarioDraftListResponse>('/simulation/scenarios/generate/batch', {
         method: 'POST',
         body: JSON.stringify(data),
         timeoutMs: 30000,
+      }),
+    create: (data: CreateScenarioInput) =>
+      apiRequest<Scenario>('/simulation/scenarios', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    update: (id: string, data: UpdateScenarioInput) =>
+      apiRequest<Scenario>(`/simulation/scenarios/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      }),
+    delete: (id: string) =>
+      apiRequest<void>(`/simulation/scenarios/${id}`, {
+        method: 'DELETE',
       }),
   },
 
@@ -713,6 +762,52 @@ export const api = {
         apiRequestRoot<any>('/crm/salesforce/search', {
           method: 'POST',
           body: JSON.stringify({ query }),
+        }),
+    },
+  },
+
+  calendar: {
+    google: {
+      connect: () => apiRequestRoot<{ authUrl: string }>('/calendar/google/connect'),
+      status: () => apiRequestRoot<any>('/calendar/google/status'),
+      disconnect: () =>
+        apiRequestRoot<{ success: boolean }>('/calendar/google/disconnect', { method: 'DELETE' }),
+      events: (params?: { from?: string; to?: string; maxResults?: number }) => {
+        const query = new URLSearchParams()
+        if (params?.from) query.set('from', params.from)
+        if (params?.to) query.set('to', params.to)
+        if (params?.maxResults) query.set('maxResults', String(params.maxResults))
+        const qs = query.toString()
+        return apiRequestRoot<any[]>(`/calendar/google/events${qs ? `?${qs}` : ''}`)
+      },
+    },
+    microsoft: {
+      connect: () => apiRequestRoot<{ authUrl: string }>('/calendar/microsoft/connect'),
+      status: () => apiRequestRoot<any>('/calendar/microsoft/status'),
+      disconnect: () =>
+        apiRequestRoot<{ success: boolean }>('/calendar/microsoft/disconnect', {
+          method: 'DELETE',
+        }),
+      events: (params?: { from?: string; to?: string; maxResults?: number }) => {
+        const query = new URLSearchParams()
+        if (params?.from) query.set('from', params.from)
+        if (params?.to) query.set('to', params.to)
+        if (params?.maxResults) query.set('maxResults', String(params.maxResults))
+        const qs = query.toString()
+        return apiRequestRoot<any[]>(`/calendar/microsoft/events${qs ? `?${qs}` : ''}`)
+      },
+    },
+    upcoming: (lookAheadDays?: number) =>
+      apiRequestRoot<any[]>(
+        `/calendar/upcoming${lookAheadDays ? `?lookAheadDays=${lookAheadDays}` : ''}`
+      ),
+    suggestions: {
+      list: () => apiRequestRoot<any[]>('/calendar/suggestions'),
+      accept: (sessionId: string) =>
+        apiRequestRoot<any>(`/calendar/suggestions/${sessionId}/accept`, { method: 'POST' }),
+      dismiss: (sessionId: string) =>
+        apiRequestRoot<{ success: boolean }>(`/calendar/suggestions/${sessionId}`, {
+          method: 'DELETE',
         }),
     },
   },
@@ -856,7 +951,15 @@ export const api = {
       context?: {
         page?: string
         sessionId?: string
+        sessionName?: string
         recentTurns?: Array<{ role: string; text: string }>
+        savedAttachments?: Array<{
+          name: string
+          content: string
+          mimeType: string
+          size: number
+          s3Url?: string
+        }>
       }
     }) =>
       apiRequest<{ reply: string }>('/support/chat', {

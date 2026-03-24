@@ -74,6 +74,9 @@ export const RedisKeys = {
     `sim:persona:${personaId}:preview-audio`,
   /** AI persona mood state — set by update_mood tool, injected into next turn prompt */
   sessionMood: (sessionId: string) => `sim:session:${sessionId}:mood`,
+  /** AI persuasion score — set by update_persuasion_score tool, shown in session UI */
+  sessionPersuasion: (sessionId: string) =>
+    `sim:session:${sessionId}:persuasion`,
 } as const;
 
 /**
@@ -312,4 +315,6 @@ export const RedisTTL = {
   PERSONA_PREVIEW_AUDIO: 30 * 24 * 60 * 60,
   /** AI persona mood state — 30 min */
   SESSION_MOOD: 30 * 60,
+  /** AI persuasion score — 30 min */
+  SESSION_PERSUASION: 30 * 60,
 } as const;

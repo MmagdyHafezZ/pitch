@@ -299,4 +299,47 @@ export class SessionRepository {
       include: this.ownerInclude,
     });
   }
+
+  /**
+   * Find a session created from a specific calendar event (deduplication).
+   * Queries the sessionConfig JSON field for calendarEventId.
+   */
+  async findByCalendarEventId(
+    calendarEventId: string,
+    userId: string,
+  ): Promise<SessionWithOwner | null> {
+    const sessions = await this.prisma.client.session.findMany({
+      where: {
+        sessionConfig: {
+          path: ['calendarEventId'],
+          equals: calendarEventId,
+        },
+        members: { some: { userId } },
+      },
+      take: 1,
+      include: this.ownerInclude,
+    });
+    return sessions[0] ?? null;
+  }
+
+  /**
+   * Find calendar-generated suggestion sessions for a user in an org.
+   */
+  async findSuggestionsForUser(
+    userId: string,
+    orgId: string,
+  ): Promise<SessionWithOwner[]> {
+    return await this.prisma.client.session.findMany({
+      where: {
+        orgId,
+        members: { some: { userId } },
+        sessionConfig: {
+          path: ['isSuggestion'],
+          equals: true,
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      include: this.ownerInclude,
+    });
+  }
 }
