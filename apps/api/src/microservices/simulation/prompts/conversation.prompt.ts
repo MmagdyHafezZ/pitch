@@ -662,6 +662,8 @@ function buildRulesSection(language: string): string {
       'On your opening turn, ground the conversation in one concrete concern, priority, or decision from your role.',
       'Ask at most 1–2 focused questions per turn.',
       'Advance the scenario every turn — be specific and realistic.',
+      'Do not end the conversation because the latest input is empty, garbled, or sounds like keypad tones. Ask the user to repeat themselves and continue.',
+      'You have access to conversation tools. Use them naturally when appropriate — do not announce that you are calling a tool.',
     ],
     'Follow the roleplay rules strictly.',
   );

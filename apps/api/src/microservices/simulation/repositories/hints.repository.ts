@@ -51,8 +51,9 @@ export interface CreateHintData {
 export class HintsRepository {
   constructor(private readonly mongo: MongoConnectionService) {}
 
-  private get model(): Model<HintDocument> {
-    if (!this.mongo.isConnected()) {
+  private async getModel(): Promise<Model<HintDocument>> {
+    const connected = await this.mongo.waitUntilConnected(10000);
+    if (!connected) {
       throw new Error('MongoDB connection is not initialized');
     }
 
@@ -63,7 +64,8 @@ export class HintsRepository {
    * Create a new hint document
    */
   async create(data: CreateHintData): Promise<HintDocument> {
-    const doc = await this.model.create({
+    const model = await this.getModel();
+    const doc = await model.create({
       _id: new Types.ObjectId().toHexString(),
       ...data,
     });
@@ -75,9 +77,8 @@ export class HintsRepository {
    * Find hint by ID
    */
   async findById(id: string): Promise<HintDocument | null> {
-    return (await this.model
-      .findById(id)
-      .lean()) as unknown as HintDocument | null;
+    const model = await this.getModel();
+    return (await model.findById(id).lean()) as unknown as HintDocument | null;
   }
 
   /**
@@ -87,7 +88,8 @@ export class HintsRepository {
     sessionId: string,
     limit: number = 10,
   ): Promise<HintDocument[]> {
-    return (await this.model
+    const model = await this.getModel();
+    return (await model
       .find({ sessionId })
       .sort({ generatedAt: -1 })
       .limit(limit)
@@ -102,7 +104,8 @@ export class HintsRepository {
     type: string,
     limit: number = 10,
   ): Promise<HintDocument[]> {
-    return (await this.model
+    const model = await this.getModel();
+    return (await model
       .find({ sessionId, 'hints.type': type })
       .sort({ generatedAt: -1 })
       .limit(limit)
@@ -116,7 +119,8 @@ export class HintsRepository {
     userId: string,
     limit: number = 10,
   ): Promise<HintDocument[]> {
-    return (await this.model
+    const model = await this.getModel();
+    return (await model
       .find({ userId })
       .sort({ generatedAt: -1 })
       .limit(limit)
@@ -130,7 +134,8 @@ export class HintsRepository {
     orgId: string,
     limit: number = 10,
   ): Promise<HintDocument[]> {
-    return (await this.model
+    const model = await this.getModel();
+    return (await model
       .find({ orgId })
       .sort({ generatedAt: -1 })
       .limit(limit)
@@ -141,7 +146,8 @@ export class HintsRepository {
    * Count hints by session ID
    */
   async countBySessionId(sessionId: string): Promise<number> {
-    return await this.model.countDocuments({ sessionId }).exec();
+    const model = await this.getModel();
+    return await model.countDocuments({ sessionId }).exec();
   }
 
   /**
@@ -151,16 +157,16 @@ export class HintsRepository {
     sessionId: string,
     type: string,
   ): Promise<number> {
-    return await this.model
-      .countDocuments({ sessionId, 'hints.type': type })
-      .exec();
+    const model = await this.getModel();
+    return await model.countDocuments({ sessionId, 'hints.type': type }).exec();
   }
 
   /**
    * Delete hint by ID
    */
   async deleteById(id: string): Promise<boolean> {
-    const result = await this.model.deleteOne({ _id: id }).exec();
+    const model = await this.getModel();
+    const result = await model.deleteOne({ _id: id }).exec();
     return result.deletedCount > 0;
   }
 
@@ -168,7 +174,8 @@ export class HintsRepository {
    * Delete all hints for a session
    */
   async deleteBySessionId(sessionId: string): Promise<number> {
-    const result = await this.model.deleteMany({ sessionId }).exec();
+    const model = await this.getModel();
+    const result = await model.deleteMany({ sessionId }).exec();
     return result.deletedCount;
   }
 }

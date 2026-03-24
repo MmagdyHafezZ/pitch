@@ -149,6 +149,7 @@ describe('Hints Integration Tests', () => {
           provide: MongoConnectionService,
           useValue: {
             isConnected: jest.fn().mockReturnValue(true),
+            waitUntilConnected: jest.fn().mockResolvedValue(true),
             getModel: jest.fn().mockReturnValue(mockModel),
           },
         },
@@ -564,7 +565,7 @@ describe('Hints Integration Tests', () => {
     });
 
     it('should handle MongoDB connection error', async () => {
-      mongoService.isConnected.mockReturnValue(false);
+      mongoService.waitUntilConnected.mockResolvedValue(false);
 
       await expect(
         repository.create({

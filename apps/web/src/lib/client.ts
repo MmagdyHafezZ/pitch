@@ -234,6 +234,7 @@ export const api = {
     getAll: () => apiRequest<any[]>('/users'),
     getById: (id: string) => apiRequest<any>(`/users/${id}`),
     getMySettings: () => apiRequest<any>('/users/me/settings'),
+    getMyPhoneVerification: () => apiRequest<any>('/users/me/phone-verification'),
     create: (data: any) =>
       apiRequest<any>('/users', {
         method: 'POST',
@@ -262,6 +263,20 @@ export const api = {
     update: (id: string, data: any) =>
       apiRequest<any>(`/users/${id}`, {
         method: 'PUT',
+        body: JSON.stringify(data),
+      }),
+    requestPhoneVerification: (data: { phoneNumber: string }) =>
+      apiRequest<any>('/users/me/phone-verification/request', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    resendPhoneVerification: () =>
+      apiRequest<any>('/users/me/phone-verification/resend', {
+        method: 'POST',
+      }),
+    verifyPhoneVerification: (data: { code: string; saveForFutureUse?: boolean }) =>
+      apiRequest<any>('/users/me/phone-verification/verify', {
+        method: 'POST',
         body: JSON.stringify(data),
       }),
     delete: (id: string) =>
@@ -605,13 +620,13 @@ export const api = {
   },
 
   phoneCalls: {
-    start: (data: {
-      sessionId: string
-      phoneNumber?: string
-      provider?: string
-      fromNumber?: string
-    }) =>
+    start: (data: { sessionId: string; firstMessage?: string; phoneNumber?: string }) =>
       apiRequest<any>('/simulation/phone-calls', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    end: (data: { sessionId: string; reason?: string }) =>
+      apiRequest<any>('/simulation/phone-calls/end', {
         method: 'POST',
         body: JSON.stringify(data),
       }),

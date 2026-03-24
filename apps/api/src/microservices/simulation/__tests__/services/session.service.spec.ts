@@ -297,9 +297,23 @@ describe('SessionService cache invalidation', () => {
   });
 
   it('restarts the current session by creating a new iteration instead of a new session', async () => {
+    const phoneSession = {
+      ...baseSession,
+      type: 'phone',
+      sessionConfig: {
+        phone: {
+          provider: 'vapi',
+          runtime: {
+            callId: 'call-1',
+            status: 'queued',
+          },
+        },
+      },
+    };
+
     sessionRepository.findById
-      .mockResolvedValueOnce(baseSession)
-      .mockResolvedValueOnce(baseSession);
+      .mockResolvedValueOnce(phoneSession)
+      .mockResolvedValueOnce(phoneSession);
     prisma.client.iteration.findFirst.mockResolvedValue({
       id: 'iteration-1',
       iterationNumber: 1,
@@ -343,6 +357,11 @@ describe('SessionService cache invalidation', () => {
         status: 'active',
         endedReason: null,
         endedAt: null,
+        sessionConfig: {
+          phone: {
+            provider: 'vapi',
+          },
+        },
       },
     });
     expect(assessmentService.requestRun).toHaveBeenCalledWith({

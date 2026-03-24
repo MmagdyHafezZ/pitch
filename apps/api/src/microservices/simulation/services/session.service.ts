@@ -477,6 +477,7 @@ export class SessionService {
         status: 'active',
         endedReason: null,
         endedAt: null,
+        sessionConfig: this.clearPhoneRuntime(existingSession.sessionConfig),
       },
     });
 
@@ -1125,5 +1126,31 @@ export class SessionService {
         `User ${requesterUserId} does not have permission to modify session ${session.id}`,
       );
     }
+  }
+
+  private clearPhoneRuntime(
+    sessionConfig: unknown,
+  ): Prisma.InputJsonValue | typeof Prisma.JsonNull {
+    if (!sessionConfig || typeof sessionConfig !== 'object') {
+      return Prisma.JsonNull;
+    }
+
+    const root = sessionConfig as Record<string, unknown>;
+    const phone =
+      root.phone && typeof root.phone === 'object'
+        ? (root.phone as Record<string, unknown>)
+        : null;
+
+    if (!phone || !('runtime' in phone)) {
+      return root as Prisma.InputJsonValue;
+    }
+
+    const restPhone = { ...phone };
+    delete restPhone.runtime;
+
+    return {
+      ...root,
+      phone: restPhone,
+    } as Prisma.InputJsonValue;
   }
 }

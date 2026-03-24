@@ -528,7 +528,7 @@ const SECTION_CREATE_SESSION = `
 A 7-step wizard. Each step is optional except the first; users can go back and forward freely.
 
 ### Step 1 — Basics
-- **Session type**: text (chat), voice (microphone), video (video avatar), phone (phone call via Twilio/Vapi)
+- **Session type**: text (chat), voice (microphone), video (video avatar), phone (phone call via verified-number Vapi transport)
 - **Name**: optional friendly label
 - **Team**: which team this session belongs to (Personal or a team you're a member of)
 - **Language**: practice language (en-US, de-DE, es-ES, fr-FR)
@@ -595,7 +595,7 @@ The live session player is a full-screen dark interface:
 - **Text**: Conversation bubbles. Type in the input box + press Enter or click Send.
 - **Voice**: Circular waveform visualizer. Click the microphone button to speak.
 - **Video**: AI persona appears as a video avatar. Speak or type; AI responds visually and with audio.
-- **Phone**: User provides their phone number at start. Call is placed via Twilio or Vapi.
+- **Phone**: User verifies a phone number first, then the call is placed via Vapi.
 
 ### Panels (toggleable)
 - **Hints panel** (left side): Real-time coaching suggestions. AI generates up to 3 contextual hints after 20 seconds of user inactivity.

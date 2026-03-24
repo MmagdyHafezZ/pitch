@@ -172,6 +172,8 @@ import {
     CalendarSessionService,
   ],
   exports: [
+    PhoneModule,
+    TtsModule,
     LLMService,
     StreamingConversationService,
     ConversationOrchestrationService,

@@ -4,6 +4,7 @@ import {
   IsOptional,
   ValidateNested,
   IsObject,
+  IsBoolean,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { LLMMessageDto, LLMConfigDto } from './llm.dto';
@@ -328,6 +329,14 @@ export class ConversationStartPayload {
 
   @IsOptional()
   startAsAssistant?: boolean;
+
+  @IsString()
+  @IsOptional()
+  starterPrompt?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  skipTts?: boolean;
 
   @IsString()
   @IsOptional()

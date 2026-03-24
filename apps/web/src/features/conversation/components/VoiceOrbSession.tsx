@@ -47,6 +47,7 @@ interface VoiceOrbSessionProps {
   currentAudioUrl?: string | null
   // resume prompt (replaces Mantine Modal)
   resumePromptOpen?: boolean
+  entryPromptMode?: 'resume' | 'retake' | null
   onResume?: () => void
   onStartOver?: () => void
   startOverLoading?: boolean
@@ -921,6 +922,7 @@ export default function VoiceOrbSession({
   onPauseReplay,
   currentAudioUrl,
   resumePromptOpen,
+  entryPromptMode,
   onResume,
   onStartOver,
   startOverLoading,
@@ -938,6 +940,7 @@ export default function VoiceOrbSession({
   const isVideoMode = mode === 'video'
   const isTextMode = mode === 'text'
   const isAlwaysOpen = isTextMode || isVideoMode
+  const isRetakePrompt = entryPromptMode === 'retake'
   const [isOpen, setIsOpen] = useState(false)
   const [latestMsgId, setLatestMsgId] = useState<string | null>(null)
   const userClosedRef = useRef(false)
@@ -1302,7 +1305,7 @@ export default function VoiceOrbSession({
                   </button>
                   <button
                     className="vos-bubble-btn vos-bubble-btn-primary"
-                    onClick={onResume}
+                    onClick={isRetakePrompt ? onStartOver : onResume}
                     disabled={startOverLoading}
                   >
                     Continue

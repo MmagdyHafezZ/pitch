@@ -12,7 +12,7 @@ import {
   ActionIcon,
   Badge,
   TextInput,
-  Select,
+  ScrollArea,
   Loader,
   Modal,
   Button,
@@ -21,8 +21,16 @@ import {
   Progress,
   ThemeIcon,
   Divider,
+  Checkbox,
 } from '@mantine/core'
 import {
+  IconAlertTriangle,
+  IconArrowRight,
+  IconCircleCheck,
+  IconClock,
+  IconDeviceMobile,
+  IconEdit,
+  IconMessage2,
   IconPhone,
   IconSparkles,
   IconX,
@@ -31,7 +39,7 @@ import {
   IconRefresh,
   IconCheck,
 } from '@tabler/icons-react'
-import { useParams, useRouter } from 'next/navigation'
+import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import { useConversation, useVisualState, CameraEngagementIndicator } from '@/features/conversation'
 import { type GlobeState } from '@/features/conversation/components/GlobeVisualizer'
 import VoiceOrbSession from '@/features/conversation/components/VoiceOrbSession'
@@ -55,23 +63,66 @@ interface AvatarVideoState {
   playbackToken: string | null
 }
 
+interface PhoneVerificationState {
+  verified: boolean
+  phoneNumber?: string | null
+  verifiedAt?: string | null
+  temporaryVerifiedPhoneNumber?: string | null
+  temporaryVerifiedAt?: string | null
+  pendingPhoneNumber?: string | null
+  pendingExpiresAt?: string | null
+  resendAvailableAt?: string | null
+  remainingAttempts?: number
+  remainingSends?: number
+}
+
+type EntryPromptMode = 'resume' | 'retake'
+type PhoneRetakeChoice = 'undecided' | 'saved' | 'different'
+
+interface PhoneCallRuntimeState {
+  callId: string | null
+  provider: string | null
+  controlUrl: string | null
+  listenUrl: string | null
+  status: string | null
+  startedAt: string | null
+  endedAt: string | null
+  endedReason: string | null
+  endRequestedAt: string | null
+  endRequestedReason: string | null
+}
+
+interface TranscriptMessage {
+  id: string
+  role: 'user' | 'assistant'
+  text: string
+  timestamp: Date
+}
+
+const EMPTY_PHONE_CALL_RUNTIME: PhoneCallRuntimeState = {
+  callId: null,
+  provider: null,
+  controlUrl: null,
+  listenUrl: null,
+  status: null,
+  startedAt: null,
+  endedAt: null,
+  endedReason: null,
+  endRequestedAt: null,
+  endRequestedReason: null,
+}
+
+const PHONE_TERMINAL_STATUSES = new Set(['ended', 'failed', 'busy', 'no-answer', 'canceled'])
+
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
 
-const normalizeSessionStatus = (
-  session: unknown,
-  options?: { launchFreshIteration?: boolean }
-): string | null => {
+const normalizeSessionStatus = (session: unknown): string | null => {
   if (!isRecord(session) || typeof session.status !== 'string') {
     return null
   }
 
-  const status = session.status.trim().toLowerCase()
-  if (options?.launchFreshIteration && status === 'ended') {
-    return 'active'
-  }
-
-  return status
+  return session.status.trim().toLowerCase()
 }
 
 const readAvatarVideoState = (session: unknown): AvatarVideoState => {
@@ -302,10 +353,1235 @@ const buildTimelineStages = (
   }))
 }
 
+const normalizePhoneRuntimeStatus = (status: string | null | undefined) =>
+  typeof status === 'string' && status.trim().length > 0 ? status.trim().toLowerCase() : null
+
+const isPhoneCallActive = (runtime: PhoneCallRuntimeState) =>
+  Boolean(
+    runtime.callId &&
+      !PHONE_TERMINAL_STATUSES.has(normalizePhoneRuntimeStatus(runtime.status) ?? '')
+  )
+
+const readPhoneCallRuntime = (session: unknown): PhoneCallRuntimeState => {
+  if (!isRecord(session)) {
+    return EMPTY_PHONE_CALL_RUNTIME
+  }
+
+  const sessionConfig = isRecord(session.sessionConfig) ? session.sessionConfig : {}
+  const phoneConfig = isRecord(sessionConfig.phone) ? sessionConfig.phone : {}
+  const runtime = isRecord(phoneConfig.runtime) ? phoneConfig.runtime : {}
+
+  return {
+    callId: typeof runtime.callId === 'string' ? runtime.callId : null,
+    provider: typeof runtime.provider === 'string' ? runtime.provider : null,
+    controlUrl: typeof runtime.controlUrl === 'string' ? runtime.controlUrl : null,
+    listenUrl: typeof runtime.listenUrl === 'string' ? runtime.listenUrl : null,
+    status: typeof runtime.status === 'string' ? runtime.status : null,
+    startedAt: typeof runtime.startedAt === 'string' ? runtime.startedAt : null,
+    endedAt: typeof runtime.endedAt === 'string' ? runtime.endedAt : null,
+    endedReason: typeof runtime.endedReason === 'string' ? runtime.endedReason : null,
+    endRequestedAt: typeof runtime.endRequestedAt === 'string' ? runtime.endRequestedAt : null,
+    endRequestedReason:
+      typeof runtime.endRequestedReason === 'string' ? runtime.endRequestedReason : null,
+  }
+}
+
+const readTimelineConversationHistory = (timeline: unknown): TranscriptMessage[] => {
+  if (!isRecord(timeline) || !Array.isArray(timeline.conversationHistory)) {
+    return []
+  }
+
+  return timeline.conversationHistory
+    .map((turn, index) => {
+      if (!isRecord(turn)) {
+        return null
+      }
+
+      const text = typeof turn.text === 'string' ? turn.text : ''
+      const rawRole = typeof turn.role === 'string' ? turn.role.trim().toLowerCase() : ''
+      const role: 'user' | 'assistant' = rawRole === 'user' ? 'user' : 'assistant'
+      const id =
+        typeof turn.id === 'string'
+          ? turn.id
+          : typeof turn.order === 'number'
+            ? `turn_${turn.order}`
+            : `turn_${index}`
+      const timestampValue =
+        typeof turn.createdAt === 'string' ? new Date(turn.createdAt) : new Date()
+
+      return {
+        id,
+        role,
+        text,
+        timestamp: Number.isNaN(timestampValue.getTime()) ? new Date() : timestampValue,
+      }
+    })
+    .filter((turn): turn is TranscriptMessage => Boolean(turn))
+}
+
+const buildTimelineState = (timeline: unknown) => {
+  if (!isRecord(timeline) || !Array.isArray(timeline.plannedStages)) {
+    return {
+      progress: 0,
+      stages: [] as Array<{
+        order: number
+        label: string
+        description?: string
+        active: boolean
+        completed: boolean
+      }>,
+    }
+  }
+
+  const plannedStages = timeline.plannedStages
+  const progress = typeof timeline.currentProgress === 'number' ? timeline.currentProgress : 0
+  const totalTurns = typeof timeline.total === 'number' ? timeline.total : 0
+
+  if (plannedStages.length === 0) {
+    return { progress: 0, stages: [] }
+  }
+
+  const currentStageIndex = Math.min(
+    plannedStages.length - 1,
+    Math.floor((progress / 100) * plannedStages.length)
+  )
+
+  const stages = plannedStages.map((stage, index) => {
+    const entry = isRecord(stage) ? stage : {}
+    return {
+      order: typeof entry.order === 'number' ? entry.order : index + 1,
+      label:
+        typeof entry.label === 'string'
+          ? entry.label
+          : typeof stage === 'string'
+            ? stage
+            : `Stage ${index + 1}`,
+      description: typeof entry.description === 'string' ? entry.description : undefined,
+      active: index === currentStageIndex && totalTurns > 0,
+      completed: index < currentStageIndex,
+    }
+  })
+
+  return { progress, stages }
+}
+
+const getPhoneStatusLabel = (
+  runtime: PhoneCallRuntimeState,
+  sessionStatus: string | null,
+  callStarted: boolean
+) => {
+  if (sessionStatus === 'ended') return 'Ended'
+
+  switch (normalizePhoneRuntimeStatus(runtime.status)) {
+    case 'queued':
+      return 'Queued'
+    case 'ringing':
+      return 'Ringing'
+    case 'in-progress':
+      return 'Live'
+    case 'answered':
+      return 'Connected'
+    case 'busy':
+      return 'Busy'
+    case 'no-answer':
+      return 'No answer'
+    case 'failed':
+      return 'Failed'
+    case 'canceled':
+      return 'Canceled'
+    case 'ended':
+      return 'Ended'
+    default:
+      return callStarted ? 'Dialing' : 'Ready'
+  }
+}
+
+const getPhoneStatusColor = (
+  runtime: PhoneCallRuntimeState,
+  sessionStatus: string | null,
+  callStarted: boolean
+) => {
+  if (sessionStatus === 'ended') return 'gray'
+
+  switch (normalizePhoneRuntimeStatus(runtime.status)) {
+    case 'queued':
+    case 'ringing':
+      return 'blue'
+    case 'in-progress':
+    case 'answered':
+      return 'green'
+    case 'busy':
+    case 'no-answer':
+      return 'orange'
+    case 'failed':
+    case 'canceled':
+      return 'red'
+    case 'ended':
+      return 'gray'
+    default:
+      return callStarted ? 'blue' : 'gray'
+  }
+}
+
+const getPhoneStatusCopy = (
+  runtime: PhoneCallRuntimeState,
+  sessionStatus: string | null,
+  callStarted: boolean
+) => {
+  if (sessionStatus === 'ended') {
+    return runtime.endedReason
+      ? `This phone session has ended: ${runtime.endedReason}.`
+      : 'This phone session has ended.'
+  }
+
+  switch (normalizePhoneRuntimeStatus(runtime.status)) {
+    case 'queued':
+      return 'The call is queued with the provider and should start dialing shortly.'
+    case 'ringing':
+      return 'We are dialing now. Answer your phone to begin the conversation.'
+    case 'in-progress':
+    case 'answered':
+      return 'The live transcript will update automatically as each turn lands.'
+    case 'busy':
+      return 'The line was busy. You can retry the call when you are ready.'
+    case 'no-answer':
+      return 'The call was not answered. Start another attempt whenever you want.'
+    case 'failed':
+      return 'The call failed before it could connect. Double-check the number and try again.'
+    case 'canceled':
+      return 'The call was canceled before it connected.'
+    case 'ended':
+      return 'The phone call has wrapped up.'
+    default:
+      return callStarted
+        ? 'The call has been requested. We will show the transcript here as soon as turns arrive.'
+        : 'Verify a number, place the call, and use the center panel to follow the transcript in real time.'
+  }
+}
+
+const formatDateTime = (value: string | null | undefined) => {
+  if (!value) return null
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleString([], {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  })
+}
+
+const formatCountdownClock = (totalSeconds: number) => {
+  const safeSeconds = Math.max(0, totalSeconds)
+  const minutes = Math.floor(safeSeconds / 60)
+  const seconds = safeSeconds % 60
+  return `${minutes}:${seconds.toString().padStart(2, '0')}`
+}
+
+const formatMessageTime = (value: Date) =>
+  value.toLocaleTimeString([], {
+    hour: 'numeric',
+    minute: '2-digit',
+  })
+
+function HintsSidebar({
+  hintsEnabled,
+  hints,
+  hintsError,
+  width = 220,
+  onShow,
+  onHide,
+}: {
+  hintsEnabled: boolean
+  hints: string[]
+  hintsError: string | null
+  width?: number | string
+  onShow: () => void
+  onHide: () => void
+}) {
+  if (hintsEnabled) {
+    return (
+      <Paper
+        withBorder
+        radius="lg"
+        p="lg"
+        style={{
+          width,
+          backgroundColor: 'var(--pitch-surface-bg)',
+          height: 'fit-content',
+          flexShrink: 0,
+        }}
+      >
+        <Group justify="space-between" mb="md">
+          <Group gap="xs">
+            <Title order={4}>Hints</Title>
+            <Badge size="sm" variant="light">
+              {hints.length}
+            </Badge>
+          </Group>
+          <Button size="xs" variant="subtle" color="gray" onClick={onHide}>
+            Hide
+          </Button>
+        </Group>
+        <Stack gap="md">
+          {hintsError && (
+            <Text size="xs" c="red">
+              {hintsError}
+            </Text>
+          )}
+          {!hintsError && hints.length === 0 && (
+            <Text size="xs" c="dimmed">
+              No hints yet.
+            </Text>
+          )}
+          {hints.map((hint, i) => (
+            <Group key={i} gap="xs" align="start">
+              <IconArrowRight size={16} style={{ marginTop: 4, flexShrink: 0 }} />
+              <Text size="sm">{hint}</Text>
+            </Group>
+          ))}
+        </Stack>
+      </Paper>
+    )
+  }
+
+  return (
+    <Box
+      style={{
+        width,
+        display: 'flex',
+        justifyContent: 'center',
+        flexShrink: 0,
+      }}
+    >
+      <Button variant="light" color="brand" onClick={onShow}>
+        Show hints
+      </Button>
+    </Box>
+  )
+}
+
+function TimelineSidebar({
+  timelineEnabled,
+  timelineStages,
+  currentProgress,
+  timelineError,
+  width = 200,
+  onShow,
+  onHide,
+}: {
+  timelineEnabled: boolean
+  timelineStages: Array<{
+    order: number
+    label: string
+    description?: string
+    active: boolean
+    completed: boolean
+  }>
+  currentProgress: number
+  timelineError: string | null
+  width?: number | string
+  onShow: () => void
+  onHide: () => void
+}) {
+  if (timelineEnabled) {
+    return (
+      <Paper
+        withBorder
+        radius="lg"
+        p="lg"
+        style={{
+          width,
+          backgroundColor: 'var(--pitch-surface-bg)',
+          height: 'fit-content',
+          flexShrink: 0,
+        }}
+      >
+        <Group justify="space-between" mb="xl">
+          <Title order={4}>Timeline</Title>
+          <Button size="xs" variant="subtle" color="gray" onClick={onHide}>
+            Hide
+          </Button>
+        </Group>
+        <Box style={{ position: 'relative', paddingLeft: 40 }}>
+          <Box
+            style={{
+              position: 'absolute',
+              left: 20,
+              top: 0,
+              bottom: 0,
+              width: 2,
+              backgroundColor: 'var(--mantine-color-gray-4)',
+            }}
+          />
+
+          <Stack gap={60}>
+            {timelineError && (
+              <Text size="xs" c="red">
+                {timelineError}
+              </Text>
+            )}
+            {!timelineError && currentProgress > 0 && (
+              <Box mb="md">
+                <Badge variant="filled" color="blue" size="lg">
+                  {currentProgress}% Complete
+                </Badge>
+              </Box>
+            )}
+            {!timelineError && timelineStages.length === 0 && (
+              <Text size="xs" c="dimmed">
+                Loading session plan...
+              </Text>
+            )}
+            {timelineStages.map((stage, i) => (
+              <Box key={i} style={{ position: 'relative' }}>
+                <Box
+                  style={{
+                    position: 'absolute',
+                    left: -28,
+                    top: -4,
+                    width: stage.active ? 16 : 8,
+                    height: stage.active ? 16 : 8,
+                    borderRadius: '50%',
+                    backgroundColor: stage.completed
+                      ? 'var(--mantine-color-green-6)'
+                      : stage.active
+                        ? 'var(--mantine-color-blue-6)'
+                        : 'var(--mantine-color-gray-5)',
+                    border: stage.active ? '2px solid var(--mantine-color-blue-2)' : 'none',
+                  }}
+                />
+                <Box>
+                  <Text
+                    size="sm"
+                    fw={stage.active ? 600 : 400}
+                    c={stage.active ? 'blue' : stage.completed ? 'green' : 'dimmed'}
+                  >
+                    {stage.label}
+                  </Text>
+                  {stage.description && (
+                    <Text size="xs" c="dimmed" mt={4} style={{ lineHeight: 1.3 }}>
+                      {stage.description}
+                    </Text>
+                  )}
+                </Box>
+              </Box>
+            ))}
+          </Stack>
+        </Box>
+      </Paper>
+    )
+  }
+
+  return (
+    <Box
+      style={{
+        width,
+        display: 'flex',
+        justifyContent: 'center',
+        flexShrink: 0,
+      }}
+    >
+      <Button variant="light" color="brand" onClick={onShow}>
+        Show timeline
+      </Button>
+    </Box>
+  )
+}
+
+function PhoneResumePromptCard({
+  entryPromptMode,
+  startOverLoading,
+  onResume,
+  onStartOver,
+}: {
+  entryPromptMode: EntryPromptMode
+  startOverLoading: boolean
+  onResume: () => void
+  onStartOver: () => void
+}) {
+  const isRetakePrompt = entryPromptMode === 'retake'
+
+  return (
+    <Paper
+      withBorder
+      radius="xl"
+      p="lg"
+      style={{
+        background:
+          'linear-gradient(180deg, color-mix(in srgb, var(--pitch-surface-bg) 92%, white 8%) 0%, var(--pitch-surface-bg) 100%)',
+        borderColor: 'color-mix(in srgb, var(--mantine-color-brand-6) 28%, transparent)',
+      }}
+    >
+      <Stack gap="sm">
+        <Group gap="xs">
+          <IconSparkles size={18} color="var(--mantine-color-brand-5)" />
+          <Text size="xs" fw={700} tt="uppercase" c="dimmed">
+            Session checkpoint
+          </Text>
+        </Group>
+        <Title order={4}>
+          {isRetakePrompt ? 'Retake this phone session?' : 'Resume previous phone progress?'}
+        </Title>
+        <Text size="sm" c="dimmed">
+          {isRetakePrompt
+            ? 'This session already ended. Start a fresh call-ready run with the same setup whenever you want.'
+            : 'You have saved turns from an earlier attempt. Continue that session or start again from a clean slate.'}
+        </Text>
+        <Group justify="flex-end" mt="xs">
+          {!isRetakePrompt && (
+            <Button variant="default" onClick={onStartOver} loading={startOverLoading}>
+              Start over
+            </Button>
+          )}
+          <Button onClick={isRetakePrompt ? onStartOver : onResume} loading={startOverLoading}>
+            {isRetakePrompt ? 'Retake session' : 'Resume'}
+          </Button>
+        </Group>
+      </Stack>
+    </Paper>
+  )
+}
+
+function PhoneCallSetupCard({
+  personaName,
+  sessionStatus,
+  phoneStatusLabel,
+  phoneStatusColor,
+  phoneStatusCopy,
+  phoneVerificationLoading,
+  phoneVerificationActionLoading,
+  phoneVerification,
+  phoneNumber,
+  onPhoneNumberChange,
+  callError,
+  editingVerifiedPhone,
+  forceFreshPhoneEntry,
+  activeVerifiedPhoneNumber,
+  savedVerifiedPhoneNumber,
+  isTransientVerifiedPhone,
+  verificationCode,
+  onVerificationCodeChange,
+  savePhoneForFutureUse,
+  onSavePhoneForFutureUseChange,
+  onRequestPhoneVerification,
+  onResendPhoneVerification,
+  onVerifyPhoneCode,
+  onEditVerifiedPhone,
+  showRetakeSavedPhoneChoice,
+  onUseSavedPhoneNumber,
+  onUseDifferentPhoneNumber,
+  onStartPhoneCall,
+  callLoading,
+  callStarted,
+  phoneCallRuntime,
+}: {
+  personaName: string | null
+  sessionStatus: string | null
+  phoneStatusLabel: string
+  phoneStatusColor: string
+  phoneStatusCopy: string
+  phoneVerificationLoading: boolean
+  phoneVerificationActionLoading: boolean
+  phoneVerification: PhoneVerificationState | null
+  phoneNumber: string
+  onPhoneNumberChange: (value: string) => void
+  callError: string | null
+  editingVerifiedPhone: boolean
+  forceFreshPhoneEntry: boolean
+  activeVerifiedPhoneNumber: string | null
+  savedVerifiedPhoneNumber: string | null
+  isTransientVerifiedPhone: boolean
+  verificationCode: string
+  onVerificationCodeChange: (value: string) => void
+  savePhoneForFutureUse: boolean
+  onSavePhoneForFutureUseChange: (value: boolean) => void
+  onRequestPhoneVerification: () => void
+  onResendPhoneVerification: () => void
+  onVerifyPhoneCode: () => void
+  onEditVerifiedPhone: () => void
+  showRetakeSavedPhoneChoice: boolean
+  onUseSavedPhoneNumber: () => void
+  onUseDifferentPhoneNumber: () => void
+  onStartPhoneCall: () => void
+  callLoading: boolean
+  callStarted: boolean
+  phoneCallRuntime: PhoneCallRuntimeState
+}) {
+  const pendingPhoneNumber = phoneVerification?.pendingPhoneNumber ?? null
+  const showVerificationStep =
+    Boolean(pendingPhoneNumber) && editingVerifiedPhone && !forceFreshPhoneEntry
+  const pendingExpiryMs = phoneVerification?.pendingExpiresAt
+    ? new Date(phoneVerification.pendingExpiresAt).getTime() - Date.now()
+    : null
+  const resendAvailableMs = phoneVerification?.resendAvailableAt
+    ? new Date(phoneVerification.resendAvailableAt).getTime() - Date.now()
+    : null
+  const verificationExpiresIn =
+    pendingExpiryMs != null && pendingExpiryMs > 0
+      ? formatCountdownClock(Math.ceil(pendingExpiryMs / 1000))
+      : null
+  const resendCooldownIn =
+    resendAvailableMs != null && resendAvailableMs > 0
+      ? formatCountdownClock(Math.ceil(resendAvailableMs / 1000))
+      : null
+  const hasVerifiedPhone = Boolean(activeVerifiedPhoneNumber)
+  const canResendCode = Boolean(showVerificationStep && !resendCooldownIn)
+  const canStartCall =
+    hasVerifiedPhone &&
+    sessionStatus !== 'ended' &&
+    !callStarted &&
+    !editingVerifiedPhone &&
+    !showRetakeSavedPhoneChoice
+  const startCallHelperText = callStarted
+    ? 'A phone call is already in progress.'
+    : showRetakeSavedPhoneChoice
+      ? 'Choose whether to reuse your saved number or verify a different one.'
+      : sessionStatus === 'ended'
+        ? 'This session has already ended.'
+        : 'Verify the code first to unlock dialing.'
+
+  return (
+    <Paper
+      withBorder
+      radius="28px"
+      p={0}
+      style={{
+        position: 'relative',
+        overflow: 'hidden',
+        background:
+          'linear-gradient(160deg, color-mix(in srgb, var(--pitch-surface-bg) 84%, var(--pitch-app-bg) 16%) 0%, color-mix(in srgb, var(--pitch-surface-bg) 76%, var(--pitch-accent-soft) 24%) 100%)',
+        borderColor: 'color-mix(in srgb, var(--pitch-accent-strong) 26%, transparent)',
+        boxShadow: '0 26px 70px color-mix(in srgb, var(--mantine-color-dark-9) 58%, transparent)',
+        color: 'var(--pitch-surface-text)',
+      }}
+    >
+      <Box
+        style={{
+          position: 'absolute',
+          top: -90,
+          right: -30,
+          width: 220,
+          height: 220,
+          borderRadius: '50%',
+          background:
+            'radial-gradient(circle, color-mix(in srgb, var(--pitch-accent-strong) 28%, transparent) 0%, transparent 72%)',
+          pointerEvents: 'none',
+        }}
+      />
+      <Box
+        style={{
+          position: 'absolute',
+          bottom: -120,
+          left: -40,
+          width: 260,
+          height: 260,
+          borderRadius: '50%',
+          background:
+            'radial-gradient(circle, color-mix(in srgb, var(--pitch-selected) 20%, transparent) 0%, transparent 74%)',
+          pointerEvents: 'none',
+        }}
+      />
+      <Stack gap={0} style={{ position: 'relative' }}>
+        <Box
+          px="lg"
+          py="lg"
+          style={{
+            borderBottom:
+              '1px solid color-mix(in srgb, var(--pitch-surface-text-dim) 18%, transparent)',
+            background:
+              'linear-gradient(135deg, color-mix(in srgb, var(--pitch-app-bg) 72%, var(--pitch-info) 28%) 0%, color-mix(in srgb, var(--pitch-app-bg) 72%, var(--pitch-selected) 28%) 100%)',
+          }}
+        >
+          <Stack gap="md">
+            <Group justify="space-between" align="flex-start">
+              <Stack gap={6}>
+                <Group gap="xs">
+                  <Badge
+                    radius="xl"
+                    variant="filled"
+                    styles={{
+                      root: {
+                        background:
+                          'linear-gradient(90deg, var(--pitch-accent) 0%, var(--pitch-accent-strong) 100%)',
+                        color: 'var(--pitch-nav-text, white)',
+                        letterSpacing: '0.08em',
+                      },
+                    }}
+                  >
+                    Phone call
+                  </Badge>
+                  <Badge color={phoneStatusColor} variant="light" radius="xl">
+                    {phoneStatusLabel}
+                  </Badge>
+                </Group>
+                <Stack gap={2}>
+                  <Title order={2} c="var(--pitch-surface-text)" style={{ lineHeight: 1 }}>
+                    Call setup
+                  </Title>
+                  <Text size="sm" c="var(--pitch-surface-text-dim)" maw={420}>
+                    {personaName
+                      ? `You’re about to get connected with ${personaName}. Verify the number, start the dial, and let the transcript take center stage.`
+                      : 'Verify the number, launch the call, and let the transcript take center stage.'}
+                  </Text>
+                </Stack>
+              </Stack>
+              <Box
+                style={{
+                  width: 52,
+                  height: 52,
+                  borderRadius: 18,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  background:
+                    'linear-gradient(135deg, color-mix(in srgb, var(--pitch-info) 26%, transparent) 0%, color-mix(in srgb, var(--pitch-selected) 24%, transparent) 100%)',
+                  border:
+                    '1px solid color-mix(in srgb, var(--pitch-surface-text-dim) 18%, transparent)',
+                  boxShadow:
+                    'inset 0 1px 0 color-mix(in srgb, var(--pitch-surface-text) 8%, transparent)',
+                }}
+              >
+                <IconSparkles size={22} color="var(--pitch-surface-text)" />
+              </Box>
+            </Group>
+
+            <Paper
+              withBorder
+              radius="xl"
+              p="md"
+              style={{
+                background:
+                  'linear-gradient(135deg, color-mix(in srgb, var(--pitch-info) 14%, transparent) 0%, color-mix(in srgb, var(--pitch-accent) 8%, transparent) 100%)',
+                borderColor: 'color-mix(in srgb, var(--pitch-border) 78%, transparent)',
+                boxShadow:
+                  'inset 0 1px 0 color-mix(in srgb, var(--pitch-surface-text) 5%, transparent)',
+              }}
+            >
+              <Group align="flex-start" gap="sm" wrap="nowrap">
+                <Box
+                  style={{
+                    width: 38,
+                    height: 38,
+                    borderRadius: 14,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    background:
+                      'linear-gradient(135deg, color-mix(in srgb, var(--pitch-info) 26%, transparent) 0%, color-mix(in srgb, var(--pitch-success) 16%, transparent) 100%)',
+                    flexShrink: 0,
+                  }}
+                >
+                  <IconDeviceMobile size={18} color="var(--pitch-surface-text)" />
+                </Box>
+                <Stack gap={4}>
+                  <Text size="xs" fw={700} tt="uppercase" c="var(--pitch-surface-text-dim)">
+                    Live call status
+                  </Text>
+                  <Text size="sm" c="var(--pitch-surface-text)">
+                    {phoneStatusCopy}
+                  </Text>
+                  {phoneCallRuntime.startedAt && (
+                    <Group gap={6} align="center">
+                      <IconClock size={13} color="var(--pitch-surface-text-dim)" />
+                      <Text size="xs" c="var(--pitch-surface-text-dim)">
+                        Started {formatDateTime(phoneCallRuntime.startedAt)}
+                      </Text>
+                    </Group>
+                  )}
+                </Stack>
+              </Group>
+            </Paper>
+          </Stack>
+        </Box>
+
+        <Stack gap="md" p="lg">
+          {phoneVerificationLoading ? (
+            <Group gap="sm">
+              <Loader size="sm" />
+              <Text size="sm" c="dimmed">
+                Loading your saved phone verification…
+              </Text>
+            </Group>
+          ) : (
+            <Stack gap="md">
+              {showRetakeSavedPhoneChoice ? (
+                <Paper
+                  withBorder
+                  radius="xl"
+                  p="md"
+                  style={{
+                    background:
+                      'linear-gradient(135deg, color-mix(in srgb, var(--pitch-selected) 14%, transparent) 0%, color-mix(in srgb, var(--pitch-info) 10%, transparent) 100%)',
+                    borderColor: 'color-mix(in srgb, var(--pitch-selected) 26%, transparent)',
+                  }}
+                >
+                  <Stack gap="md">
+                    <Stack gap={4}>
+                      <Text size="xs" fw={700} tt="uppercase" c="var(--pitch-surface-text-dim)">
+                        Retake setup
+                      </Text>
+                      <Text fw={700} size="lg" c="var(--pitch-surface-text)">
+                        Which number should we use for this retake?
+                      </Text>
+                      <Text size="sm" c="var(--pitch-surface-text-dim)">
+                        Use your already verified number, or switch to a different number for this
+                        attempt.
+                      </Text>
+                    </Stack>
+                    <Group grow>
+                      <Button
+                        radius="xl"
+                        onClick={onUseSavedPhoneNumber}
+                        styles={{
+                          root: {
+                            background:
+                              'linear-gradient(90deg, var(--pitch-accent) 0%, var(--pitch-accent-strong) 100%)',
+                            boxShadow:
+                              '0 16px 28px color-mix(in srgb, var(--pitch-accent-strong) 32%, transparent)',
+                          },
+                        }}
+                      >
+                        Use saved phone number
+                      </Button>
+                      <Button
+                        radius="xl"
+                        onClick={onUseDifferentPhoneNumber}
+                        styles={{
+                          root: {
+                            background:
+                              'linear-gradient(90deg, color-mix(in srgb, var(--pitch-selected) 24%, var(--pitch-surface-bg)) 0%, color-mix(in srgb, var(--pitch-accent-soft) 26%, var(--pitch-surface-bg)) 100%)',
+                            color: 'var(--pitch-surface-text)',
+                            border:
+                              '1px solid color-mix(in srgb, var(--pitch-selected) 42%, transparent)',
+                            boxShadow:
+                              '0 12px 24px color-mix(in srgb, var(--pitch-selected) 18%, transparent), inset 0 1px 0 color-mix(in srgb, var(--pitch-surface-text) 8%, transparent)',
+                          },
+                        }}
+                      >
+                        Use a different number
+                      </Button>
+                    </Group>
+                  </Stack>
+                </Paper>
+              ) : activeVerifiedPhoneNumber && !editingVerifiedPhone ? (
+                <Paper
+                  withBorder
+                  radius="xl"
+                  p="md"
+                  style={{
+                    background:
+                      'linear-gradient(135deg, color-mix(in srgb, var(--pitch-success) 14%, transparent) 0%, color-mix(in srgb, var(--pitch-info) 10%, transparent) 100%)',
+                    borderColor: 'color-mix(in srgb, var(--pitch-success) 28%, transparent)',
+                  }}
+                >
+                  <Stack gap="xs">
+                    <Group justify="space-between" align="flex-start">
+                      <Stack gap={4}>
+                        <Group gap={6} align="center">
+                          <IconCircleCheck size={16} color="var(--mantine-color-green-5)" />
+                          <Text size="xs" fw={700} tt="uppercase" c="green">
+                            Verified number
+                          </Text>
+                        </Group>
+                        <Text fw={700} size="lg" c="var(--pitch-surface-text)">
+                          {activeVerifiedPhoneNumber}
+                        </Text>
+                      </Stack>
+                      <Button
+                        size="compact-sm"
+                        variant="subtle"
+                        color="gray"
+                        leftSection={<IconEdit size={14} />}
+                        onClick={onEditVerifiedPhone}
+                      >
+                        Edit
+                      </Button>
+                    </Group>
+                    {isTransientVerifiedPhone ? (
+                      <Badge color="yellow" variant="light" radius="xl">
+                        Verified for this call only
+                      </Badge>
+                    ) : (
+                      <Text size="xs" c="dimmed">
+                        Saved to your account for future phone sessions.
+                      </Text>
+                    )}
+                  </Stack>
+                </Paper>
+              ) : !showVerificationStep ? (
+                <Stack gap="xs">
+                  <TextInput
+                    label="Phone number"
+                    placeholder="+15551234567"
+                    value={phoneNumber}
+                    onChange={(event) => onPhoneNumberChange(event.currentTarget.value)}
+                    type="tel"
+                    autoComplete="tel"
+                    description="Enter the full phone number, including the country code, like +1 555 123 4567."
+                    styles={{
+                      input: {
+                        background: 'var(--pitch-input-bg)',
+                        borderColor: 'var(--pitch-border)',
+                        color: 'var(--pitch-input-text)',
+                        minHeight: 50,
+                      },
+                      label: { color: 'var(--pitch-surface-text)', marginBottom: 6 },
+                      description: { color: 'var(--pitch-surface-text-dim)' },
+                    }}
+                  />
+                  <Button
+                    onClick={onRequestPhoneVerification}
+                    loading={phoneVerificationActionLoading}
+                    disabled={sessionStatus === 'ended'}
+                    radius="xl"
+                    size="md"
+                    styles={{
+                      root: {
+                        background:
+                          'linear-gradient(90deg, var(--pitch-accent) 0%, var(--pitch-accent-strong) 100%)',
+                        boxShadow:
+                          '0 16px 28px color-mix(in srgb, var(--pitch-accent-strong) 34%, transparent)',
+                      },
+                    }}
+                  >
+                    Text verification code
+                  </Button>
+                </Stack>
+              ) : null}
+
+              {showVerificationStep && (
+                <Paper
+                  withBorder
+                  radius="xl"
+                  p="md"
+                  style={{
+                    background:
+                      'linear-gradient(135deg, color-mix(in srgb, var(--pitch-info) 10%, transparent) 0%, color-mix(in srgb, var(--pitch-selected) 8%, transparent) 100%)',
+                    borderColor: 'color-mix(in srgb, var(--pitch-info) 24%, transparent)',
+                  }}
+                >
+                  <Stack gap="sm">
+                    <Text size="sm" fw={600} c="var(--pitch-surface-text)">
+                      Enter the code we sent to {pendingPhoneNumber}
+                    </Text>
+                    <Group justify="space-between" align="center" gap="sm">
+                      <Group gap={6} align="center">
+                        <IconClock size={13} color="var(--pitch-surface-text-dim)" />
+                        <Text
+                          size="xs"
+                          c={verificationExpiresIn ? 'var(--pitch-surface-text-dim)' : 'orange'}
+                        >
+                          {verificationExpiresIn
+                            ? `Code expires in ${verificationExpiresIn}`
+                            : 'Code expired. Request a new one.'}
+                        </Text>
+                      </Group>
+                      <Button
+                        size="compact-sm"
+                        variant="subtle"
+                        color="gray"
+                        onClick={onResendPhoneVerification}
+                        disabled={!canResendCode}
+                        loading={phoneVerificationActionLoading && canResendCode}
+                      >
+                        {resendCooldownIn ? `Resend in ${resendCooldownIn}` : 'Resend code'}
+                      </Button>
+                    </Group>
+                    <TextInput
+                      label="Verification code"
+                      placeholder="123456"
+                      value={verificationCode}
+                      onChange={(event) => onVerificationCodeChange(event.currentTarget.value)}
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      styles={{
+                        input: {
+                          background: 'var(--pitch-input-bg)',
+                          borderColor: 'var(--pitch-border)',
+                          color: 'var(--pitch-input-text)',
+                          minHeight: 50,
+                        },
+                        label: { color: 'var(--pitch-surface-text)', marginBottom: 6 },
+                      }}
+                    />
+                    <Checkbox
+                      checked={savePhoneForFutureUse}
+                      onChange={(event) =>
+                        onSavePhoneForFutureUseChange(event.currentTarget.checked)
+                      }
+                      label="Save this number for future phone sessions"
+                    />
+                    <Group grow>
+                      <Button onClick={onVerifyPhoneCode} loading={phoneVerificationActionLoading}>
+                        Verify number
+                      </Button>
+                    </Group>
+                    {(phoneVerification?.remainingAttempts != null ||
+                      phoneVerification?.remainingSends != null) && (
+                      <Text size="xs" c="dimmed">
+                        {phoneVerification?.remainingAttempts != null
+                          ? `${phoneVerification.remainingAttempts} code attempts left`
+                          : ''}
+                        {phoneVerification?.remainingAttempts != null &&
+                        phoneVerification?.remainingSends != null
+                          ? ' • '
+                          : ''}
+                        {phoneVerification?.remainingSends != null
+                          ? `${phoneVerification.remainingSends} resends left`
+                          : ''}
+                      </Text>
+                    )}
+                  </Stack>
+                </Paper>
+              )}
+            </Stack>
+          )}
+
+          {callError && (
+            <Group gap="xs" align="flex-start" wrap="nowrap">
+              <IconAlertTriangle
+                size={16}
+                color="var(--mantine-color-red-5)"
+                style={{ marginTop: 2, flexShrink: 0 }}
+              />
+              <Text size="sm" c="red">
+                {callError}
+              </Text>
+            </Group>
+          )}
+
+          {!showRetakeSavedPhoneChoice && (
+            <>
+              <Group grow>
+                <Button
+                  size="md"
+                  radius="xl"
+                  onClick={onStartPhoneCall}
+                  loading={callLoading}
+                  disabled={!canStartCall}
+                  leftSection={<IconPhone size={16} />}
+                  styles={{
+                    root: {
+                      background: canStartCall
+                        ? 'linear-gradient(90deg, var(--pitch-accent) 0%, var(--pitch-accent-strong) 100%)'
+                        : 'var(--pitch-input-bg)',
+                      color: canStartCall
+                        ? 'var(--pitch-nav-text, white)'
+                        : 'var(--pitch-surface-text-dim)',
+                      border: canStartCall ? 'none' : '1px solid var(--pitch-border)',
+                      boxShadow: canStartCall
+                        ? '0 16px 32px color-mix(in srgb, var(--pitch-accent-strong) 36%, transparent)'
+                        : 'none',
+                    },
+                  }}
+                >
+                  {callStarted ? 'Call already in progress' : 'Start phone call'}
+                </Button>
+              </Group>
+              {!canStartCall && (
+                <Text size="xs" ta="center" c="var(--pitch-surface-text-dim)">
+                  {startCallHelperText}
+                </Text>
+              )}
+            </>
+          )}
+        </Stack>
+      </Stack>
+    </Paper>
+  )
+}
+
+function PhoneTranscriptPanel({
+  messages,
+  error,
+  phoneStatusLabel,
+  phoneStatusColor,
+  phoneStatusCopy,
+  callStarted,
+}: {
+  messages: TranscriptMessage[]
+  error: string | null
+  phoneStatusLabel: string
+  phoneStatusColor: string
+  phoneStatusCopy: string
+  callStarted: boolean
+}) {
+  const viewportRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    if (!viewportRef.current) return
+    viewportRef.current.scrollTo({
+      top: viewportRef.current.scrollHeight,
+      behavior: 'smooth',
+    })
+  }, [messages.length])
+
+  return (
+    <Paper
+      withBorder
+      radius="xl"
+      p="lg"
+      style={{
+        flex: 1,
+        minHeight: 0,
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden',
+        background:
+          'linear-gradient(180deg, color-mix(in srgb, var(--pitch-surface-bg) 93%, white 7%) 0%, var(--pitch-surface-bg) 100%)',
+        borderColor: 'color-mix(in srgb, var(--mantine-color-brand-6) 18%, transparent)',
+        boxShadow: '0 24px 60px color-mix(in srgb, var(--mantine-color-dark-9) 45%, transparent)',
+      }}
+    >
+      <Stack gap={4} mb="md">
+        <Group justify="space-between" align="flex-start">
+          <Group gap="sm" align="center">
+            <Box
+              style={{
+                width: 42,
+                height: 42,
+                borderRadius: 14,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                background:
+                  'color-mix(in srgb, var(--mantine-color-brand-6) 14%, var(--pitch-surface-bg))',
+              }}
+            >
+              <IconMessage2 size={20} color="var(--mantine-color-brand-5)" />
+            </Box>
+            <Stack gap={2}>
+              <Group gap="xs" align="center">
+                <Title order={3}>Live transcript</Title>
+                <Badge color={phoneStatusColor} variant="light" radius="sm">
+                  {phoneStatusLabel}
+                </Badge>
+              </Group>
+              <Text size="sm" c="dimmed">
+                {phoneStatusCopy}
+              </Text>
+            </Stack>
+          </Group>
+          <Badge color="gray" variant="outline" radius="sm">
+            {messages.length} turns
+          </Badge>
+        </Group>
+      </Stack>
+
+      <ScrollArea viewportRef={viewportRef} offsetScrollbars style={{ flex: 1, minHeight: 0 }}>
+        <Stack gap="sm" pr="sm">
+          {error && (
+            <Paper
+              withBorder
+              radius="lg"
+              p="md"
+              style={{ borderColor: 'var(--mantine-color-red-4)' }}
+            >
+              <Group gap="xs" align="center">
+                <IconAlertTriangle size={16} color="var(--mantine-color-red-5)" />
+                <Text size="sm" c="red">
+                  {error}
+                </Text>
+              </Group>
+            </Paper>
+          )}
+
+          {messages.length === 0 ? (
+            <Paper
+              withBorder
+              radius="xl"
+              p="xl"
+              style={{
+                minHeight: 320,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                textAlign: 'center',
+                background:
+                  'color-mix(in srgb, var(--mantine-color-dark-9) 12%, var(--pitch-surface-bg))',
+              }}
+            >
+              <Stack align="center" gap="sm" maw={420}>
+                <Box
+                  style={{
+                    width: 54,
+                    height: 54,
+                    borderRadius: '50%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    background:
+                      'color-mix(in srgb, var(--mantine-color-brand-6) 16%, var(--pitch-surface-bg))',
+                  }}
+                >
+                  <IconDeviceMobile size={24} color="var(--mantine-color-brand-5)" />
+                </Box>
+                <Title order={4}>
+                  {callStarted
+                    ? 'Transcript is waiting for the first turn'
+                    : 'Transcript will appear here'}
+                </Title>
+                <Text size="sm" c="dimmed">
+                  {callStarted
+                    ? 'As soon as the phone conversation begins, each turn will land in this feed automatically.'
+                    : 'Verify the number and start the call when you are ready. This center panel is reserved for the transcript only.'}
+                </Text>
+              </Stack>
+            </Paper>
+          ) : (
+            messages.map((message) => {
+              const isUser = message.role === 'user'
+              return (
+                <Box
+                  key={message.id}
+                  style={{
+                    display: 'flex',
+                    justifyContent: isUser ? 'flex-end' : 'flex-start',
+                  }}
+                >
+                  <Paper
+                    withBorder
+                    radius="xl"
+                    p="md"
+                    style={{
+                      maxWidth: '82%',
+                      background: isUser
+                        ? 'color-mix(in srgb, var(--mantine-color-brand-6) 16%, var(--pitch-surface-bg))'
+                        : 'color-mix(in srgb, var(--mantine-color-dark-9) 12%, var(--pitch-surface-bg))',
+                      borderColor: isUser
+                        ? 'color-mix(in srgb, var(--mantine-color-brand-5) 22%, transparent)'
+                        : 'color-mix(in srgb, var(--mantine-color-dark-9) 18%, transparent)',
+                    }}
+                  >
+                    <Group justify="space-between" gap="md" mb={6}>
+                      <Badge color={isUser ? 'brand' : 'teal'} variant="light" radius="sm">
+                        {isUser ? 'You' : 'AI'}
+                      </Badge>
+                      <Text size="xs" c="dimmed">
+                        {formatMessageTime(message.timestamp)}
+                      </Text>
+                    </Group>
+                    <Text size="sm" style={{ whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>
+                      {message.text.trim() || 'No transcript text was captured for this turn.'}
+                    </Text>
+                  </Paper>
+                </Box>
+              )
+            })
+          )}
+        </Stack>
+      </ScrollArea>
+    </Paper>
+  )
+}
+
 export default function LiveSessionPage() {
   const params = useParams()
+  const searchParams = useSearchParams()
   const sessionId = params.id as string
   const router = useRouter()
+  const entrySource = searchParams.get('entry')
   const isMobile = useMediaQuery('(max-width: 768px)')
   const [time, setTime] = useState(0)
   const [sessionDuration, setSessionDuration] = useState(0) // total seconds; 0 = no limit
@@ -316,6 +1592,7 @@ export default function LiveSessionPage() {
   const [textInput, setTextInput] = useState('')
   const [hints, setHints] = useState<string[]>([])
   const [timelineStages, setTimelineStages] = useState<TimelineStage[]>([])
+  const [currentProgress, setCurrentProgress] = useState(0)
   const [hintsError, setHintsError] = useState<string | null>(null)
   const [timelineError, setTimelineError] = useState<string | null>(null)
   const [timelineLoading, setTimelineLoading] = useState(false)
@@ -326,11 +1603,26 @@ export default function LiveSessionPage() {
   const [hintsEnabled, setHintsEnabled] = useState(false)
   const [timelineEnabled, setTimelineEnabled] = useState(false)
   const [callStarted, setCallStarted] = useState(false)
+  const [phoneSetupModalOpen, setPhoneSetupModalOpen] = useState(false)
   const [phoneNumber, setPhoneNumber] = useState('')
-  const [callProvider, setCallProvider] = useState('twilio')
-  const [callModalOpen, setCallModalOpen] = useState(false)
   const [callLoading, setCallLoading] = useState(false)
   const [callError, setCallError] = useState<string | null>(null)
+  const [phoneVerification, setPhoneVerification] = useState<PhoneVerificationState | null>(null)
+  const [phoneVerificationLoading, setPhoneVerificationLoading] = useState(false)
+  const [phoneVerificationActionLoading, setPhoneVerificationActionLoading] = useState(false)
+  const [verificationCode, setVerificationCode] = useState('')
+  const [savePhoneForFutureUse, setSavePhoneForFutureUse] = useState(true)
+  const [transientVerifiedPhoneNumber, setTransientVerifiedPhoneNumber] = useState<string | null>(
+    null
+  )
+  const [editingVerifiedPhone, setEditingVerifiedPhone] = useState(false)
+  const [forceFreshPhoneEntry, setForceFreshPhoneEntry] = useState(false)
+  const [phoneSetupRetakeMode, setPhoneSetupRetakeMode] = useState(entrySource === 'retake')
+  const [phoneRetakeChoice, setPhoneRetakeChoice] = useState<PhoneRetakeChoice>('saved')
+  const [phoneCallRuntime, setPhoneCallRuntime] =
+    useState<PhoneCallRuntimeState>(EMPTY_PHONE_CALL_RUNTIME)
+  const [phoneTranscriptMessages, setPhoneTranscriptMessages] = useState<TranscriptMessage[]>([])
+  const [phoneTranscriptError, setPhoneTranscriptError] = useState<string | null>(null)
   const [avatarVideoUrl, setAvatarVideoUrl] = useState<string | null>(null)
   const [avatarVideoStatus, setAvatarVideoStatus] = useState<AvatarVideoStatus>('idle')
   const [avatarVideoProvider, setAvatarVideoProvider] = useState<string | null>(null)
@@ -339,6 +1631,7 @@ export default function LiveSessionPage() {
   const [autoConnectConversation, setAutoConnectConversation] = useState(false)
   const [conversationConnectKey, setConversationConnectKey] = useState(0)
   const [resumePromptOpen, setResumePromptOpen] = useState(false)
+  const [entryPromptMode, setEntryPromptMode] = useState<EntryPromptMode | null>(null)
   const [entryDecisionLoading, setEntryDecisionLoading] = useState(true)
   const [startOverLoading, setStartOverLoading] = useState(false)
   const [loadedSessionRecord, setLoadedSessionRecord] = useState<Record<string, unknown> | null>(
@@ -362,11 +1655,13 @@ export default function LiveSessionPage() {
   const hintsRequestSeqRef = useRef(0)
   const speechFinalizeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const speechFinalizeTickerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const sendMessageRef = useRef<(text: string) => void>(() => {})
+  const resetTranscriptRef = useRef<() => void>(() => {})
   const previousAudioPlayingRef = useRef(false)
   const speechBufferRef = useRef<string>('')
   const assistantInterruptTriggeredRef = useRef(false)
   const hasUserEnabledMicRef = useRef(false)
-  const [, setIsMultiTurn] = useState(false)
+  const [isMultiTurn, setIsMultiTurn] = useState(false)
   const assistantStartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const lastAssistantMessageIdRef = useRef<string | null>(null)
@@ -413,7 +1708,7 @@ export default function LiveSessionPage() {
     [hintsEnabled, sessionId, sessionStatus]
   )
 
-  const clearSpeechFinalizeState = () => {
+  const clearSpeechFinalizeState = useCallback(() => {
     if (speechFinalizeTimerRef.current) {
       clearTimeout(speechFinalizeTimerRef.current)
       speechFinalizeTimerRef.current = null
@@ -423,18 +1718,18 @@ export default function LiveSessionPage() {
       speechFinalizeTickerRef.current = null
     }
     setSttCommitRemainingMs(0)
-  }
+  }, [])
 
-  const flushSpeechBuffer = () => {
+  const flushSpeechBuffer = useCallback(() => {
     clearSpeechFinalizeState()
     const buffered = speechBufferRef.current.trim()
     if (sessionStatus !== 'ended' && buffered) {
-      sendMessage(buffered)
+      sendMessageRef.current(buffered)
       scheduleIdleHints()
     }
     speechBufferRef.current = ''
-    resetTranscript()
-  }
+    resetTranscriptRef.current()
+  }, [clearSpeechFinalizeState, scheduleIdleHints, sessionStatus])
 
   const handleSpeechEnd = useCallback(() => {
     // speechend fires when the user stops speaking — accelerate commit if there's buffered content
@@ -476,6 +1771,7 @@ export default function LiveSessionPage() {
     onError: () => {},
   })
   const assistantSpeaking = isAudioPlaying
+  sendMessageRef.current = sendMessage
 
   const {
     isListening,
@@ -546,6 +1842,7 @@ export default function LiveSessionPage() {
       clearSpeechFinalizeState()
     },
   })
+  resetTranscriptRef.current = resetTranscript
 
   const analyserRef = useAudioLevel({ audioElementRef, assistantSpeaking })
 
@@ -557,49 +1854,78 @@ export default function LiveSessionPage() {
     onUserAbsent: () => {},
   })
 
-  const syncSessionState = useCallback(
-    (session: any, options?: { launchFreshIteration?: boolean }) => {
-      const config = (session?.sessionConfig as Record<string, any>) ?? {}
-      const avatarState = readAvatarVideoState(session)
-      const normalizedStatus = normalizeSessionStatus(session, options)
-      const nextAvatarVideoUrl =
-        session?.id && avatarState.status === 'ready' && avatarState.playbackToken
-          ? buildSessionVideoStreamUrl(session.id, avatarState.playbackToken, avatarState.jobId)
-          : avatarState.url
+  const isPhoneSession = sessionType === 'phone'
+  const activeConversationMessages = isPhoneSession ? phoneTranscriptMessages : messages
 
-      const rawDuration =
-        typeof config.durationMinutes === 'number'
-          ? config.durationMinutes
-          : typeof config.duration === 'number'
-            ? config.duration
-            : 0
-      if (rawDuration > 0) setSessionDuration(rawDuration * 60)
+  const syncSessionState = useCallback((session: any) => {
+    const config = (session?.sessionConfig as Record<string, any>) ?? {}
+    const avatarState = readAvatarVideoState(session)
+    const phoneRuntime = readPhoneCallRuntime(session)
+    const normalizedStatus = normalizeSessionStatus(session)
+    const nextAvatarVideoUrl =
+      session?.id && avatarState.status === 'ready' && avatarState.playbackToken
+        ? buildSessionVideoStreamUrl(session.id, avatarState.playbackToken, avatarState.jobId)
+        : avatarState.url
+    const rawDuration =
+      typeof config.durationMinutes === 'number'
+        ? config.durationMinutes
+        : typeof config.duration === 'number'
+          ? config.duration
+          : 0
 
-      setIsMultiTurn(Boolean(config.multiTurnEnabled))
-      setSessionType(session?.type ?? null)
-      setSessionStatus(normalizedStatus)
-      setSessionName((session as any)?.name ?? (session as any)?.scenario?.name ?? '')
-      setPersonaName((session as any)?.persona?.name ?? null)
-      setPhoneNumber('')
-      setAvatarVideoStatus(avatarState.status)
-      setAvatarVideoProvider(avatarState.provider)
-      setAvatarVideoError(avatarState.error)
-      setAvatarVideoJobId(avatarState.jobId)
-      setAvatarVideoUrl(nextAvatarVideoUrl)
+    if (rawDuration > 0) {
+      setSessionDuration(rawDuration * 60)
+    }
 
-      const resolvedProvider =
-        typeof config.phoneProvider === 'string'
-          ? config.phoneProvider
-          : typeof config.phone?.provider === 'string'
-            ? config.phone.provider
-            : 'twilio'
+    setIsMultiTurn(Boolean(config.multiTurnEnabled))
+    setSessionType(session?.type ?? null)
+    setSessionStatus(normalizedStatus)
+    setSessionName((session as any)?.name ?? (session as any)?.scenario?.name ?? '')
+    setPersonaName((session as any)?.persona?.name ?? null)
+    setAvatarVideoStatus(avatarState.status)
+    setAvatarVideoProvider(avatarState.provider)
+    setAvatarVideoError(avatarState.error)
+    setAvatarVideoJobId(avatarState.jobId)
+    setAvatarVideoUrl(nextAvatarVideoUrl)
+    setPhoneCallRuntime(phoneRuntime)
+    setCallStarted(session?.type === 'phone' ? isPhoneCallActive(phoneRuntime) : false)
+  }, [])
 
-      setCallProvider(
-        resolvedProvider === 'vapi' || resolvedProvider === 'twilio' ? resolvedProvider : 'twilio'
-      )
-    },
-    []
-  )
+  const applyTimelineResponse = useCallback((response: unknown) => {
+    const { progress, stages } = buildTimelineState(response)
+    setTimelineStages(stages)
+    setCurrentProgress(progress)
+    setTimelineError(null)
+  }, [])
+
+  const loadPhoneVerificationStatus = useCallback(async () => {
+    setPhoneVerificationLoading(true)
+    try {
+      const status = (await api.users.getMyPhoneVerification()) as PhoneVerificationState
+      setPhoneVerification(status)
+      if (status.verified && status.phoneNumber) {
+        setEditingVerifiedPhone(false)
+        setForceFreshPhoneEntry(false)
+        setPhoneNumber(status.phoneNumber)
+      } else if (status.pendingPhoneNumber) {
+        setEditingVerifiedPhone(true)
+        setForceFreshPhoneEntry(false)
+        setPhoneNumber(status.pendingPhoneNumber)
+      } else {
+        setEditingVerifiedPhone(false)
+        setForceFreshPhoneEntry(false)
+      }
+      setCallError(null)
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'Unable to load your phone verification status right now.'
+      setCallError(message)
+    } finally {
+      setPhoneVerificationLoading(false)
+    }
+  }, [])
 
   const loadTimeline = useCallback(
     async (limit = 50, sessionRecord?: Record<string, unknown> | null) => {
@@ -667,7 +1993,7 @@ export default function LiveSessionPage() {
 
       setPrelaunchModalOpen(false)
       setPendingEntryMode(null)
-      setCallModalOpen(effectiveType === 'phone' && effectiveStatus !== 'ended')
+      setPhoneSetupModalOpen(effectiveType === 'phone' && effectiveStatus !== 'ended')
 
       if (mode === 'resume') {
         setResumePromptOpen(true)
@@ -768,6 +2094,7 @@ export default function LiveSessionPage() {
     let cancelled = false
     pauseConversationConnect()
     setResumePromptOpen(false)
+    setEntryPromptMode(null)
     setEntryDecisionLoading(true)
     setStartOverLoading(false)
     setLoadedSessionRecord(null)
@@ -778,7 +2105,24 @@ export default function LiveSessionPage() {
     setPrelaunchModalOpen(false)
     setPrelaunchSaving(false)
     setPendingEntryMode(null)
-    setCallModalOpen(false)
+    setCallStarted(false)
+    setPhoneSetupModalOpen(false)
+    setCallLoading(false)
+    setCallError(null)
+    setPhoneVerification(null)
+    setPhoneVerificationLoading(false)
+    setPhoneVerificationActionLoading(false)
+    setVerificationCode('')
+    setSavePhoneForFutureUse(true)
+    setTransientVerifiedPhoneNumber(null)
+    setEditingVerifiedPhone(false)
+    setForceFreshPhoneEntry(false)
+    setPhoneSetupRetakeMode(entrySource === 'retake')
+    setPhoneRetakeChoice(entrySource === 'retake' ? 'undecided' : 'saved')
+    setPhoneCallRuntime(EMPTY_PHONE_CALL_RUNTIME)
+    setPhoneTranscriptMessages([])
+    setPhoneTranscriptError(null)
+    setPhoneNumber('')
 
     const loadSession = async () => {
       try {
@@ -789,29 +2133,43 @@ export default function LiveSessionPage() {
         setLoadedSessionRecord(sessionRecord)
         setSessionAttachments(readSessionAttachments(sessionRecord))
         const status = normalizeSessionStatus(session)
+        const isPhoneSession = sessionRecord.type === 'phone'
 
-        if (status === 'ended') {
-          // Show the session as "active" in the UI while we restart
-          syncSessionState(session, { launchFreshIteration: true })
+        if (status === 'ended' && isPhoneSession && entrySource === 'retake') {
           try {
             const restartedSession = await api.sessions.restart(sessionId, {
-              reason: 'completed_iteration_restart',
+              reason: 'restart_from_scratch',
             })
             if (cancelled) return
+
             const restartedRecord = isRecord(restartedSession) ? restartedSession : {}
             setLoadedSessionRecord(restartedRecord)
             syncSessionState(restartedSession)
-            requestConversationConnect()
+            setPhoneSetupRetakeMode(true)
+            setPhoneRetakeChoice('undecided')
+            setResumePromptOpen(false)
+            setEntryPromptMode(null)
+            setAutoConnectConversation(false)
+            return
           } catch {
             if (cancelled) return
-            // Fallback: show the modal so the user can retry manually
-            setPendingEntryMode('resume')
-            setResumePromptOpen(true)
           }
+        }
+
+        if (status === 'ended') {
+          syncSessionState(session)
+          setEntryPromptMode('retake')
+          setResumePromptOpen(true)
+          setAutoConnectConversation(false)
           return
         }
 
         syncSessionState(session)
+
+        if (isPhoneSession) {
+          setAutoConnectConversation(false)
+          return
+        }
 
         let hasExistingProgress = false
         try {
@@ -829,16 +2187,18 @@ export default function LiveSessionPage() {
         if (cancelled) return
 
         if (hasExistingProgress) {
-          setPendingEntryMode('resume')
+          setEntryPromptMode('resume')
           setResumePromptOpen(true)
         } else {
           setPendingEntryMode('auto')
           setPrelaunchModalOpen(true)
+          setEntryPromptMode(null)
         }
       } catch {
         if (cancelled) return
         setIsMultiTurn(false)
-        requestConversationConnect()
+        setEntryPromptMode(null)
+        setAutoConnectConversation(true)
       } finally {
         if (!cancelled) {
           setEntryDecisionLoading(false)
@@ -851,12 +2211,40 @@ export default function LiveSessionPage() {
     return () => {
       cancelled = true
     }
+  }, [entrySource, loadTimeline, pauseConversationConnect, sessionId, syncSessionState])
+
+  useEffect(() => {
+    if (sessionType !== 'phone' || sessionStatus === 'ended') return
+    void loadPhoneVerificationStatus()
+  }, [sessionType, sessionStatus, loadPhoneVerificationStatus])
+
+  useEffect(() => {
+    if (sessionType !== 'phone') return
+    if (autoConnectConversation) {
+      setAutoConnectConversation(false)
+    }
+  }, [sessionType, autoConnectConversation])
+
+  useEffect(() => {
+    if (entryDecisionLoading) return
+    if (sessionType !== 'phone') {
+      setPhoneSetupModalOpen(false)
+      return
+    }
+    if (sessionStatus === 'ended' || resumePromptOpen || entryPromptMode) {
+      setPhoneSetupModalOpen(false)
+      return
+    }
+    if (!callStarted) {
+      setPhoneSetupModalOpen(true)
+    }
   }, [
-    loadTimeline,
-    pauseConversationConnect,
-    requestConversationConnect,
-    sessionId,
-    syncSessionState,
+    callStarted,
+    entryDecisionLoading,
+    entryPromptMode,
+    resumePromptOpen,
+    sessionStatus,
+    sessionType,
   ])
 
   const handleStartOver = useCallback(async () => {
@@ -886,14 +2274,18 @@ export default function LiveSessionPage() {
       setHintsError(null)
       setTimelineStages([])
       setTimelineError(null)
+      setPhoneTranscriptMessages([])
+      setPhoneTranscriptError(null)
       setCallStarted(false)
       setCallError(null)
+      setForceFreshPhoneEntry(false)
       speechBufferRef.current = ''
       assistantInterruptTriggeredRef.current = false
       resetTranscript()
 
       setLoadedSessionRecord(restartedRecord)
       syncSessionState(restartedSession)
+      setEntryPromptMode(null)
 
       if (hintsEnabled) {
         try {
@@ -917,7 +2309,15 @@ export default function LiveSessionPage() {
         color: 'green',
       })
       setResumePromptOpen(false)
-      requestConversationConnect()
+      if (restartedRecord.type === 'phone') {
+        setPhoneSetupRetakeMode(true)
+        setPhoneRetakeChoice('undecided')
+        setAutoConnectConversation(false)
+      } else {
+        setPhoneSetupRetakeMode(false)
+        setPhoneRetakeChoice('saved')
+        requestConversationConnect()
+      }
     } catch (error) {
       const message =
         error instanceof Error ? error.message : 'Unable to start a new iteration right now.'
@@ -955,8 +2355,11 @@ export default function LiveSessionPage() {
     }
 
     setResumePromptOpen(false)
-    requestConversationConnect()
-  }, [handleStartOver, loadedSessionRecord, requestConversationConnect])
+    setEntryPromptMode(null)
+    if (sessionType !== 'phone') {
+      requestConversationConnect()
+    }
+  }, [handleStartOver, loadedSessionRecord, requestConversationConnect, sessionType])
 
   // Hidden pose camera for MediaPipe across session types.
   // The visible video area is reserved for the AI avatar on video sessions.
@@ -973,6 +2376,7 @@ export default function LiveSessionPage() {
 
     let cancelled = false
     const poseVideoElement = poseVideoRef.current
+    const pipVideoElement = userPipVideoRef.current
     const startPoseCamera = async () => {
       if (!navigator.mediaDevices?.getUserMedia) return
       try {
@@ -989,9 +2393,9 @@ export default function LiveSessionPage() {
           poseVideoElement.srcObject = stream
           poseVideoElement.play().catch(() => {})
         }
-        if (userPipVideoRef.current) {
-          userPipVideoRef.current.srcObject = stream
-          userPipVideoRef.current.play().catch(() => {})
+        if (pipVideoElement) {
+          pipVideoElement.srcObject = stream
+          pipVideoElement.play().catch(() => {})
         }
       } catch {
         // Camera permission denied — visual state won't be sent; conversation still works normally
@@ -1005,21 +2409,125 @@ export default function LiveSessionPage() {
       poseCameraStreamRef.current?.getTracks().forEach((t) => t.stop())
       poseCameraStreamRef.current = null
       if (poseVideoElement) poseVideoElement.srcObject = null
-      if (userPipVideoRef.current) userPipVideoRef.current.srcObject = null
+      if (pipVideoElement) pipVideoElement.srcObject = null
     }
   }, [isVideoSession, visualEnabled, isConnected, sessionType])
 
+  const handleRequestPhoneVerification = async () => {
+    const nextPhoneNumber = phoneNumber.trim()
+    if (!nextPhoneNumber) {
+      setCallError('Enter the phone number you want to verify.')
+      return
+    }
+
+    setPhoneVerificationActionLoading(true)
+    setCallError(null)
+    try {
+      const status = (await api.users.requestPhoneVerification({
+        phoneNumber: nextPhoneNumber,
+      })) as PhoneVerificationState
+      setPhoneVerification(status)
+      setTransientVerifiedPhoneNumber(null)
+      setEditingVerifiedPhone(true)
+      setForceFreshPhoneEntry(false)
+      setVerificationCode('')
+      notifications.show({
+        title: 'Verification code sent',
+        message: `We texted a verification code to ${status.pendingPhoneNumber ?? nextPhoneNumber}.`,
+        color: 'blue',
+      })
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Unable to send the verification challenge.'
+      setCallError(message)
+      notifications.show({
+        title: 'Verification failed',
+        message,
+        color: 'red',
+      })
+    } finally {
+      setPhoneVerificationActionLoading(false)
+    }
+  }
+
+  const handleResendPhoneVerification = async () => {
+    setPhoneVerificationActionLoading(true)
+    setCallError(null)
+    try {
+      const status = (await api.users.resendPhoneVerification()) as PhoneVerificationState
+      setPhoneVerification(status)
+      setTransientVerifiedPhoneNumber(null)
+      setEditingVerifiedPhone(true)
+      setForceFreshPhoneEntry(false)
+      setVerificationCode('')
+      notifications.show({
+        title: 'Verification code resent',
+        message: `We texted a fresh verification code to ${status.pendingPhoneNumber ?? phoneNumber}.`,
+        color: 'blue',
+      })
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Unable to resend the verification challenge.'
+      setCallError(message)
+      notifications.show({
+        title: 'Resend failed',
+        message,
+        color: 'red',
+      })
+    } finally {
+      setPhoneVerificationActionLoading(false)
+    }
+  }
+
+  const handleVerifyPhoneCode = async () => {
+    if (!verificationCode.trim()) {
+      setCallError('Enter the 6-digit verification code from the text message.')
+      return
+    }
+
+    setPhoneVerificationActionLoading(true)
+    setCallError(null)
+    try {
+      const status = (await api.users.verifyPhoneVerification({
+        code: verificationCode.trim(),
+        saveForFutureUse: savePhoneForFutureUse,
+      })) as PhoneVerificationState
+      setPhoneVerification(status)
+      setEditingVerifiedPhone(false)
+      setForceFreshPhoneEntry(false)
+      setVerificationCode('')
+      setTransientVerifiedPhoneNumber(
+        savePhoneForFutureUse ? null : (status.temporaryVerifiedPhoneNumber ?? phoneNumber.trim())
+      )
+      if (status.phoneNumber) {
+        setPhoneNumber(status.phoneNumber)
+      }
+      notifications.show({
+        title: 'Phone verified',
+        message: savePhoneForFutureUse
+          ? `${status.phoneNumber ?? 'Your phone number'} is now ready for calling sessions.`
+          : `${(status.temporaryVerifiedPhoneNumber ?? phoneNumber.trim()) || 'This phone number'} is verified for this call only.`,
+        color: 'green',
+      })
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Unable to verify that code right now.'
+      setCallError(message)
+      notifications.show({
+        title: 'Verification failed',
+        message,
+        color: 'red',
+      })
+    } finally {
+      setPhoneVerificationActionLoading(false)
+    }
+  }
+
   const handleStartPhoneCall = async () => {
     if (!sessionId) return
-    const normalized = phoneNumber.trim()
-    const requiresPlus = callProvider === 'vapi'
-    const validPattern = requiresPlus ? /^\+[1-9]\d{7,14}$/ : /^\+?[1-9]\d{7,14}$/
-    if (!normalized || !validPattern.test(normalized)) {
-      setCallError(
-        requiresPlus
-          ? 'Enter a valid phone number with + and country code (e.g. +15551234567)'
-          : 'Enter a valid phone number in E.164 format (e.g. +15551234567)'
-      )
+    const activeVerifiedPhoneNumber = transientVerifiedPhoneNumber ?? phoneVerification?.phoneNumber
+    if (!activeVerifiedPhoneNumber) {
+      setCallError('Verify your phone number before starting the call.')
       return
     }
 
@@ -1028,16 +2536,18 @@ export default function LiveSessionPage() {
     try {
       await api.phoneCalls.start({
         sessionId,
-        phoneNumber: normalized,
-        provider: callProvider,
+        phoneNumber: activeVerifiedPhoneNumber,
       })
+      setSessionStatus('active')
+      setPhoneSetupRetakeMode(false)
+      setPhoneRetakeChoice('saved')
       notifications.show({
         title: 'Calling now',
-        message: `We’re calling ${normalized}. Answer your phone to begin.`,
+        message: `We’re calling ${activeVerifiedPhoneNumber}. Answer your phone to begin.`,
         color: 'green',
       })
       setCallStarted(true)
-      setCallModalOpen(false)
+      setPhoneSetupModalOpen(false)
     } catch (error) {
       const message =
         error instanceof Error ? error.message : 'Unable to start the phone call right now.'
@@ -1051,6 +2561,69 @@ export default function LiveSessionPage() {
       setCallLoading(false)
     }
   }
+
+  const handleEditVerifiedPhone = () => {
+    setEditingVerifiedPhone(true)
+    setForceFreshPhoneEntry(true)
+    setPhoneRetakeChoice('different')
+    setVerificationCode('')
+    setCallError(null)
+    setSavePhoneForFutureUse(true)
+    setTransientVerifiedPhoneNumber(null)
+    setPhoneNumber('')
+  }
+
+  const handleClosePhoneSetupModal = () => {
+    setPhoneSetupModalOpen(false)
+    setCallError(null)
+    setVerificationCode('')
+    if (phoneVerification?.verified && phoneVerification.phoneNumber) {
+      setPhoneNumber(phoneVerification.phoneNumber)
+      setEditingVerifiedPhone(false)
+      setForceFreshPhoneEntry(false)
+    }
+  }
+
+  const handleUseSavedPhoneNumber = () => {
+    const savedPhoneNumber = phoneVerification?.verified
+      ? (phoneVerification.phoneNumber ?? null)
+      : null
+    setPhoneRetakeChoice('saved')
+    setEditingVerifiedPhone(false)
+    setForceFreshPhoneEntry(false)
+    setVerificationCode('')
+    setCallError(null)
+    if (savedPhoneNumber) {
+      setPhoneNumber(savedPhoneNumber)
+    }
+  }
+
+  const handleUseDifferentPhoneNumber = () => {
+    setPhoneRetakeChoice('different')
+    setEditingVerifiedPhone(true)
+    setForceFreshPhoneEntry(true)
+    setVerificationCode('')
+    setCallError(null)
+    setSavePhoneForFutureUse(true)
+    setTransientVerifiedPhoneNumber(null)
+    setPhoneNumber('')
+  }
+
+  const savedVerifiedPhoneNumber =
+    phoneVerification?.verified && phoneVerification.phoneNumber
+      ? phoneVerification.phoneNumber
+      : null
+  const activeVerifiedPhoneNumber =
+    transientVerifiedPhoneNumber ?? phoneVerification?.phoneNumber ?? null
+  const isTransientVerifiedPhone = Boolean(
+    transientVerifiedPhoneNumber && transientVerifiedPhoneNumber !== phoneVerification?.phoneNumber
+  )
+  const showRetakeSavedPhoneChoice = Boolean(
+    phoneSetupRetakeMode &&
+      savedVerifiedPhoneNumber &&
+      phoneRetakeChoice === 'undecided' &&
+      !forceFreshPhoneEntry
+  )
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60)
@@ -1125,11 +2698,11 @@ export default function LiveSessionPage() {
   ])
 
   useEffect(() => {
-    latestMessagesRef.current = messages.map((msg) => ({
+    latestMessagesRef.current = activeConversationMessages.map((msg) => ({
       role: msg.role,
       text: msg.text,
     }))
-  }, [messages])
+  }, [activeConversationMessages])
 
   useEffect(() => {
     if (!sessionId || !hintsEnabled) {
@@ -1167,11 +2740,17 @@ export default function LiveSessionPage() {
 
   useEffect(() => {
     if (!hintsEnabled || sessionStatus === 'ended') return
-    if (messages.length === 0) return
+    if (activeConversationMessages.length === 0) return
     if (isProcessing) return
 
     scheduleIdleHints(1200)
-  }, [hintsEnabled, sessionStatus, messages.length, isProcessing, scheduleIdleHints])
+  }, [
+    hintsEnabled,
+    sessionStatus,
+    activeConversationMessages.length,
+    isProcessing,
+    scheduleIdleHints,
+  ])
 
   useEffect(() => {
     if (!sessionId || !timelineEnabled) {
@@ -1179,9 +2758,10 @@ export default function LiveSessionPage() {
       setTimelineError(null)
       return
     }
+    if (sessionType === 'phone') return
 
     void loadTimeline(50)
-  }, [loadTimeline, sessionId, timelineEnabled])
+  }, [loadTimeline, sessionId, timelineEnabled, sessionType])
 
   useEffect(() => {
     return () => {
@@ -1205,17 +2785,24 @@ export default function LiveSessionPage() {
 
   useEffect(() => {
     if (sessionStatus === 'ended') return
-    if (!isConnected) return
-    if (messages.length > 0) return
     if (sessionType === 'phone') return
+    if (!isMultiTurn || !isConnected) return
+    if (activeConversationMessages.length > 0) return
 
     if (assistantStartTimerRef.current) {
       clearTimeout(assistantStartTimerRef.current)
     }
     assistantStartTimerRef.current = setTimeout(() => {
       startAssistantTurn()
-    }, 800)
-  }, [isConnected, messages.length, startAssistantTurn, sessionStatus, sessionType])
+    }, 600)
+  }, [
+    isMultiTurn,
+    isConnected,
+    activeConversationMessages.length,
+    startAssistantTurn,
+    sessionStatus,
+    sessionType,
+  ])
 
   useEffect(() => {
     const shouldPauseMicWhileAssistantSpeaks = sessionType !== 'voice' && sessionType !== 'video'
@@ -1273,6 +2860,47 @@ export default function LiveSessionPage() {
   }, [messages, sessionType])
 
   useEffect(() => {
+    if (sessionType !== 'phone') return
+    if (!sessionId || sessionStatus === 'ended') return
+    if (entryPromptMode === 'retake') return
+
+    let cancelled = false
+    const refreshPhoneState = async () => {
+      try {
+        const [session, timeline] = await Promise.all([
+          api.sessions.getById(sessionId),
+          api.sessions.timeline(sessionId, 200),
+        ])
+        if (cancelled) return
+        syncSessionState(session)
+        setPhoneTranscriptMessages(readTimelineConversationHistory(timeline))
+        setPhoneTranscriptError(null)
+        applyTimelineResponse(timeline)
+      } catch {
+        if (cancelled) return
+        setPhoneTranscriptError('Unable to refresh the live transcript right now.')
+      }
+    }
+
+    void refreshPhoneState()
+    const interval = setInterval(() => {
+      void refreshPhoneState()
+    }, 3000)
+
+    return () => {
+      cancelled = true
+      clearInterval(interval)
+    }
+  }, [
+    entryPromptMode,
+    sessionId,
+    sessionStatus,
+    sessionType,
+    syncSessionState,
+    applyTimelineResponse,
+  ])
+
+  useEffect(() => {
     if (sessionType !== 'video') return
     if (avatarVideoStatus !== 'queued' && avatarVideoStatus !== 'rendering') return
     if (!sessionId) return
@@ -1310,48 +2938,84 @@ export default function LiveSessionPage() {
   // Refresh timeline when messages change (conversation progresses)
   useEffect(() => {
     if (!timelineEnabled) return
+    if (sessionType === 'phone') return
     if (messages.length > 0 && sessionId) {
       void loadTimeline(50)
     }
-  }, [loadTimeline, messages.length, sessionId, timelineEnabled])
+  }, [loadTimeline, messages.length, sessionId, timelineEnabled, sessionType])
 
-  const handleHangUp = async () => {
+  const handleHangUp = useCallback(async () => {
     clearSpeechFinalizeState()
     speechBufferRef.current = ''
     if (isListening) {
       stopListening()
     }
-    hangUp()
 
-    const hasConversation = messages.length > 0
-    const needsExplicitEnd =
-      hasConversation && normalizeSessionStatus(loadedSessionRecord) !== 'ended'
+    try {
+      if (sessionType === 'phone' && phoneCallRuntime.callId) {
+        try {
+          await api.phoneCalls.end({
+            sessionId,
+            reason: 'user_requested_hangup',
+          })
+        } catch (err) {
+          const message = err instanceof Error ? err.message : ''
+          if (!message.includes('No active phone call is registered')) {
+            throw err
+          }
+        }
+      }
 
-    if (needsExplicitEnd) {
-      try {
+      const hasConversation = activeConversationMessages.length > 0
+      const sessionAlreadyEnded = normalizeSessionStatus(loadedSessionRecord) === 'ended'
+
+      if (!sessionAlreadyEnded && (hasConversation || sessionType === 'phone')) {
         const endedSession = await api.sessions.end(sessionId, {
-          reason: 'user_hangup',
+          reason: sessionType === 'phone' ? 'hangup' : 'user_hangup',
         })
         const endedRecord = isRecord(endedSession) ? endedSession : loadedSessionRecord
         setLoadedSessionRecord(endedRecord)
         syncSessionState(endedRecord)
-      } catch (error) {
-        notifications.show({
-          title: 'Unable to finish the session',
-          message:
-            error instanceof Error ? error.message : 'The session could not be marked as ended.',
-          color: 'red',
-        })
-        return
+      } else if (sessionType === 'phone') {
+        setSessionStatus('ended')
+        setCallStarted(false)
       }
-    }
 
-    if (hasConversation) {
-      router.push(`/session/${sessionId}/performance`)
-    } else {
-      window.history.back()
+      hangUp()
+      if (hasConversation || sessionType === 'phone') {
+        router.push(`/session/${sessionId}/performance`)
+      } else {
+        window.history.back()
+      }
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : 'Unable to finish or hang up the session.'
+      notifications.show({
+        title: 'Hang up failed',
+        message,
+        color: 'red',
+      })
+      console.warn('Failed to hang up session', err)
     }
-  }
+  }, [
+    clearSpeechFinalizeState,
+    hangUp,
+    isListening,
+    activeConversationMessages.length,
+    loadedSessionRecord,
+    phoneCallRuntime.callId,
+    router,
+    sessionId,
+    sessionType,
+    stopListening,
+    syncSessionState,
+  ])
+
+  useEffect(() => {
+    if (sessionType === 'phone' && sessionStatus === 'ended' && entryPromptMode !== 'retake') {
+      router.push(`/session/${sessionId}/performance`)
+    }
+  }, [entryPromptMode, sessionType, sessionStatus, sessionId, router])
 
   const sttCommitProgress = Math.min(1, Math.max(0, sttCommitRemainingMs / speechFinalizeDelayMs))
 
@@ -1596,6 +3260,9 @@ export default function LiveSessionPage() {
 
   const activeObjections = toolEvents.filter((e) => e.tool === 'raise_objection')
   const latestNextStep = toolEvents.findLast((e) => e.tool === 'propose_next_step') ?? null
+  const phoneStatusLabel = getPhoneStatusLabel(phoneCallRuntime, sessionStatus, callStarted)
+  const phoneStatusColor = getPhoneStatusColor(phoneCallRuntime, sessionStatus, callStarted)
+  const phoneStatusCopy = getPhoneStatusCopy(phoneCallRuntime, sessionStatus, callStarted)
 
   // Show coaching toast for each new flag_moment event
   useEffect(() => {
@@ -1637,7 +3304,6 @@ export default function LiveSessionPage() {
         overflow: 'hidden',
       }}
     >
-      {/* Resume prompt is now rendered inside VoiceOrbSession as an orb speech bubble */}
       <Modal
         opened={prelaunchModalOpen}
         onClose={() => {}}
@@ -1701,48 +3367,70 @@ export default function LiveSessionPage() {
       </Modal>
 
       <Modal
-        opened={callModalOpen && sessionType === 'phone'}
-        onClose={() => setCallModalOpen(false)}
-        title="Start phone call"
+        opened={phoneSetupModalOpen && isPhoneSession}
+        onClose={handleClosePhoneSetupModal}
         centered
+        size="lg"
+        withCloseButton={false}
+        overlayProps={{
+          backgroundOpacity: 0.72,
+          blur: 10,
+        }}
+        styles={{
+          body: {
+            background: 'transparent',
+            padding: 0,
+          },
+          content: {
+            background: 'transparent',
+            border: 'none',
+            boxShadow: 'none',
+          },
+        }}
       >
-        <Stack gap="md">
-          <Text size="sm" c="dimmed">
-            Enter the destination number now. Phone-call sessions no longer store this during setup.
-          </Text>
-          <TextInput
-            label="Phone number"
-            placeholder="+15551234567"
-            value={phoneNumber}
-            onChange={(event) => {
-              setPhoneNumber(event.currentTarget.value)
-              if (callError) {
-                setCallError(null)
-              }
-            }}
-            error={callError ?? undefined}
-            type="tel"
-            autoComplete="tel"
-          />
-          <Select
-            label="Provider"
-            data={[
-              { value: 'twilio', label: 'Twilio' },
-              { value: 'vapi', label: 'Vapi' },
-            ]}
-            value={callProvider}
-            onChange={(value) => setCallProvider(value ?? 'twilio')}
-            allowDeselect={false}
-          />
-          <Group justify="flex-end">
-            <Button variant="default" onClick={() => setCallModalOpen(false)}>
-              Not now
-            </Button>
-            <Button onClick={handleStartPhoneCall} loading={callLoading}>
-              Start call
-            </Button>
-          </Group>
-        </Stack>
+        <PhoneCallSetupCard
+          personaName={personaName}
+          sessionStatus={sessionStatus}
+          phoneStatusLabel={phoneStatusLabel}
+          phoneStatusColor={phoneStatusColor}
+          phoneStatusCopy={phoneStatusCopy}
+          phoneVerificationLoading={phoneVerificationLoading}
+          phoneVerificationActionLoading={phoneVerificationActionLoading}
+          phoneVerification={phoneVerification}
+          phoneNumber={phoneNumber}
+          onPhoneNumberChange={(value) => {
+            setPhoneNumber(value)
+            if (callError) {
+              setCallError(null)
+            }
+          }}
+          callError={callError}
+          editingVerifiedPhone={editingVerifiedPhone}
+          forceFreshPhoneEntry={forceFreshPhoneEntry}
+          activeVerifiedPhoneNumber={activeVerifiedPhoneNumber}
+          savedVerifiedPhoneNumber={savedVerifiedPhoneNumber}
+          isTransientVerifiedPhone={isTransientVerifiedPhone}
+          verificationCode={verificationCode}
+          onVerificationCodeChange={(value) => {
+            setVerificationCode(value)
+            if (callError) {
+              setCallError(null)
+            }
+          }}
+          savePhoneForFutureUse={savePhoneForFutureUse}
+          onSavePhoneForFutureUseChange={setSavePhoneForFutureUse}
+          onRequestPhoneVerification={handleRequestPhoneVerification}
+          onResendPhoneVerification={handleResendPhoneVerification}
+          onVerifyPhoneCode={handleVerifyPhoneCode}
+          onEditVerifiedPhone={handleEditVerifiedPhone}
+          showRetakeSavedPhoneChoice={showRetakeSavedPhoneChoice}
+          onUseSavedPhoneNumber={handleUseSavedPhoneNumber}
+          onUseDifferentPhoneNumber={handleUseDifferentPhoneNumber}
+          onStartPhoneCall={handleStartPhoneCall}
+          callLoading={callLoading}
+          callStarted={callStarted}
+          phoneCallRuntime={phoneCallRuntime}
+        />
       </Modal>
 
       {/* AI Hang-up Confirmation Modal */}
@@ -1971,7 +3659,7 @@ export default function LiveSessionPage() {
                 ? formatTime(Math.max(0, sessionDuration - time))
                 : formatTime(time)}
             </Text>
-            {!isMobile && (
+            {!isMobile && !isPhoneSession && (
               <Group gap="xs">
                 <Box
                   style={{
@@ -1989,14 +3677,14 @@ export default function LiveSessionPage() {
             )}
             {!isMobile && <Text c="dimmed">{todayStr}</Text>}
             <Group gap="xs">
-              {isConnecting && <Loader size="sm" color="white" />}
+              {!isPhoneSession && isConnecting && <Loader size="sm" color="white" />}
               {entryDecisionLoading && <Loader size="sm" color="white" />}
-              {conversationError && (
+              {!isPhoneSession && conversationError && (
                 <Text size="xs" c="red">
                   {conversationError}
                 </Text>
               )}
-              {isConnected && !isConnecting && (
+              {!isPhoneSession && isConnected && !isConnecting && (
                 <Box
                   style={{
                     width: 8,
@@ -2005,6 +3693,23 @@ export default function LiveSessionPage() {
                     backgroundColor: 'green',
                   }}
                 />
+              )}
+              {isPhoneSession && (
+                <>
+                  <Badge color={phoneStatusColor} variant="light" radius="sm">
+                    {phoneStatusLabel}
+                  </Badge>
+                  {sessionStatus !== 'ended' && (
+                    <Button
+                      size="xs"
+                      variant="light"
+                      color="blue"
+                      onClick={() => setPhoneSetupModalOpen(true)}
+                    >
+                      {callStarted ? 'Call options' : 'Call setup'}
+                    </Button>
+                  )}
+                </>
               )}
               {isVideoSession && (
                 <CameraEngagementIndicator
@@ -2018,7 +3723,7 @@ export default function LiveSessionPage() {
                   size="xs"
                   variant="light"
                   color="blue"
-                  onClick={() => setCallModalOpen(true)}
+                  onClick={() => setPhoneSetupModalOpen(true)}
                 >
                   Start call
                 </Button>
@@ -2058,194 +3763,159 @@ export default function LiveSessionPage() {
           padding: isMobile ? '0.75rem' : '1.5rem',
         }}
       >
-        {!isMobile && hintsEnabled ? (
-          <Box
-            style={{
-              width: 224,
-              flexShrink: 0,
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 16,
-              padding: '20px 16px',
-              borderRadius: 12,
-              background: 'rgba(255,255,255,0.025)',
-              border: '1px solid rgba(255,255,255,0.06)',
-              height: 'fit-content',
-            }}
-          >
-            {/* Header */}
-            <Group justify="space-between" align="center">
-              <Text
-                size="xs"
-                fw={600}
-                tt="uppercase"
-                c="dimmed"
-                style={{ letterSpacing: '0.08em' }}
-              >
-                Hints
-              </Text>
-              <Group gap={6} align="center">
-                {hints.length > 0 ? (
-                  <Text size="xs" c="dimmed">
-                    {hints.length}
-                  </Text>
-                ) : null}
-                <ActionIcon
-                  size="xs"
-                  variant="subtle"
-                  color="gray"
-                  onClick={() => setHintsEnabled(false)}
-                >
-                  <IconX size={12} />
-                </ActionIcon>
-              </Group>
-            </Group>
-
-            {/* Content */}
-            {hintsError ? (
-              <Text size="xs" c="red.4">
-                {hintsError}
-              </Text>
-            ) : hints.length === 0 ? (
-              <Text size="xs" c="rgba(255,255,255,0.2)" style={{ lineHeight: 1.5 }}>
-                Hints appear as the conversation progresses.
-              </Text>
-            ) : (
-              <Stack gap={12}>
-                {hints.map((hint, i) => (
-                  <Box key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-                    <Text
-                      size="xs"
-                      c="rgba(79,131,204,0.7)"
-                      fw={700}
-                      style={{ flexShrink: 0, lineHeight: 1.5, minWidth: 14 }}
-                    >
-                      {i + 1}
-                    </Text>
-                    <Text size="xs" c="rgba(255,255,255,0.65)" style={{ lineHeight: 1.6 }}>
-                      {hint}
-                    </Text>
-                  </Box>
-                ))}
-              </Stack>
+        {isPhoneSession ? (
+          <>
+            {!isMobile && (
+              <HintsSidebar
+                hintsEnabled={hintsEnabled}
+                hints={hints}
+                hintsError={hintsError}
+                onShow={() => setHintsEnabled(true)}
+                onHide={() => setHintsEnabled(false)}
+              />
             )}
-          </Box>
-        ) : !isMobile ? (
-          <Box style={{ width: 224, flexShrink: 0, display: 'flex', justifyContent: 'center' }}>
-            <Button variant="subtle" color="gray" size="xs" onClick={() => setHintsEnabled(true)}>
-              Show hints
-            </Button>
-          </Box>
-        ) : null}
 
-        <Box
-          style={{
-            flex: 1,
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 24,
-            overflow: 'hidden',
-          }}
-        >
-          <VoiceOrbSession
-            mode={sessionType === 'text' ? 'text' : sessionType === 'video' ? 'video' : 'voice'}
-            messages={messages}
-            globeState={globeState}
-            analyserRef={analyserRef}
-            resumePromptOpen={resumePromptOpen}
-            onResume={handleResumeSession}
-            onStartOver={handleStartOver}
-            startOverLoading={startOverLoading}
-            assistantSpeaking={assistantSpeaking}
-            isListening={isListening}
-            isProcessing={isProcessing}
-            isConnected={isConnected}
-            isConnecting={isConnecting}
-            connectionError={conversationError}
-            sessionStatus={sessionStatus}
-            isSttSupported={isSttSupported}
-            isSttPermissionBlocked={isSttPermissionBlocked}
-            transcript={transcript}
-            interimTranscript={interimTranscript}
-            sttError={sttError ?? null}
-            sttCommitRemainingMs={sttCommitRemainingMs}
-            sttCommitProgress={sttCommitProgress}
-            textInput={textInput}
-            currentAudioUrl={currentAudioUrl}
-            isMobile={!!isMobile}
-            activeObjections={activeObjections}
-            latestNextStep={latestNextStep}
-            onHangUp={handleHangUp}
-            onPauseReplay={handlePauseReplay}
-            onMicrophoneClick={handleMicrophoneClick}
-            onSendText={handleSendText}
-            onTextInputChange={setTextInput}
-            onScheduleIdleHints={scheduleIdleHints}
-            isVideoSession={isVideoSession}
-            avatarVideoUrl={avatarVideoUrl}
-            avatarVideoJobId={avatarVideoJobId}
-            avatarVideoStatus={avatarVideoStatus}
-            avatarVideoProvider={avatarVideoProvider}
-            avatarVideoError={avatarVideoError}
-            videoRef={videoRef}
-            visualState={visualState}
-            poseIsReady={poseIsReady}
-            cameraEnabled={visualEnabled}
-            onToggleCamera={() => setVisualEnabled((v) => !v)}
-            userVideoRef={userPipVideoRef}
-          />
-        </Box>
-
-        {!isMobile && timelineEnabled ? (
-          <Box
-            style={{
-              width: 272,
-              flexShrink: 0,
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 0,
-              padding: '20px 16px',
-              borderRadius: 12,
-              background: 'rgba(255,255,255,0.025)',
-              border: '1px solid rgba(255,255,255,0.06)',
-              maxHeight: '100%',
-              overflowY: 'auto',
-            }}
-          >
-            {/* Header */}
-            <Group justify="space-between" align="center" mb="lg">
-              <Text
-                size="xs"
-                fw={600}
-                tt="uppercase"
-                c="dimmed"
-                style={{ letterSpacing: '0.08em' }}
-              >
-                Plan
-              </Text>
-              <ActionIcon
-                size="xs"
-                variant="subtle"
-                color="gray"
-                onClick={() => setTimelineEnabled(false)}
-              >
-                <IconX size={12} />
-              </ActionIcon>
-            </Group>
-            {renderTimelineContent()}
-          </Box>
-        ) : !isMobile ? (
-          <Box style={{ width: 200, flexShrink: 0, display: 'flex', justifyContent: 'center' }}>
-            <Button
-              variant="subtle"
-              color="gray"
-              size="xs"
-              onClick={() => setTimelineEnabled(true)}
+            <Box
+              style={{
+                flex: 1,
+                minWidth: 0,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: isMobile ? 12 : 24,
+                overflow: 'hidden',
+              }}
             >
-              Show plan
-            </Button>
-          </Box>
-        ) : null}
+              {isMobile && resumePromptOpen && entryPromptMode && (
+                <PhoneResumePromptCard
+                  entryPromptMode={entryPromptMode}
+                  startOverLoading={startOverLoading}
+                  onResume={handleResumeSession}
+                  onStartOver={handleStartOver}
+                />
+              )}
+              <PhoneTranscriptPanel
+                messages={phoneTranscriptMessages}
+                error={phoneTranscriptError}
+                phoneStatusLabel={phoneStatusLabel}
+                phoneStatusColor={phoneStatusColor}
+                phoneStatusCopy={phoneStatusCopy}
+                callStarted={callStarted}
+              />
+              {isMobile && (
+                <Stack gap="md">
+                  <HintsSidebar
+                    hintsEnabled={hintsEnabled}
+                    hints={hints}
+                    hintsError={hintsError}
+                    width="100%"
+                    onShow={() => setHintsEnabled(true)}
+                    onHide={() => setHintsEnabled(false)}
+                  />
+                  <TimelineSidebar
+                    timelineEnabled={timelineEnabled}
+                    timelineStages={timelineStages}
+                    currentProgress={currentProgress}
+                    timelineError={timelineError}
+                    width="100%"
+                    onShow={() => setTimelineEnabled(true)}
+                    onHide={() => setTimelineEnabled(false)}
+                  />
+                </Stack>
+              )}
+            </Box>
+
+            {!isMobile && (
+              <TimelineSidebar
+                timelineEnabled={timelineEnabled}
+                timelineStages={timelineStages}
+                currentProgress={currentProgress}
+                timelineError={timelineError}
+                onShow={() => setTimelineEnabled(true)}
+                onHide={() => setTimelineEnabled(false)}
+              />
+            )}
+          </>
+        ) : (
+          <>
+            {!isMobile && (
+              <HintsSidebar
+                hintsEnabled={hintsEnabled}
+                hints={hints}
+                hintsError={hintsError}
+                onShow={() => setHintsEnabled(true)}
+                onHide={() => setHintsEnabled(false)}
+              />
+            )}
+
+            <Box
+              style={{
+                flex: 1,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 24,
+                overflow: 'hidden',
+              }}
+            >
+              <VoiceOrbSession
+                mode={sessionType === 'text' ? 'text' : sessionType === 'video' ? 'video' : 'voice'}
+                messages={messages}
+                globeState={globeState}
+                analyserRef={analyserRef}
+                resumePromptOpen={resumePromptOpen}
+                entryPromptMode={entryPromptMode}
+                onResume={handleResumeSession}
+                onStartOver={handleStartOver}
+                startOverLoading={startOverLoading}
+                assistantSpeaking={assistantSpeaking}
+                isListening={isListening}
+                isProcessing={isProcessing}
+                isConnected={isConnected}
+                sessionStatus={sessionStatus}
+                isSttSupported={isSttSupported}
+                isSttPermissionBlocked={isSttPermissionBlocked}
+                transcript={transcript}
+                interimTranscript={interimTranscript}
+                sttError={sttError ?? null}
+                sttCommitRemainingMs={sttCommitRemainingMs}
+                sttCommitProgress={sttCommitProgress}
+                textInput={textInput}
+                currentAudioUrl={currentAudioUrl}
+                isMobile={!!isMobile}
+                activeObjections={activeObjections}
+                latestNextStep={latestNextStep}
+                onHangUp={handleHangUp}
+                onPauseReplay={handlePauseReplay}
+                onMicrophoneClick={handleMicrophoneClick}
+                onSendText={handleSendText}
+                onTextInputChange={setTextInput}
+                onScheduleIdleHints={scheduleIdleHints}
+                isVideoSession={isVideoSession}
+                avatarVideoUrl={avatarVideoUrl}
+                avatarVideoJobId={avatarVideoJobId}
+                avatarVideoStatus={avatarVideoStatus}
+                avatarVideoProvider={avatarVideoProvider}
+                avatarVideoError={avatarVideoError}
+                videoRef={videoRef}
+                visualState={visualState}
+                poseIsReady={poseIsReady}
+                cameraEnabled={visualEnabled}
+                onToggleCamera={() => setVisualEnabled((v) => !v)}
+                userVideoRef={userPipVideoRef}
+              />
+            </Box>
+
+            {!isMobile && (
+              <TimelineSidebar
+                timelineEnabled={timelineEnabled}
+                timelineStages={timelineStages}
+                currentProgress={currentProgress}
+                timelineError={timelineError}
+                onShow={() => setTimelineEnabled(true)}
+                onHide={() => setTimelineEnabled(false)}
+              />
+            )}
+          </>
+        )}
       </Box>
 
       <Modal
@@ -2477,7 +4147,9 @@ export default function LiveSessionPage() {
           page: 'session',
           sessionId,
           sessionName: sessionName || undefined,
-          recentTurns: messages.slice(-6).map((m) => ({ role: m.role, text: m.text })),
+          recentTurns: activeConversationMessages
+            .slice(-6)
+            .map((message) => ({ role: message.role, text: message.text })),
         }}
       />
     </Box>

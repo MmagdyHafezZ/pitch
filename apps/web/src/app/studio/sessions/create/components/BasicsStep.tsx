@@ -63,8 +63,8 @@ const sessionTypeOptions: Array<{
   {
     value: 'voice',
     label: 'Voice',
-    description: 'Natural conversations with TTS',
-    hint: 'Best for roleplay and realism',
+    description: 'Browser mic conversation with TTS',
+    hint: 'Uses your mic and speakers, not your phone',
     icon: <IconMicrophone size={20} />,
   },
   {
@@ -77,8 +77,8 @@ const sessionTypeOptions: Array<{
   {
     value: 'phone',
     label: 'Phone calls',
-    description: 'Real-world calls on your device',
-    hint: 'Best for phone-based training',
+    description: 'Rings your verified phone number',
+    hint: 'Best for real dial-out practice',
     icon: <IconPhone size={20} />,
   },
 ]
@@ -215,8 +215,8 @@ export function BasicsStep({
                         Phone number is collected when the session starts
                       </Text>
                       <Text size="xs" c="dimmed">
-                        Setup only defines the training format. The caller enters the destination
-                        number right before the outbound phone session begins.
+                        Setup only defines the training format. The caller verifies a number when
+                        the session starts, then PITCH dials that verified number.
                       </Text>
                     </Stack>
                   </Group>
