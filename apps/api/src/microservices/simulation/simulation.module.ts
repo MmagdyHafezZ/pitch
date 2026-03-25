@@ -122,7 +122,6 @@ import {
     CalendarSessionController,
   ],
   providers: [
-    CheckSystemAdmin,
     SimulationPrismaService,
     MongoConnectionService,
     LLMProviderRegistry,

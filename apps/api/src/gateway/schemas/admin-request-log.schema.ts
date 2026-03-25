@@ -16,7 +16,7 @@ export const AdminRequestLogSchema = new Schema<IAdminRequestLog>(
     path: { type: String, required: true, index: true },
     statusCode: { type: Number, required: true, index: true },
     durationMs: { type: Number, required: true },
-    timestamp: { type: Date, required: true, index: true },
+    timestamp: { type: Date, required: true },
   },
   {
     collection: 'adminRequestLogs',

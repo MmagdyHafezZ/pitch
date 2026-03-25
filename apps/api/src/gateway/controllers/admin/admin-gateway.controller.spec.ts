@@ -1,72 +1,81 @@
-import { Test, TestingModule } from '@nestjs/testing';
+import { HttpException } from '@nestjs/common';
+import { Test } from '@nestjs/testing';
+import {
+  SIMULATION_SERVICE_PATTERNS,
+  USER_SERVICE_PATTERNS,
+} from '@pitch/shared-backend/interfaces/message-patterns.interface';
+import type { UserClaims } from '@pitch/shared-backend/interfaces/user-claims.interface';
 import { of, throwError } from 'rxjs';
-import { JwtService } from '@nestjs/jwt';
 import { AdminGatewayController } from './admin-gateway.controller';
-import { AdminFeatureFlagsService } from '../../services/admin/admin-feature-flags.service';
-import { CheckSystemAdmin } from '../../guards/check-system-admin.guard';
+import { AdminGatewayService } from './admin-gateway.service';
 
-function makeClientProxy(sendResult: any = { status: 'ok' }) {
+function makeClientProxy() {
   return {
-    send: jest.fn().mockReturnValue(of(sendResult)),
+    send: jest.fn(),
   };
 }
 
+const responseOf = <T>(value: T) => of(value);
+const errorResponse = (error: Error) => throwError(() => error);
+
 describe('AdminGatewayController', () => {
   let controller: AdminGatewayController;
-  let userService: ReturnType<typeof makeClientProxy>;
-  let simulationService: ReturnType<typeof makeClientProxy>;
-  let analyticsService: ReturnType<typeof makeClientProxy>;
-  let supportService: ReturnType<typeof makeClientProxy>;
-  let crmService: ReturnType<typeof makeClientProxy>;
-  let ltiService: ReturnType<typeof makeClientProxy>;
-  let s3Service: ReturnType<typeof makeClientProxy>;
-  let featureFlagsService: AdminFeatureFlagsService;
+  let userClient: ReturnType<typeof makeClientProxy>;
+  let simulationClient: ReturnType<typeof makeClientProxy>;
+  let adminService: {
+    getDependenciesHealth: jest.Mock;
+    getVersion: jest.Mock;
+    getRuntimeConfig: jest.Mock;
+    getFeatureFlags: jest.Mock;
+    updateFeatureFlag: jest.Mock;
+    transferTeamOwner: jest.Mock;
+    getUserSessions: jest.Mock;
+    listAssessmentRuns: jest.Mock;
+    listWebhooks: jest.Mock;
+    retryDeadLetters: jest.Mock;
+  };
+
+  const userClaims = {
+    id: 'admin-1',
+    email: 'admin@test.com',
+  } as UserClaims;
 
   beforeEach(async () => {
-    userService = makeClientProxy([]);
-    simulationService = makeClientProxy({ sessions: [], total: 0 });
-    analyticsService = makeClientProxy({ status: 'ok' });
-    supportService = makeClientProxy({ status: 'ok' });
-    crmService = makeClientProxy({ status: 'ok' });
-    ltiService = makeClientProxy({ status: 'ok' });
-    s3Service = makeClientProxy({ status: 'ok' });
+    userClient = makeClientProxy();
+    simulationClient = makeClientProxy();
+    adminService = {
+      getDependenciesHealth: jest.fn(),
+      getVersion: jest.fn(),
+      getRuntimeConfig: jest.fn(),
+      getFeatureFlags: jest.fn(),
+      updateFeatureFlag: jest.fn(),
+      transferTeamOwner: jest.fn(),
+      getUserSessions: jest.fn(),
+      listAssessmentRuns: jest.fn(),
+      listWebhooks: jest.fn(),
+      retryDeadLetters: jest.fn(),
+    };
 
-    const module: TestingModule = await Test.createTestingModule({
+    const module = await Test.createTestingModule({
       controllers: [AdminGatewayController],
       providers: [
-        AdminFeatureFlagsService,
-        CheckSystemAdmin,
-        {
-          provide: JwtService,
-          useValue: {
-            verify: jest.fn().mockReturnValue({ email: 'admin@test.com' }),
-          },
-        },
-        { provide: 'USER_SERVICE', useValue: userService },
-        { provide: 'SIMULATION_SERVICE', useValue: simulationService },
-        { provide: 'ANALYTICS_SERVICE', useValue: analyticsService },
-        { provide: 'SUPPORT_SERVICE', useValue: supportService },
-        { provide: 'CRM_SERVICE', useValue: crmService },
-        { provide: 'LTI_SERVICE', useValue: ltiService },
-        { provide: 'S3_SERVICE', useValue: s3Service },
+        { provide: 'USER_SERVICE', useValue: userClient },
+        { provide: 'SIMULATION_SERVICE', useValue: simulationClient },
+        { provide: AdminGatewayService, useValue: adminService },
       ],
     }).compile();
 
-    controller = module.get<AdminGatewayController>(AdminGatewayController);
-    featureFlagsService = module.get<AdminFeatureFlagsService>(
-      AdminFeatureFlagsService,
-    );
-
-    global.fetch = jest.fn().mockResolvedValue({ ok: true });
+    controller = module.get(AdminGatewayController);
   });
 
   afterEach(() => {
-    jest.restoreAllMocks();
+    jest.clearAllMocks();
   });
 
-  describe('check()', () => {
-    it('returns { isAdmin: true }', () => {
-      expect(controller.check()).toEqual({ isAdmin: true });
+  it('returns the current admin identity', () => {
+    expect(controller.getMe(userClaims)).toEqual({
+      ...userClaims,
+      isSystemAdmin: true,
     });
   });
 
@@ -647,25 +656,45 @@ describe('AdminGatewayController', () => {
     });
   });
 
-  describe('version()', () => {
-    it('returns version info', () => {
-      const result = controller.version();
-
-      expect(result).toHaveProperty('nodeVersion');
-      expect(result).toHaveProperty('uptime');
-      expect(result).toHaveProperty('environment');
-      expect(result).toHaveProperty('version');
+  it('delegates team ownership transfers to the admin service', async () => {
+    adminService.transferTeamOwner.mockResolvedValue({
+      message: 'transferred',
     });
+
+    await expect(
+      controller.transferTeamOwner('team-1', { userId: 'user-2' }, userClaims),
+    ).resolves.toEqual({
+      message: 'transferred',
+    });
+    expect(adminService.transferTeamOwner.mock.calls).toEqual([
+      ['team-1', { userId: 'user-2' }, userClaims],
+    ]);
   });
 
-  describe('runtimeConfig()', () => {
-    it('returns runtime config with featureFlags array', () => {
-      const result = controller.runtimeConfig();
-
-      expect(result).toHaveProperty('NODE_ENV');
-      expect(result).toHaveProperty('PORT');
-      expect(Array.isArray(result.featureFlags)).toBe(true);
+  it('parses user session filters before delegating to the admin service', async () => {
+    adminService.getUserSessions.mockResolvedValue({
+      sessions: [],
+      total: 0,
     });
+
+    await controller.getUserSessions('user-9', {
+      limit: '20',
+      offset: '4',
+      status: 'active',
+      type: 'phone',
+    });
+
+    expect(adminService.getUserSessions.mock.calls).toEqual([
+      [
+        'user-9',
+        {
+          limit: 20,
+          offset: 4,
+          status: 'active',
+          type: 'phone',
+        },
+      ],
+    ]);
   });
 
   it('delegates logs alias to the error log service', () => {

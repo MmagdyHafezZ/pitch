@@ -63,6 +63,8 @@ const PHONE_STARTER_PROMPT_PREFIX = '[PITCH_STARTER_PROMPT]';
 @ApiTags('simulation-phone-calls')
 @Controller({ path: 'simulation/phone-calls', version: '1' })
 export class PhoneCallWebhookController {
+  private readonly logger = new Logger(PhoneCallWebhookController.name);
+
   constructor(
     private readonly vapiContext: VapiContextService,
     private readonly sessionService: SessionService,

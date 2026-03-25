@@ -118,7 +118,6 @@ type TransferOwnerBody = {
 type RedialBody = {
   provider?: string;
   phoneNumber?: string;
-  fromNumber?: string;
 };
 
 type FeatureFlagPatchBody = {
@@ -1642,7 +1641,6 @@ export class AdminGatewayService {
       userId: call.iteration.sessionMember.userId,
       phoneNumber: body.phoneNumber,
       provider: body.provider,
-      fromNumber: body.fromNumber,
     });
 
     this.recordAudit(actor, 'admin.phone-calls.redial', 'phoneCall', callId, {
