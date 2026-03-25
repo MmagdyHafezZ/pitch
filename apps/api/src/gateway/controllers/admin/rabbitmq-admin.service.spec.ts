@@ -1,6 +1,21 @@
-import { RabbitMqAdminService } from './rabbitmq-admin.service';
+import type { Channel } from 'amqplib';
+import {
+  type AdminQueueStats,
+  RabbitMqAdminService,
+} from './rabbitmq-admin.service';
 
-function createMockChannel(checkQueue: jest.Mock) {
+type MockChannel = Pick<
+  Channel,
+  | 'checkQueue'
+  | 'close'
+  | 'on'
+  | 'removeListener'
+  | 'get'
+  | 'sendToQueue'
+  | 'ack'
+>;
+
+function createMockChannel(checkQueue: jest.Mock): MockChannel {
   return {
     checkQueue,
     close: jest.fn().mockResolvedValue(undefined),
@@ -12,28 +27,34 @@ function createMockChannel(checkQueue: jest.Mock) {
   };
 }
 
+class TestRabbitMqAdminService extends RabbitMqAdminService {
+  inspect(channel: MockChannel, queueName: string): Promise<AdminQueueStats> {
+    return this.inspectQueue(channel as Channel, queueName);
+  }
+}
+
 describe('RabbitMqAdminService', () => {
   it('treats a missing standardized dead-letter queue as absent', async () => {
-    const checkQueue = jest
-      .fn()
-      .mockImplementation(async (queueName: string) => {
-        if (queueName === 'user_queue') {
-          return {
-            messageCount: 4,
-            consumerCount: 1,
-          };
-        }
+    const checkQueue = jest.fn().mockImplementation((queueName: string) => {
+      if (queueName === 'user_queue') {
+        return Promise.resolve({
+          messageCount: 4,
+          consumerCount: 1,
+        });
+      }
 
-        throw new Error(
+      return Promise.reject(
+        new Error(
           `Channel closed by server: 404 (NOT-FOUND) with message "NOT_FOUND - no queue '${queueName}' in vhost 'pitch_local'"`,
-        );
-      });
+        ),
+      );
+    });
 
-    const service = new RabbitMqAdminService({
+    const service = new TestRabbitMqAdminService({
       get: jest.fn().mockReturnValue('amqp://localhost/pitch_local'),
     } as never);
 
-    const result = await (service as any).inspectQueue(
+    const result = await service.inspect(
       createMockChannel(checkQueue),
       'user_queue',
     );
@@ -53,11 +74,11 @@ describe('RabbitMqAdminService', () => {
       `Channel closed by server: 404 (NOT-FOUND) with message "NOT_FOUND - no queue 'user_queue' in vhost 'pitch_local'"`,
     );
 
-    const service = new RabbitMqAdminService({
+    const service = new TestRabbitMqAdminService({
       get: jest.fn().mockReturnValue('amqp://localhost/pitch_local'),
     } as never);
 
-    const result = await (service as any).inspectQueue(
+    const result = await service.inspect(
       createMockChannel(jest.fn().mockRejectedValue(missingQueueError)),
       'user_queue',
     );

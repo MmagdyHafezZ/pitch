@@ -154,8 +154,8 @@ describe('AdminGatewayService', () => {
       send: jest.fn().mockReturnValue(of({ ok: true })),
     };
     simulationPrisma.client.$transaction.mockImplementation(
-      async (callback: (tx: typeof simulationPrisma.client) => unknown) =>
-        callback(simulationPrisma.client),
+      (callback: (tx: typeof simulationPrisma.client) => unknown) =>
+        Promise.resolve(callback(simulationPrisma.client)),
     );
 
     service = new AdminGatewayService(

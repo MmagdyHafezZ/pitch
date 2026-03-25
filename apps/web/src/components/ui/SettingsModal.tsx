@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Modal,
   Box,
@@ -215,12 +215,14 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
   const [activePicker, setActivePicker] = useState<keyof ThemeTokens | null>(null)
   const [draggingPicker, setDraggingPicker] = useState(false)
 
-  const syncPhoneInputState = (rawPhoneNumber: string | null | undefined) => {
+  const userPhoneNumber = (user as { phoneNumber?: string | null } | null)?.phoneNumber ?? ''
+
+  const syncPhoneInputState = useCallback((rawPhoneNumber: string | null | undefined) => {
     const parts = splitPhoneNumber(rawPhoneNumber)
     setPhoneCountryCode(parts.countryCode)
     setPhoneLocalNumber(parts.localNumber)
     setPhoneNumber(rawPhoneNumber?.trim() ?? '')
-  }
+  }, [])
 
   const buildPhoneNumber = (countryCode: string, localNumber: string) => {
     const digits = localNumber.replace(/\D/g, '')
@@ -236,8 +238,8 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
   useEffect(() => {
     setName(user?.name ?? '')
     setEmail(user?.email ?? '')
-    syncPhoneInputState((user as { phoneNumber?: string | null } | null)?.phoneNumber ?? '')
-  }, [user?.name, user?.email, (user as { phoneNumber?: string | null } | null)?.phoneNumber])
+    syncPhoneInputState(userPhoneNumber)
+  }, [syncPhoneInputState, user?.email, user?.name, userPhoneNumber])
 
   useEffect(() => {
     if (!opened) return
@@ -275,7 +277,7 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
     return () => {
       cancelled = true
     }
-  }, [opened])
+  }, [opened, syncPhoneInputState])
 
   useEffect(() => {
     const handlePointerUp = () => setDraggingPicker(false)

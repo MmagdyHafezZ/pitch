@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-argument */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import type { ClientProxy } from '@nestjs/microservices';
 import { of } from 'rxjs';
 import { lastValueFrom } from 'rxjs';
@@ -9,6 +9,7 @@ import { AuthGatewayController } from './auth-gateway.controller';
 describe('AuthGatewayController', () => {
   let controller: AuthGatewayController;
   let userService: jest.Mocked<ClientProxy>;
+  let send: jest.Mock;
 
   const originalEnv = { ...process.env };
 
@@ -19,8 +20,9 @@ describe('AuthGatewayController', () => {
   };
 
   beforeEach(() => {
+    send = jest.fn();
     userService = {
-      send: jest.fn(),
+      send,
     } as unknown as jest.Mocked<ClientProxy>;
 
     controller = new AuthGatewayController(userService);
@@ -62,7 +64,7 @@ describe('AuthGatewayController', () => {
         isSystemAdmin: true,
       }),
     });
-    expect(userService.send).toHaveBeenCalledWith('auth.login', {
+    expect(send).toHaveBeenCalledWith('auth.login', {
       email: 'admin@example.com',
     });
     expect(res.cookie).toHaveBeenCalled();
@@ -93,13 +95,10 @@ describe('AuthGatewayController', () => {
         isSystemAdmin: true,
       }),
     );
-    expect(userService.send).toHaveBeenCalledWith(
-      USER_SERVICE_PATTERNS.GET_USER,
-      {
-        userId: 'user-1',
-        userClaims,
-      },
-    );
+    expect(send).toHaveBeenCalledWith(USER_SERVICE_PATTERNS.GET_USER, {
+      userId: 'user-1',
+      userClaims,
+    });
   });
 
   it('does not mark non-admin users as system admins during token validation', () => {

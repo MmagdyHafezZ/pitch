@@ -344,7 +344,13 @@ export default function Home() {
 
               <aside className={`${styles.heroPanel} ${styles.reveal}`} style={withDelay('0.16s')}>
                 <p className={styles.ibmLabel}>Sponsored by</p>
-                <img src="/IBM.png" alt="IBM Logo" className={styles.ibmLogo} />
+                <Image
+                  src="/IBM.png"
+                  alt="IBM Logo"
+                  className={styles.ibmLogo}
+                  width={192}
+                  height={72}
+                />
                 <p className={styles.ibmText}>
                   Built with IBM-backed mentorship around a real coaching problem: helping teams
                   practice better before live customer conversations.

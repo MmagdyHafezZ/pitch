@@ -100,7 +100,7 @@ export class RabbitMqAdminService implements OnModuleDestroy {
     }
   }
 
-  private async inspectQueue(
+  protected async inspectQueue(
     channel: Channel,
     queueName: string,
   ): Promise<AdminQueueStats> {

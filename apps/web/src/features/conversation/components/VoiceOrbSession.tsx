@@ -943,6 +943,7 @@ export default function VoiceOrbSession({
   const isRetakePrompt = entryPromptMode === 'retake'
   const [isOpen, setIsOpen] = useState(false)
   const [latestMsgId, setLatestMsgId] = useState<string | null>(null)
+  const lastMessageId = messages[messages.length - 1]?.id ?? null
   const userClosedRef = useRef(false)
   const scrollRef = useRef<HTMLDivElement>(null)
   const linesRef = useRef<HTMLDivElement>(null)
@@ -957,8 +958,8 @@ export default function VoiceOrbSession({
 
   // Track newest message for word animation
   useEffect(() => {
-    if (messages.length > 0) setLatestMsgId(messages[messages.length - 1].id)
-  }, [messages.length])
+    if (lastMessageId) setLatestMsgId(lastMessageId)
+  }, [lastMessageId])
 
   // Auto-scroll to bottom
   useEffect(() => {

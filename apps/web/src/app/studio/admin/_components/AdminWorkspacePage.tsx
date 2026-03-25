@@ -52,6 +52,8 @@ import { useAdminAccess } from '@/features/admin/hooks/useAdminAccess'
 import { requestJsonPath } from '@/features/admin/services/admin.service'
 
 type JsonRecord = Record<string, unknown>
+const EMPTY_RECORD: JsonRecord = {}
+const EMPTY_RECORD_ARRAY: JsonRecord[] = []
 
 type PlanFormState = {
   name: string
@@ -4515,7 +4517,7 @@ export function AdminWorkspacePage({ view }: { view: AdminWorkspaceView }) {
   )
   const userMembershipTeamSnapshots = Array.isArray(userMembershipTeamsQuery.data)
     ? userMembershipTeamsQuery.data.filter(isRecord)
-    : []
+    : EMPTY_RECORD_ARRAY
   const userMembershipTeamSnapshotById = useMemo(() => {
     const next = new Map<string, JsonRecord>()
 
@@ -4566,7 +4568,7 @@ export function AdminWorkspacePage({ view }: { view: AdminWorkspaceView }) {
     ? teamDetail.memberships.filter(isRecord)
     : Array.isArray(teamUsageTeam.memberships)
       ? teamUsageTeam.memberships.filter(isRecord)
-      : []
+      : EMPTY_RECORD_ARRAY
   const availableTeamMemberOptions = useMemo(() => {
     const existingMemberIds = new Set(
       teamMemberships
@@ -4604,7 +4606,7 @@ export function AdminWorkspacePage({ view }: { view: AdminWorkspaceView }) {
         : null,
     [defaultTeamSubscriptionPlanId, selectedTeamId, teamSubscription, teamSubscriptionId]
   )
-  const sessionDetail = isRecord(sessionDetailQuery.data) ? sessionDetailQuery.data : {}
+  const sessionDetail = isRecord(sessionDetailQuery.data) ? sessionDetailQuery.data : EMPTY_RECORD
   const sessionMembers = extractArray(sessionMembersQuery.data)
   const availableSessionMemberOptions = useMemo(() => {
     const existingMemberIds = new Set(

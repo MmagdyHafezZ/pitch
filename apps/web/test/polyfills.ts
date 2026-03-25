@@ -1,11 +1,10 @@
 import { TextDecoder, TextEncoder } from 'util'
 import { ReadableStream, TransformStream, WritableStream } from 'stream/web'
+import * as undici from 'undici'
+import { BroadcastChannel as WorkerBroadcastChannel } from 'worker_threads'
 
 if (typeof globalThis.Response === 'undefined') {
   // Defer to undici when running inside a Node-based Jest environment
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const undici = require('undici')
-
   globalThis.fetch = globalThis.fetch ?? undici.fetch
   globalThis.Headers = globalThis.Headers ?? undici.Headers
   globalThis.Request = globalThis.Request ?? undici.Request
@@ -22,10 +21,8 @@ if (typeof globalThis.Response === 'undefined') {
 
 if (typeof globalThis.BroadcastChannel === 'undefined') {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { BroadcastChannel } = require('worker_threads')
-    if (BroadcastChannel) {
-      globalThis.BroadcastChannel = BroadcastChannel
+    if (WorkerBroadcastChannel) {
+      globalThis.BroadcastChannel = WorkerBroadcastChannel
     }
   } catch (error) {
     // Skip when BroadcastChannel is unavailable (older Node releases)

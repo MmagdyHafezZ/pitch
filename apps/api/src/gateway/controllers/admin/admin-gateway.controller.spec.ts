@@ -748,7 +748,7 @@ describe('AdminGatewayController', () => {
       key: 'admin-ui',
       enabled: true,
     });
-    expect((adminService.updateFeatureFlag as jest.Mock).mock.calls).toEqual([
+    expect(adminService.updateFeatureFlag.mock.calls).toEqual([
       ['admin-ui', { enabled: true }, userClaims],
     ]);
   });
@@ -766,7 +766,7 @@ describe('AdminGatewayController', () => {
       type: 'phone',
     });
 
-    expect((adminService.getUserSessions as jest.Mock).mock.calls).toEqual([
+    expect(adminService.getUserSessions.mock.calls).toEqual([
       [
         'user-9',
         {
@@ -794,7 +794,7 @@ describe('AdminGatewayController', () => {
       sessionMemberId: 'member-1',
     });
 
-    expect((adminService.listAssessmentRuns as jest.Mock).mock.calls).toEqual([
+    expect(adminService.listAssessmentRuns.mock.calls).toEqual([
       [
         {
           limit: 50,
@@ -815,9 +815,7 @@ describe('AdminGatewayController', () => {
 
     controller.listWebhooks({ limit: '15' });
 
-    expect((adminService.listWebhooks as jest.Mock).mock.calls).toEqual([
-      [{ limit: 15 }],
-    ]);
+    expect(adminService.listWebhooks.mock.calls).toEqual([[{ limit: 15 }]]);
   });
 
   it('delegates queue retries to the admin service', async () => {
@@ -837,7 +835,7 @@ describe('AdminGatewayController', () => {
       retried: 2,
     });
 
-    expect((adminService.retryDeadLetters as jest.Mock).mock.calls).toEqual([
+    expect(adminService.retryDeadLetters.mock.calls).toEqual([
       ['simulation_queue', { maxMessages: 2 }, userClaims],
     ]);
   });

@@ -76,7 +76,7 @@ export class AdminRuntimeLogger extends ConsoleLogger {
     try {
       return JSON.parse(JSON.stringify(value));
     } catch {
-      return String(value);
+      return Object.prototype.toString.call(value);
     }
   }
 }
