@@ -716,6 +716,28 @@ export class SessionService {
   }
 
   /**
+   * Aggregate platform-wide session counts for the public landing page.
+   * Runs three lightweight COUNT queries in parallel.
+   */
+  async getPlatformStats(): Promise<{
+    activeSessions: number;
+    totalRehearsals: number;
+    rehearsalsThisWeek: number;
+  }> {
+    const weekAgo = new Date();
+    weekAgo.setDate(weekAgo.getDate() - 7);
+
+    const [activeSessions, totalRehearsals, rehearsalsThisWeek] =
+      await Promise.all([
+        this.sessionRepository.count({ status: 'active' }),
+        this.sessionRepository.count(),
+        this.sessionRepository.count({ createdAfter: weekAgo }),
+      ]);
+
+    return { activeSessions, totalRehearsals, rehearsalsThisWeek };
+  }
+
+  /**
    * Map Prisma Session model to SessionResponseDto
    */
   private mapToResponseDto = (

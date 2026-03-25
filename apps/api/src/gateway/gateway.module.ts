@@ -41,6 +41,7 @@ import { SupportAttachmentGatewayController } from './controllers/support/suppor
 import { CoachStreamService } from './controllers/support/coach-stream.service';
 import { SupportAttachmentStorageService } from './controllers/support/support-attachment-storage.service';
 import { S3GatewayController } from './controllers/s3/s3-gateway.controller';
+import { StatsGatewayController } from './controllers/stats/stats-gateway.controller';
 import { CoinsGatewayController } from './controllers/userManagement/coins-gateway.controller';
 
 @Module({
@@ -89,6 +90,7 @@ import { CoinsGatewayController } from './controllers/userManagement/coins-gatew
     S3GatewayController,
     SupportChatGatewayController,
     SupportAttachmentGatewayController,
+    StatsGatewayController,
     CoinsGatewayController,
   ],
   providers: [

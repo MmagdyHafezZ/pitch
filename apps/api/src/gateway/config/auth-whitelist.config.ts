@@ -65,6 +65,12 @@ export const AUTH_WHITELIST_ROUTES: WhitelistRoute[] = [
   },
 
   {
+    method: 'GET',
+    path: '/api/v1/stats/public',
+    description: 'Public landing page statistics',
+  },
+
+  {
     method: 'POST',
     path: '/api/v1/lti/v1.1/launch',
     description: 'LTI 1.1 launch (OAuth HMAC-SHA1 signed)',
