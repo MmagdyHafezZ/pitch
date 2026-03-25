@@ -4,7 +4,9 @@ import {
   Logger,
   BadRequestException,
   ForbiddenException,
+  HttpException,
 } from '@nestjs/common';
+import { randomUUID } from 'crypto';
 import { SessionRepository } from '../repositories/session.repository';
 import { Prisma } from '@prisma/simulation-client';
 import type { SessionMember } from '@prisma/simulation-client';
@@ -27,6 +29,8 @@ import type { SessionWithOwner } from '../repositories/session.repository';
 import { SimulationPrismaService } from '../prisma/simulation-prisma.service';
 import { PersonaMediaService } from './persona-media.service';
 import { SimulationRedisService } from './redis/redis.service';
+import { CoinGatingService } from './coin-gating.service';
+import { CoinEstimationService } from './coin-estimation.service';
 
 /**
  * Session Service
@@ -48,6 +52,8 @@ export class SessionService {
     private readonly prisma: SimulationPrismaService,
     private readonly personaMediaService: PersonaMediaService,
     private readonly redis: SimulationRedisService,
+    private readonly coinGating: CoinGatingService,
+    private readonly coinEstimation: CoinEstimationService,
   ) {}
 
   /**
@@ -196,16 +202,63 @@ export class SessionService {
 
     this.logger.log(`Creating new session for user: ${sessionUserId}`);
 
-    try {
-      const sessionConfig = this.normalizeSessionConfig(
-        createSessionDto.name,
-        createSessionDto.type,
-        createSessionDto.sessionConfig,
-      );
+    // Normalize config first so we can read model/duration for coin estimation
+    const sessionConfig = this.normalizeSessionConfig(
+      createSessionDto.name,
+      createSessionDto.type,
+      createSessionDto.sessionConfig,
+    );
 
+    const teamId = this.resolveOrgId(createSessionDto.orgId, sessionUserId);
+
+    // Estimate coins based on model + session duration (awaits pricing cache warm-up)
+    const rawConfig = (createSessionDto.sessionConfig ?? {}) as Record<
+      string,
+      unknown
+    >;
+    const llmCfg = (rawConfig.llm ?? rawConfig.llmConfig ?? {}) as Record<
+      string,
+      unknown
+    >;
+    const estimation = await this.coinEstimation.estimate({
+      model:
+        this.pickText(llmCfg.model) ??
+        this.pickText(rawConfig.model) ??
+        'gpt-4o-mini',
+      provider: this.pickText(llmCfg.provider),
+      sessionType: createSessionDto.type,
+      durationMinutes:
+        typeof rawConfig.durationMinutes === 'number'
+          ? rawConfig.durationMinutes
+          : typeof rawConfig.duration === 'number'
+            ? rawConfig.duration
+            : undefined,
+    });
+
+    const coinRequestId = randomUUID();
+    const coinIdempotencyKey = randomUUID();
+
+    const coinResult = await this.coinGating.reserveForSession({
+      teamId,
+      userId: sessionUserId,
+      sessionType: createSessionDto.type,
+      requestId: coinRequestId,
+      idempotencyKey: coinIdempotencyKey,
+      estimatedCoins: estimation.estimatedCoins,
+      coinPriceUsd: estimation.coinPriceUsd,
+    });
+
+    if (!coinResult.approved) {
+      throw new HttpException(
+        coinResult.reason ?? 'COIN_GATE_REJECTED',
+        coinResult.reason === 'NO_ACTIVE_SUBSCRIPTION' ? 403 : 402,
+      );
+    }
+
+    try {
       const session = await this.sessionRepository.create({
         ownerUserId: sessionUserId,
-        orgId: this.resolveOrgId(createSessionDto.orgId, sessionUserId),
+        orgId: teamId,
         ownerSnapshot: createSessionDto.userSnapshot,
         orgSnapshot: createSessionDto.orgSnapshot,
         name: createSessionDto.name,
@@ -220,6 +273,10 @@ export class SessionService {
           createSessionDto.userSnapshot,
         ),
         crmContextId: createSessionDto.crmContextId,
+        coinReservationId: coinResult.reservationId,
+        coinPeriodKey: coinResult.periodKey,
+        estimatedCoins: coinResult.estimatedCoins,
+        coinPriceUsd: coinResult.coinPriceUsd,
       });
 
       await this.invalidateSessionFullCache(session.id);
@@ -349,7 +406,6 @@ export class SessionService {
         where: { sessionMemberId: ownerMember.id },
         orderBy: { iterationNumber: 'desc' },
       });
-
       if (iteration && iteration.status !== 'completed') {
         await this.prisma.client.iteration.update({
           where: { id: iteration.id },
@@ -632,6 +688,10 @@ export class SessionService {
       createdAt: session.createdAt,
       updatedAt: session.updatedAt,
       endedAt: session.endedAt || undefined,
+      coinReservationId: session.coinReservationId ?? undefined,
+      coinPeriodKey: session.coinPeriodKey ?? undefined,
+      estimatedCoins: session.estimatedCoins ?? undefined,
+      coinPriceUsd: session.coinPriceUsd ?? undefined,
     };
   };
 

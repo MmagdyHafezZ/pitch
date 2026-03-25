@@ -33,6 +33,10 @@ export interface CreateSessionData {
   personaId?: string;
   language?: string;
   crmContextId?: string;
+  coinReservationId?: string;
+  coinPeriodKey?: string;
+  estimatedCoins?: number;
+  coinPriceUsd?: number;
 }
 
 /**
@@ -172,6 +176,10 @@ export class SessionRepository {
         personaId: data.personaId,
         language: data.language,
         crmContextId: data.crmContextId,
+        coinReservationId: data.coinReservationId,
+        coinPeriodKey: data.coinPeriodKey,
+        estimatedCoins: data.estimatedCoins,
+        coinPriceUsd: data.coinPriceUsd,
         members: {
           create: {
             userId: data.ownerUserId,
@@ -250,7 +258,6 @@ export class SessionRepository {
     if (filters?.personaId) {
       where.personaId = filters.personaId;
     }
-
     return await this.prisma.client.session.count({ where });
   }
 

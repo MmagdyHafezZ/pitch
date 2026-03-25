@@ -173,14 +173,16 @@ model TeamMembership {
 
 model Plan {
   // plans are constant
-  id           String          @id @default(cuid())
-  name         String          @unique
-  description  String?
-  planLevel    PlanLevel       @default(FREE)
-  maxCoins     Int             @default(0) // the number of allowed tokens in the plan
-  isActive     Boolean         @default(true) // can anyone subscribe to this plan
-  createdAt    DateTime        @default(now())
-  updatedAt    DateTime        @updatedAt
+  id                 String          @id @default(cuid())
+  name               String          @unique
+  description        String?
+  planLevel          PlanLevel       @default(FREE)
+  maxCoins           Int             @default(0) // the number of allowed tokens in the plan
+  coinCostPerSession Int             @default(10)  // Base coins reserved per simulation session; 0 = unlimited (skip gating)
+  coinPriceUsd       Float           @default(0.10) // Monetary value per coin (used for USD→coin conversion)
+  isActive           Boolean         @default(true) // can anyone subscribe to this plan
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
 
   // Relations
   subscriptions Subscription[]

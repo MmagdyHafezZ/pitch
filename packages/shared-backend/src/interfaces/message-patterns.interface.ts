@@ -1,3 +1,11 @@
+export const USER_SERVICE_COIN_PATTERNS = {
+  COIN_RESERVE: 'coin.reserve',
+  COIN_SESSION_RESERVE: 'coin.session.reserve',
+  COIN_ADJUST: 'coin.adjust',
+  COIN_BALANCE_GET: 'coin.balance.get',
+  COIN_USER_BALANCE_GET: 'coin.user.balance.get',
+} as const
+
 export const USER_SERVICE_PATTERNS = {
   GET_USER: 'get_user',
   GET_MY_SETTINGS: 'get_my_settings',
@@ -193,6 +201,8 @@ export const SIMULATION_SERVICE_PATTERNS = {
   CALENDAR_SESSION_SUGGESTIONS_LIST: 'simulation.calendar.suggestions.list',
   CALENDAR_SESSION_SUGGESTIONS_ACCEPT: 'simulation.calendar.suggestions.accept',
   CALENDAR_SESSION_SUGGESTIONS_DISMISS: 'simulation.calendar.suggestions.dismiss',
+
+  COIN_SESSION_ESTIMATE: 'simulation.coin.session.estimate',
 } as const
 
 export type UserServicePattern = (typeof USER_SERVICE_PATTERNS)[keyof typeof USER_SERVICE_PATTERNS]

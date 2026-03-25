@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { LLMMessageDto, LLMUsageDto } from '../../dto/llm.dto';
 import { ModelCapabilitiesRegistry } from './model-capabilities.registry';
 import { ModelCapabilities } from '../../providers/llm/llm-provider.interface';
@@ -13,6 +13,8 @@ interface UsageCalculationInput {
 
 @Injectable()
 export class UsageCalculatorService {
+  private readonly logger = new Logger(UsageCalculatorService.name);
+
   constructor(
     private readonly capabilitiesRegistry: ModelCapabilitiesRegistry,
   ) {}
@@ -22,6 +24,15 @@ export class UsageCalculatorService {
       input.model,
       input.providerName,
     );
+
+    const tokenSource = {
+      prompt:
+        input.providerUsage?.promptTokens != null ? 'provider' : 'estimated',
+      completion:
+        input.providerUsage?.completionTokens != null
+          ? 'provider'
+          : 'estimated',
+    };
 
     const promptTokens =
       input.providerUsage?.promptTokens ??
@@ -41,11 +52,27 @@ export class UsageCalculatorService {
         input.providerUsage?.completionTokens != null
       );
 
+    const hasPricing = this.hasPricing(capabilities.pricing);
     const costUsd =
       input.providerUsage?.costUsd ??
-      (this.hasPricing(capabilities.pricing)
+      (hasPricing
         ? this.calculateCost(promptTokens, completionTokens, capabilities)
         : undefined);
+
+    this.logger.debug(
+      `[${input.providerName ?? 'unknown'}/${input.model}] ` +
+        `prompt=${promptTokens}(${tokenSource.prompt}) ` +
+        `completion=${completionTokens}(${tokenSource.completion}) ` +
+        `total=${totalTokens} ` +
+        `pricing=${hasPricing ? `in=$${capabilities.pricing.inputTokensPerMillion}/M out=$${capabilities.pricing.outputTokensPerMillion}/M` : 'none'} ` +
+        `costUsd=${costUsd != null ? `$${costUsd.toFixed(6)}` : 'null (no pricing)'}`,
+    );
+
+    if (!hasPricing) {
+      this.logger.warn(
+        `No pricing data for model "${input.model}" (provider: ${input.providerName ?? 'unknown'}) — costUsd will be null, coin adjustment will refund full reservation`,
+      );
+    }
 
     return {
       promptTokens,
@@ -102,7 +129,16 @@ export class UsageCalculatorService {
     const outputCost =
       (completionTokens / 1_000_000) *
       capabilities.pricing.outputTokensPerMillion;
-    return inputCost + outputCost;
+    const rawCost = inputCost + outputCost;
+    const offsetPct = Number(process.env.DEFAULT_EXPENSES_OFFSET_PERCENT ?? 10);
+    const finalCost = rawCost + rawCost * (offsetPct / 100);
+
+    this.logger.debug(
+      `calculateCost: input=$${inputCost.toFixed(6)} output=$${outputCost.toFixed(6)} ` +
+        `raw=$${rawCost.toFixed(6)} offset=${offsetPct}% final=$${finalCost.toFixed(6)}`,
+    );
+
+    return finalCost;
   }
 
   private hasPricing(pricing: ModelCapabilities['pricing']): boolean {

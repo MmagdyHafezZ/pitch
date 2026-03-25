@@ -86,6 +86,19 @@ export class SubscriptionRepository {
     });
   }
 
+  async findActiveWithPlanByTeamId(
+    teamId: string,
+  ): Promise<SubscriptionWithPlan | null> {
+    this.logger.debug(
+      `Finding active subscription with plan for team "${teamId}"`,
+    );
+    return this.prisma.subscription.findFirst({
+      where: { teamId, isActive: true },
+      include: { plan: true },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
   async findDueForRollover(currentDate: Date): Promise<SubscriptionWithPlan[]> {
     this.logger.debug('Finding subscriptions due for rollover');
     return this.prisma.subscription.findMany({

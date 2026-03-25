@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "public"."plans" ADD COLUMN     "coinCostPerSession" INTEGER NOT NULL DEFAULT 10,
+ADD COLUMN     "coinPriceUsd" DOUBLE PRECISION NOT NULL DEFAULT 0.10;

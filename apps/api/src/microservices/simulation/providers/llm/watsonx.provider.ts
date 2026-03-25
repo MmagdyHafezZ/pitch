@@ -19,6 +19,7 @@ import {
   LLMStreamChunkDto,
 } from '../../dto/llm.dto';
 import { LLMPricingService } from '../../services/llm/llm-pricing.service';
+import { LLMModelCatalogService } from '../../services/llm/llm-model-catalog.service';
 import { RedisKeys } from '../../services/redis/redis-key-patterns';
 
 interface WatsonxGenerationResult {
@@ -60,6 +61,7 @@ export class WatsonxProvider implements ILLMProvider {
     private configService: ConfigService,
     @Optional() private readonly pricingService?: LLMPricingService,
     @Optional() private readonly redisService?: RedisService,
+    @Optional() private readonly catalogService?: LLMModelCatalogService,
   ) {
     this.apiKey = this.configService.get<string>('WATSONX_API_KEY') || '';
     this.projectId = this.configService.get<string>('WATSONX_PROJECT_ID') || '';
@@ -363,15 +365,27 @@ export class WatsonxProvider implements ILLMProvider {
   getModelCapabilities(model: string): ModelCapabilities {
     const modelLower = model.toLowerCase();
 
+    // Live spec data from the Watsonx foundation_model_specs API (populated
+    // when the catalog refreshes).  Falls back to hardcoded defaults when the
+    // catalog hasn't been loaded yet or when running without Watsonx creds.
+    const liveSpec = this.catalogService?.getWatsonxModelSpec(model);
+
+    const baseCapabilities: Omit<
+      ModelCapabilities,
+      'maxTokens' | 'maxOutputTokens' | 'pricing'
+    > = {
+      supportsStreaming: true,
+      supportsTools: false,
+      supportsVision: false,
+      supportsAudio: false,
+      supportedModalities: ['text'],
+    };
+
     if (modelLower.includes('granite-13b')) {
       return {
-        maxTokens: 8192,
-        maxOutputTokens: 2048,
-        supportsStreaming: true,
-        supportsTools: false,
-        supportsVision: false,
-        supportsAudio: false,
-        supportedModalities: ['text'],
+        ...baseCapabilities,
+        maxTokens: liveSpec?.maxSequenceLength ?? 8192,
+        maxOutputTokens: liveSpec?.maxOutputTokens ?? 2048,
         pricing: this.buildPricing(model),
       };
     }
@@ -381,51 +395,35 @@ export class WatsonxProvider implements ILLMProvider {
       modelLower.includes('granite-34b')
     ) {
       return {
-        maxTokens: 8192,
-        maxOutputTokens: 2048,
-        supportsStreaming: true,
-        supportsTools: false,
-        supportsVision: false,
-        supportsAudio: false,
-        supportedModalities: ['text'],
+        ...baseCapabilities,
+        maxTokens: liveSpec?.maxSequenceLength ?? 8192,
+        maxOutputTokens: liveSpec?.maxOutputTokens ?? 2048,
         pricing: this.buildPricing(model),
       };
     }
 
     if (modelLower.includes('llama-3-70b')) {
       return {
-        maxTokens: 8192,
-        maxOutputTokens: 4096,
-        supportsStreaming: true,
-        supportsTools: false,
-        supportsVision: false,
-        supportsAudio: false,
-        supportedModalities: ['text'],
+        ...baseCapabilities,
+        maxTokens: liveSpec?.maxSequenceLength ?? 8192,
+        maxOutputTokens: liveSpec?.maxOutputTokens ?? 4096,
         pricing: this.buildPricing(model),
       };
     }
 
     if (modelLower.includes('llama-3-8b')) {
       return {
-        maxTokens: 8192,
-        maxOutputTokens: 4096,
-        supportsStreaming: true,
-        supportsTools: false,
-        supportsVision: false,
-        supportsAudio: false,
-        supportedModalities: ['text'],
+        ...baseCapabilities,
+        maxTokens: liveSpec?.maxSequenceLength ?? 8192,
+        maxOutputTokens: liveSpec?.maxOutputTokens ?? 4096,
         pricing: this.buildPricing(model),
       };
     }
 
     return {
-      maxTokens: 8192,
-      maxOutputTokens: 2048,
-      supportsStreaming: true,
-      supportsTools: false,
-      supportsVision: false,
-      supportsAudio: false,
-      supportedModalities: ['text'],
+      ...baseCapabilities,
+      maxTokens: liveSpec?.maxSequenceLength ?? 8192,
+      maxOutputTokens: liveSpec?.maxOutputTokens ?? 2048,
       pricing: this.buildPricing(model),
     };
   }

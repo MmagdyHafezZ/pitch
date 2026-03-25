@@ -419,6 +419,18 @@ export class SessionResponseDto {
 
   @ApiPropertyOptional({ example: '2024-01-01T00:30:00.000Z' })
   endedAt?: Date;
+
+  @ApiPropertyOptional({ example: 'reservation_abc123' })
+  coinReservationId?: string;
+
+  @ApiPropertyOptional({ example: 'sub_xyz:1700000000000-1702688400000' })
+  coinPeriodKey?: string;
+
+  @ApiPropertyOptional({ example: 10 })
+  estimatedCoins?: number;
+
+  @ApiPropertyOptional({ example: 0.1 })
+  coinPriceUsd?: number;
 }
 
 /**

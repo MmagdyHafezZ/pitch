@@ -2,6 +2,7 @@ import { forwardRef, Module } from '@nestjs/common';
 import { CoinsConsumer } from './controllers/coins.consumer';
 import { CoinAccountingService } from './services/coin-accounting.service';
 import { CoinRedisService } from './services/coin-redis.service';
+import { CoinSessionService } from './services/coin-session.service';
 import { CoinLedgerRepository } from './repositories/coin-ledger.repository';
 import { CoinBalanceRepository } from './repositories/coin-balance.repository';
 import { SubscriptionModule } from '../subscription/subscription.module';
@@ -15,11 +16,17 @@ import { CoinRefillService } from './services/coin-refill.service';
   providers: [
     CoinRedisService,
     CoinAccountingService,
+    CoinSessionService,
     CoinRefillCron,
     CoinRefillService,
     CoinLedgerRepository,
     CoinBalanceRepository,
   ],
-  exports: [CoinAccountingService, CoinRedisService, CoinRefillService],
+  exports: [
+    CoinAccountingService,
+    CoinRedisService,
+    CoinRefillService,
+    CoinSessionService,
+  ],
 })
 export class CoinsModule {}

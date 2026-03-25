@@ -147,6 +147,8 @@ export interface Plan {
   description?: string | null
   planLevel: PlanLevel
   maxCoins: number
+  coinCostPerSession: number
+  coinPriceUsd: number
   isActive: boolean
   createdAt: Date
   updatedAt: Date
@@ -293,6 +295,8 @@ export interface CreatePlanDto {
   description?: string | null
   planLevel: PlanLevel
   maxCoins: number
+  coinCostPerSession?: number
+  coinPriceUsd?: number
   isActive?: boolean
 }
 
@@ -301,6 +305,8 @@ export interface UpdatePlanDto {
   description?: string | null
   planLevel?: PlanLevel
   maxCoins?: number
+  coinCostPerSession?: number
+  coinPriceUsd?: number
   isActive?: boolean
 }
 

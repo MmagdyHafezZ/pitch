@@ -41,6 +41,7 @@ import { SupportAttachmentGatewayController } from './controllers/support/suppor
 import { CoachStreamService } from './controllers/support/coach-stream.service';
 import { SupportAttachmentStorageService } from './controllers/support/support-attachment-storage.service';
 import { S3GatewayController } from './controllers/s3/s3-gateway.controller';
+import { CoinsGatewayController } from './controllers/userManagement/coins-gateway.controller';
 
 @Module({
   imports: [
@@ -88,6 +89,7 @@ import { S3GatewayController } from './controllers/s3/s3-gateway.controller';
     S3GatewayController,
     SupportChatGatewayController,
     SupportAttachmentGatewayController,
+    CoinsGatewayController,
   ],
   providers: [
     { provide: APP_GUARD, useClass: GlobalJwtAuthGuard },
