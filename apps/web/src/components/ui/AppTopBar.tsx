@@ -1048,15 +1048,21 @@ export function AppTopBar({
           <Stack gap={rem(8)} w="100%">
             <Group justify="space-between" align="center" w="100%" wrap="nowrap">
               <Group align="center" style={{ minWidth: 0 }}>
-                <Text
-                  px={rem(isNarrow ? 4 : 10)}
-                  size={rem(isNarrow ? 20 : 22)}
-                  fw={700}
-                  c="var(--pitch-accent-strong)"
-                  style={{ whiteSpace: 'nowrap' }}
+                <UnstyledButton
+                  aria-label="Go to authenticated home screen"
+                  onClick={() => router.push('/studio/home')}
+                  style={{ cursor: 'pointer' }}
                 >
-                  P.I.T.C.H.
-                </Text>
+                  <Text
+                    px={rem(isNarrow ? 4 : 10)}
+                    size={rem(isNarrow ? 20 : 22)}
+                    fw={700}
+                    c="var(--pitch-accent-strong)"
+                    style={{ whiteSpace: 'nowrap' }}
+                  >
+                    P.I.T.C.H.
+                  </Text>
+                </UnstyledButton>
               </Group>
 
               {utilityControls}
@@ -1067,15 +1073,21 @@ export function AppTopBar({
         ) : (
           <Group justify="space-between" align="center" w="100%" wrap="nowrap">
             <Group align="center" style={{ minWidth: 0 }}>
-              <Text
-                px={rem(32)}
-                size={rem(28)}
-                fw={700}
-                c="var(--pitch-accent-strong)"
-                style={{ whiteSpace: 'nowrap' }}
+              <UnstyledButton
+                aria-label="Go to authenticated home screen"
+                onClick={() => router.push('/studio/home')}
+                style={{ cursor: 'pointer' }}
               >
-                P.I.T.C.H.
-              </Text>
+                <Text
+                  px={rem(32)}
+                  size={rem(28)}
+                  fw={700}
+                  c="var(--pitch-accent-strong)"
+                  style={{ whiteSpace: 'nowrap' }}
+                >
+                  P.I.T.C.H.
+                </Text>
+              </UnstyledButton>
             </Group>
 
             {showActionArea && <Box style={{ flex: 1, minWidth: 0 }}>{actionArea}</Box>}
