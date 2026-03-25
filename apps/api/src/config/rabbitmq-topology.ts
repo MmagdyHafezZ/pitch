@@ -2,11 +2,12 @@ import { Logger } from '@nestjs/common';
 import { connect } from 'amqplib';
 import {
   MICROSERVICES_CONFIG,
+  RABBITMQ_DEAD_LETTER_EXCHANGE,
   getQueueOptions,
   getRabbitMQUrl,
 } from './microservices.config';
 
-export const RABBITMQ_DEAD_LETTER_EXCHANGE = 'pitch.services.dlx';
+export { RABBITMQ_DEAD_LETTER_EXCHANGE } from './microservices.config';
 
 export interface RabbitMqQueueTopology {
   queue: string;
@@ -15,6 +16,25 @@ export interface RabbitMqQueueTopology {
 }
 
 const logger = new Logger('RabbitMqTopology');
+type RabbitMqConnection = Awaited<ReturnType<typeof connect>>;
+type RabbitMqChannel = Awaited<ReturnType<RabbitMqConnection['createChannel']>>;
+
+function attachProvisioningChannelListeners(channel: RabbitMqChannel): void {
+  channel.on('error', (error: unknown) => {
+    const message = error instanceof Error ? error.message : String(error);
+    const stack = error instanceof Error ? error.stack : undefined;
+
+    logger.error(`RabbitMQ provisioning channel error: ${message}`, stack);
+  });
+}
+
+async function createProvisioningChannel(
+  connection: RabbitMqConnection,
+): Promise<RabbitMqChannel> {
+  const channel = await connection.createChannel();
+  attachProvisioningChannelListeners(channel);
+  return channel;
+}
 
 export function getDeadLetterQueueName(queueName: string): string {
   return `${queueName}.dlq`;
@@ -38,7 +58,7 @@ export async function provisionRabbitMqTopology(
   topology: RabbitMqQueueTopology[] = RABBITMQ_QUEUE_TOPOLOGY,
 ): Promise<void> {
   const connection = await connect(rabbitmqUrl);
-  const channel = await connection.createChannel();
+  const channel = await createProvisioningChannel(connection);
 
   try {
     await channel.assertExchange(RABBITMQ_DEAD_LETTER_EXCHANGE, 'direct', {
@@ -46,7 +66,7 @@ export async function provisionRabbitMqTopology(
     });
 
     for (const entry of topology) {
-      await channel.assertQueue(entry.queue, getQueueOptions());
+      await channel.assertQueue(entry.queue, getQueueOptions(rabbitmqUrl));
       await channel.assertQueue(entry.deadLetterQueue, { durable: true });
       await channel.bindQueue(
         entry.deadLetterQueue,

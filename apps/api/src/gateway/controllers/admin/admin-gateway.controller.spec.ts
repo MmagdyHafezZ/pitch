@@ -18,22 +18,29 @@ function makeClientProxy() {
 const responseOf = <T>(value: T) => of(value);
 const errorResponse = (error: Error) => throwError(() => error);
 
+type AdminServiceMock = {
+  getDependenciesHealth: jest.Mock;
+  getVersion: jest.Mock;
+  getRuntimeConfig: jest.Mock;
+  getFeatureFlags: jest.Mock;
+  updateFeatureFlag: jest.Mock;
+  transferTeamOwner: jest.Mock;
+  getUserSessions: jest.Mock;
+  listAssessmentRuns: jest.Mock;
+  listWebhooks: jest.Mock;
+  retryDeadLetters: jest.Mock;
+  removeTeamMember: jest.Mock;
+  removeSessionMember: jest.Mock;
+  listErrors: jest.Mock;
+  getLogLevels: jest.Mock;
+  updateLogLevels: jest.Mock;
+};
+
 describe('AdminGatewayController', () => {
   let controller: AdminGatewayController;
   let userClient: ReturnType<typeof makeClientProxy>;
   let simulationClient: ReturnType<typeof makeClientProxy>;
-  let adminService: {
-    getDependenciesHealth: jest.Mock;
-    getVersion: jest.Mock;
-    getRuntimeConfig: jest.Mock;
-    getFeatureFlags: jest.Mock;
-    updateFeatureFlag: jest.Mock;
-    transferTeamOwner: jest.Mock;
-    getUserSessions: jest.Mock;
-    listAssessmentRuns: jest.Mock;
-    listWebhooks: jest.Mock;
-    retryDeadLetters: jest.Mock;
-  };
+  let adminService: AdminServiceMock;
 
   const userClaims = {
     id: 'admin-1',
@@ -54,6 +61,11 @@ describe('AdminGatewayController', () => {
       listAssessmentRuns: jest.fn(),
       listWebhooks: jest.fn(),
       retryDeadLetters: jest.fn(),
+      removeTeamMember: jest.fn(),
+      removeSessionMember: jest.fn(),
+      listErrors: jest.fn(),
+      getLogLevels: jest.fn(),
+      updateLogLevels: jest.fn(),
     };
 
     const module = await Test.createTestingModule({
@@ -437,7 +449,7 @@ describe('AdminGatewayController', () => {
       message: 'removed',
     });
 
-    expect((adminService.removeTeamMember as jest.Mock).mock.calls).toEqual([
+    expect(adminService.removeTeamMember.mock.calls).toEqual([
       ['team-1', 'user-2', userClaims],
     ]);
   });
@@ -584,7 +596,7 @@ describe('AdminGatewayController', () => {
       message: 'removed',
     });
 
-    expect((adminService.removeSessionMember as jest.Mock).mock.calls).toEqual([
+    expect(adminService.removeSessionMember.mock.calls).toEqual([
       ['session-1', 'user-2', userClaims],
     ]);
   });
@@ -705,9 +717,7 @@ describe('AdminGatewayController', () => {
     const result = controller.listLogs({ limit: '25' });
 
     expect(result).toEqual({ logs: [] });
-    expect((adminService.listErrors as jest.Mock).mock.calls).toEqual([
-      [{ limit: 25 }],
-    ]);
+    expect(adminService.listErrors.mock.calls).toEqual([[{ limit: 25 }]]);
   });
 
   it('delegates runtime log level reads to the admin service', () => {
@@ -718,7 +728,7 @@ describe('AdminGatewayController', () => {
     expect(controller.getLogLevels()).toEqual({
       debugEnabled: true,
     });
-    expect((adminService.getLogLevels as jest.Mock).mock.calls).toEqual([[]]);
+    expect(adminService.getLogLevels.mock.calls).toEqual([[]]);
   });
 
   it('delegates runtime log level updates to the admin service', () => {
@@ -731,7 +741,7 @@ describe('AdminGatewayController', () => {
     ).toEqual({
       debugEnabled: false,
     });
-    expect((adminService.updateLogLevels as jest.Mock).mock.calls).toEqual([
+    expect(adminService.updateLogLevels.mock.calls).toEqual([
       [{ debugEnabled: false }, userClaims],
     ]);
   });

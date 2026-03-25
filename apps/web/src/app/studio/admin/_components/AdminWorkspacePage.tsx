@@ -15,6 +15,7 @@ import {
   MultiSelect,
   NumberInput,
   ScrollArea,
+  SegmentedControl,
   Select,
   Stack,
   Switch,
@@ -145,6 +146,11 @@ type TeamMemberCreateFormState = {
   role: string
   tokenLimit: number
   isActive: boolean
+}
+
+type TeamMemberInviteFormState = {
+  email: string
+  role: string
 }
 
 type SessionMemberCreateFormState = {
@@ -341,6 +347,11 @@ const EMPTY_TEAM_MEMBER_CREATE_FORM: TeamMemberCreateFormState = {
   isActive: true,
 }
 
+const EMPTY_TEAM_MEMBER_INVITE_FORM: TeamMemberInviteFormState = {
+  email: '',
+  role: 'MEMBER',
+}
+
 const EMPTY_SESSION_MEMBER_CREATE_FORM: SessionMemberCreateFormState = {
   userIds: [],
   role: 'viewer',
@@ -448,10 +459,28 @@ const getObservedLogToneClassName = (level: ObservedLogEntry['level']) => {
 const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
 const getObservedLogFilterText = (entry: ObservedLogEntry) => {
-  const detailText =
-    typeof entry.detail === 'string' ? entry.detail : (JSON.stringify(entry.detail) ?? '')
+  const detail = isRecord(entry.detail) ? entry.detail : {}
+  const statusCode = readNumber(detail.statusCode)
+  const durationMs = readNumber(detail.durationMs)
+  const userEmail = readString(detail.userEmail, detail.actorEmail)
 
-  return [entry.source, entry.level, entry.title, entry.subtitle, entry.summary, detailText]
+  return [
+    entry.source,
+    entry.level,
+    entry.title,
+    readString(detail.message, entry.title, entry.summary),
+    readString(detail.context),
+    readString(detail.method),
+    readString(detail.path),
+    readString(detail.url),
+    statusCode !== null ? String(statusCode) : null,
+    durationMs !== null ? String(durationMs) : null,
+    userEmail,
+    readString(detail.action),
+    readString(detail.targetType),
+    readString(detail.name),
+  ]
+    .filter((value): value is string => typeof value === 'string' && value.length > 0)
     .join(' ')
     .toLowerCase()
 }
@@ -737,14 +766,11 @@ const buildObservedLogSearchDocument = (entry: ObservedLogEntry): LogSearchDocum
     statuscode: statusCode !== null ? String(statusCode) : '',
     duration: durationMs !== null ? String(durationMs) : '',
     durationms: durationMs !== null ? String(durationMs) : '',
-    user: readString(userEmail, userId) ?? '',
+    user: userEmail ?? '',
     email: userEmail ?? '',
-    userid: userId ?? '',
     action: readString(detail.action) ?? '',
     targettype: readString(detail.targetType) ?? '',
-    targetid: readString(detail.targetId) ?? '',
     name: readString(detail.name) ?? '',
-    id: readString(detail.id, entry.id) ?? entry.id,
   }
 
   return {
@@ -2144,20 +2170,30 @@ function TeamEditorSection({
 function TeamMemberAssignmentSection({
   form,
   setForm,
+  inviteForm,
+  setInviteForm,
   userOptions,
   saving,
+  inviteSaving,
   onAssign,
+  onInvite,
   expanded,
   onToggle,
 }: {
   form: TeamMemberCreateFormState
   setForm: React.Dispatch<React.SetStateAction<TeamMemberCreateFormState>>
+  inviteForm: TeamMemberInviteFormState
+  setInviteForm: React.Dispatch<React.SetStateAction<TeamMemberInviteFormState>>
   userOptions: Array<{ value: string; label: string }>
   saving: boolean
+  inviteSaving: boolean
   onAssign: () => void
+  onInvite: () => void
   expanded: boolean
   onToggle: () => void
 }) {
+  const [mode, setMode] = useState<'assign' | 'invite'>('assign')
+
   return (
     <DetailSection
       title="Add team member"
@@ -2173,78 +2209,136 @@ function TeamMemberAssignmentSection({
       }
     >
       <Stack gap="md">
-        <Grid gutter="md">
-          <Grid.Col span={{ base: 12, md: 7 }}>
-            <Select
-              label="User"
-              searchable
-              data={userOptions}
-              value={form.userId || null}
-              onChange={(value) =>
-                setForm((current) => ({
-                  ...current,
-                  userId: value ?? '',
-                }))
-              }
-              nothingFoundMessage="No eligible users found"
-            />
-          </Grid.Col>
-          <Grid.Col span={{ base: 12, md: 5 }}>
-            <Select
-              label="Role"
-              data={TEAM_ROLE_OPTIONS.filter((role) => role !== 'OWNER').map((value) => ({
-                value,
-                label: value,
-              }))}
-              value={form.role}
-              onChange={(value) =>
-                setForm((current) => ({
-                  ...current,
-                  role: value ?? 'MEMBER',
-                }))
-              }
-            />
-          </Grid.Col>
-          <Grid.Col span={{ base: 12, md: 6 }}>
-            <NumberInput
-              label="Coin limit"
-              min={0}
-              allowDecimal={false}
-              thousandSeparator=","
-              value={form.tokenLimit}
-              onChange={(value) =>
-                setForm((current) => ({
-                  ...current,
-                  tokenLimit: typeof value === 'number' && Number.isFinite(value) ? value : 0,
-                }))
-              }
-            />
-          </Grid.Col>
-          <Grid.Col span={{ base: 12, md: 6 }}>
-            <Box style={{ paddingTop: '1.8rem' }}>
-              <Switch
-                checked={form.isActive}
-                label="Membership starts active"
-                onChange={(event) => {
-                  const checked = event.currentTarget.checked
-                  setForm((current) => ({
-                    ...current,
-                    isActive: checked,
-                  }))
-                }}
-              />
-            </Box>
-          </Grid.Col>
-        </Grid>
+        <SegmentedControl
+          value={mode}
+          onChange={(value) => setMode(value as 'assign' | 'invite')}
+          data={[
+            { label: 'In-app user', value: 'assign' },
+            { label: 'Email invite', value: 'invite' },
+          ]}
+        />
 
-        <Group justify="space-between" align="flex-end" wrap="wrap">
-          <Text size="sm" className={classes.mutedText}>
-            Add an existing user into this team with a role and optional per-member coin limit.
-          </Text>
-          <Button loading={saving} onClick={onAssign}>
-            Add member
-          </Button>
-        </Group>
+        {mode === 'assign' ? (
+          <>
+            <Grid gutter="md">
+              <Grid.Col span={{ base: 12, md: 7 }}>
+                <Select
+                  label="User"
+                  searchable
+                  data={userOptions}
+                  value={form.userId || null}
+                  onChange={(value) =>
+                    setForm((current) => ({
+                      ...current,
+                      userId: value ?? '',
+                    }))
+                  }
+                  nothingFoundMessage="No eligible users found"
+                />
+              </Grid.Col>
+              <Grid.Col span={{ base: 12, md: 5 }}>
+                <Select
+                  label="Role"
+                  data={TEAM_ROLE_OPTIONS.filter((role) => role !== 'OWNER').map((value) => ({
+                    value,
+                    label: value,
+                  }))}
+                  value={form.role}
+                  onChange={(value) =>
+                    setForm((current) => ({
+                      ...current,
+                      role: value ?? 'MEMBER',
+                    }))
+                  }
+                />
+              </Grid.Col>
+              <Grid.Col span={{ base: 12, md: 6 }}>
+                <NumberInput
+                  label="Coin limit"
+                  min={0}
+                  allowDecimal={false}
+                  thousandSeparator=","
+                  value={form.tokenLimit}
+                  onChange={(value) =>
+                    setForm((current) => ({
+                      ...current,
+                      tokenLimit: typeof value === 'number' && Number.isFinite(value) ? value : 0,
+                    }))
+                  }
+                />
+              </Grid.Col>
+              <Grid.Col span={{ base: 12, md: 6 }}>
+                <Box style={{ paddingTop: '1.8rem' }}>
+                  <Switch
+                    checked={form.isActive}
+                    label="Membership starts active"
+                    onChange={(event) => {
+                      const checked = event.currentTarget.checked
+                      setForm((current) => ({
+                        ...current,
+                        isActive: checked,
+                      }))
+                    }}
+                  />
+                </Box>
+              </Grid.Col>
+            </Grid>
+
+            <Group justify="space-between" align="flex-end" wrap="wrap">
+              <Text size="sm" className={classes.mutedText}>
+                Add an existing user into this team with a role and optional per-member coin limit.
+              </Text>
+              <Button loading={saving} onClick={onAssign}>
+                Add member
+              </Button>
+            </Group>
+          </>
+        ) : (
+          <>
+            <Grid gutter="md">
+              <Grid.Col span={{ base: 12, md: 7 }}>
+                <TextInput
+                  label="Email"
+                  placeholder="new-member@example.com"
+                  value={inviteForm.email}
+                  onChange={(event) => {
+                    const value = event.currentTarget.value
+                    setInviteForm((current) => ({
+                      ...current,
+                      email: value,
+                    }))
+                  }}
+                />
+              </Grid.Col>
+              <Grid.Col span={{ base: 12, md: 5 }}>
+                <Select
+                  label="Role"
+                  data={TEAM_ROLE_OPTIONS.filter((role) => role !== 'OWNER').map((value) => ({
+                    value,
+                    label: value,
+                  }))}
+                  value={inviteForm.role}
+                  onChange={(value) =>
+                    setInviteForm((current) => ({
+                      ...current,
+                      role: value ?? 'MEMBER',
+                    }))
+                  }
+                />
+              </Grid.Col>
+            </Grid>
+
+            <Group justify="space-between" align="flex-end" wrap="wrap">
+              <Text size="sm" className={classes.mutedText}>
+                Send the team signup invite email directly from this team and let the user join
+                through the invite link.
+              </Text>
+              <Button loading={inviteSaving} onClick={onInvite}>
+                Send invite
+              </Button>
+            </Group>
+          </>
+        )}
       </Stack>
     </DetailSection>
   )
@@ -2583,6 +2677,9 @@ export function AdminWorkspacePage({ view }: { view: AdminWorkspaceView }) {
     useState<TeamMembershipEditFormState | null>(null)
   const [teamMemberCreateForm, setTeamMemberCreateForm] = useState<TeamMemberCreateFormState>(
     EMPTY_TEAM_MEMBER_CREATE_FORM
+  )
+  const [teamMemberInviteForm, setTeamMemberInviteForm] = useState<TeamMemberInviteFormState>(
+    EMPTY_TEAM_MEMBER_INVITE_FORM
   )
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null)
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null)
@@ -2938,6 +3035,35 @@ export function AdminWorkspacePage({ view }: { view: AdminWorkspaceView }) {
     const email = inviteUserForm.email.trim()
     const teamId = inviteUserForm.teamId.trim()
     const role = inviteUserForm.role.trim().toUpperCase()
+
+    if (!email) {
+      throw new Error('Invite email is required')
+    }
+
+    if (!teamId) {
+      throw new Error('Choose a team for the invite')
+    }
+
+    if (!TEAM_ROLE_OPTIONS.includes(role as (typeof TEAM_ROLE_OPTIONS)[number])) {
+      throw new Error('Invite role is invalid')
+    }
+
+    if (role === 'OWNER') {
+      throw new Error('Owner role cannot be assigned through signup invites')
+    }
+
+    return {
+      teamId,
+      body: {
+        email,
+        role,
+      },
+    }
+  }
+
+  const buildTeamMemberInvitePayload = (teamId: string) => {
+    const email = teamMemberInviteForm.email.trim()
+    const role = teamMemberInviteForm.role.trim().toUpperCase()
 
     if (!email) {
       throw new Error('Invite email is required')
@@ -3547,6 +3673,35 @@ export function AdminWorkspacePage({ view }: { view: AdminWorkspaceView }) {
     onError: (error) => {
       notifications.show({
         title: 'Add team member failed',
+        message: error instanceof Error ? error.message : 'Please try again.',
+        color: 'brand',
+      })
+    },
+  })
+
+  const inviteTeamMemberMutation = useMutation({
+    mutationFn: (teamId: string) => {
+      const payload = buildTeamMemberInvitePayload(teamId)
+      return requestJsonPath(
+        `/api/v1/admin/teams/${encodeURIComponent(payload.teamId)}/invitations/signup`,
+        {
+          method: 'POST',
+          body: JSON.stringify(payload.body),
+        }
+      )
+    },
+    onSuccess: () => {
+      setTeamMemberInviteForm(EMPTY_TEAM_MEMBER_INVITE_FORM)
+      notifications.show({
+        title: 'Invite sent',
+        message: 'The signup email has been queued for delivery.',
+        color: 'success',
+      })
+      queryClient.invalidateQueries({ queryKey: ['admin-console'] })
+    },
+    onError: (error) => {
+      notifications.show({
+        title: 'Invite failed',
         message: error instanceof Error ? error.message : 'Please try again.',
         color: 'brand',
       })
@@ -4994,6 +5149,7 @@ export function AdminWorkspacePage({ view }: { view: AdminWorkspaceView }) {
 
   useEffect(() => {
     setTeamMemberCreateForm(EMPTY_TEAM_MEMBER_CREATE_FORM)
+    setTeamMemberInviteForm(EMPTY_TEAM_MEMBER_INVITE_FORM)
   }, [selectedTeamId])
 
   useEffect(() => {
@@ -5299,51 +5455,89 @@ export function AdminWorkspacePage({ view }: { view: AdminWorkspaceView }) {
               <Group justify="space-between" align="flex-start" mb="md" gap="md">
                 <Box maw={760}>
                   <Group gap="xs" mb={4}>
-                    <ThemeIcon color="info" variant="light">
-                      <IconServer size={16} />
+                    <ThemeIcon color="brand" variant="light">
+                      <IconClock size={16} />
                     </ThemeIcon>
-                    <Title order={4}>System Posture</Title>
+                    <Title order={4}>Runtime Snapshot</Title>
                   </Group>
                   <Text size="sm" className={classes.mutedText}>
-                    The health view is now split on purpose: endpoint checks come from real HTTP
-                    health routes, dependency status comes from `/api/v1/admin/health/dependencies`,
-                    and queue rows are RabbitMQ worker readiness rather than health endpoints.
+                    Current runtime metadata exposed by the admin API for debugging config and
+                    deployment state.
                   </Text>
                 </Box>
-                <StatusBadge status={overallSystemStatus} />
+                <Badge color="brand" variant="light">
+                  safe config view
+                </Badge>
               </Group>
 
-              <div className={classes.kpiGrid}>
-                <MetricCard
-                  label="Overall Status"
-                  value={overallSystemStatus.toUpperCase()}
-                  note={`${endpointHealthyCount}/${systemEndpointChecks.length} endpoint checks healthy`}
-                />
-                <MetricCard
-                  label="Dependencies"
-                  value={`${dependencyHealthyCount}/${systemDependencyChecks.length}`}
-                  note="From /api/v1/admin/health/dependencies"
-                />
-                <MetricCard
-                  label="Queues Ready"
-                  value={`${queueHealthyCount}/${systemQueueChecks.length}`}
-                  note={`${formatNumber(systemQueueChecks.length - queueHealthyCount)} need attention`}
-                />
-                <MetricCard
-                  label="Integrations"
-                  value={`${integrationConfiguredCount}/${Object.keys(SYSTEM_INTEGRATION_LABELS).length}`}
-                  note="Configured in runtime environment"
-                />
-                <MetricCard
-                  label="Providers"
-                  value={formatNumber(llmProviders.length + ttsProviders.length)}
-                  note={`${formatNumber(llmProviders.length)} LLM • ${formatNumber(ttsProviders.length)} TTS`}
-                />
-                <MetricCard
-                  label="Admin Jobs"
-                  value={formatNumber(getCollectionCount(jobsQuery.data))}
-                  note={`${formatNumber(readNumber(queueMetrics.assessmentQueueDepth) ?? 0)} assessment backlog`}
-                />
+              <div className={classes.miniGrid}>
+                <div className={classes.miniCard}>
+                  <Text size="xs" tt="uppercase" fw={700} className={classes.metaLabel}>
+                    Environment
+                  </Text>
+                  <Text mt={6} fw={700}>
+                    {readString(versionApi.environment) ?? 'unknown'}
+                  </Text>
+                  <Text size="xs" c="dimmed">
+                    Node {readString(versionApi.nodeVersion) ?? 'n/a'}
+                  </Text>
+                </div>
+                <div className={classes.miniCard}>
+                  <Text size="xs" tt="uppercase" fw={700} className={classes.metaLabel}>
+                    API Version
+                  </Text>
+                  <Text mt={6} fw={700}>
+                    {readString(versionApi.version) ?? 'unknown'}
+                  </Text>
+                  <Text size="xs" c="dimmed">
+                    Branch {truncate(readString(versionBuild.branch), 28)}
+                  </Text>
+                </div>
+                <div className={classes.miniCard}>
+                  <Text size="xs" tt="uppercase" fw={700} className={classes.metaLabel}>
+                    Uptime
+                  </Text>
+                  <Text mt={6} fw={700}>
+                    {formatNumber(readNumber(versionApi.uptimeSeconds) ?? 0)} s
+                  </Text>
+                  <Text size="xs" c="dimmed">
+                    API process lifetime
+                  </Text>
+                </div>
+                <div className={classes.miniCard}>
+                  <Text size="xs" tt="uppercase" fw={700} className={classes.metaLabel}>
+                    Frontend URL
+                  </Text>
+                  <Text mt={6} fw={700} lineClamp={2}>
+                    {truncate(readString(runtimeApp.frontendUrl), 42)}
+                  </Text>
+                  <Text size="xs" c="dimmed">
+                    API default version {readString(runtimeApp.defaultApiVersion) ?? '1'}
+                  </Text>
+                </div>
+                <div className={classes.miniCard}>
+                  <Text size="xs" tt="uppercase" fw={700} className={classes.metaLabel}>
+                    Super Admins
+                  </Text>
+                  <Text mt={6} fw={700}>
+                    {formatNumber(readNumber(runtimeAuth.superAdminCount) ?? 0)}
+                  </Text>
+                  <Text size="xs" c="dimmed">
+                    DEV bypass {readBoolean(runtimeAuth.devBypassEnabled) ? 'enabled' : 'disabled'}
+                  </Text>
+                </div>
+                <div className={classes.miniCard}>
+                  <Text size="xs" tt="uppercase" fw={700} className={classes.metaLabel}>
+                    Buffered Logs
+                  </Text>
+                  <Text mt={6} fw={700}>
+                    {formatNumber(readNumber(runtimeObservability.bufferedLogs) ?? 0)}
+                  </Text>
+                  <Text size="xs" c="dimmed">
+                    Debug capture{' '}
+                    {readBoolean(runtimeObservability.debugEnabled) ? 'enabled' : 'disabled'}
+                  </Text>
+                </div>
               </div>
             </section>
 
@@ -5465,99 +5659,6 @@ export function AdminWorkspacePage({ view }: { view: AdminWorkspaceView }) {
                       ))
                     )}
                   </Stack>
-                </section>
-              </Grid.Col>
-            </Grid>
-
-            <Grid gutter="lg">
-              <Grid.Col span={12}>
-                <section className={classes.panel}>
-                  <Group justify="space-between" mb="xs">
-                    <Group gap="xs">
-                      <ThemeIcon color="brand" variant="light">
-                        <IconClock size={16} />
-                      </ThemeIcon>
-                      <Title order={4}>Runtime Snapshot</Title>
-                    </Group>
-                    <Badge color="brand" variant="light">
-                      safe config view
-                    </Badge>
-                  </Group>
-                  <Text size="sm" className={classes.mutedText} mb="md">
-                    Current runtime metadata exposed by the admin API for debugging config and
-                    deployment state.
-                  </Text>
-
-                  <div className={classes.miniGrid}>
-                    <div className={classes.miniCard}>
-                      <Text size="xs" tt="uppercase" fw={700} className={classes.metaLabel}>
-                        Environment
-                      </Text>
-                      <Text mt={6} fw={700}>
-                        {readString(versionApi.environment) ?? 'unknown'}
-                      </Text>
-                      <Text size="xs" c="dimmed">
-                        Node {readString(versionApi.nodeVersion) ?? 'n/a'}
-                      </Text>
-                    </div>
-                    <div className={classes.miniCard}>
-                      <Text size="xs" tt="uppercase" fw={700} className={classes.metaLabel}>
-                        API Version
-                      </Text>
-                      <Text mt={6} fw={700}>
-                        {readString(versionApi.version) ?? 'unknown'}
-                      </Text>
-                      <Text size="xs" c="dimmed">
-                        Branch {truncate(readString(versionBuild.branch), 28)}
-                      </Text>
-                    </div>
-                    <div className={classes.miniCard}>
-                      <Text size="xs" tt="uppercase" fw={700} className={classes.metaLabel}>
-                        Uptime
-                      </Text>
-                      <Text mt={6} fw={700}>
-                        {formatNumber(readNumber(versionApi.uptimeSeconds) ?? 0)} s
-                      </Text>
-                      <Text size="xs" c="dimmed">
-                        API process lifetime
-                      </Text>
-                    </div>
-                    <div className={classes.miniCard}>
-                      <Text size="xs" tt="uppercase" fw={700} className={classes.metaLabel}>
-                        Frontend URL
-                      </Text>
-                      <Text mt={6} fw={700} lineClamp={2}>
-                        {truncate(readString(runtimeApp.frontendUrl), 42)}
-                      </Text>
-                      <Text size="xs" c="dimmed">
-                        API default version {readString(runtimeApp.defaultApiVersion) ?? '1'}
-                      </Text>
-                    </div>
-                    <div className={classes.miniCard}>
-                      <Text size="xs" tt="uppercase" fw={700} className={classes.metaLabel}>
-                        Super Admins
-                      </Text>
-                      <Text mt={6} fw={700}>
-                        {formatNumber(readNumber(runtimeAuth.superAdminCount) ?? 0)}
-                      </Text>
-                      <Text size="xs" c="dimmed">
-                        DEV bypass{' '}
-                        {readBoolean(runtimeAuth.devBypassEnabled) ? 'enabled' : 'disabled'}
-                      </Text>
-                    </div>
-                    <div className={classes.miniCard}>
-                      <Text size="xs" tt="uppercase" fw={700} className={classes.metaLabel}>
-                        Buffered Logs
-                      </Text>
-                      <Text mt={6} fw={700}>
-                        {formatNumber(readNumber(runtimeObservability.bufferedLogs) ?? 0)}
-                      </Text>
-                      <Text size="xs" c="dimmed">
-                        Debug capture{' '}
-                        {readBoolean(runtimeObservability.debugEnabled) ? 'enabled' : 'disabled'}
-                      </Text>
-                    </div>
-                  </div>
                 </section>
               </Grid.Col>
             </Grid>
@@ -6450,11 +6551,18 @@ export function AdminWorkspacePage({ view }: { view: AdminWorkspaceView }) {
                                 <TeamMemberAssignmentSection
                                   form={teamMemberCreateForm}
                                   setForm={setTeamMemberCreateForm}
+                                  inviteForm={teamMemberInviteForm}
+                                  setInviteForm={setTeamMemberInviteForm}
                                   userOptions={availableTeamMemberOptions}
                                   saving={addTeamMemberMutation.isPending}
+                                  inviteSaving={inviteTeamMemberMutation.isPending}
                                   onAssign={() => {
                                     if (!selectedTeamId) return
                                     addTeamMemberMutation.mutate(selectedTeamId)
+                                  }}
+                                  onInvite={() => {
+                                    if (!selectedTeamId) return
+                                    inviteTeamMemberMutation.mutate(selectedTeamId)
                                   }}
                                   expanded={isUserInspectorSectionExpanded('team:add-member')}
                                   onToggle={() => toggleUserInspectorSection('team:add-member')}
@@ -8647,11 +8755,18 @@ export function AdminWorkspacePage({ view }: { view: AdminWorkspaceView }) {
                               <TeamMemberAssignmentSection
                                 form={teamMemberCreateForm}
                                 setForm={setTeamMemberCreateForm}
+                                inviteForm={teamMemberInviteForm}
+                                setInviteForm={setTeamMemberInviteForm}
                                 userOptions={availableTeamMemberOptions}
                                 saving={addTeamMemberMutation.isPending}
+                                inviteSaving={inviteTeamMemberMutation.isPending}
                                 onAssign={() => {
                                   if (!selectedTeamId) return
                                   addTeamMemberMutation.mutate(selectedTeamId)
+                                }}
+                                onInvite={() => {
+                                  if (!selectedTeamId) return
+                                  inviteTeamMemberMutation.mutate(selectedTeamId)
                                 }}
                                 expanded={isTeamInspectorSectionExpanded('team:add-member')}
                                 onToggle={() => toggleTeamInspectorSection('team:add-member')}

@@ -14,6 +14,7 @@ import { MicroserviceExceptionFilter } from '@pitch/shared-backend/filters/micro
 import { PrismaClientExceptionFilter } from '@pitch/shared-backend/filters/prisma-exception.filter';
 import { RpcExceptionLoggingFilter } from '@pitch/shared-backend/filters/rpc-exception.filter';
 import { getRabbitMQUrl } from './config/rabbitmq.config';
+import { getQueueOptions } from '../../config/microservices.config';
 import {
   buildRabbitMqQueueTopology,
   provisionRabbitMqTopology,
@@ -41,9 +42,7 @@ async function bootstrap() {
     options: {
       urls: [rabbitmqUrl],
       queue: queueName,
-      queueOptions: {
-        durable: true,
-      },
+      queueOptions: getQueueOptions(),
       noAck: true,
       prefetchCount: 10,
     },

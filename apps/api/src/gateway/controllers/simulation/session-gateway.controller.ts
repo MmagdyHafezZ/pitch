@@ -56,22 +56,6 @@ export class SessionGatewayController {
   ) {}
 
   /**
-   * Session gateway health check
-   *
-   * GET /v1/simulation/sessions/health
-   */
-  @Get('health')
-  @ApiOperation({ summary: 'Session gateway health check' })
-  @ApiResponse({ status: 200, description: 'Session gateway is healthy' })
-  health() {
-    return {
-      status: 'ok',
-      service: 'simulation-sessions',
-      timestamp: new Date().toISOString(),
-    };
-  }
-
-  /**
    * Create a new session
    *
    * POST /v1/simulation/sessions

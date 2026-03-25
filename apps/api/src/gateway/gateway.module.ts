@@ -141,7 +141,6 @@ import { S3GatewayController } from './controllers/s3/s3-gateway.controller';
     S3GatewayController,
     SupportChatGatewayController,
     SupportAttachmentGatewayController,
-    AdminGatewayController,
     AdminUsersController,
     AdminTeamsController,
     AdminSessionsController,
