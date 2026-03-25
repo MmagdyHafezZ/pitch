@@ -33,7 +33,6 @@ import {
   getJwtAccessExpiration,
 } from '@pitch/shared-backend/config/jwt.config';
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
-import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { SimulationWsGateway } from './controllers/simulation/simulation-ws.gateway';
 import { SimulationModule } from '@microservices/simulation/simulation.module';
 import { RagController } from '@microservices/simulation/rag/rag.controller';
@@ -48,7 +47,6 @@ import { AdminObservabilityService } from './controllers/admin/admin-observabili
 import { RabbitMqAdminService } from './controllers/admin/rabbitmq-admin.service';
 import { AdminObservabilityInterceptor } from './interceptors/admin-observability.interceptor';
 import { PhoneCallWebhookService } from './controllers/simulation/phone-call-webhook.service';
-import { AdminGatewayController } from './controllers/admin/admin-gateway.controller';
 import { AdminUsersController } from './controllers/admin/admin-users.controller';
 import { AdminTeamsController } from './controllers/admin/admin-teams.controller';
 import { AdminSessionsController } from './controllers/admin/admin-sessions.controller';
