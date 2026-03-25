@@ -1469,6 +1469,7 @@
 .planCardPriceRow {
   display: flex;
   align-items: flex-end;
+  flex-wrap: wrap;
   gap: 0.35rem;
 }
 
@@ -1478,6 +1479,7 @@
   font-weight: 900;
   letter-spacing: -0.05em;
   color: var(--pitch-surface-text);
+  overflow-wrap: anywhere;
 }
 
 .planCardPriceCadence {

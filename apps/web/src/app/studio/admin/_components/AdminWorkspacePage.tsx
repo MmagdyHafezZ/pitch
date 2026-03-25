@@ -1173,32 +1173,19 @@ const normalizePlanLevel = (planLevel: unknown): (typeof PLAN_LEVEL_OPTIONS)[num
   return 'FREE'
 }
 
-const detectPlanLevelFromText = (value: unknown): (typeof PLAN_LEVEL_OPTIONS)[number] | null => {
-  const normalized = readString(value)?.toLowerCase()
-  if (!normalized) return null
-  if (/\benterprise\b/.test(normalized)) return 'ENTERPRISE'
-  if (/\bteam\b/.test(normalized)) return 'TEAM'
-  if (/\bpro\b|\bgrowth\b/.test(normalized)) return 'PRO'
-  if (/\bfree\b|\bstarter\b/.test(normalized)) return 'FREE'
-  return null
-}
-
 const getPlanDisplayContent = (planLevel: unknown) =>
   PLAN_DISPLAY_CONTENT[normalizePlanLevel(planLevel)]
 
+const getPlanPriceHeadline = (plan: JsonRecord) => {
+  const pricingAmount = getPlanDisplayContent(plan.planLevel).pricing.amount
+  if (pricingAmount !== 'Custom') return pricingAmount
+  return getPlanLabel(plan)
+}
+
 const getPlanLabel = (plan: JsonRecord) => {
   const rawName = readString(plan.name)?.trim()
-  const level = normalizePlanLevel(plan.planLevel)
-  const content = PLAN_DISPLAY_CONTENT[level]
-
-  if (!rawName) return content.fallbackTitle
-
-  const detected = detectPlanLevelFromText(rawName)
-  if (detected && detected !== level) {
-    return content.fallbackTitle
-  }
-
-  return rawName
+  if (rawName) return rawName
+  return PLAN_DISPLAY_CONTENT[normalizePlanLevel(plan.planLevel)].fallbackTitle
 }
 
 const getPlanDescription = (plan: JsonRecord) => {
@@ -9066,6 +9053,9 @@ export function AdminWorkspacePage({ view }: { view: AdminWorkspaceView }) {
                           ...planContent.features,
                           `${formatNumber(readNumber(plan.maxCoins) ?? 0)} coins included`,
                         ]
+                        const planLabel = getPlanLabel(plan)
+                        const planPriceHeadline = getPlanPriceHeadline(plan)
+                        const showPlanTitle = planPriceHeadline !== planLabel
                         const isSelected = selectedPlanId === planId && !isCreatingPlan
 
                         if (!isSelected) {
@@ -9111,16 +9101,18 @@ export function AdminWorkspacePage({ view }: { view: AdminWorkspaceView }) {
                                   </Text>
                                   <div className={classes.planCardPriceRow}>
                                     <Text component="span" className={classes.planCardPriceValue}>
-                                      {planContent.pricing.amount}
+                                      {planPriceHeadline}
                                     </Text>
                                     <Text component="span" className={classes.planCardPriceCadence}>
                                       {planContent.pricing.cadence}
                                     </Text>
                                   </div>
                                 </div>
-                                <Text fw={800} size="lg" className={classes.planCardTitle}>
-                                  {getPlanLabel(plan)}
-                                </Text>
+                                {showPlanTitle ? (
+                                  <Text fw={800} size="lg" className={classes.planCardTitle}>
+                                    {planLabel}
+                                  </Text>
+                                ) : null}
                                 <Text size="sm" className={classes.planCardDescription}>
                                   {getPlanDescription(plan)}
                                 </Text>
