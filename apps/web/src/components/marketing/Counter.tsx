@@ -115,12 +115,8 @@ export function Counter({
       ) : null}
       <span className={styles.value} aria-hidden="true" style={valueStyle}>
         {displayValue}
+        {suffix ? suffix : null}
       </span>
-      {suffix ? (
-        <span className={styles.affix} aria-hidden="true">
-          {suffix}
-        </span>
-      ) : null}
     </span>
   )
 }
