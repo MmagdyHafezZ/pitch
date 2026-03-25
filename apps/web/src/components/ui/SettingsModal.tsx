@@ -41,6 +41,8 @@ import {
   IconSparkles,
   IconCalendarEvent,
   IconAlertCircle,
+  IconChevronDown,
+  IconLogout2,
 } from '@tabler/icons-react'
 import { CalendarConnectCards } from '@/features/calendar/components/CalendarConnectCards'
 import { modals } from '@mantine/modals'
@@ -278,6 +280,12 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
   }, [opened])
 
   useEffect(() => {
+    if (!opened) {
+      setMobileSectionsOpened(false)
+    }
+  }, [opened])
+
+  useEffect(() => {
     const handlePointerUp = () => setDraggingPicker(false)
     window.addEventListener('pointerup', handlePointerUp)
     window.addEventListener('mouseup', handlePointerUp)
@@ -304,6 +312,36 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
     { icon: IconWorld, label: 'Language' },
     { icon: IconCalendarEvent, label: 'Integrations' },
   ]
+  const [mobileSectionsOpened, setMobileSectionsOpened] = useState(false)
+
+  const getSectionTitle = (section: SettingsSection) =>
+    section === 'Account'
+      ? t('topbar.account')
+      : section === 'Notifications'
+        ? t('topbar.notifications')
+        : section === 'Voice & Video'
+          ? 'Voice & Video'
+          : section === 'Appearance'
+            ? 'Appearance'
+            : section === 'Integrations'
+              ? 'Integrations'
+              : t('settings.language.title')
+
+  const getMobileSectionTitle = (section: SettingsSection) =>
+    section === 'Account'
+      ? t('topbar.account')
+      : section === 'Notifications'
+        ? 'Alerts'
+        : section === 'Voice & Video'
+          ? 'Audio'
+          : section === 'Appearance'
+            ? 'Theme'
+            : section === 'Integrations'
+              ? 'Calendar'
+              : t('settings.language.title')
+
+  const activeSectionConfig = sections.find((section) => section.label === activeSection) ?? sections[0]
+  const ActiveSectionIcon = activeSectionConfig.icon
 
   const handleLogout = async () => {
     await logout()
@@ -501,72 +539,142 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
                   <IconX size={16} color={navText} />
                 </ActionIcon>
               </Group>
-              <SimpleGrid cols={3} spacing={rem(4)}>
-                {sections.map((section) => {
-                  const Icon = section.icon
-                  const isActive = activeSection === section.label
-                  const mobileLabel =
-                    section.label === 'Account'
-                      ? t('topbar.account')
-                      : section.label === 'Notifications'
-                        ? 'Alerts'
-                        : section.label === 'Voice & Video'
-                          ? 'Audio'
-                          : section.label === 'Appearance'
-                            ? 'Theme'
-                            : section.label === 'Integrations'
-                              ? 'Calendar'
-                              : t('settings.language.title')
-                  return (
+              <Stack gap={rem(10)}>
+                <Popover
+                  opened={mobileSectionsOpened}
+                  onChange={setMobileSectionsOpened}
+                  position="bottom"
+                  withArrow
+                  shadow="md"
+                  withinPortal={false}
+                  width="target"
+                >
+                  <Popover.Target>
                     <Box
-                      key={section.label}
-                      onClick={() => setActiveSection(section.label)}
+                      onClick={() => setMobileSectionsOpened((current) => !current)}
                       style={{
-                        padding: `${rem(10)} ${rem(4)}`,
-                        borderRadius: rem(8),
                         cursor: 'pointer',
-                        backgroundColor: isActive ? 'rgba(255,255,255,0.14)' : 'transparent',
-                        textAlign: 'center',
-                        transition: 'background-color 0.2s',
+                        borderRadius: rem(14),
+                        padding: `${rem(10)} ${rem(12)}`,
+                        background: `linear-gradient(
+                          180deg,
+                          color-mix(in srgb, ${navBackground} 92%, white 8%),
+                          color-mix(in srgb, ${navBackground} 84%, ${tabsActiveBg} 16%)
+                        )`,
+                        border: `1px solid ${mixColors(navBackground, navText, 0.18)}`,
+                        boxShadow: `0 10px 24px ${mixColors(navBackground, '#000000', 0.28)}`,
                       }}
                     >
-                      <Stack gap={rem(4)} align="center">
-                        <Box style={{ opacity: isActive ? 1 : 0.5, display: 'flex' }}>
-                          <Icon size={20} color={navText} />
-                        </Box>
-                        <Text
-                          c={navText}
-                          size="xs"
-                          fw={isActive ? 700 : 400}
-                          lh={1.2}
-                          ta="center"
-                          style={{ opacity: isActive ? 1 : 0.6 }}
-                        >
-                          {mobileLabel}
-                        </Text>
-                      </Stack>
+                      <Group justify="space-between" wrap="nowrap" gap="sm">
+                        <Group gap="sm" wrap="nowrap">
+                          <Box
+                            style={{
+                              width: rem(36),
+                              height: rem(36),
+                              borderRadius: rem(10),
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              background: tabsActiveBg,
+                              color: tabsActiveText,
+                              flexShrink: 0,
+                            }}
+                          >
+                            <ActiveSectionIcon size={18} />
+                          </Box>
+                          <Stack gap={0}>
+                            <Text size="xs" fw={700} c={navText} style={{ letterSpacing: '0.04em' }}>
+                              SETTINGS
+                            </Text>
+                            <Text size="sm" fw={600} c={navText}>
+                              {getMobileSectionTitle(activeSection)}
+                            </Text>
+                          </Stack>
+                        </Group>
+                        <IconChevronDown
+                          size={18}
+                          color={navText}
+                          style={{
+                            transform: mobileSectionsOpened ? 'rotate(180deg)' : undefined,
+                            transition: 'transform 160ms ease',
+                            flexShrink: 0,
+                          }}
+                        />
+                      </Group>
                     </Box>
-                  )
-                })}
-                {/* Logout tile */}
-                <Box
-                  onClick={handleLogout}
-                  style={{
-                    padding: `${rem(10)} ${rem(4)}`,
-                    borderRadius: rem(8),
-                    cursor: 'pointer',
-                    textAlign: 'center',
-                    transition: 'background-color 0.2s',
-                  }}
-                >
-                  <Stack gap={rem(4)} align="center">
-                    <IconX size={20} color="rgba(255,100,100,0.85)" />
-                    <Text c="rgba(255,100,100,0.85)" size="xs" fw={400} lh={1.2} ta="center">
-                      {t('common.logout')}
-                    </Text>
-                  </Stack>
-                </Box>
-              </SimpleGrid>
+                  </Popover.Target>
+
+                  <Popover.Dropdown
+                    p={rem(8)}
+                    style={{
+                      background: contentBackground,
+                      border: `1px solid ${inputBorder}`,
+                      borderRadius: rem(16),
+                    }}
+                  >
+                    <Stack gap={rem(4)}>
+                      {sections.map((section) => {
+                        const Icon = section.icon
+                        const isActive = activeSection === section.label
+
+                        return (
+                          <Box
+                            key={section.label}
+                            onClick={() => {
+                              setActiveSection(section.label)
+                              setMobileSectionsOpened(false)
+                            }}
+                            style={{
+                              cursor: 'pointer',
+                              borderRadius: rem(12),
+                              padding: `${rem(10)} ${rem(12)}`,
+                              background: isActive ? tabsActiveBg : 'transparent',
+                              border: `1px solid ${
+                                isActive ? mixColors(tabsActiveBg, tabsActiveText, 0.18) : 'transparent'
+                              }`,
+                              transition: 'background 150ms ease, border-color 150ms ease',
+                            }}
+                          >
+                            <Group justify="space-between" wrap="nowrap" gap="sm">
+                              <Group gap="sm" wrap="nowrap">
+                                <Box
+                                  style={{
+                                    width: rem(32),
+                                    height: rem(32),
+                                    borderRadius: rem(10),
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    background: isActive ? tabsHoverBg : inputBackground,
+                                    color: isActive ? tabsActiveText : contentText,
+                                    flexShrink: 0,
+                                  }}
+                                >
+                                  <Icon size={17} />
+                                </Box>
+                                <Stack gap={0}>
+                                  <Text size="sm" fw={600} c={contentText}>
+                                    {getSectionTitle(section.label)}
+                                  </Text>
+                                  <Text size="xs" c={contentMuted}>
+                                    {getMobileSectionTitle(section.label)}
+                                  </Text>
+                                </Stack>
+                              </Group>
+                              {isActive && (
+                                <Text size="xs" fw={700} c={contentMuted}>
+                                  Open
+                                </Text>
+                              )}
+                            </Group>
+                          </Box>
+                        )
+                      })}
+                    </Stack>
+                  </Popover.Dropdown>
+                </Popover>
+
+              </Stack>
             </Box>
           ) : (
             /* Desktop: vertical sidebar */
@@ -600,17 +708,7 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
                       <Group gap="sm">
                         <Icon size={20} color={navText} />
                         <Text c={navText} size="sm" fw={500}>
-                          {section.label === 'Account'
-                            ? t('topbar.account')
-                            : section.label === 'Notifications'
-                              ? t('topbar.notifications')
-                              : section.label === 'Voice & Video'
-                                ? 'Voice & Video'
-                                : section.label === 'Appearance'
-                                  ? 'Appearance'
-                                  : section.label === 'Integrations'
-                                    ? 'Integrations'
-                                    : t('settings.language.title')}
+                          {getSectionTitle(section.label)}
                         </Text>
                       </Group>
                     </Box>
@@ -648,7 +746,10 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
         <ScrollArea style={{ flex: 1, minHeight: 0 }}>
           <Box
             style={{
-              padding: rem(isMobile ? 16 : 40),
+              paddingTop: rem(isMobile ? 16 : 40),
+              paddingRight: rem(isMobile ? 16 : 40),
+              paddingLeft: rem(isMobile ? 16 : 40),
+              paddingBottom: isMobile ? `calc(${rem(96)} + env(safe-area-inset-bottom, 0px))` : rem(40),
               backgroundColor: contentBackground,
               minHeight: '100%',
               color: contentText,
@@ -773,6 +874,44 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
                     {t('common.save')}
                   </Button>
                 </Group>
+
+                {isMobile && (
+                  <Box
+                    onClick={handleLogout}
+                    style={{
+                      cursor: 'pointer',
+                      borderRadius: rem(12),
+                      padding: `${rem(12)} ${rem(14)}`,
+                      border: `1px solid ${mixColors(contentBackground, '#ff6b6b', 0.28)}`,
+                      background: mixColors(contentBackground, '#ff6b6b', 0.08),
+                    }}
+                  >
+                    <Group justify="space-between" wrap="nowrap">
+                      <Group gap="sm" wrap="nowrap">
+                        <Box
+                          style={{
+                            width: rem(34),
+                            height: rem(34),
+                            borderRadius: rem(10),
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            background: mixColors(contentBackground, '#ff6b6b', 0.14),
+                            color: '#ff8787',
+                            flexShrink: 0,
+                          }}
+                        >
+                          <IconLogout2 size={17} />
+                        </Box>
+                        <Stack gap={0}>
+                          <Text size="sm" fw={600} c="var(--pitch-surface-text)">
+                            {t('common.logout')}
+                          </Text>
+                        </Stack>
+                      </Group>
+                    </Group>
+                  </Box>
+                )}
               </Stack>
             )}
 
