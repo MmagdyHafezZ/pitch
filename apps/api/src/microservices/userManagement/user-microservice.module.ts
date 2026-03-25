@@ -8,6 +8,7 @@ import { SubscriptionModule } from './subscription/subscription.module';
 import { NotificationModule } from './notifications/notification.module';
 import { PlansModule } from './plans/plans.module';
 import { CoinsModule } from './coins/coins.module';
+import { StudioAccessModule } from './studio-access/studio-access.module';
 import { ConfigModule } from '@nestjs/config';
 import { PrismaModule } from './prisma/prisma.module';
 import { MongoModule } from './mongo/mongo.module';
@@ -21,6 +22,7 @@ import { MongoModule } from './mongo/mongo.module';
     SubscriptionModule,
     PlansModule,
     CoinsModule,
+    StudioAccessModule,
     PrismaModule,
     MongoModule,
     PassportModule,
