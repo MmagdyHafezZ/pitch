@@ -1,5 +1,6 @@
 export type SessionType = 'text' | 'voice' | 'video' | 'phone' | string
 export type SessionStatus = 'active' | 'ended' | string
+export type ScenarioVisibility = 'PRIVATE' | 'TEAM' | 'PUBLIC'
 
 export interface Session {
   id: string
@@ -16,9 +17,19 @@ export interface Session {
   scenario?: {
     id: string
     orgId?: string
+    createdByUserId?: string | null
+    visibility?: ScenarioVisibility
     name?: string | null
     description?: string | null
     config?: Record<string, unknown> | null
+    isReadonlyLegacy?: boolean
+    permissions?: {
+      canUse: boolean
+      canRead?: boolean
+      canEdit: boolean
+      canDelete: boolean
+      canDuplicate: boolean
+    }
     createdAt?: string
     updatedAt?: string
   } | null
@@ -157,6 +168,7 @@ export type SessionAttachment = {
   contentType: string
   size: number
   uploadedAt: string
+  textPreview?: string
 }
 
 export interface VideoRuntimeConfig {

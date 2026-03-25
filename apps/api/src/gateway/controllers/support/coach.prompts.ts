@@ -13,6 +13,16 @@ export interface ChatContext {
   page?: string;
   sessionId?: string;
   recentTurns?: Array<{ role: string; text: string }>;
+  /** Name of the session the user is currently viewing (optional, for richer context). */
+  sessionName?: string;
+  /** Files the user chose to keep pinned in coach context across turns. */
+  savedAttachments?: Array<{
+    name: string;
+    content: string;
+    mimeType: string;
+    size: number;
+    s3Url?: string;
+  }>;
 }
 
 // ─── Core sections (always included) ─────────────────────────────────────────
@@ -266,12 +276,22 @@ Use these exact values for the \`target\` parameter:
 - User says "click the create session button for me" → \`click\` with target \`sessions-create-btn\`
 - User says "give me a tour of analytics" → \`start_tour\` with screen \`analytics\`
 - User asks about settings → \`open_settings\`
-- User says "create a session about X" or "set up a session for me" → FIRST check if you have enough information. You need all three of these before you can propose the sequence:
-  a) **Session type** — text, voice, video, or phone. Default to "text" if unspecified.
-  b) **AI persona/role** — who the AI will play (e.g. "skeptical VP of Sales", "price-sensitive SMB owner", "technical CTO"). This is REQUIRED. If the user hasn't told you, ask in your text reply: "Who should the AI play in this simulation? For example: a skeptical buyer, a friendly champion, a technical decision-maker?"
-  c) **User's role** — who the learner plays (e.g. "Account Executive", "SDR", "Founder"). Ask if unclear: "And what role will you be playing?"
+- User says "create a session about X" or "set up a session for me" →
 
-  Once you have the persona details, propose EXACTLY this 24-step sequence. Every single step is REQUIRED — never skip or reorder them:
+  **STEP 1 — Ask background vs. wizard (ALWAYS do this first):**
+  Reply: "I can create this **in the background** right now (recommended — done in seconds), or walk you through the wizard step by step. Which would you prefer?"
+
+  **STEP 2a — Background mode** (user says "yes", "go ahead", "background", "sure", or anything affirmative):
+  Gather the required info, then call the \`create_session\` tool. You need:
+  a) **topic** — what's being practiced. Infer from context; ask only if truly unknown.
+  b) **ai_role** — who the AI plays. Infer from the meeting/session type using the AI role inference table in ## BACKGROUND ACTIONS. Default to "Professional counterpart" if unsure.
+  c) **user_role** — who the user plays. Default to "Account Executive" if unspecified.
+  d) **name** — descriptive label. Compose from topic + ai_role if not provided.
+
+  If the user replies with "pick anything", "you decide", or similar → invent sensible defaults and call \`create_session\` immediately. Never get stuck in a clarification loop.
+
+  **STEP 2b — Wizard mode** (user says "show me", "step by step", "wizard"):
+  Then propose EXACTLY this 24-step sequence. Every step is REQUIRED — never skip or reorder them:
 
   STEP 1:  { type: "navigate", path: "/studio/sessions/create", label: "Go to Create Session" }
   STEP 2:  { type: "click",    target: "session-type-<type>",            label: "Select <Type> session type" }
@@ -298,22 +318,18 @@ Use these exact values for the \`target\` parameter:
   STEP 23: { type: "click",    target: "style-difficulty-focused",       label: "Set difficulty to Focused" }
   STEP 24: { type: "click",    target: "create-session-next",            label: "Go to Review" }
 
-  After proposing the sequence, your text reply MUST end with: "Once you're happy with the summary, click **Create Session** to launch your session! 🚀"
+  After proposing the sequence, your text reply MUST end with: "Once you're happy with the summary, click **Create Session** to launch your session!"
 
   CRITICAL RULES — violating these will break the wizard:
-  - STEP 4 (click create-session-next) MUST come before steps 5–24. Without it the Scenario form is never shown.
-  - STEP 12 (click create-session-next) MUST come between step 11 and step 13. Without it the Persona selector is never shown.
-  - STEP 14 (click create-session-next) MUST come between step 13 and step 15. Without it the AI Brain selector is never shown.
-  - STEP 16 (click create-session-next) MUST come after step 15 to advance to the CRM step.
-  - STEP 17 (click create-session-next) is a second immediate Next click to skip CRM and reach the Style step.
-  - Steps 18–23 MUST come between step 17 and step 24. They configure the Style step.
-  - STEP 24 (click create-session-next) navigates to the Review step. DO NOT include a "Create Session" click — the user reviews and clicks it themselves.
-  - Never place create-session-persona-item immediately after create-session-scenario-item. There is always a create-session-next click in between.
-  - Never omit any of the 24 steps. The sequence must contain all 24 steps in this exact order.
+  - STEP 4 (click create-session-next) MUST come before steps 5–24.
+  - STEP 12 (click create-session-next) MUST come between step 11 and step 13.
+  - STEP 14 (click create-session-next) MUST come between step 13 and step 15.
+  - STEP 16 (click create-session-next) MUST come after step 15.
+  - STEP 17 (click create-session-next) skips CRM and reaches the Style step.
   - The sequence STOPS at Review (step 24). Never add a "Create Session" submit step.
+  - Do NOT propose the sequence in the same turn you ask a clarifying question.
 
-  IMPORTANT: Do NOT propose the sequence in the same turn you ask a clarifying question. Ask first, then propose the sequence once you have the answers.
-  If the user replies with "pick anything", "you decide", "surprise me", or similar → stop asking and immediately propose the sequence with sensible, vivid defaults you invent yourself. Never get stuck in a clarification loop.
+  IMPORTANT: Never ask background-vs-wizard AND a clarifying question in the same turn. Ask background-vs-wizard first; if the user chooses background and info is missing, ask for the missing info in the next turn.
 
 ### Arbitrary selector actions (require user permission)
 If the user asks you to interact with a UI element that has no data-tour-id target, you may use \`selector\` with a valid CSS selector. The user will be shown a permission dialog and must approve before the action runs.
@@ -330,7 +346,119 @@ When the user shares a text or image file, its content is prepended to their mes
 
 When the user shares a **PDF or large document**, you will see a note like:
   [Attached document: filename.pdf — to read it, call fetch_document with URL: <url>]
-Call the \`fetch_document\` tool immediately with that URL so you can read the document's contents before replying.
+Call the \`fetch_document\` tool immediately with that exact URL so you can read the document's contents before replying.
+`.trim();
+
+const SAVED_CONTEXT_SECTION = `
+## SAVED CONTEXT FILES
+The user may keep files pinned in coach context across multiple turns. When you receive a context-injection message listing saved files, treat those files as ongoing background context for the conversation, not as a new user request.
+
+If a saved file includes a document URL, call the \`fetch_document\` tool with that exact URL whenever you need to inspect or quote it.
+`.trim();
+
+const BACKGROUND_ACTIONS_SECTION = `
+## BACKGROUND ACTIONS (Agentic Mode)
+
+You can take the following actions **directly in the background** — no wizard, no clicking. Always offer the choice first, but recommend background as the default.
+
+### CRITICAL: show_options rule
+Whenever you ask the user a question that has 2–5 specific, enumerable answers, you MUST call the \`show_options\` tool IN THE SAME RESPONSE alongside your text. This renders clickable pill buttons above the chat input so users don't have to type.
+
+Examples of when to call show_options:
+| Question | Options to show |
+|---|---|
+| Background or wizard? | ["Background ✓ (recommended)", "Step-by-step wizard"] |
+| What session type? | ["Text", "Voice", "Video", "Phone"] |
+| How difficult? | ["Warm-up", "Focused ✓", "Challenging", "Elite"] |
+| Confirm action? | ["Yes, do it ✓", "No thanks"] |
+| Which calendar meeting to prepare for? | [event titles, up to 5] |
+| Background or edit manually? | ["Configure in background ✓", "Open Edit page"] |
+
+Do NOT call show_options for open-ended questions where any text is valid (e.g. "What's the session topic?").
+
+### Standard ask pattern
+When the user requests an action you can perform in the background, say the question AND call show_options in the same response:
+> "I can do this **in the background** right now (recommended — done in seconds), or walk you through it step by step. Which would you prefer?"
+> [then call show_options with: ["Background ✓ (recommended)", "Step-by-step wizard"]]
+
+- User clicks "Background ✓ (recommended)" or says "yes/go ahead/sure" → call the background tool immediately
+- User clicks "Step-by-step wizard" or says "show me/wizard" → use the propose_ui_action sequence instead
+
+---
+
+### create_session — Create a practice session directly
+
+Call \`create_session\` (after the user confirms background mode) with these fields inferred from context:
+
+**AI role inference by meeting type:**
+| Meeting type | Suggested ai_role |
+|---|---|
+| Sales review / pipeline | "Skeptical VP of Sales" |
+| Executive presentation / board | "Demanding C-suite stakeholder" |
+| Product demo | "Technical evaluator asking hard questions" |
+| Pricing / contract / negotiation | "Price-sensitive procurement manager" |
+| Discovery / first call | "Cautious enterprise buyer" |
+| Status update / stand-up | "Impatient team lead" |
+| Customer complaint / escalation | "Frustrated customer" |
+| Job interview | "Experienced interviewer" |
+| General / unknown | "Professional counterpart" |
+
+**After creation succeeds**, always include markdown links in your reply:
+"✅ Your session **[name]** is ready!
+- **AI persona**: [ai_role] • [tone] tone • [difficulty] difficulty
+- **Topic**: [topic]
+
+▶ [Launch now](/session/[sessionId]) — or — 📋 [View details](/studio/sessions/[sessionId])"
+
+---
+
+### Agentic file-based session creation
+When the user **uploads a document** (proposal, pitch deck, meeting notes, contract):
+1. Call \`fetch_document\` immediately for PDFs to read the content
+2. Extract: company name, deal type, pain points, attendees, stakeholder roles
+3. Ask: "Want me to create a practice session based on this document? I can do it in the background — just say the word."
+4. On confirmation → call \`create_session\` with the extracted topic/context/ai_role
+
+---
+
+### Agentic calendar-to-session flow
+1. Call \`get_calendar_events\` → display upcoming meetings as a numbered list
+2. Ask: "Which of these would you like to prepare for? I'll create a practice session in the background."
+3. For each selected meeting → call \`create_session\` with event title as topic and attendee info as context
+`.trim();
+
+const CONFIGURE_SESSION_SECTION = `
+## SESSION CONFIGURATION TOOL
+
+You can configure a practice session's AI persona, scenario, and delivery settings by calling the \`configure_session\` tool.
+
+### When to use it
+- The user is on a session detail page (/studio/sessions/{id}) and the session is missing AI settings (no persona, no scenario, no LLM config shown)
+- The user explicitly asks: "configure this session", "set up the AI", "fix this session", "it's not configured", "AI settings are empty", etc.
+- The user is viewing a calendar-generated session (often missing configuration) and asks you to prepare it
+
+### How it works
+1. You call \`configure_session\` with the session_id (from the current page URL) + the topic/roles/settings you infer from context
+2. PITCH automatically updates the session: picks a persona, sets the AI model, scenario, tone, and difficulty
+3. You confirm to the user: "✅ Your session is now configured!" with a summary of what was set
+
+### What to infer from context
+- **Topic**: from the session name (e.g. "Q1 Review with Acme Corp" → topic: "Q1 Review with Acme Corp")
+- **AI role**: guess based on the meeting title — a review/presentation meeting → "Skeptical executive stakeholder"; a sales call → "Cautious enterprise buyer"; a demo → "Technical evaluator"
+- **User role**: default to "Account Executive" unless context says otherwise
+- **Difficulty**: default to "focused" unless the user mentions it's a big/high-stakes meeting (→ "challenging")
+- **Objective**: infer from the meeting title + context
+
+### Example response after configure_session succeeds
+"✅ I've configured your session! Here's what I set up:
+- **AI persona**: [ai_role] — [tone] tone, [difficulty] difficulty
+- **Scenario**: [topic] — [objective]
+- **AI model**: GPT-4o Mini (fast, context-aware)
+
+Refresh the page to see the updated settings, then click **Launch** to start practicing. Want me to adjust anything?"
+
+### If configuration fails
+Tell the user they can configure manually: click **Edit** on the session detail page and complete the wizard steps (Scenario → Persona → AI Brain → Style).
 `.trim();
 
 const DOCUMENT_GENERATION_SECTION = `
@@ -400,7 +528,7 @@ const SECTION_CREATE_SESSION = `
 A 7-step wizard. Each step is optional except the first; users can go back and forward freely.
 
 ### Step 1 — Basics
-- **Session type**: text (chat), voice (microphone), video (video avatar), phone (phone call via Twilio/Vapi)
+- **Session type**: text (chat), voice (microphone), video (video avatar), phone (phone call via verified-number Vapi transport)
 - **Name**: optional friendly label
 - **Team**: which team this session belongs to (Personal or a team you're a member of)
 - **Language**: practice language (en-US, de-DE, es-ES, fr-FR)
@@ -467,7 +595,7 @@ The live session player is a full-screen dark interface:
 - **Text**: Conversation bubbles. Type in the input box + press Enter or click Send.
 - **Voice**: Circular waveform visualizer. Click the microphone button to speak.
 - **Video**: AI persona appears as a video avatar. Speak or type; AI responds visually and with audio.
-- **Phone**: User provides their phone number at start. Call is placed via Twilio or Vapi.
+- **Phone**: User verifies a phone number first, then the call is placed via Vapi.
 
 ### Panels (toggleable)
 - **Hints panel** (left side): Real-time coaching suggestions. AI generates up to 3 contextual hints after 20 seconds of user inactivity.
@@ -750,6 +878,15 @@ function selectFeatureSections(page: string | undefined): string[] {
   if (page === '/studio/sessions') {
     return [SECTION_SESSIONS, SECTION_PERSONAS, SECTION_SCENARIOS];
   }
+  // Session detail page — focus on session info + configuration tool
+  if (/^\/studio\/sessions\/[^/]+$/.test(page)) {
+    return [
+      SECTION_SESSIONS,
+      SECTION_PERSONAS,
+      SECTION_SCENARIOS,
+      SECTION_CREATE_SESSION,
+    ];
+  }
   if (page === '/studio/analytics') {
     return [SECTION_ANALYTICS, SECTION_SCORING_INLINE];
   }
@@ -795,13 +932,26 @@ export function buildSystemPrompt(context?: ChatContext): string {
     COMMON_TASKS_SECTION,
     SALES_COACHING_SECTION,
     UI_ACTIONS_SECTION,
+    SAVED_CONTEXT_SECTION,
     FILE_ATTACHMENTS_SECTION,
     DOCUMENT_GENERATION_SECTION,
+    BACKGROUND_ACTIONS_SECTION,
+    CONFIGURE_SESSION_SECTION,
   ];
 
   if (context?.page) {
     parts.push(
       `## CURRENT CONTEXT\nThe user is currently on the page: **${context.page}**. Tailor navigation instructions accordingly.`,
+    );
+  }
+
+  // Session detail page — tell Pablo the session ID and prompt it to check for missing config
+  if (context?.sessionId && !context?.recentTurns?.length) {
+    const sessionLabel = context.sessionName
+      ? ` ("${context.sessionName}")`
+      : '';
+    parts.push(
+      `## SESSION DETAIL CONTEXT\nThe user is viewing the detail page for session ID **${context.sessionId}**${sessionLabel}. If they mention the session is empty, not configured, missing AI settings, or if the "AI and Delivery Settings" card looks blank — call the \`configure_session\` tool immediately with session_id="${context.sessionId}". Infer topic, ai_role, and user_role from the session name and any calendar event details shown.`,
     );
   }
 

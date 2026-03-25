@@ -56,4 +56,12 @@ export type ConversationStreamEvent =
         args: Record<string, unknown>;
         effect?: Record<string, unknown>;
       };
+    }
+  | {
+      type: 'coaching_tip';
+      data: {
+        tip: string;
+        stage: string;
+        stageIndex: number;
+      };
     };

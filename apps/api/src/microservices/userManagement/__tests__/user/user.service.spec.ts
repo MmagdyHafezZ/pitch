@@ -13,6 +13,8 @@ describe('UserService', () => {
     phoneNumber: null,
     phoneVerifiedAt: null,
     avatar: null,
+    phoneNumber: null,
+    phoneVerifiedAt: null,
     settings: null,
     isActive: true,
     createdAt: new Date(),

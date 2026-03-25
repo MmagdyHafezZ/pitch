@@ -22,13 +22,19 @@ import {
   ApiQuery,
 } from '@nestjs/swagger';
 import { catchError, timeout } from 'rxjs/operators';
-import { throwError } from 'rxjs';
+import { lastValueFrom, throwError } from 'rxjs';
 import { SIMULATION_SERVICE_PATTERNS } from '@pitch/shared-backend/interfaces/message-patterns.interface';
 import { GlobalJwtAuthGuard } from '../../guards/global-jwt-auth.guard';
+import { Public } from '../../../microservices/userManagement/decorators/public.decorator';
 import { UserClaimsInterceptor } from '../../interceptors/user-claims.interceptor';
 import { UserClaims } from '../../decorators/user-claims.decorator';
 import type { UserClaims as UserClaimsType } from '@pitch/shared-backend/interfaces/user-claims.interface';
 import { normalizeError } from '@pitch/shared-backend/helpers/exceptions';
+import { SessionService } from '@microservices/simulation/services/session.service';
+import {
+  RestartSessionDto,
+  SessionResponseDto,
+} from '@microservices/simulation/dto/session.dto';
 
 /**
  * Session Gateway Controller
@@ -46,6 +52,7 @@ import { normalizeError } from '@pitch/shared-backend/helpers/exceptions';
 export class SessionGatewayController {
   constructor(
     @Inject('SIMULATION_SERVICE') private simulationService: ClientProxy,
+    private readonly sessionService: SessionService,
   ) {}
 
   /**
@@ -76,6 +83,23 @@ export class SessionGatewayController {
           return throwError(() => new HttpException(message, status));
         }),
       );
+  }
+
+  /**
+   * Liveness probe — no auth required
+   *
+   * GET /v1/simulation/sessions/health
+   */
+  @Get('health')
+  @Public()
+  @ApiOperation({ summary: 'Health check for simulation sessions service' })
+  @ApiResponse({ status: 200, description: 'Service is healthy' })
+  health() {
+    return {
+      status: 'ok',
+      service: 'simulation-sessions',
+      timestamp: new Date().toISOString(),
+    };
   }
 
   /**
@@ -258,26 +282,57 @@ export class SessionGatewayController {
   @ApiResponse({ status: 200, description: 'Session restarted successfully' })
   @ApiResponse({ status: 404, description: 'Session not found' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  restartSession(
+  async restartSession(
     @Param('id') id: string,
-    @Body() restartSessionDto: any,
+    @Body() restartSessionDto: RestartSessionDto,
     @UserClaims() userClaims: UserClaimsType,
-  ) {
-    return this.simulationService
-      .send(SIMULATION_SERVICE_PATTERNS.RESTART_SESSION, {
-        id,
-        ...restartSessionDto,
-        userClaims,
-      })
-      .pipe(
-        timeout(5000),
-        catchError((err: unknown) => {
-          const error = normalizeError(err);
-          const message = error.message ?? 'Failed to restart session';
-          const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
-          return throwError(() => new HttpException(message, status));
-        }),
+  ): Promise<SessionResponseDto> {
+    try {
+      return await lastValueFrom(
+        this.simulationService
+          .send<SessionResponseDto>(
+            SIMULATION_SERVICE_PATTERNS.RESTART_SESSION,
+            {
+              id,
+              ...restartSessionDto,
+              userClaims,
+            },
+          )
+          .pipe(timeout(5000)),
       );
+    } catch (err: unknown) {
+      const error = normalizeError(err);
+
+      if (this.isMissingHandlerError(error.message)) {
+        try {
+          return await this.sessionService.restart(
+            id,
+            restartSessionDto,
+            userClaims?.id,
+          );
+        } catch (fallbackErr: unknown) {
+          const normalizedFallback = normalizeError(fallbackErr);
+          const message =
+            normalizedFallback.message ?? 'Failed to restart session';
+          const status =
+            normalizedFallback.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
+          throw new HttpException(message, status);
+        }
+      }
+
+      const message = error.message ?? 'Failed to restart session';
+      const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
+      throw new HttpException(message, status);
+    }
+  }
+
+  private isMissingHandlerError(message: string | undefined): boolean {
+    return (
+      typeof message === 'string' &&
+      message.includes(
+        'There is no matching message handler defined in the remote service',
+      )
+    );
   }
 
   /**

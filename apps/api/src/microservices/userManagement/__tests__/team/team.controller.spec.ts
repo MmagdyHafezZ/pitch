@@ -175,6 +175,7 @@ describe('TeamController', () => {
         },
       },
       basePayload.userClaims.id,
+      false,
     );
   });
 
@@ -256,6 +257,7 @@ describe('TeamController', () => {
         invitedByUserId: basePayload.userClaims.id,
       },
       basePayload.userClaims.id,
+      false,
     );
   });
 
@@ -288,6 +290,7 @@ describe('TeamController', () => {
         isActive: false,
       },
       basePayload.userClaims.id,
+      false,
     );
   });
 
@@ -310,6 +313,7 @@ describe('TeamController', () => {
       'team-1',
       'user-1',
       basePayload.userClaims.id,
+      false,
     );
   });
 

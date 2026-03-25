@@ -1,27 +1,15 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import {
-  ActionIcon,
-  Badge,
-  Box,
-  Group,
-  Paper,
-  Stack,
-  Text,
-  ThemeIcon,
-  Title,
-} from '@mantine/core'
+import { ActionIcon, Badge, Box, Group, Paper, Stack, Text, ThemeIcon, Title } from '@mantine/core'
 import { Dropzone } from '@mantine/dropzone'
+import { IconAlertCircle, IconCheck, IconFile, IconTrash, IconUpload } from '@tabler/icons-react'
 import {
-  IconAlertCircle,
-  IconCheck,
-  IconFile,
-  IconTrash,
-  IconUpload,
-} from '@tabler/icons-react'
-import {
+  ALLOWED_UPLOAD_ACCEPT,
+  ALLOWED_UPLOAD_TYPE_LABELS,
+  ALLOWED_UPLOAD_TYPES_TEXT,
   BLOCKED_EXTENSIONS,
+  isSupportedUploadFile,
   MAX_FILE_SIZE_MB,
   MAX_FILES_PER_SESSION,
 } from '@/features/sessions/constants/upload.constants'
@@ -44,8 +32,6 @@ interface UploadSectionProps {
 }
 
 const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024
-const PRESIGN_UPLOAD_EXPIRY_SECONDS = 300
-const DEFAULT_BUCKET = process.env.NEXT_PUBLIC_STORAGE_BUCKET?.trim() ?? ''
 const BLOCKED_EXTENSIONS_TEXT = BLOCKED_EXTENSIONS.join(', ')
 
 const formatFileSize = (size: number) => {
@@ -86,6 +72,10 @@ const validateFile = (file: File) => {
   const extension = getFileExtension(file.name)
   if (extension && BLOCKED_EXTENSIONS.includes(extension as (typeof BLOCKED_EXTENSIONS)[number])) {
     return `Files with the ${extension} extension are not allowed.`
+  }
+
+  if (!isSupportedUploadFile({ filename: file.name, mimeType: file.type })) {
+    return `Unsupported file type. Supported files: ${ALLOWED_UPLOAD_TYPES_TEXT}.`
   }
 
   return undefined
@@ -160,46 +150,16 @@ export function UploadSection({
   }
 
   const uploadFile = async (file: File) => {
-    if (!DEFAULT_BUCKET) {
-      updatePendingFile(file, {
-        status: 'error',
-        error: 'Storage bucket is not configured.',
-      })
-      return
-    }
-
     updatePendingFile(file, { status: 'uploading', error: undefined })
 
     const timestamp = Date.now()
     const key = `sessions/${effectiveSessionDraftId}/${timestamp}-${sanitizeFilename(file.name)}`
 
     try {
-      const { url } = await api.s3.presignUpload({
-        bucket: DEFAULT_BUCKET,
+      const attachment = await api.s3.upload({
         key,
-        expiresIn: PRESIGN_UPLOAD_EXPIRY_SECONDS,
+        file,
       })
-
-      const uploadResponse = await fetch(url, {
-        method: 'PUT',
-        body: file,
-        headers: {
-          'Content-Type': file.type,
-        },
-      })
-
-      if (!uploadResponse.ok) {
-        throw new Error(`Upload failed with status ${uploadResponse.status}`)
-      }
-
-      const attachment: SessionAttachment = {
-        bucket: DEFAULT_BUCKET,
-        key,
-        filename: file.name,
-        contentType: file.type,
-        size: file.size,
-        uploadedAt: new Date().toISOString(),
-      }
 
       updatePendingFile(file, {
         status: 'uploaded',
@@ -290,6 +250,7 @@ export function UploadSection({
             activateOnClick
             activateOnDrag
             disabled={isUploading}
+            accept={ALLOWED_UPLOAD_ACCEPT}
             className={classes.uploadDropzone}
           >
             <Stack gap="xs" align="center">
@@ -300,8 +261,19 @@ export function UploadSection({
               <Text size="sm" c="dimmed" ta="center">
                 Max {MAX_FILE_SIZE_MB} MB per file.
               </Text>
+              <Text size="xs" c="dimmed" ta="center">
+                Supported: {ALLOWED_UPLOAD_TYPES_TEXT}.
+              </Text>
             </Stack>
           </Dropzone>
+
+          <Group gap="xs">
+            {ALLOWED_UPLOAD_TYPE_LABELS.map((label) => (
+              <Badge key={label} size="xs" variant="light" color="gray">
+                {label}
+              </Badge>
+            ))}
+          </Group>
 
           <Stack gap="xs">
             {pendingFiles.length === 0 ? (
@@ -312,7 +284,12 @@ export function UploadSection({
               </Paper>
             ) : (
               pendingFiles.map((item, index) => (
-                <Paper withBorder radius="md" p="md" key={`${item.file.name}-${item.file.size}-${index}`}>
+                <Paper
+                  withBorder
+                  radius="md"
+                  p="md"
+                  key={`${item.file.name}-${item.file.size}-${index}`}
+                >
                   <Group justify="space-between" align="flex-start" wrap="nowrap">
                     <Group gap="sm" align="flex-start" wrap="nowrap">
                       <ThemeIcon size="lg" radius="md" variant="light" color="gray">

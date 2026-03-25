@@ -4,17 +4,49 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
+import type { Prisma } from '@prisma/simulation-client';
 import { SimulationPrismaService } from '../prisma/simulation-prisma.service';
 import { PhoneProviderFactory } from './providers/phone.factory';
-import { PhoneCallResult, PhoneCallRequest } from './providers/phone.provider';
+import { PhoneCallRequest, PhoneCallResult } from './providers/phone.provider';
+import { VapiContextService } from './vapi-context.service';
+import { TtsService } from '../tts/tts.service';
+import { TtsOptions, TtsResult } from '../tts/providers/tts.provider';
+import { resolveTtsConfig, type ResolvedTtsConfig } from '../utils/tts-config';
+
+const PHONE_STARTER_PROMPT_PREFIX = '[PITCH_STARTER_PROMPT]';
 
 interface StartPhoneCallInput {
   sessionId: string;
   phoneNumber?: string;
   provider?: string;
-  fromNumber?: string;
   userId: string;
+  firstMessage?: string;
+}
+
+interface EndPhoneCallInput {
+  sessionId: string;
+  userId: string;
+  reason?: string;
+}
+
+interface SynthesizePhoneCallAudioInput {
+  sessionId: string;
+  userId: string;
+  text: string;
+  sampleRate?: number;
+}
+
+interface PhoneCallRuntimeUpdate {
+  provider?: string;
+  callId: string;
+  controlUrl?: string;
+  listenUrl?: string;
+  status?: string;
+  startedAt?: string;
+  endedAt?: string;
+  endedReason?: string;
+  endRequestedAt?: string;
+  endRequestedReason?: string;
 }
 
 @Injectable()
@@ -24,14 +56,19 @@ export class PhoneCallService {
   constructor(
     private readonly providerFactory: PhoneProviderFactory,
     private readonly prisma: SimulationPrismaService,
-    private readonly configService: ConfigService,
+    private readonly vapiContext: VapiContextService,
+    private readonly ttsService: TtsService,
   ) {}
 
   async startCall(input: StartPhoneCallInput): Promise<PhoneCallResult> {
-    const { sessionId, provider, phoneNumber, fromNumber, userId } = input;
+    const { sessionId, provider, phoneNumber, userId, firstMessage } = input;
 
     const session = await this.prisma.client.session.findUnique({
       where: { id: sessionId },
+      include: {
+        scenario: true,
+        persona: true,
+      },
     });
 
     if (!session) {
@@ -52,46 +89,206 @@ export class PhoneCallService {
     }
 
     const resolvedProvider =
-      provider ?? this.resolvePhoneProvider(session.sessionConfig);
+      provider ?? this.resolvePhoneProvider(session.sessionConfig) ?? 'vapi';
+
+    if (resolvedProvider !== 'vapi') {
+      throw new BadRequestException('Only Vapi is supported for phone calls.');
+    }
+
     const providerInstance = this.providerFactory.getProvider(resolvedProvider);
 
-    if (providerInstance.name === 'vapi') {
-      if (!this.isStrictE164(resolvedNumber)) {
-        throw new BadRequestException(
-          'Phone number must include a + and country code for Vapi (e.g. +15551234567)',
-        );
-      }
-    } else if (!this.isValidPhoneNumber(resolvedNumber)) {
+    if (!this.isStrictE164(resolvedNumber)) {
       throw new BadRequestException(
-        'Phone number must be in E.164 format (e.g. +15551234567)',
+        'Phone number must be in E.164 format (for example +15551234567).',
       );
     }
 
     const request: PhoneCallRequest = {
       to: resolvedNumber,
-      from: fromNumber,
-      metadata: { sessionId, userId },
+      metadata: {
+        sessionId,
+        userId,
+        transport: 'vapi',
+      },
     };
 
-    const providerConfig = this.resolveProviderConfig(session.sessionConfig);
-    if (providerConfig) {
-      request.providerConfig = providerConfig;
-    }
-
-    if (providerInstance.name === 'twilio') {
-      request.webhookUrl = this.buildWebhookUrl(sessionId, userId);
-    }
+    request.providerConfig = this.buildVapiProviderConfig(
+      session,
+      userId,
+      firstMessage,
+    );
+    this.logVapiRouting(sessionId, userId, request.providerConfig);
 
     this.logger.log(
-      `Starting ${providerInstance.name} call to ${resolvedNumber} for session ${sessionId}`,
+      `phone_call.start session=${sessionId} user=${userId} provider=${providerInstance.name} to=${this.maskPhone(resolvedNumber)}`,
     );
 
     const result = await providerInstance.createCall(request);
+
+    await this.persistPhoneCallRuntime(session.id, session.sessionConfig, {
+      provider: result.provider,
+      callId: result.callId,
+      controlUrl: this.extractMonitorUrl(result.raw, 'controlUrl'),
+      listenUrl: this.extractMonitorUrl(result.raw, 'listenUrl'),
+      status: result.status,
+      startedAt: new Date().toISOString(),
+    }).catch((error) => {
+      this.logger.warn(
+        `phone_call.runtime.persist_failed session=${sessionId} user=${userId} call=${result.callId} error=${(error as Error)?.message ?? error}`,
+      );
+    });
+
+    this.logger.log(
+      `phone_call.started session=${sessionId} user=${userId} provider=${providerInstance.name} call=${result.callId}`,
+    );
 
     return {
       ...result,
       sessionId,
     };
+  }
+
+  async endActiveCall(input: EndPhoneCallInput): Promise<{
+    ok: true;
+    callId: string;
+    provider: string;
+    sessionId: string;
+  }> {
+    const { sessionId, userId, reason } = input;
+    const session = await this.prisma.client.session.findUnique({
+      where: { id: sessionId },
+    });
+
+    if (!session) {
+      throw new NotFoundException(`Session ${sessionId} not found`);
+    }
+
+    if (session.type !== 'phone') {
+      throw new BadRequestException(
+        `Session ${sessionId} is not a phone call session`,
+      );
+    }
+
+    const runtime = this.resolvePhoneCallRuntime(session.sessionConfig);
+    if (!runtime?.callId) {
+      throw new BadRequestException(
+        `No active phone call is registered for session ${sessionId}.`,
+      );
+    }
+
+    const providerName =
+      runtime.provider ??
+      this.resolvePhoneProvider(session.sessionConfig) ??
+      'vapi';
+    const providerInstance = this.providerFactory.getProvider(providerName);
+
+    if (!providerInstance.endCall) {
+      throw new BadRequestException(
+        `Phone provider "${providerName}" does not support programmatic hangup.`,
+      );
+    }
+
+    this.logger.log(
+      `phone_call.end.requested session=${sessionId} user=${userId} provider=${providerName} call=${runtime.callId} reason=${reason ?? 'none'}`,
+    );
+
+    await providerInstance.endCall({
+      callId: runtime.callId,
+      controlUrl: runtime.controlUrl,
+    });
+
+    await this.persistPhoneCallRuntime(sessionId, session.sessionConfig, {
+      ...runtime,
+      provider: providerName,
+      callId: runtime.callId,
+      endRequestedAt: new Date().toISOString(),
+      ...(reason ? { endRequestedReason: reason } : {}),
+    }).catch((error) => {
+      this.logger.warn(
+        `phone_call.end.persist_failed session=${sessionId} user=${userId} call=${runtime.callId} error=${(error as Error)?.message ?? error}`,
+      );
+    });
+
+    return {
+      ok: true,
+      callId: runtime.callId,
+      provider: providerName,
+      sessionId,
+    };
+  }
+
+  async syncPhoneCallRuntimeFromWebhook(input: {
+    sessionId: string;
+    callId: string;
+    status?: string;
+    endedReason?: string;
+    controlUrl?: string;
+    listenUrl?: string;
+  }): Promise<void> {
+    const session = await this.prisma.client.session.findUnique({
+      where: { id: input.sessionId },
+      select: {
+        id: true,
+        type: true,
+        sessionConfig: true,
+      },
+    });
+
+    if (!session || session.type !== 'phone') {
+      return;
+    }
+
+    const existingRuntime = this.resolvePhoneCallRuntime(session.sessionConfig);
+    const now = new Date().toISOString();
+    const isTerminalStatus = this.isTerminalPhoneStatus(input.status);
+
+    await this.persistPhoneCallRuntime(input.sessionId, session.sessionConfig, {
+      ...(existingRuntime ?? {}),
+      callId: input.callId,
+      ...(input.status ? { status: input.status } : {}),
+      ...(input.endedReason ? { endedReason: input.endedReason } : {}),
+      ...(input.controlUrl ? { controlUrl: input.controlUrl } : {}),
+      ...(input.listenUrl ? { listenUrl: input.listenUrl } : {}),
+      ...(existingRuntime?.startedAt ? {} : { startedAt: now }),
+      ...(isTerminalStatus ? { endedAt: now } : {}),
+    });
+  }
+
+  async synthesizePhoneCallAudio(
+    input: SynthesizePhoneCallAudioInput,
+  ): Promise<TtsResult> {
+    const text = input.text.trim();
+    if (!text) {
+      throw new BadRequestException(
+        'Phone call voice request must include text to synthesize.',
+      );
+    }
+
+    const session = await this.prisma.client.session.findUnique({
+      where: { id: input.sessionId },
+      include: {
+        persona: true,
+      },
+    });
+
+    if (!session) {
+      throw new NotFoundException(`Session ${input.sessionId} not found`);
+    }
+
+    if (session.type !== 'phone') {
+      throw new BadRequestException(
+        `Session ${input.sessionId} is not a phone call session`,
+      );
+    }
+
+    const resolvedTts = this.resolvePhoneTtsConfig(session);
+    const sampleRate = this.normalizePhoneSampleRate(input.sampleRate);
+
+    this.logger.log(
+      `phone_call.voice.synthesize session=${input.sessionId} user=${input.userId} provider=${resolvedTts.provider} voice=${resolvedTts.voice ?? 'default'} sampleRate=${sampleRate} text="${this.previewText(text)}"`,
+    );
+
+    return this.synthesizePcmAudio(text, sampleRate, resolvedTts);
   }
 
   private resolvePhoneNumber(sessionConfig: unknown): string | undefined {
@@ -155,6 +352,372 @@ export class PhoneCallService {
     return undefined;
   }
 
+  private buildVapiProviderConfig(
+    session: {
+      id: string;
+      name: string | null;
+      sessionConfig: unknown;
+      scenario?: { description?: string | null } | null;
+      persona?: { name: string; traits?: unknown } | null;
+    },
+    userId: string,
+    firstMessageOverride?: string,
+  ): Record<string, unknown> {
+    const sessionConfigRecord = this.resolveRecord(session.sessionConfig) ?? {};
+    const phoneConfig = this.resolvePhoneConfig(session.sessionConfig);
+    const existingProviderConfig =
+      this.resolveProviderConfig(session.sessionConfig) ?? {};
+    const vapiConfig = this.resolveNestedObject(phoneConfig, 'vapi') ?? {};
+
+    const token = this.vapiContext.createToken({
+      sessionId: session.id,
+      userId,
+      purpose: 'phone-call',
+    });
+
+    const serverUrl = this.vapiContext.buildGatewayUrl(
+      'simulation/phone-calls/vapi/server',
+      token,
+    );
+    const voiceUrl = this.vapiContext.buildGatewayUrl(
+      'simulation/phone-calls/vapi/voice',
+      token,
+    );
+    const llmUrl = this.vapiContext.buildGatewayPathTokenUrl(
+      'simulation/phone-calls/vapi/llm',
+      token,
+    );
+    const transcriberConfig =
+      this.resolveNestedObject(vapiConfig, 'transcriber') ?? {};
+    const voiceConfig = this.resolveNestedObject(vapiConfig, 'voice') ?? {};
+    const firstMessage = this.resolvePlaybackText(
+      firstMessageOverride ??
+        this.resolveString(vapiConfig, 'firstMessage') ??
+        this.resolveString(vapiConfig, 'first_message') ??
+        this.resolveString(phoneConfig, 'firstMessage') ??
+        this.resolveString(sessionConfigRecord, 'firstMessage'),
+    );
+    const playbackAudioUrl = this.resolvePlaybackAudioUrl(
+      this.resolveString(vapiConfig, 'audioUrl') ??
+        this.resolveString(vapiConfig, 'audio_url'),
+    );
+
+    const assistantBase = {
+      name:
+        this.resolveString(vapiConfig, 'name') ??
+        session.name ??
+        (session.persona?.name
+          ? `PITCH ${session.persona.name}`
+          : 'PITCH Phone Session'),
+      maxDurationSeconds:
+        this.resolveNumber(vapiConfig, 'maxDurationSeconds') ?? 900,
+      server: {
+        url: serverUrl,
+      },
+      transcriber: {
+        provider:
+          this.resolveString(transcriberConfig, 'provider') ?? 'deepgram',
+        model: this.resolveString(transcriberConfig, 'model') ?? 'nova-2',
+      },
+    };
+
+    const customVoice = {
+      provider: 'custom-voice',
+      server: {
+        url: voiceUrl,
+        ...(this.resolveNumber(voiceConfig, 'timeoutSeconds')
+          ? {
+              timeoutSeconds: this.resolveNumber(voiceConfig, 'timeoutSeconds'),
+            }
+          : {}),
+      },
+      // Preserve the exact wording authored by PITCH instead of letting Vapi
+      // post-process it before calling our custom voice endpoint.
+      chunkPlan: {
+        enabled: false,
+        formatPlan: {
+          enabled: false,
+        },
+      },
+    };
+
+    const scriptedServerMessages = this.resolveStringArray(
+      vapiConfig,
+      'serverMessages',
+    ) ?? [
+      'status-update',
+      'speech-update',
+      'transcript',
+      'end-of-call-report',
+      'hang',
+    ];
+    const conversationalServerMessages = this.resolveStringArray(
+      vapiConfig,
+      'serverMessages',
+    ) ?? [
+      'status-update',
+      'speech-update',
+      'transcript',
+      'conversation-update',
+      'model-output',
+      'tool-calls',
+      'end-of-call-report',
+      'hang',
+    ];
+    const baseModelMessages = [
+      {
+        role: 'system',
+        content:
+          'Use the external custom LLM endpoint as the source of truth for all phone-call replies. Keep answers concise, natural, and optimized for live speech.',
+      },
+    ];
+
+    let assistant: Record<string, unknown>;
+
+    if (playbackAudioUrl) {
+      assistant = {
+        ...assistantBase,
+        firstMessage: playbackAudioUrl,
+        firstMessageMode:
+          this.resolveString(vapiConfig, 'firstMessageMode') ??
+          'assistant-speaks-first',
+        modelOutputInMessagesEnabled: false,
+        serverMessages: scriptedServerMessages,
+      };
+    } else if (firstMessage) {
+      assistant = {
+        ...assistantBase,
+        firstMessageMode: 'assistant-speaks-first-with-model-generated-message',
+        modelOutputInMessagesEnabled: false,
+        serverMessages: conversationalServerMessages,
+        model: {
+          provider: 'custom-llm',
+          url: llmUrl,
+          model:
+            this.resolveString(vapiConfig, 'model') ?? 'pitch-phone-engine',
+          messages: [
+            ...baseModelMessages,
+            {
+              role: 'system',
+              content: `${PHONE_STARTER_PROMPT_PREFIX} ${firstMessage}`,
+            },
+          ],
+        },
+        voice: customVoice,
+      };
+    } else {
+      assistant = {
+        ...assistantBase,
+        firstMessageMode:
+          this.resolveString(vapiConfig, 'firstMessageMode') ??
+          'assistant-speaks-first-with-model-generated-message',
+        modelOutputInMessagesEnabled: false,
+        serverMessages: conversationalServerMessages,
+        model: {
+          provider: 'custom-llm',
+          url: llmUrl,
+          model:
+            this.resolveString(vapiConfig, 'model') ?? 'pitch-phone-engine',
+          messages: baseModelMessages,
+        },
+        voice: customVoice,
+      };
+    }
+
+    return {
+      ...existingProviderConfig,
+      ...vapiConfig,
+      assistant,
+    };
+  }
+
+  private logVapiRouting(
+    sessionId: string,
+    userId: string,
+    providerConfig: Record<string, unknown>,
+  ): void {
+    const assistant = this.resolveNestedObject(providerConfig, 'assistant');
+    const server = this.resolveNestedObject(assistant, 'server');
+    const model = this.resolveNestedObject(assistant, 'model');
+    const firstMessage = this.resolveString(assistant, 'firstMessage');
+    const starterPrompt = this.extractStarterPromptFromModelMessages(model);
+    const transcriber = this.resolveNestedObject(assistant, 'transcriber');
+    const voice = this.resolveNestedObject(assistant, 'voice');
+    const voiceServer = this.resolveNestedObject(voice, 'server');
+    const phoneNumberId =
+      this.resolveString(providerConfig, 'phoneNumberId') ??
+      this.resolveString(providerConfig, 'phone_number_id') ??
+      'env_default';
+    const serverUrl =
+      this.sanitizeUrlForLog(this.resolveString(server, 'url')) ?? 'unknown';
+    const llmSummary =
+      this.sanitizeUrlForLog(this.resolveString(model, 'url')) ??
+      this.resolveString(model, 'provider') ??
+      'none';
+    const llmModel = this.resolveString(model, 'model') ?? 'none';
+    const firstMessageSummary = this.summarizeAssistantFirstMessage(
+      firstMessage ?? starterPrompt,
+    );
+    const transcriberSummary = [
+      this.resolveString(transcriber, 'provider') ?? 'unknown-provider',
+      this.resolveString(transcriber, 'model') ?? 'unknown-model',
+    ].join('/');
+    const voiceSummary =
+      this.sanitizeUrlForLog(this.resolveString(voiceServer, 'url')) ??
+      this.resolveString(voice, 'provider') ??
+      'none';
+
+    this.logger.log(
+      `phone_call.routing session=${sessionId} user=${userId} phoneNumberId=${phoneNumberId} server=${serverUrl} llm=${llmSummary} model=${llmModel} voice=${voiceSummary} transcriber=${transcriberSummary} firstMessage=${firstMessageSummary}`,
+    );
+  }
+
+  private resolvePhoneTtsConfig(session: {
+    sessionConfig: unknown;
+    persona?: { traits?: unknown } | null;
+  }): ResolvedTtsConfig {
+    const sessionConfig = this.resolveRecord(session.sessionConfig) ?? {};
+    const phoneConfig = this.resolvePhoneConfig(session.sessionConfig);
+    const vapiConfig = this.resolveNestedObject(phoneConfig, 'vapi') ?? {};
+    const phoneVoice = this.resolveNestedObject(vapiConfig, 'voice') ?? {};
+    const baseConfig = resolveTtsConfig({
+      sessionConfig,
+      personaTraits: session.persona?.traits
+        ? (this.resolveRecord(session.persona.traits) ?? null)
+        : null,
+    });
+
+    return {
+      provider:
+        this.resolveString(phoneVoice, 'provider') ??
+        this.resolveString(vapiConfig, 'voiceProvider') ??
+        baseConfig.provider,
+      voice:
+        this.resolveString(phoneVoice, 'voiceId') ??
+        this.resolveString(phoneVoice, 'voiceName') ??
+        this.resolveString(phoneVoice, 'voice') ??
+        this.resolveString(vapiConfig, 'voiceId') ??
+        baseConfig.voice,
+      language:
+        this.resolveString(phoneVoice, 'language') ?? baseConfig.language,
+      model: this.resolveString(phoneVoice, 'model') ?? baseConfig.model,
+    };
+  }
+
+  private normalizePhoneSampleRate(value: number | undefined): number {
+    if (!value || !Number.isFinite(value) || value <= 0) {
+      return 24000;
+    }
+
+    return Math.round(value);
+  }
+
+  private async synthesizePcmAudio(
+    text: string,
+    sampleRate: number,
+    resolvedTts: ResolvedTtsConfig,
+  ): Promise<TtsResult> {
+    const attempts = this.buildPhoneTtsAttempts(sampleRate, resolvedTts);
+    let lastError: unknown;
+
+    for (const attempt of attempts) {
+      try {
+        return await this.synthesizePhonePcmWithProvider(
+          text,
+          attempt.provider,
+          attempt.options,
+        );
+      } catch (error) {
+        lastError = error;
+        this.logger.warn(
+          `phone_call.voice.attempt_failed provider=${attempt.provider} voice=${attempt.options.voice ?? 'default'} error=${(error as Error)?.message ?? error}`,
+        );
+      }
+    }
+
+    throw lastError instanceof Error
+      ? lastError
+      : new BadRequestException('Unable to synthesize phone call audio.');
+  }
+
+  private buildPhoneTtsAttempts(
+    sampleRate: number,
+    resolvedTts: ResolvedTtsConfig,
+  ): Array<{ provider: string; options: TtsOptions }> {
+    const primaryOptions: TtsOptions = {
+      ...(resolvedTts.voice ? { voice: resolvedTts.voice } : {}),
+      ...(resolvedTts.language ? { language: resolvedTts.language } : {}),
+      ...(resolvedTts.model ? { model: resolvedTts.model } : {}),
+      format: 'pcm',
+      sampleRate,
+    };
+
+    const attempts: Array<{ provider: string; options: TtsOptions }> = [
+      {
+        provider: resolvedTts.provider || 'elevenlabs',
+        options: primaryOptions,
+      },
+    ];
+
+    const needsElevenLabsFallback =
+      resolvedTts.provider !== 'elevenlabs' ||
+      resolvedTts.voice != null ||
+      resolvedTts.model != null;
+
+    if (needsElevenLabsFallback) {
+      attempts.push({
+        provider: 'elevenlabs',
+        options: {
+          ...(resolvedTts.language ? { language: resolvedTts.language } : {}),
+          format: 'pcm',
+          sampleRate,
+        },
+      });
+    }
+
+    return attempts;
+  }
+
+  private async synthesizePhonePcmWithProvider(
+    text: string,
+    provider: string,
+    options: TtsOptions,
+  ): Promise<TtsResult> {
+    let audioBuffer: Buffer;
+    let contentType: string;
+
+    try {
+      const streamResult = await this.ttsService.synthesizeStream(
+        text,
+        provider,
+        options,
+      );
+      const chunks: Uint8Array[] = [];
+      for await (const chunk of streamResult.audioStream) {
+        chunks.push(chunk);
+      }
+      audioBuffer = Buffer.concat(chunks);
+      contentType = streamResult.contentType;
+    } catch (streamError) {
+      const message = (streamError as Error)?.message ?? '';
+      if (!message.includes('does not support streaming')) {
+        throw streamError;
+      }
+
+      const result = await this.ttsService.synthesize(text, provider, options);
+      audioBuffer = result.audioBuffer;
+      contentType = result.contentType;
+    }
+
+    if (!contentType.toLowerCase().startsWith('audio/pcm')) {
+      throw new BadRequestException(
+        `TTS provider "${provider}" returned unsupported content type "${contentType}" for phone audio.`,
+      );
+    }
+
+    return { audioBuffer, contentType };
+  }
+
   private resolvePhoneConfig(
     sessionConfig: unknown,
   ): Record<string, unknown> | undefined {
@@ -171,23 +734,288 @@ export class PhoneCallService {
     return undefined;
   }
 
-  private buildWebhookUrl(sessionId: string, userId: string): string {
-    const baseUrl = this.configService.get<string>('PHONE_CALL_WEBHOOK_URL');
-    if (!baseUrl) {
-      throw new Error('PHONE_CALL_WEBHOOK_URL is not configured');
+  private resolvePhoneCallRuntime(
+    sessionConfig: unknown,
+  ): PhoneCallRuntimeUpdate | undefined {
+    const phone = this.resolvePhoneConfig(sessionConfig);
+    const runtime = this.resolveNestedObject(phone, 'runtime');
+    if (!runtime) {
+      return undefined;
     }
 
-    const url = new URL(baseUrl);
-    url.searchParams.set('sessionId', sessionId);
-    url.searchParams.set('userId', userId);
-    return url.toString();
+    const callId = this.resolveString(runtime, 'callId');
+    if (!callId) {
+      return undefined;
+    }
+
+    return {
+      callId,
+      provider: this.resolveString(runtime, 'provider'),
+      controlUrl: this.resolveString(runtime, 'controlUrl'),
+      listenUrl: this.resolveString(runtime, 'listenUrl'),
+      status: this.resolveString(runtime, 'status'),
+      startedAt: this.resolveString(runtime, 'startedAt'),
+      endedAt: this.resolveString(runtime, 'endedAt'),
+      endedReason: this.resolveString(runtime, 'endedReason'),
+      endRequestedAt: this.resolveString(runtime, 'endRequestedAt'),
+      endRequestedReason: this.resolveString(runtime, 'endRequestedReason'),
+    };
   }
 
-  private isValidPhoneNumber(value: string): boolean {
-    return /^\+?[1-9]\d{7,14}$/.test(value);
+  private async persistPhoneCallRuntime(
+    sessionId: string,
+    sessionConfig: unknown,
+    runtime: PhoneCallRuntimeUpdate,
+  ): Promise<void> {
+    const nextSessionConfig = this.withPhoneCallRuntime(sessionConfig, runtime);
+    await this.prisma.client.session.update({
+      where: { id: sessionId },
+      data: {
+        sessionConfig: nextSessionConfig as Prisma.InputJsonValue,
+      },
+    });
+  }
+
+  private withPhoneCallRuntime(
+    sessionConfig: unknown,
+    runtime: PhoneCallRuntimeUpdate,
+  ): Record<string, unknown> {
+    const root = this.resolveRecord(sessionConfig) ?? {};
+    const phone = this.resolvePhoneConfig(sessionConfig) ?? {};
+    const existingRuntime = this.resolveNestedObject(phone, 'runtime') ?? {};
+
+    return {
+      ...root,
+      phone: {
+        ...phone,
+        runtime: {
+          ...existingRuntime,
+          ...this.withoutUndefined(runtime),
+        },
+      },
+    };
+  }
+
+  private extractMonitorUrl(
+    raw: Record<string, unknown> | undefined,
+    key: 'controlUrl' | 'listenUrl',
+  ): string | undefined {
+    const monitor = this.resolveNestedObject(raw, 'monitor');
+    return this.resolveString(monitor, key);
+  }
+
+  private withoutUndefined<T extends object>(
+    value: T,
+  ): Record<string, unknown> {
+    return Object.fromEntries(
+      Object.entries(value).filter(([, entry]) => entry !== undefined),
+    );
+  }
+
+  private isTerminalPhoneStatus(status: string | undefined): boolean {
+    return (
+      status === 'ended' ||
+      status === 'failed' ||
+      status === 'busy' ||
+      status === 'no-answer' ||
+      status === 'canceled'
+    );
   }
 
   private isStrictE164(value: string): boolean {
     return /^\+[1-9]\d{7,14}$/.test(value);
+  }
+
+  private resolveString(
+    source: Record<string, unknown> | undefined,
+    key: string,
+  ): string | undefined {
+    if (!source) {
+      return undefined;
+    }
+
+    const value = source[key];
+    return typeof value === 'string' && value.trim().length > 0
+      ? value
+      : undefined;
+  }
+
+  private resolveNumber(
+    source: Record<string, unknown> | undefined,
+    key: string,
+  ): number | undefined {
+    if (!source) {
+      return undefined;
+    }
+
+    const value = source[key];
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return value;
+    }
+
+    if (typeof value === 'string' && value.trim().length > 0) {
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : undefined;
+    }
+
+    return undefined;
+  }
+
+  private resolveNestedObject(
+    source: Record<string, unknown> | null | undefined,
+    key: string,
+  ): Record<string, unknown> | undefined {
+    if (!source) {
+      return undefined;
+    }
+
+    const value = source[key];
+    return value && typeof value === 'object'
+      ? (value as Record<string, unknown>)
+      : undefined;
+  }
+
+  private resolveRecord(value: unknown): Record<string, unknown> | undefined {
+    return value && typeof value === 'object'
+      ? (value as Record<string, unknown>)
+      : undefined;
+  }
+
+  private resolveStringArray(
+    source: Record<string, unknown> | undefined,
+    key: string,
+  ): string[] | undefined {
+    if (!source) {
+      return undefined;
+    }
+
+    const value = source[key];
+    if (!Array.isArray(value)) {
+      return undefined;
+    }
+
+    const items = value.filter(
+      (entry): entry is string =>
+        typeof entry === 'string' && entry.trim().length > 0,
+    );
+
+    return items.length > 0 ? items : undefined;
+  }
+
+  private sanitizeUrlForLog(url: string | undefined): string | undefined {
+    if (!url) {
+      return undefined;
+    }
+
+    try {
+      const parsed = new URL(url);
+      if (parsed.searchParams.has('token')) {
+        parsed.searchParams.set('token', '[redacted]');
+      }
+      parsed.pathname = parsed.pathname.replace(
+        /(\/simulation\/phone-calls\/vapi\/llm\/)[^/]+$/u,
+        '$1[redacted]',
+      );
+      return parsed.toString();
+    } catch {
+      return url;
+    }
+  }
+
+  private summarizeAssistantFirstMessage(value: string | undefined): string {
+    if (!value) {
+      return 'none';
+    }
+
+    const sanitizedUrl = this.sanitizeUrlForLog(value);
+    if (sanitizedUrl) {
+      try {
+        const parsed = new URL(value);
+        if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+          return sanitizedUrl;
+        }
+      } catch {
+        // Fall through to text preview when value is not a URL.
+      }
+    }
+
+    return this.previewText(value);
+  }
+
+  private extractStarterPromptFromModelMessages(
+    model: Record<string, unknown> | undefined,
+  ): string | undefined {
+    const rawMessages = model?.messages;
+    const messages: unknown[] = Array.isArray(rawMessages) ? rawMessages : [];
+
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+      const message = messages[index];
+      if (!message || typeof message !== 'object') {
+        continue;
+      }
+
+      const record = message as Record<string, unknown>;
+      if (this.resolveString(record, 'role') !== 'system') {
+        continue;
+      }
+
+      const content = this.resolveString(record, 'content');
+      if (!content?.startsWith(PHONE_STARTER_PROMPT_PREFIX)) {
+        continue;
+      }
+
+      const prompt = content.slice(PHONE_STARTER_PROMPT_PREFIX.length).trim();
+      if (prompt.length > 0) {
+        return prompt;
+      }
+    }
+
+    return undefined;
+  }
+
+  private resolvePlaybackText(
+    value: string | undefined | null,
+  ): string | undefined {
+    if (typeof value !== 'string') {
+      return undefined;
+    }
+
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+  }
+
+  private resolvePlaybackAudioUrl(
+    value: string | undefined,
+  ): string | undefined {
+    if (!value) {
+      return undefined;
+    }
+
+    try {
+      const parsed = new URL(value);
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+        throw new Error('unsupported protocol');
+      }
+      return parsed.toString();
+    } catch {
+      throw new BadRequestException(
+        'Phone call audioUrl must be an absolute HTTP(S) URL.',
+      );
+    }
+  }
+
+  private previewText(value: string, maxLength = 120): string {
+    const normalized = value.replace(/\s+/g, ' ').trim();
+    if (normalized.length <= maxLength) {
+      return normalized;
+    }
+
+    return `${normalized.slice(0, maxLength - 3)}...`;
+  }
+
+  private maskPhone(phoneNumber: string): string {
+    return phoneNumber.length > 4
+      ? `${phoneNumber.slice(0, 3)}***${phoneNumber.slice(-2)}`
+      : phoneNumber;
   }
 }

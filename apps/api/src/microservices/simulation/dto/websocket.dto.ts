@@ -4,6 +4,7 @@ import {
   IsOptional,
   ValidateNested,
   IsObject,
+  IsBoolean,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { LLMMessageDto, LLMConfigDto } from './llm.dto';
@@ -51,6 +52,7 @@ export enum WsMessageType {
   CONVERSATION_VISUAL_STATE = 'conversation.visual_state',
   CONVERSATION_HANGUP_REQUESTED = 'conversation.hangup_requested',
   CONVERSATION_TOOL_EXECUTED = 'conversation.tool_executed',
+  CONVERSATION_COACHING_TIP = 'conversation.coaching_tip',
 
   PING = 'ping',
   PONG = 'pong',
@@ -327,6 +329,14 @@ export class ConversationStartPayload {
 
   @IsOptional()
   startAsAssistant?: boolean;
+
+  @IsString()
+  @IsOptional()
+  starterPrompt?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  skipTts?: boolean;
 
   @IsString()
   @IsOptional()

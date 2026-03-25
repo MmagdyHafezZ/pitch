@@ -1,5 +1,6 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { ClientsModule, Transport } from '@nestjs/microservices';
 import { ChatController } from './controllers/chat.controller';
 import { LLMRoutingController } from './controllers/llm-routing.controller';
 import { LLMTestController } from './controllers/llm-test.controller';
@@ -10,10 +11,12 @@ import { InvitationController } from './controllers/invitation.controller';
 import { InvitationHttpController } from './controllers/invitation-http.controller';
 import { ConversationController } from './controllers/conversation.controller';
 import { PersonaHttpController } from './controllers/persona-http.controller';
-import { ScenarioHttpController } from './controllers/scenario-http.controller';
+import { ScenarioController } from './controllers/scenario.controller';
 import { HintsController } from './controllers/hints.controller';
 import { TimelineController } from './controllers/timeline.controller';
 import { ChallengeController } from './controllers/challenge.controller';
+import { CalendarSessionController } from './controllers/calendar-session.controller';
+import { CalendarSessionService } from './services/calendar-session.service';
 import { SimulationPrismaService } from './prisma/simulation-prisma.service';
 import { MongoConnectionService } from './services/mongo/mongo-connection.service';
 import { LLMService } from './services/llm/llm.service';
@@ -53,7 +56,10 @@ import { TtsModule } from './tts/tts.module';
 import { AssessmentModule } from './assessment/assessment.module';
 import { PhoneModule } from './phone/phone.module';
 import { RagModule } from './rag/rag.module';
-import { CheckSystemAdmin } from '../../gateway/guards/check-system-admin.guard';
+import {
+  getRabbitMQUrl,
+  getQueueOptions,
+} from '../../config/microservices.config';
 
 @Module({
   imports: [
@@ -65,6 +71,34 @@ import { CheckSystemAdmin } from '../../gateway/guards/check-system-admin.guard'
       }),
       inject: [ConfigService],
     }),
+    ClientsModule.registerAsync([
+      {
+        name: 'CRM_SERVICE',
+        imports: [ConfigModule],
+        useFactory: (_configService: ConfigService) => ({
+          transport: Transport.RMQ,
+          options: {
+            urls: [getRabbitMQUrl()],
+            queue: 'crm_queue',
+            queueOptions: getQueueOptions(),
+          },
+        }),
+        inject: [ConfigService],
+      },
+      {
+        name: 'USER_SERVICE',
+        imports: [ConfigModule],
+        useFactory: (_configService: ConfigService) => ({
+          transport: Transport.RMQ,
+          options: {
+            urls: [getRabbitMQUrl()],
+            queue: 'user_queue',
+            queueOptions: getQueueOptions(),
+          },
+        }),
+        inject: [ConfigService],
+      },
+    ]),
     TtsModule,
     PhoneModule,
     RagModule,
@@ -81,10 +115,11 @@ import { CheckSystemAdmin } from '../../gateway/guards/check-system-admin.guard'
     InvitationHttpController,
     ConversationController,
     PersonaHttpController,
-    ScenarioHttpController,
+    ScenarioController,
     HintsController,
     TimelineController,
     ChallengeController,
+    CalendarSessionController,
   ],
   providers: [
     CheckSystemAdmin,
@@ -135,8 +170,11 @@ import { CheckSystemAdmin } from '../../gateway/guards/check-system-admin.guard'
     StreamingConversationService,
     ConversationToolsService,
     ConversationOrchestrationService,
+    CalendarSessionService,
   ],
   exports: [
+    PhoneModule,
+    TtsModule,
     LLMService,
     LLMRoutingConfigService,
     StreamingConversationService,

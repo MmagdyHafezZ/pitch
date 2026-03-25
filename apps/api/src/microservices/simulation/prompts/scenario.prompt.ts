@@ -6,8 +6,10 @@ const SCENARIO_SYSTEM_PROMPT_TEMPLATE = PromptTemplate.fromTemplate(
     'You are a senior scenario designer for a sales simulation platform.',
     '',
     '[TASK]',
-    '- Generate a detailed, realistic scenario a user will be placed into.',
-    '- Avoid generic language; include concrete context (company, role, setting, stakes, constraints).',
+    '- Generate a realistic, practical scenario a learner can immediately practice.',
+    '- Ground the scenario in the provided topic, objective, roles, persona cues, CRM context, duration, and workspace context.',
+    '- Avoid generic filler. Use concrete company context, meeting situation, stakes, constraints, and likely objections.',
+    '- Make the situation feel commercially believable and useful for coaching.',
     '',
     '[OUTPUT FORMAT: JSON ONLY]',
     '{outputSchema}',
@@ -15,9 +17,12 @@ const SCENARIO_SYSTEM_PROMPT_TEMPLATE = PromptTemplate.fromTemplate(
     '[RULES]',
     '- Return only valid JSON. No prose or commentary.',
     '- config must be a JSON object.',
-    '- Keep fields concise but specific.',
+    '- Keep fields concise but specific and operationally useful.',
     '- roles.user is the human learner; roles.assistant is the AI counterparty.',
     '- description should be neutral and third-person; avoid second-person "you".',
+    '- successCriteria, constraints, stakes, and stages must be actionable, not generic.',
+    '- stages should describe how the conversation should realistically progress.',
+    '- If some grounding input is missing, infer the most plausible business context instead of leaving the scenario vague.',
     '- {languageDirective}',
   ].join('\n'),
 );
@@ -27,23 +32,42 @@ export async function buildScenarioSystemPrompt(
 ): Promise<string> {
   const outputSchema = JSON.stringify(
     {
-      name: 'Scenario name',
-      description: 'One-paragraph scenario description',
+      name: 'Specific scenario title',
+      description:
+        'One short paragraph describing the realistic business situation',
       config: {
-        objective: 'Primary objective',
-        background: 'Relevant context and background',
+        objective: 'Primary learner objective',
+        background:
+          'Relevant company, relationship, meeting, and commercial context',
         roles: {
-          user: 'User role',
-          assistant: 'Assistant role',
+          user: 'Human learner role',
+          assistant: 'AI counterpart role',
         },
-        successCriteria: ['List of success criteria'],
-        constraints: ['List of constraints'],
+        successCriteria: [
+          'Concrete outcomes that indicate a strong performance',
+        ],
+        constraints: ['Realistic limitations, blockers, or non-negotiables'],
+        stakes: [
+          'What the learner risks losing or gaining in this interaction',
+        ],
+        stages: [
+          {
+            label: 'Opening',
+            description: 'How the stage should unfold',
+            duration: 5,
+          },
+        ],
         difficulty: 'easy|medium|hard',
-        durationMinutes: 10,
+        durationMinutes: 20,
         tags: ['tag1', 'tag2'],
         language: 'en-US',
-        personaHints: ['optional persona hints'],
-        crmContextId: 'optional CRM context id',
+        grounding: {
+          meetingType:
+            'Discovery call / renewal / escalation / executive review',
+          companyContext:
+            'Short concrete summary of the account or internal context',
+          likelyObjections: ['Most likely objections or friction points'],
+        },
       },
     },
     null,

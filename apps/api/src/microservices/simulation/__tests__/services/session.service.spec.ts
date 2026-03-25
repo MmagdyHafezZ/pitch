@@ -107,6 +107,66 @@ describe('SessionService cache invalidation', () => {
     expect(redis.deleteSessionFull).toHaveBeenCalledWith('session-1');
   });
 
+  it('enriches thin generated session configs before persisting them', async () => {
+    sessionRepository.create.mockResolvedValue(baseSession);
+    redis.deleteSessionFull.mockResolvedValue(undefined);
+
+    await service.create(
+      {
+        orgId: 'org-1',
+        type: 'text',
+        name: 'Morning Catch Up',
+        sessionConfig: {
+          calendarEventId: 'evt-1',
+          eventStartTime: '2026-03-21T09:00:00.000Z',
+          attendees: [{ name: 'Alex Morgan', email: 'alex@example.com' }],
+        },
+      } as never,
+      'owner-1',
+    );
+
+    expect(sessionRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionConfig: expect.objectContaining({
+          description: expect.stringContaining('Morning Catch Up'),
+          aiRole: 'Cross-functional meeting counterpart',
+          userRole: 'Account Executive',
+          counterpartProfile: expect.objectContaining({
+            name: 'Alex Morgan',
+            role: 'Cross-functional meeting counterpart',
+          }),
+          scenario: expect.objectContaining({
+            name: 'Morning Catch Up',
+            topic: 'Morning Catch Up',
+            objective: expect.stringContaining('Morning Catch Up'),
+          }),
+        }),
+      }),
+    );
+  });
+
+  it('falls back to the personal workspace and default locale when callers send blanks', async () => {
+    sessionRepository.create.mockResolvedValue(baseSession);
+    redis.deleteSessionFull.mockResolvedValue(undefined);
+
+    await service.create(
+      {
+        orgId: '',
+        type: 'text',
+        name: 'WatsonX AI Practice Session',
+        language: '',
+      } as never,
+      'owner-1',
+    );
+
+    expect(sessionRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orgId: 'owner-1',
+        language: 'en-US',
+      }),
+    );
+  });
+
   it('invalidates full-session cache on update', async () => {
     sessionRepository.findById.mockResolvedValue(baseSession);
     sessionRepository.update.mockResolvedValue({
@@ -237,9 +297,23 @@ describe('SessionService cache invalidation', () => {
   });
 
   it('restarts the current session by creating a new iteration instead of a new session', async () => {
+    const phoneSession = {
+      ...baseSession,
+      type: 'phone',
+      sessionConfig: {
+        phone: {
+          provider: 'vapi',
+          runtime: {
+            callId: 'call-1',
+            status: 'queued',
+          },
+        },
+      },
+    };
+
     sessionRepository.findById
-      .mockResolvedValueOnce(baseSession)
-      .mockResolvedValueOnce(baseSession);
+      .mockResolvedValueOnce(phoneSession)
+      .mockResolvedValueOnce(phoneSession);
     prisma.client.iteration.findFirst.mockResolvedValue({
       id: 'iteration-1',
       iterationNumber: 1,
@@ -283,6 +357,11 @@ describe('SessionService cache invalidation', () => {
         status: 'active',
         endedReason: null,
         endedAt: null,
+        sessionConfig: {
+          phone: {
+            provider: 'vapi',
+          },
+        },
       },
     });
     expect(assessmentService.requestRun).toHaveBeenCalledWith({

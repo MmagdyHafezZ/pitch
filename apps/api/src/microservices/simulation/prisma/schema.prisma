@@ -31,6 +31,12 @@ enum SessionMemberRole {
   viewer
 }
 
+enum ScenarioVisibility {
+  PRIVATE
+  TEAM
+  PUBLIC
+}
+
 enum TurnRole {
   user
   system
@@ -349,11 +355,13 @@ model HintConfig {
  */
 
 model Scenario {
-  id          String  @id @default(cuid())
-  orgId       String // external
-  name        String
-  description String?
-  config      Json? // Small structured config
+  id              String             @id @default(cuid())
+  orgId           String // external
+  createdByUserId String?
+  visibility      ScenarioVisibility @default(PRIVATE)
+  name            String
+  description     String?
+  config          Json? // Small structured config
 
   sessions Session[]
 
@@ -361,6 +369,9 @@ model Scenario {
   updatedAt DateTime @updatedAt
 
   @@index([orgId])
+  @@index([createdByUserId])
+  @@index([visibility])
+  @@index([orgId, visibility])
 }
 
 model Persona {

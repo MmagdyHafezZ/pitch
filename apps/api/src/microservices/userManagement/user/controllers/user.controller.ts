@@ -1,6 +1,7 @@
 import { Controller, ValidationPipe, UsePipes, Logger } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
 import { UserService } from '../services/user.service';
+import { PhoneVerificationService } from '../services/phone-verification.service';
 import { USER_SERVICE_PATTERNS } from '@pitch/shared-backend/interfaces/message-patterns.interface';
 import { OAuthProviderFactory } from '../../auth/factories/oauth-provider.factory';
 import * as userInterface from '@pitch/shared-backend/interfaces/user.interface';
@@ -13,14 +14,20 @@ export class UserController {
 
   constructor(
     private readonly userService: UserService,
+    private readonly phoneVerificationService: PhoneVerificationService,
     private readonly oauthProviderFactory: OAuthProviderFactory,
   ) {}
+
+  @MessagePattern('health')
+  health() {
+    return { status: 'ok', service: 'user' };
+  }
 
   @MessagePattern(USER_SERVICE_PATTERNS.GET_USERS)
   async getUsers(@Payload() data: userClaimsInterface.MessageWithUserClaims) {
     try {
       this.logger.log(
-        `Getting users - Requested by: ${data.userClaims.email} (${data.userClaims.id})`,
+        `Getting users - Requested by: ${data.userClaims?.email ?? 'admin'} (${data.userClaims?.id ?? 'N/A'})`,
       );
       return await this.userService.findAll();
     } catch (error) {
@@ -35,9 +42,9 @@ export class UserController {
   ) {
     try {
       this.logger.log(
-        `Getting user ${data.userId} - Requested by: ${data.userClaims.email} (${data.userClaims.id})`,
+        `Getting user ${data.userId} - Requested by: ${data.userClaims?.email ?? 'admin'} (${data.userClaims?.id ?? 'N/A'})`,
       );
-      if (data.userClaims.id === data.userId) {
+      if (data.userClaims?.id === data.userId) {
         return await this.userService.touchLastSeen(data.userId);
       }
       return await this.userService.findOne(data.userId);
@@ -55,6 +62,20 @@ export class UserController {
         `Getting settings for user ${data.userClaims.id} - Requested by: ${data.userClaims.email} (${data.userClaims.id})`,
       );
       return await this.userService.getSettings(data.userClaims.id);
+    } catch (error) {
+      throw toRpcException(error);
+    }
+  }
+
+  @MessagePattern(USER_SERVICE_PATTERNS.GET_MY_PHONE_VERIFICATION)
+  async getMyPhoneVerification(
+    @Payload() data: userClaimsInterface.MessageWithUserClaims,
+  ) {
+    try {
+      this.logger.log(
+        `Getting phone verification for user ${data.userClaims.id} - Requested by: ${data.userClaims.email} (${data.userClaims.id})`,
+      );
+      return await this.phoneVerificationService.getStatus(data.userClaims.id);
     } catch (error) {
       throw toRpcException(error);
     }
@@ -96,7 +117,7 @@ export class UserController {
   ) {
     try {
       this.logger.log(
-        `Updating user ${data.userId} - Requested by: ${data.userClaims.email} (${data.userClaims.id})`,
+        `Updating user ${data.userId} - Requested by: ${data.userClaims?.email ?? 'admin'} (${data.userClaims?.id ?? 'N/A'})`,
       );
       const {
         userClaims: _userClaims,
@@ -132,6 +153,61 @@ export class UserController {
     }
   }
 
+  @MessagePattern(USER_SERVICE_PATTERNS.REQUEST_PHONE_VERIFICATION)
+  async requestPhoneVerification(
+    @Payload()
+    data: userInterface.RequestPhoneVerificationDto &
+      userClaimsInterface.MessageWithUserClaims,
+  ) {
+    try {
+      this.logger.log(
+        `Requesting phone verification for user ${data.userClaims.id} - Requested by: ${data.userClaims.email} (${data.userClaims.id})`,
+      );
+      return await this.phoneVerificationService.requestVerification(
+        data.userClaims.id,
+        data.phoneNumber,
+      );
+    } catch (error) {
+      throw toRpcException(error);
+    }
+  }
+
+  @MessagePattern(USER_SERVICE_PATTERNS.RESEND_PHONE_VERIFICATION)
+  async resendPhoneVerification(
+    @Payload() data: userClaimsInterface.MessageWithUserClaims,
+  ) {
+    try {
+      this.logger.log(
+        `Resending phone verification for user ${data.userClaims.id} - Requested by: ${data.userClaims.email} (${data.userClaims.id})`,
+      );
+      return await this.phoneVerificationService.resendVerification(
+        data.userClaims.id,
+      );
+    } catch (error) {
+      throw toRpcException(error);
+    }
+  }
+
+  @MessagePattern(USER_SERVICE_PATTERNS.VERIFY_PHONE_VERIFICATION)
+  async verifyPhoneVerification(
+    @Payload()
+    data: userInterface.VerifyPhoneVerificationDto &
+      userClaimsInterface.MessageWithUserClaims,
+  ) {
+    try {
+      this.logger.log(
+        `Verifying phone verification for user ${data.userClaims.id} - Requested by: ${data.userClaims.email} (${data.userClaims.id})`,
+      );
+      return await this.phoneVerificationService.verifyCode(
+        data.userClaims.id,
+        data.code,
+        data.saveForFutureUse ?? true,
+      );
+    } catch (error) {
+      throw toRpcException(error);
+    }
+  }
+
   @MessagePattern(USER_SERVICE_PATTERNS.DELETE_USER)
   async deleteUser(
     @Payload()
@@ -139,7 +215,7 @@ export class UserController {
   ) {
     try {
       this.logger.log(
-        `Deleting user ${data.userId} - Requested by: ${data.userClaims.email} (${data.userClaims.id})`,
+        `Deleting user ${data.userId} - Requested by: ${data.userClaims?.email ?? 'admin'} (${data.userClaims?.id ?? 'N/A'})`,
       );
       return await this.userService.remove(data.userId);
     } catch (error) {

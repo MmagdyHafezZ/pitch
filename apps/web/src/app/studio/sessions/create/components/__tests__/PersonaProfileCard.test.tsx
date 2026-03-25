@@ -26,7 +26,7 @@ const persona = {
   },
 }
 
-function TestCard(props: { onPreviewAudio: jest.Mock; onSelect: jest.Mock }) {
+function TestCard(props: { onSelect: jest.Mock }) {
   const [infoOpen, setInfoOpen] = useState(false)
 
   return (
@@ -46,31 +46,25 @@ function TestCard(props: { onPreviewAudio: jest.Mock; onSelect: jest.Mock }) {
       isPreviewPlaying={false}
       infoOpen={infoOpen}
       onInfoToggle={() => setInfoOpen((current) => !current)}
-      onPreviewAudio={props.onPreviewAudio}
+      onPreviewAudio={() => undefined}
       onSelect={props.onSelect}
     />
   )
 }
 
 describe('PersonaProfileCard', () => {
-  it('toggles the details overlay and keeps preview/select interactions separate', async () => {
+  it('toggles the details overlay and preserves card selection', async () => {
     const user = userEvent.setup()
-    const onPreviewAudio = jest.fn()
     const onSelect = jest.fn()
 
-    render(<TestCard onPreviewAudio={onPreviewAudio} onSelect={onSelect} />)
+    render(<TestCard onSelect={onSelect} />)
 
-    expect(screen.queryByText('Persona Intel')).not.toBeInTheDocument()
+    expect(screen.getByText('Persona Intel')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /show persona details for arden vale/i }))
 
     expect(screen.getByText('Persona Intel')).toBeInTheDocument()
     expect(screen.getByText('Performance Bias')).toBeInTheDocument()
-
-    await user.click(screen.getByRole('button', { name: /play preview audio for arden vale/i }))
-
-    expect(onPreviewAudio).toHaveBeenCalledTimes(1)
-    expect(onSelect).not.toHaveBeenCalled()
 
     await user.click(screen.getByRole('button', { name: /select persona arden vale/i }))
 

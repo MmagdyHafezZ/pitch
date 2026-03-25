@@ -131,6 +131,7 @@ describe('CreateSessionWizard - Navigation', () => {
     })
 
     expect(screen.getByText('Session Name')).toBeInTheDocument()
+    expect(screen.getByText('Uses your mic and speakers, not your phone')).toBeInTheDocument()
   })
 
   it('disables "Next" button and shows error when session type not selected', async () => {
@@ -166,7 +167,7 @@ describe('CreateSessionWizard - Navigation', () => {
 
     expect(screen.queryByText('Phone Number')).not.toBeInTheDocument()
     expect(
-      screen.getByText(/phone number is collected when the session starts/i)
+      screen.getByText(/the caller verifies a number when the session starts/i)
     ).toBeInTheDocument()
   })
 
@@ -185,10 +186,10 @@ describe('CreateSessionWizard - Navigation', () => {
     })
 
     expect(screen.getByText('Pick a session type')).toBeInTheDocument()
-    expect(screen.queryByText('Scenario & Topic')).not.toBeInTheDocument()
+    expect(screen.queryByText('Choose a Scenario')).not.toBeInTheDocument()
   })
 
-  it('advances to step 1 (LLM Config) when session type is selected', async () => {
+  it('advances to step 1 (Scenario) when session type is selected', async () => {
     renderWizard()
     const user = userEvent.setup()
 
@@ -205,7 +206,7 @@ describe('CreateSessionWizard - Navigation', () => {
     // Should advance to Scenario step
     await waitFor(
       () => {
-        expect(screen.getByText('Scenario & Topic')).toBeInTheDocument()
+        expect(screen.getByText('Choose a Scenario')).toBeInTheDocument()
       },
       { timeout: 3000 }
     )
@@ -233,7 +234,7 @@ describe('CreateSessionWizard - Navigation', () => {
     await user.click(screen.getByRole('button', { name: /next/i }))
 
     await waitFor(() => {
-      expect(screen.getByText('Scenario & Topic')).toBeInTheDocument()
+      expect(screen.getByText('Choose a Scenario')).toBeInTheDocument()
     })
 
     // Back button should be enabled

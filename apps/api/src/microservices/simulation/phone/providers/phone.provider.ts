@@ -17,9 +17,14 @@ export interface PhoneCallResult {
   raw?: Record<string, unknown>;
 }
 
+export interface PhoneCallEndRequest {
+  callId: string;
+  controlUrl?: string;
+}
+
 export interface PhoneProvider {
   readonly name: string;
   readonly description?: string;
   createCall(request: PhoneCallRequest): Promise<PhoneCallResult>;
-  endCall?(callId: string): Promise<void>;
+  endCall?(request: PhoneCallEndRequest): Promise<void>;
 }

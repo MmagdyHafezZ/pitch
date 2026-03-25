@@ -1,4 +1,15 @@
 import { QueryClient } from '@tanstack/react-query'
+import type {
+  CreateScenarioInput,
+  GenerateScenarioBatchRequest,
+  GenerateScenarioRequest,
+  Scenario,
+  ScenarioDraft,
+  ScenarioDraftListResponse,
+  ScenarioListParams,
+  ScenarioListResponse,
+  UpdateScenarioInput,
+} from '@/features/scenarios/types/scenario.types'
 
 export const API_CONFIG = {
   baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1',
@@ -144,7 +155,6 @@ export async function apiRequest<T>(
 
     throw resolvedError instanceof Error ? resolvedError : new Error('Request failed')
   } finally {
-    // no-op
   }
 }
 
@@ -224,6 +234,7 @@ export const api = {
     getAll: () => apiRequest<any[]>('/users'),
     getById: (id: string) => apiRequest<any>(`/users/${id}`),
     getMySettings: () => apiRequest<any>('/users/me/settings'),
+    getMyPhoneVerification: () => apiRequest<any>('/users/me/phone-verification'),
     create: (data: any) =>
       apiRequest<any>('/users', {
         method: 'POST',
@@ -252,6 +263,20 @@ export const api = {
     update: (id: string, data: any) =>
       apiRequest<any>(`/users/${id}`, {
         method: 'PUT',
+        body: JSON.stringify(data),
+      }),
+    requestPhoneVerification: (data: { phoneNumber: string }) =>
+      apiRequest<any>('/users/me/phone-verification/request', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    resendPhoneVerification: () =>
+      apiRequest<any>('/users/me/phone-verification/resend', {
+        method: 'POST',
+      }),
+    verifyPhoneVerification: (data: { code: string; saveForFutureUse?: boolean }) =>
+      apiRequest<any>('/users/me/phone-verification/verify', {
+        method: 'POST',
         body: JSON.stringify(data),
       }),
     delete: (id: string) =>
@@ -463,6 +488,20 @@ export const api = {
   plans: {
     getAll: () => apiRequest<any[]>('/plans'),
     getById: (id: string) => apiRequest<any>(`/plans/${id}`),
+    create: (data: any) =>
+      apiRequest<any>('/plans', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    update: (id: string, data: any) =>
+      apiRequest<any>(`/plans/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      }),
+    delete: (id: string) =>
+      apiRequest<any>(`/plans/${id}`, {
+        method: 'DELETE',
+      }),
   },
 
   subscriptions: {
@@ -491,16 +530,36 @@ export const api = {
   },
 
   s3: {
+    upload: (input: { key: string; file: File }) => {
+      const formData = new FormData()
+      formData.append('key', input.key)
+      formData.append('file', input.file)
+
+      return apiRequest<{
+        bucket: string
+        key: string
+        filename: string
+        contentType: string
+        size: number
+        uploadedAt: string
+        textPreview?: string
+      }>('/s3/upload', {
+        method: 'POST',
+        body: formData,
+      })
+    },
     presignUpload: (input: {
-      bucket: string
+      bucket?: string
       key: string
+      contentType?: string
       expiresIn?: number
     }) =>
-      apiRequest<{ url: string }>('/s3/presigned/upload', {
+      apiRequest<{ url: string; bucket: string }>('/s3/presigned/upload', {
         method: 'POST',
         body: JSON.stringify({
           bucket: input.bucket,
           key: input.key,
+          contentType: input.contentType,
           expiresInSeconds: input.expiresIn,
         }),
       }),
@@ -575,13 +634,13 @@ export const api = {
   },
 
   phoneCalls: {
-    start: (data: {
-      sessionId: string
-      phoneNumber?: string
-      provider?: string
-      fromNumber?: string
-    }) =>
+    start: (data: { sessionId: string; firstMessage?: string; phoneNumber?: string }) =>
       apiRequest<any>('/simulation/phone-calls', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    end: (data: { sessionId: string; reason?: string }) =>
+      apiRequest<any>('/simulation/phone-calls/end', {
         method: 'POST',
         body: JSON.stringify(data),
       }),
@@ -646,24 +705,43 @@ export const api = {
   },
 
   scenarios: {
-    getAll: (params?: { orgId?: string }) => {
+    list: (params?: ScenarioListParams) => {
       const query = new URLSearchParams()
       if (params?.orgId) query.set('orgId', params.orgId)
+      if (params?.scope) query.set('scope', params.scope)
+      if (params?.query) query.set('query', params.query)
       const queryString = query.toString()
-      return apiRequest<any>(`/simulation/scenarios${queryString ? `?${queryString}` : ''}`)
+      return apiRequest<ScenarioListResponse>(
+        `/simulation/scenarios${queryString ? `?${queryString}` : ''}`
+      )
     },
-    getById: (id: string) => apiRequest<any>(`/simulation/scenarios/${id}`),
-    generate: (data: any) =>
-      apiRequest<any>('/simulation/scenarios/generate', {
+    getAll: (params?: ScenarioListParams) => api.scenarios.list(params),
+    getById: (id: string) => apiRequest<Scenario>(`/simulation/scenarios/${id}`),
+    generate: (data: GenerateScenarioRequest) =>
+      apiRequest<ScenarioDraft>('/simulation/scenarios/generate', {
         method: 'POST',
         body: JSON.stringify(data),
         timeoutMs: 30000,
       }),
-    generateBatch: (data: any) =>
-      apiRequest<any>('/simulation/scenarios/generate/batch', {
+    generateBatch: (data: GenerateScenarioBatchRequest) =>
+      apiRequest<ScenarioDraftListResponse>('/simulation/scenarios/generate/batch', {
         method: 'POST',
         body: JSON.stringify(data),
         timeoutMs: 30000,
+      }),
+    create: (data: CreateScenarioInput) =>
+      apiRequest<Scenario>('/simulation/scenarios', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    update: (id: string, data: UpdateScenarioInput) =>
+      apiRequest<Scenario>(`/simulation/scenarios/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      }),
+    delete: (id: string) =>
+      apiRequest<void>(`/simulation/scenarios/${id}`, {
+        method: 'DELETE',
       }),
   },
 
@@ -698,6 +776,52 @@ export const api = {
         apiRequestRoot<any>('/crm/salesforce/search', {
           method: 'POST',
           body: JSON.stringify({ query }),
+        }),
+    },
+  },
+
+  calendar: {
+    google: {
+      connect: () => apiRequestRoot<{ authUrl: string }>('/calendar/google/connect'),
+      status: () => apiRequestRoot<any>('/calendar/google/status'),
+      disconnect: () =>
+        apiRequestRoot<{ success: boolean }>('/calendar/google/disconnect', { method: 'DELETE' }),
+      events: (params?: { from?: string; to?: string; maxResults?: number }) => {
+        const query = new URLSearchParams()
+        if (params?.from) query.set('from', params.from)
+        if (params?.to) query.set('to', params.to)
+        if (params?.maxResults) query.set('maxResults', String(params.maxResults))
+        const qs = query.toString()
+        return apiRequestRoot<any[]>(`/calendar/google/events${qs ? `?${qs}` : ''}`)
+      },
+    },
+    microsoft: {
+      connect: () => apiRequestRoot<{ authUrl: string }>('/calendar/microsoft/connect'),
+      status: () => apiRequestRoot<any>('/calendar/microsoft/status'),
+      disconnect: () =>
+        apiRequestRoot<{ success: boolean }>('/calendar/microsoft/disconnect', {
+          method: 'DELETE',
+        }),
+      events: (params?: { from?: string; to?: string; maxResults?: number }) => {
+        const query = new URLSearchParams()
+        if (params?.from) query.set('from', params.from)
+        if (params?.to) query.set('to', params.to)
+        if (params?.maxResults) query.set('maxResults', String(params.maxResults))
+        const qs = query.toString()
+        return apiRequestRoot<any[]>(`/calendar/microsoft/events${qs ? `?${qs}` : ''}`)
+      },
+    },
+    upcoming: (lookAheadDays?: number) =>
+      apiRequestRoot<any[]>(
+        `/calendar/upcoming${lookAheadDays ? `?lookAheadDays=${lookAheadDays}` : ''}`
+      ),
+    suggestions: {
+      list: () => apiRequestRoot<any[]>('/calendar/suggestions'),
+      accept: (sessionId: string) =>
+        apiRequestRoot<any>(`/calendar/suggestions/${sessionId}/accept`, { method: 'POST' }),
+      dismiss: (sessionId: string) =>
+        apiRequestRoot<{ success: boolean }>(`/calendar/suggestions/${sessionId}`, {
+          method: 'DELETE',
         }),
     },
   },
@@ -841,7 +965,15 @@ export const api = {
       context?: {
         page?: string
         sessionId?: string
+        sessionName?: string
         recentTurns?: Array<{ role: string; text: string }>
+        savedAttachments?: Array<{
+          name: string
+          content: string
+          mimeType: string
+          size: number
+          s3Url?: string
+        }>
       }
     }) =>
       apiRequest<{ reply: string }>('/support/chat', {
@@ -893,5 +1025,175 @@ export const api = {
           }>
         }>
       }>('/simulation/llm/providers'),
+  },
+
+  admin: {
+    check: () => apiRequest<{ isAdmin: true }>('/admin/check'),
+    healthServices: () =>
+      apiRequest<{
+        services: Array<{
+          name: string
+          status: 'online' | 'degraded' | 'offline'
+          latency: number
+        }>
+      }>('/admin/health'),
+    overview: () =>
+      apiRequest<{
+        userCount: number
+        teamCount: number
+        sessionCount: number
+        planCount: number
+      }>('/admin/overview'),
+    version: () =>
+      apiRequest<{
+        version: string
+        nodeVersion: string
+        uptime: number
+        environment: string
+      }>('/admin/version'),
+    runtimeConfig: () =>
+      apiRequest<{
+        NODE_ENV: string
+        PORT: string
+        featureFlags: Array<{ key: string; enabled: boolean }>
+      }>('/admin/runtime-config'),
+    featureFlags: {
+      list: () => apiRequest<Array<{ key: string; enabled: boolean }>>('/admin/feature-flags'),
+      set: (key: string, enabled: boolean) =>
+        apiRequest<{ key: string; enabled: boolean }>('/admin/feature-flags', {
+          method: 'POST',
+          body: JSON.stringify({ key, enabled }),
+        }),
+      delete: (key: string) =>
+        apiRequest<{ deleted: boolean }>(`/admin/feature-flags/${encodeURIComponent(key)}`, {
+          method: 'DELETE',
+        }),
+    },
+    users: {
+      list: (params?: { limit?: number; offset?: number; search?: string }) => {
+        const q = new URLSearchParams()
+        if (params?.limit) q.set('limit', String(params.limit))
+        if (params?.offset) q.set('offset', String(params.offset))
+        if (params?.search) q.set('search', params.search)
+        const qs = q.toString()
+        return apiRequest<any>(`/admin/users${qs ? `?${qs}` : ''}`)
+      },
+      get: (id: string) => apiRequest<any>(`/admin/users/${id}`),
+      update: (id: string, data: any) =>
+        apiRequest<any>(`/admin/users/${id}`, {
+          method: 'PUT',
+          body: JSON.stringify(data),
+        }),
+      delete: (id: string) => apiRequest<any>(`/admin/users/${id}`, { method: 'DELETE' }),
+      getSessions: (id: string, params?: { limit?: number; offset?: number }) => {
+        const q = new URLSearchParams()
+        if (params?.limit) q.set('limit', String(params.limit))
+        if (params?.offset) q.set('offset', String(params.offset))
+        const qs = q.toString()
+        return apiRequest<any>(`/admin/users/${id}/sessions${qs ? `?${qs}` : ''}`)
+      },
+      impersonate: (id: string) =>
+        apiRequest<{ token: string; expiresAt: string }>(`/admin/users/${id}/impersonate`, {
+          method: 'POST',
+        }),
+    },
+    teams: {
+      list: (params?: { limit?: number; offset?: number; search?: string }) => {
+        const q = new URLSearchParams()
+        if (params?.limit) q.set('limit', String(params.limit))
+        if (params?.offset) q.set('offset', String(params.offset))
+        if (params?.search) q.set('search', params.search)
+        const qs = q.toString()
+        return apiRequest<any>(`/admin/teams${qs ? `?${qs}` : ''}`)
+      },
+      get: (id: string) => apiRequest<any>(`/admin/teams/${id}`),
+      update: (id: string, data: any) =>
+        apiRequest<any>(`/admin/teams/${id}`, {
+          method: 'PUT',
+          body: JSON.stringify(data),
+        }),
+      delete: (id: string) => apiRequest<any>(`/admin/teams/${id}`, { method: 'DELETE' }),
+      getMembers: (id: string) => apiRequest<any>(`/admin/teams/${id}/members`),
+      transferOwner: (id: string, newOwnerId: string) =>
+        apiRequest<any>(`/admin/teams/${id}/transfer-owner`, {
+          method: 'POST',
+          body: JSON.stringify({ newOwnerId }),
+        }),
+      addMember: (id: string, data: { userId: string; role?: string; tokenLimit?: number }) =>
+        apiRequest<any>(`/admin/teams/${id}/members`, {
+          method: 'POST',
+          body: JSON.stringify(data),
+        }),
+      updateMember: (
+        id: string,
+        userId: string,
+        data: { role?: string; tokenLimit?: number; isActive?: boolean }
+      ) =>
+        apiRequest<any>(`/admin/teams/${id}/members/${userId}`, {
+          method: 'PUT',
+          body: JSON.stringify(data),
+        }),
+      removeMember: (id: string, userId: string) =>
+        apiRequest<any>(`/admin/teams/${id}/members/${userId}`, { method: 'DELETE' }),
+    },
+    sessions: {
+      list: (params?: {
+        userId?: string
+        orgId?: string
+        status?: string
+        type?: string
+        limit?: number
+        offset?: number
+      }) => {
+        const q = new URLSearchParams()
+        if (params?.userId) q.set('userId', params.userId)
+        if (params?.orgId) q.set('orgId', params.orgId)
+        if (params?.status) q.set('status', params.status)
+        if (params?.type) q.set('type', params.type)
+        if (params?.limit) q.set('limit', String(params.limit))
+        if (params?.offset) q.set('offset', String(params.offset))
+        const qs = q.toString()
+        return apiRequest<any>(`/admin/sessions${qs ? `?${qs}` : ''}`)
+      },
+      get: (id: string) => apiRequest<any>(`/admin/sessions/${id}`),
+      getEvents: (id: string, params?: { limit?: number; offset?: number }) => {
+        const q = new URLSearchParams()
+        if (params?.limit) q.set('limit', String(params.limit))
+        if (params?.offset) q.set('offset', String(params.offset))
+        const qs = q.toString()
+        return apiRequest<any>(`/admin/sessions/${id}/events${qs ? `?${qs}` : ''}`)
+      },
+      getTranscript: (id: string) => apiRequest<any>(`/admin/sessions/${id}/transcript`),
+      getLlmCalls: (id: string, params?: { limit?: number; offset?: number }) => {
+        const q = new URLSearchParams()
+        if (params?.limit) q.set('limit', String(params.limit))
+        if (params?.offset) q.set('offset', String(params.offset))
+        const qs = q.toString()
+        return apiRequest<any>(`/admin/sessions/${id}/llm-calls${qs ? `?${qs}` : ''}`)
+      },
+      forceEnd: (id: string) =>
+        apiRequest<any>(`/admin/sessions/${id}/force-end`, { method: 'POST' }),
+      recompute: (id: string) =>
+        apiRequest<any>(`/admin/sessions/${id}/recompute`, { method: 'POST' }),
+      delete: (id: string) => apiRequest<any>(`/admin/sessions/${id}`, { method: 'DELETE' }),
+    },
+    monitoring: {
+      assessments: (params?: { limit?: number; offset?: number }) => {
+        const q = new URLSearchParams()
+        if (params?.limit) q.set('limit', String(params.limit))
+        if (params?.offset) q.set('offset', String(params.offset))
+        const qs = q.toString()
+        return apiRequest<any>(`/admin/monitoring/assessments${qs ? `?${qs}` : ''}`)
+      },
+      llm: () => apiRequest<any>('/admin/monitoring/llm'),
+      jobs: () => apiRequest<any>('/admin/monitoring/jobs'),
+      requestLogs: (params?: { limit?: number; offset?: number }) => {
+        const q = new URLSearchParams()
+        if (params?.limit) q.set('limit', String(params.limit))
+        if (params?.offset) q.set('offset', String(params.offset))
+        const qs = q.toString()
+        return apiRequest<any>(`/admin/monitoring/request-logs${qs ? `?${qs}` : ''}`)
+      },
+    },
   },
 }

@@ -6,7 +6,7 @@ export class FileService {
   constructor(private readonly repository: S3Repository) {}
 
   async createPresignedUploadUrl(params: {
-    bucket: string;
+    bucket?: string;
     key: string;
     contentType?: string;
     expiresInSeconds?: number;
