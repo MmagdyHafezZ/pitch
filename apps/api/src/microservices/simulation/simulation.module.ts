@@ -137,6 +137,8 @@ import { CheckSystemAdmin } from '../../gateway/guards/check-system-admin.guard'
     ConversationOrchestrationService,
   ],
   exports: [
+    PhoneModule,
+    TtsModule,
     LLMService,
     LLMRoutingConfigService,
     StreamingConversationService,

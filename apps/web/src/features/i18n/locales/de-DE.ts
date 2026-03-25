@@ -26,6 +26,7 @@ export const deDE: LocaleDictionary = {
     'nav.analytics': 'Analysen',
     'nav.teamConfig': 'Team-Konfiguration',
     'nav.challenges': 'Herausforderungen',
+    'nav.admin': 'Admin',
     'nav.settings': 'Einstellungen',
     'tabs.all': 'Alle',
     'tabs.favorites': 'Favoriten',

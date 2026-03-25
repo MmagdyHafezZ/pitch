@@ -1,9 +1,13 @@
 export const USER_SERVICE_PATTERNS = {
   GET_USER: 'get_user',
   GET_MY_SETTINGS: 'get_my_settings',
+  GET_MY_PHONE_VERIFICATION: 'get_my_phone_verification',
   CREATE_USER: 'create_user',
   UPDATE_USER: 'update_user',
   UPDATE_MY_SETTINGS: 'update_my_settings',
+  REQUEST_PHONE_VERIFICATION: 'request_phone_verification',
+  RESEND_PHONE_VERIFICATION: 'resend_phone_verification',
+  VERIFY_PHONE_VERIFICATION: 'verify_phone_verification',
   DELETE_USER: 'delete_user',
   GET_USERS: 'get_users',
   REGISTER: 'auth.register',
@@ -157,6 +161,7 @@ export const SIMULATION_SERVICE_PATTERNS = {
   HINTS_HISTORY: 'simulation.hints.history',
 
   PHONE_CALL_START: 'simulation.phone.call.start',
+  PHONE_CALL_END: 'simulation.phone.call.end',
 
   ANALYTICS_DASHBOARD: 'analytics.dashboard',
 

@@ -116,4 +116,37 @@ describe('AdminObservabilityService', () => {
       }),
     );
   });
+
+  it('buffers runtime logs only when debug capture is enabled', () => {
+    expect(
+      service.recordRuntimeLog({
+        level: 'debug',
+        context: 'Bootstrap',
+        message: 'before-enable',
+      }),
+    ).toBeNull();
+
+    service.setDebugEnabled(true);
+    service.recordRuntimeLog({
+      level: 'debug',
+      context: 'Bootstrap',
+      message: 'after-enable',
+      timestamp: '2026-03-20T00:20:00.000Z',
+    });
+
+    expect(service.listErrorLogs()).toEqual([
+      expect.objectContaining({
+        level: 'debug',
+        context: 'Bootstrap',
+        message: 'after-enable',
+      }),
+    ]);
+    expect(service.getLogLevelSettings()).toEqual({ debugEnabled: true });
+    expect(service.getRuntimeObservability()).toEqual({
+      debugEnabled: true,
+      bufferedLogs: 1,
+      bufferedRequests: 0,
+      bufferedAuditLogs: 0,
+    });
+  });
 });

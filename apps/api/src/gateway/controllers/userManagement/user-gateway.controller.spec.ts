@@ -82,6 +82,95 @@ describe('UserGatewayController', () => {
     );
   });
 
+  it('gets current user phone verification status', async () => {
+    clientProxy.send.mockReturnValue(
+      of({ verified: false, pendingPhoneNumber: '+15551234567' }) as any,
+    );
+
+    const result = await lastValueFrom(
+      controller.getMyPhoneVerification(userClaims),
+    );
+
+    expect(result).toEqual({
+      verified: false,
+      pendingPhoneNumber: '+15551234567',
+    });
+    expect(clientProxy.send).toHaveBeenCalledWith(
+      USER_SERVICE_PATTERNS.GET_MY_PHONE_VERIFICATION,
+      { userClaims },
+    );
+  });
+
+  it('requests phone verification', async () => {
+    clientProxy.send.mockReturnValue(
+      of({ verified: false, pendingPhoneNumber: '+15551234567' }) as any,
+    );
+
+    const result = await lastValueFrom(
+      controller.requestPhoneVerification(
+        { phoneNumber: '+15551234567' },
+        userClaims,
+      ),
+    );
+
+    expect(result).toEqual({
+      verified: false,
+      pendingPhoneNumber: '+15551234567',
+    });
+    expect(clientProxy.send).toHaveBeenCalledWith(
+      USER_SERVICE_PATTERNS.REQUEST_PHONE_VERIFICATION,
+      {
+        phoneNumber: '+15551234567',
+        userClaims,
+      },
+    );
+  });
+
+  it('resends phone verification', async () => {
+    clientProxy.send.mockReturnValue(
+      of({ verified: false, pendingPhoneNumber: '+15551234567' }) as any,
+    );
+
+    const result = await lastValueFrom(
+      controller.resendPhoneVerification(userClaims),
+    );
+
+    expect(result).toEqual({
+      verified: false,
+      pendingPhoneNumber: '+15551234567',
+    });
+    expect(clientProxy.send).toHaveBeenCalledWith(
+      USER_SERVICE_PATTERNS.RESEND_PHONE_VERIFICATION,
+      { userClaims },
+    );
+  });
+
+  it('verifies a phone verification code', async () => {
+    clientProxy.send.mockReturnValue(
+      of({ verified: true, phoneNumber: '+15551234567' }) as any,
+    );
+
+    const result = await lastValueFrom(
+      controller.verifyPhoneVerification(
+        { code: '123456', saveForFutureUse: false },
+        userClaims,
+      ),
+    );
+
+    expect(result).toEqual({
+      verified: true,
+      phoneNumber: '+15551234567',
+    });
+    expect(clientProxy.send).toHaveBeenCalledWith(
+      USER_SERVICE_PATTERNS.VERIFY_PHONE_VERIFICATION,
+      {
+        code: '123456',
+        saveForFutureUse: false,
+        userClaims,
+      },
+    );
+  });
+
   it('updates avatar using avatarUrl', async () => {
     clientProxy.send.mockReturnValue(
       of({ avatar: 'https://cdn.example/avatar.png' }) as any,

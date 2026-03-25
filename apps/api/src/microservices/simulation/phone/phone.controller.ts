@@ -3,7 +3,7 @@ import { MessagePattern, Payload } from '@nestjs/microservices';
 import { toRpcException } from '@pitch/shared-backend/helpers/exceptions';
 import { SIMULATION_SERVICE_PATTERNS } from '@pitch/shared-backend/interfaces/message-patterns.interface';
 import { PhoneCallService } from './phone-call.service';
-import { StartPhoneCallDto } from '../dto/phone-call.dto';
+import { EndPhoneCallDto, StartPhoneCallDto } from '../dto/phone-call.dto';
 import type * as userClaimsInterface from '@pitch/shared-backend/interfaces/user-claims.interface';
 
 @Controller()
@@ -34,6 +34,32 @@ export class PhoneCallController {
       });
     } catch (error) {
       this.logger.error('Failed to start phone call', error);
+      throw toRpcException(error);
+    }
+  }
+
+  @MessagePattern(SIMULATION_SERVICE_PATTERNS.PHONE_CALL_END)
+  @UsePipes(new ValidationPipe({ transform: true }))
+  async endCall(
+    @Payload()
+    data: EndPhoneCallDto & userClaimsInterface.MessageWithUserClaims,
+  ) {
+    try {
+      if (!data.userClaims?.id) {
+        throw new Error('User claims are required to end a phone call');
+      }
+
+      const { userClaims, ...payload } = data;
+      this.logger.log(
+        `Ending phone call for session ${payload.sessionId} (requested by ${userClaims.email})`,
+      );
+
+      return await this.phoneCallService.endActiveCall({
+        ...payload,
+        userId: userClaims.id,
+      });
+    } catch (error) {
+      this.logger.error('Failed to end phone call', error);
       throw toRpcException(error);
     }
   }

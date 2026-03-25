@@ -131,6 +131,7 @@ describe('CreateSessionWizard - Navigation', () => {
     })
 
     expect(screen.getByText('Session Name')).toBeInTheDocument()
+    expect(screen.getByText('Uses your mic and speakers, not your phone')).toBeInTheDocument()
   })
 
   it('disables "Next" button and shows error when session type not selected', async () => {
@@ -166,7 +167,7 @@ describe('CreateSessionWizard - Navigation', () => {
 
     expect(screen.queryByText('Phone Number')).not.toBeInTheDocument()
     expect(
-      screen.getByText(/phone number is collected when the session starts/i)
+      screen.getByText(/the caller verifies a number when the session starts/i)
     ).toBeInTheDocument()
   })
 

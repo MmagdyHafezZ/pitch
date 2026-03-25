@@ -202,4 +202,36 @@ describe('TeamsStore', () => {
     expect(TeamService.getById).toHaveBeenCalledWith('team-1')
     expect(useTeamsStore.getState().currentTeam).toEqual(refreshedTeam)
   })
+
+  it('createTeam stores error and rethrows on failure', async () => {
+    jest.spyOn(TeamService, 'create').mockRejectedValue(new Error('Failed to create team'))
+
+    await expect(
+      act(async () => {
+        await useTeamsStore.getState().createTeam({
+          name: 'Revenue Ops',
+          isActive: true,
+        })
+      })
+    ).rejects.toThrow('Failed to create team')
+
+    expect(useTeamsStore.getState().loading).toBe(false)
+    expect(useTeamsStore.getState().error).toBe('Failed to create team')
+  })
+
+  it('createTeam rejects blank names without calling the API', async () => {
+    const createSpy = jest.spyOn(TeamService, 'create')
+
+    await expect(
+      act(async () => {
+        await useTeamsStore.getState().createTeam({
+          name: '   ',
+          isActive: true,
+        })
+      })
+    ).rejects.toThrow('Team name is required')
+
+    expect(createSpy).not.toHaveBeenCalled()
+    expect(useTeamsStore.getState().error).toBe('Team name is required')
+  })
 })

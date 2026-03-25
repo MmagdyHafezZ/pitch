@@ -23,6 +23,8 @@ import {
   Popover,
   ColorPicker,
   useComputedColorScheme,
+  Alert,
+  PinInput,
 } from '@mantine/core'
 import {
   IconUser,
@@ -37,13 +39,15 @@ import {
   IconShare2,
   IconDownload,
   IconSparkles,
+  IconAlertCircle,
 } from '@tabler/icons-react'
 import { modals } from '@mantine/modals'
 import { useMediaQuery } from '@mantine/hooks'
-import { useAuth } from '@/features/auth'
+import { useAuth, useAuthStore } from '@/features/auth'
 import { useRouter } from 'next/navigation'
 import { useAppearanceStore } from '@/lib/stores/appearance.store'
 import { useI18n } from '@/features/i18n'
+import { api } from '@/lib/client'
 import type { ThemeTokens } from '@/lib/stores/appearance.store'
 import { getReadableMutedColor, getReadableTextColor, mixColors } from '@/lib/colors/contrast'
 import classes from './SettingsModal.module.css'
@@ -56,9 +60,68 @@ interface SettingsModalProps {
   onClose: () => void
 }
 
+type PhoneVerificationState = {
+  verified: boolean
+  phoneNumber?: string | null
+  verifiedAt?: string | Date | null
+  pendingPhoneNumber?: string | null
+  pendingExpiresAt?: string | Date | null
+  resendAvailableAt?: string | Date | null
+  remainingAttempts?: number
+  remainingSends?: number
+}
+
+const PHONE_COUNTRY_OPTIONS = [
+  { value: '+1', label: 'Canada / US (+1)' },
+  { value: '+44', label: 'United Kingdom (+44)' },
+  { value: '+61', label: 'Australia (+61)' },
+  { value: '+33', label: 'France (+33)' },
+  { value: '+49', label: 'Germany (+49)' },
+  { value: '+34', label: 'Spain (+34)' },
+  { value: '+39', label: 'Italy (+39)' },
+  { value: '+31', label: 'Netherlands (+31)' },
+  { value: '+52', label: 'Mexico (+52)' },
+  { value: '+55', label: 'Brazil (+55)' },
+  { value: '+91', label: 'India (+91)' },
+  { value: '+81', label: 'Japan (+81)' },
+  { value: '+82', label: 'South Korea (+82)' },
+  { value: '+65', label: 'Singapore (+65)' },
+]
+
+const DEFAULT_PHONE_COUNTRY_CODE = '+1'
+
 export function SettingsModal({ opened, onClose }: SettingsModalProps) {
+  const splitPhoneNumber = (
+    rawPhoneNumber: string | null | undefined
+  ): { countryCode: string; localNumber: string } => {
+    const normalized = rawPhoneNumber?.trim()
+    if (!normalized) {
+      return { countryCode: DEFAULT_PHONE_COUNTRY_CODE, localNumber: '' }
+    }
+
+    const withPlus = normalized.startsWith('+') ? normalized : `+${normalized}`
+    const digitsOnly = withPlus.replace(/[^\d+]/g, '')
+    const sortedOptions = [...PHONE_COUNTRY_OPTIONS].sort(
+      (left, right) => right.value.length - left.value.length
+    )
+    const match = sortedOptions.find((option) => digitsOnly.startsWith(option.value))
+
+    if (!match) {
+      return {
+        countryCode: DEFAULT_PHONE_COUNTRY_CODE,
+        localNumber: digitsOnly.replace(/^\+/, '').replace(/\D/g, ''),
+      }
+    }
+
+    return {
+      countryCode: match.value,
+      localNumber: digitsOnly.slice(match.value.length).replace(/\D/g, ''),
+    }
+  }
+
   const router = useRouter()
   const { user, logout } = useAuth()
+  const setUser = useAuthStore((state) => state.setUser)
   const { locale, setLocale, localeOptions, t, isSavingLocale, localeSaveError } = useI18n()
   const computedColorScheme = useComputedColorScheme('light')
   const isMobile = useMediaQuery('(max-width: 48em)')
@@ -67,6 +130,21 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
   const [name, setName] = useState(user?.name ?? '')
   const [email, setEmail] = useState(user?.email ?? '')
   const [timezone, setTimezone] = useState('(GMT-5:00) Eastern Time')
+  const initialPhoneParts = splitPhoneNumber(
+    (user as { phoneNumber?: string | null } | null)?.phoneNumber ?? ''
+  )
+  const [phoneCountryCode, setPhoneCountryCode] = useState(initialPhoneParts.countryCode)
+  const [phoneLocalNumber, setPhoneLocalNumber] = useState(initialPhoneParts.localNumber)
+  const [phoneNumber, setPhoneNumber] = useState(
+    (user as { phoneNumber?: string | null } | null)?.phoneNumber ?? ''
+  )
+  const [verificationCode, setVerificationCode] = useState('')
+  const [phoneVerification, setPhoneVerification] = useState<PhoneVerificationState | null>(null)
+  const [phoneStatusLoading, setPhoneStatusLoading] = useState(false)
+  const [phoneActionLoading, setPhoneActionLoading] = useState(false)
+  const [phoneError, setPhoneError] = useState<string | null>(null)
+  const [phoneOverlayOpened, setPhoneOverlayOpened] = useState(false)
+  const [phoneOverlayStep, setPhoneOverlayStep] = useState<'number' | 'verify'>('number')
   const {
     colorMode,
     setColorMode,
@@ -129,6 +207,18 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
   const [activePicker, setActivePicker] = useState<keyof ThemeTokens | null>(null)
   const [draggingPicker, setDraggingPicker] = useState(false)
 
+  const syncPhoneInputState = (rawPhoneNumber: string | null | undefined) => {
+    const parts = splitPhoneNumber(rawPhoneNumber)
+    setPhoneCountryCode(parts.countryCode)
+    setPhoneLocalNumber(parts.localNumber)
+    setPhoneNumber(rawPhoneNumber?.trim() ?? '')
+  }
+
+  const buildPhoneNumber = (countryCode: string, localNumber: string) => {
+    const digits = localNumber.replace(/\D/g, '')
+    return digits ? `${countryCode}${digits}` : ''
+  }
+
   useEffect(() => {
     if (activeProfile) {
       setProfileName(activeProfile.name)
@@ -138,7 +228,46 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
   useEffect(() => {
     setName(user?.name ?? '')
     setEmail(user?.email ?? '')
-  }, [user?.name, user?.email])
+    syncPhoneInputState((user as { phoneNumber?: string | null } | null)?.phoneNumber ?? '')
+  }, [user?.name, user?.email, (user as { phoneNumber?: string | null } | null)?.phoneNumber])
+
+  useEffect(() => {
+    if (!opened) return
+
+    let cancelled = false
+
+    const loadPhoneVerification = async () => {
+      setPhoneStatusLoading(true)
+      setPhoneError(null)
+      try {
+        const status = (await api.users.getMyPhoneVerification()) as PhoneVerificationState
+        if (cancelled) return
+        setPhoneVerification(status)
+        if (status.phoneNumber) {
+          syncPhoneInputState(status.phoneNumber)
+        } else if (status.pendingPhoneNumber) {
+          syncPhoneInputState(status.pendingPhoneNumber)
+        }
+      } catch (error) {
+        if (cancelled) return
+        setPhoneError(
+          error instanceof Error
+            ? error.message
+            : 'Unable to load your phone verification status right now.'
+        )
+      } finally {
+        if (!cancelled) {
+          setPhoneStatusLoading(false)
+        }
+      }
+    }
+
+    void loadPhoneVerification()
+
+    return () => {
+      cancelled = true
+    }
+  }, [opened])
 
   useEffect(() => {
     const handlePointerUp = () => setDraggingPicker(false)
@@ -185,6 +314,141 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
       confirmProps: { color: 'red' },
       onConfirm: () => deleteProfile(id),
     })
+  }
+
+  const isResendCoolingDown = useMemo(() => {
+    const resendAvailableAt = phoneVerification?.resendAvailableAt
+    if (!resendAvailableAt) return false
+    return new Date(resendAvailableAt).getTime() > Date.now()
+  }, [phoneVerification?.resendAvailableAt])
+
+  const hasVerifiedPhone = Boolean(phoneVerification?.verified && phoneVerification.phoneNumber)
+  const hasPendingPhone = Boolean(
+    phoneVerification?.pendingPhoneNumber && !phoneVerification?.verified
+  )
+  const phoneStatusDescription = phoneStatusLoading
+    ? 'Loading your phone setup...'
+    : hasVerifiedPhone
+      ? (phoneVerification?.phoneNumber ?? '')
+      : hasPendingPhone
+        ? `Code sent to ${phoneVerification?.pendingPhoneNumber}`
+        : 'Add a mobile number to unlock phone-based sessions.'
+  const phoneActionLabel = hasVerifiedPhone
+    ? 'Change number'
+    : hasPendingPhone
+      ? 'Finish setup'
+      : 'Add number'
+
+  const openPhoneOverlay = () => {
+    setPhoneError(null)
+    setPhoneOverlayStep(hasPendingPhone ? 'verify' : 'number')
+    setPhoneOverlayOpened(true)
+  }
+
+  const closePhoneOverlay = () => {
+    setPhoneOverlayOpened(false)
+    setPhoneError(null)
+    if (!hasPendingPhone) {
+      setVerificationCode('')
+    }
+  }
+
+  const handlePhoneCountryCodeChange = (value: string | null) => {
+    const nextCountryCode = value ?? DEFAULT_PHONE_COUNTRY_CODE
+    setPhoneCountryCode(nextCountryCode)
+    setPhoneNumber(buildPhoneNumber(nextCountryCode, phoneLocalNumber))
+  }
+
+  const handlePhoneLocalNumberChange = (value: string) => {
+    if (value.trim().startsWith('+')) {
+      const parts = splitPhoneNumber(value)
+      setPhoneCountryCode(parts.countryCode)
+      setPhoneLocalNumber(parts.localNumber)
+      setPhoneNumber(buildPhoneNumber(parts.countryCode, parts.localNumber))
+      return
+    }
+
+    const digits = value.replace(/\D/g, '')
+    setPhoneLocalNumber(digits)
+    setPhoneNumber(buildPhoneNumber(phoneCountryCode, digits))
+  }
+
+  const handleRequestPhoneVerification = async () => {
+    const nextPhoneNumber = phoneNumber.trim()
+    if (!nextPhoneNumber) {
+      setPhoneError('Enter the mobile number you want to verify.')
+      return
+    }
+
+    setPhoneActionLoading(true)
+    setPhoneError(null)
+    try {
+      const status = (await api.users.requestPhoneVerification({
+        phoneNumber: nextPhoneNumber,
+      })) as PhoneVerificationState
+      setPhoneVerification(status)
+      setVerificationCode('')
+      setPhoneOverlayStep('verify')
+    } catch (error) {
+      setPhoneError(
+        error instanceof Error ? error.message : 'Unable to send the verification code right now.'
+      )
+    } finally {
+      setPhoneActionLoading(false)
+    }
+  }
+
+  const handleResendPhoneVerification = async () => {
+    setPhoneActionLoading(true)
+    setPhoneError(null)
+    try {
+      const status = (await api.users.resendPhoneVerification()) as PhoneVerificationState
+      setPhoneVerification(status)
+      setVerificationCode('')
+    } catch (error) {
+      setPhoneError(
+        error instanceof Error ? error.message : 'Unable to resend the verification code right now.'
+      )
+    } finally {
+      setPhoneActionLoading(false)
+    }
+  }
+
+  const handleVerifyPhoneCode = async () => {
+    const code = verificationCode.trim()
+    if (!code) {
+      setPhoneError('Enter the verification code from the text message.')
+      return
+    }
+
+    setPhoneActionLoading(true)
+    setPhoneError(null)
+    try {
+      const status = (await api.users.verifyPhoneVerification({ code })) as PhoneVerificationState
+      setPhoneVerification(status)
+      setVerificationCode('')
+      if (status.phoneNumber) {
+        syncPhoneInputState(status.phoneNumber)
+        if (user) {
+          setUser({
+            ...user,
+            phoneNumber: status.phoneNumber,
+            phoneVerifiedAt:
+              typeof status.verifiedAt === 'string'
+                ? status.verifiedAt
+                : (status.verifiedAt?.toISOString?.() ?? null),
+          } as typeof user)
+        }
+      }
+      setPhoneOverlayOpened(false)
+      setPhoneOverlayStep('number')
+    } catch (error) {
+      setPhoneError(
+        error instanceof Error ? error.message : 'Unable to verify that code right now.'
+      )
+    } finally {
+      setPhoneActionLoading(false)
+    }
   }
 
   return (
@@ -425,6 +689,47 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
                   readOnly
                   classNames={settingsInputClassNames}
                 />
+
+                <Box>
+                  <Text
+                    size="sm"
+                    fw={500}
+                    mb={8}
+                    c="var(--pitch-surface-text-dim)"
+                    className={inputClasses.label}
+                  >
+                    Phone number
+                  </Text>
+                  <Box className={classes.phoneField}>
+                    <Group justify="space-between" align="center" wrap="wrap" gap="md">
+                      <Box style={{ minWidth: 0, flex: 1 }}>
+                        <Text fw={500} c="var(--pitch-surface-text)">
+                          {hasVerifiedPhone
+                            ? phoneVerification?.phoneNumber
+                            : hasPendingPhone
+                              ? 'Verification pending'
+                              : 'Not connected'}
+                        </Text>
+                        <Text size="sm" c="var(--pitch-surface-text-dim)" mt={4}>
+                          {hasVerifiedPhone
+                            ? 'Connected for phone-based sessions.'
+                            : hasPendingPhone
+                              ? phoneStatusDescription
+                              : 'Add a mobile number for phone-based sessions.'}
+                        </Text>
+                      </Box>
+
+                      <Button
+                        onClick={openPhoneOverlay}
+                        variant="subtle"
+                        size="sm"
+                        loading={phoneStatusLoading}
+                      >
+                        {phoneActionLabel}
+                      </Button>
+                    </Group>
+                  </Box>
+                </Box>
 
                 <Select
                   label="Time Zone"
@@ -799,6 +1104,171 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
           </Box>
         </ScrollArea>
       </Group>
+
+      <Modal
+        opened={phoneOverlayOpened}
+        onClose={closePhoneOverlay}
+        centered
+        withCloseButton
+        title={phoneOverlayStep === 'number' ? 'Add phone number' : 'Verify phone number'}
+        size="sm"
+        styles={{
+          content: {
+            backgroundColor: contentBackground,
+          },
+          header: {
+            backgroundColor: contentBackground,
+          },
+        }}
+      >
+        <Stack
+          gap="lg"
+          style={{
+            color: contentText,
+            ['--pitch-surface-text' as string]: contentText,
+            ['--pitch-surface-text-dim' as string]: contentMuted,
+            ['--pitch-input-bg' as string]: inputBackground,
+            ['--pitch-input-text' as string]: contentText,
+            ['--pitch-input-placeholder' as string]: inputPlaceholder,
+            ['--pitch-border' as string]: inputBorder,
+          }}
+        >
+          {phoneOverlayStep === 'number' ? (
+            <>
+              <Box>
+                <Text fw={600} c="var(--pitch-surface-text)">
+                  Add a mobile number
+                </Text>
+                <Text size="sm" c="var(--pitch-surface-text-dim)" mt={4}>
+                  We&apos;ll text you a 6-digit verification code right away.
+                </Text>
+              </Box>
+
+              <Box>
+                <Text
+                  size="sm"
+                  fw={500}
+                  mb={8}
+                  c="var(--pitch-surface-text-dim)"
+                  className={inputClasses.label}
+                >
+                  Mobile number
+                </Text>
+                <Group gap="sm" wrap="nowrap" align="flex-end">
+                  <Select
+                    aria-label="Country code"
+                    data={PHONE_COUNTRY_OPTIONS}
+                    value={phoneCountryCode}
+                    onChange={handlePhoneCountryCodeChange}
+                    allowDeselect={false}
+                    size="md"
+                    w={190}
+                    classNames={settingsInputClassNames}
+                  />
+                  <TextInput
+                    aria-label="Phone number"
+                    placeholder="555 123 4567"
+                    value={phoneLocalNumber}
+                    onChange={(event) => handlePhoneLocalNumberChange(event.currentTarget.value)}
+                    size="md"
+                    classNames={settingsInputClassNames}
+                    style={{ flex: 1 }}
+                  />
+                </Group>
+              </Box>
+
+              {phoneError && (
+                <Alert variant="light" color="red" icon={<IconAlertCircle size={16} />} radius="md">
+                  {phoneError}
+                </Alert>
+              )}
+
+              <Group justify="space-between">
+                <Button variant="subtle" onClick={closePhoneOverlay}>
+                  Cancel
+                </Button>
+                <Button
+                  onClick={() => void handleRequestPhoneVerification()}
+                  loading={phoneActionLoading}
+                >
+                  Confirm
+                </Button>
+              </Group>
+            </>
+          ) : (
+            <>
+              <Box>
+                <Text fw={600} c="var(--pitch-surface-text)">
+                  Please enter verification code below
+                </Text>
+                <Text size="sm" c="var(--pitch-surface-text-dim)" mt={4}>
+                  {phoneVerification?.pendingPhoneNumber
+                    ? `We sent a code to ${phoneVerification.pendingPhoneNumber}.`
+                    : 'Enter the 6-digit code we just sent.'}
+                </Text>
+              </Box>
+
+              <PinInput
+                data-testid="phone-code-input"
+                length={6}
+                type="number"
+                oneTimeCode
+                size="lg"
+                value={verificationCode}
+                onChange={setVerificationCode}
+                styles={{
+                  root: { justifyContent: 'space-between', gap: rem(10) },
+                  input: {
+                    width: rem(48),
+                    height: rem(56),
+                    borderRadius: rem(14),
+                    border: '1px solid var(--pitch-border)',
+                    backgroundColor: 'var(--pitch-input-bg)',
+                    color: 'var(--pitch-input-text)',
+                    fontSize: rem(22),
+                    fontWeight: 700,
+                  },
+                }}
+              />
+
+              {typeof phoneVerification?.remainingAttempts === 'number' && (
+                <Text size="sm" c="var(--pitch-surface-text-dim)">
+                  {phoneVerification.remainingAttempts} attempt
+                  {phoneVerification.remainingAttempts === 1 ? '' : 's'} remaining
+                </Text>
+              )}
+
+              {phoneError && (
+                <Alert variant="light" color="red" icon={<IconAlertCircle size={16} />} radius="md">
+                  {phoneError}
+                </Alert>
+              )}
+
+              <Group justify="space-between" align="center">
+                <Button
+                  variant="subtle"
+                  onClick={() => void handleResendPhoneVerification()}
+                  loading={phoneActionLoading}
+                  disabled={
+                    isResendCoolingDown ||
+                    (typeof phoneVerification?.remainingSends === 'number' &&
+                      phoneVerification.remainingSends <= 0)
+                  }
+                >
+                  {isResendCoolingDown ? 'Wait to resend' : 'Resend code'}
+                </Button>
+                <Button
+                  onClick={() => void handleVerifyPhoneCode()}
+                  loading={phoneActionLoading}
+                  disabled={verificationCode.trim().length !== 6}
+                >
+                  Verify code
+                </Button>
+              </Group>
+            </>
+          )}
+        </Stack>
+      </Modal>
     </Modal>
   )
 }

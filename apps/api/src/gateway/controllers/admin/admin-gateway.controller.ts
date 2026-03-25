@@ -284,6 +284,20 @@ export class AdminGatewayController {
     );
   }
 
+  @Post('teams')
+  @ApiOperation({ summary: 'Create team from admin console' })
+  @ApiResponse({ status: 201, description: 'Team created' })
+  async createTeam(
+    @Body() body: Record<string, unknown>,
+    @UserClaims() userClaims: UserClaimsType,
+  ) {
+    return this.sendUserRequest(
+      USER_SERVICE_PATTERNS.CREATE_TEAM,
+      { ...body, ownerId: userClaims.id, createdBy: userClaims.id, userClaims },
+      'Failed to create team',
+    );
+  }
+
   @Get('teams/:teamId')
   @ApiOperation({ summary: 'Get team by ID for admin console' })
   @ApiResponse({ status: 200, description: 'Team returned' })
@@ -298,11 +312,97 @@ export class AdminGatewayController {
     );
   }
 
+  @Put('teams/:teamId')
+  @ApiOperation({ summary: 'Update team from admin console' })
+  @ApiResponse({ status: 200, description: 'Team updated' })
+  async updateTeam(
+    @Param('teamId') teamId: string,
+    @Body() body: Record<string, unknown>,
+    @UserClaims() userClaims: UserClaimsType,
+  ) {
+    return this.sendUserRequest(
+      USER_SERVICE_PATTERNS.UPDATE_TEAM,
+      { teamId, ...body, userClaims },
+      'Failed to update team',
+    );
+  }
+
+  @Delete('teams/:teamId')
+  @ApiOperation({ summary: 'Delete team from admin console' })
+  @ApiResponse({ status: 200, description: 'Team deleted' })
+  async deleteTeam(
+    @Param('teamId') teamId: string,
+    @UserClaims() userClaims: UserClaimsType,
+  ) {
+    return this.sendUserRequest(
+      USER_SERVICE_PATTERNS.DELETE_TEAM,
+      { teamId, userClaims },
+      'Failed to delete team',
+    );
+  }
+
   @Get('teams/:teamId/usage')
   @ApiOperation({ summary: 'Get team usage for admin console' })
   @ApiResponse({ status: 200, description: 'Team usage returned' })
   async getTeamUsage(@Param('teamId') teamId: string) {
     return this.adminService.getTeamUsage(teamId);
+  }
+
+  @Post('teams/:teamId/members')
+  @ApiOperation({ summary: 'Add a team member from the admin console' })
+  @ApiResponse({ status: 201, description: 'Team member added' })
+  async addTeamMember(
+    @Param('teamId') teamId: string,
+    @Body() body: Record<string, unknown>,
+    @UserClaims() userClaims: UserClaimsType,
+  ) {
+    return this.sendUserRequest(
+      USER_SERVICE_PATTERNS.ADD_TEAM_MEMBER,
+      { teamId, ...body, userClaims },
+      'Failed to add team member',
+    );
+  }
+
+  @Put('teams/:teamId/members/:userId')
+  @ApiOperation({ summary: 'Update a team member from the admin console' })
+  @ApiResponse({ status: 200, description: 'Team member updated' })
+  async updateTeamMember(
+    @Param('teamId') teamId: string,
+    @Param('userId') userId: string,
+    @Body() body: Record<string, unknown>,
+    @UserClaims() userClaims: UserClaimsType,
+  ) {
+    return this.sendUserRequest(
+      USER_SERVICE_PATTERNS.UPDATE_TEAM_MEMBER,
+      { teamId, userId, ...body, userClaims },
+      'Failed to update team member',
+    );
+  }
+
+  @Delete('teams/:teamId/members/:userId')
+  @ApiOperation({ summary: 'Remove a team member from the admin console' })
+  @ApiResponse({ status: 200, description: 'Team member removed' })
+  async removeTeamMember(
+    @Param('teamId') teamId: string,
+    @Param('userId') userId: string,
+    @UserClaims() userClaims: UserClaimsType,
+  ) {
+    return this.adminService.removeTeamMember(teamId, userId, userClaims);
+  }
+
+  @Post('teams/:teamId/invitations/signup')
+  @ApiOperation({ summary: 'Send a team signup invite from the admin console' })
+  @ApiResponse({ status: 201, description: 'Signup invite sent' })
+  async sendTeamSignupInvite(
+    @Param('teamId') teamId: string,
+    @Body() body: Record<string, unknown>,
+    @UserClaims() userClaims: UserClaimsType,
+  ) {
+    return this.sendUserRequest(
+      USER_SERVICE_PATTERNS.SEND_TEAM_SIGNUP_INVITE,
+      { teamId, ...body, userClaims },
+      'Failed to send signup invite',
+    );
   }
 
   @Post('teams/:teamId/transfer-owner')
@@ -523,6 +623,61 @@ export class AdminGatewayController {
     );
   }
 
+  @Post('sessions')
+  @ApiOperation({ summary: 'Create a session from the admin console' })
+  @ApiResponse({ status: 201, description: 'Session created' })
+  async createSession(
+    @Body() body: Record<string, unknown>,
+    @UserClaims() userClaims: UserClaimsType,
+  ) {
+    return this.sendSimulationRequest(
+      SIMULATION_SERVICE_PATTERNS.CREATE_SESSION,
+      { ...body, userClaims },
+      'Failed to create session',
+    );
+  }
+
+  @Put('sessions/:id')
+  @ApiOperation({ summary: 'Update a session from the admin console' })
+  @ApiResponse({ status: 200, description: 'Session updated' })
+  async updateSession(
+    @Param('id') id: string,
+    @Body() body: Record<string, unknown>,
+    @UserClaims() userClaims: UserClaimsType,
+  ) {
+    return this.sendSimulationRequest(
+      SIMULATION_SERVICE_PATTERNS.UPDATE_SESSION,
+      { id, ...body, userClaims },
+      'Failed to update session',
+    );
+  }
+
+  @Post('sessions/:id/members')
+  @ApiOperation({ summary: 'Add session members from the admin console' })
+  @ApiResponse({ status: 201, description: 'Session members added' })
+  async addSessionMembers(
+    @Param('id') id: string,
+    @Body() body: Record<string, unknown>,
+    @UserClaims() userClaims: UserClaimsType,
+  ) {
+    return this.sendSimulationRequest(
+      SIMULATION_SERVICE_PATTERNS.ADD_SESSION_MEMBERS,
+      { sessionId: id, ...body, userClaims },
+      'Failed to add session members',
+    );
+  }
+
+  @Delete('sessions/:id/members/:userId')
+  @ApiOperation({ summary: 'Remove a session member from the admin console' })
+  @ApiResponse({ status: 200, description: 'Session member removed' })
+  async removeSessionMember(
+    @Param('id') id: string,
+    @Param('userId') userId: string,
+    @UserClaims() userClaims: UserClaimsType,
+  ) {
+    return this.adminService.removeSessionMember(id, userId, userClaims);
+  }
+
   @Get('sessions/:id/members')
   @ApiOperation({ summary: 'List session members for admin console' })
   @ApiResponse({ status: 200, description: 'Session members returned' })
@@ -534,6 +689,20 @@ export class AdminGatewayController {
       SIMULATION_SERVICE_PATTERNS.LIST_SESSION_MEMBERS,
       { sessionId: id, userClaims },
       'Failed to list session members',
+    );
+  }
+
+  @Get('sessions/:id/invitations')
+  @ApiOperation({ summary: 'List session invitations for admin console' })
+  @ApiResponse({ status: 200, description: 'Session invitations returned' })
+  async listSessionInvitations(
+    @Param('id') id: string,
+    @UserClaims() userClaims: UserClaimsType,
+  ) {
+    return this.sendSimulationRequest(
+      SIMULATION_SERVICE_PATTERNS.LIST_SESSION_INVITATIONS,
+      { sessionId: id, userClaims },
+      'Failed to list session invitations',
     );
   }
 
@@ -554,6 +723,31 @@ export class AdminGatewayController {
         userClaims,
       },
       'Failed to fetch timeline',
+    );
+  }
+
+  @Get('sessions/:id/assessments/latest')
+  @ApiOperation({
+    summary: 'Get latest completed assessment for admin console',
+  })
+  @ApiQuery({ name: 'iterationId', required: false, type: String })
+  @ApiQuery({ name: 'sessionMemberId', required: false, type: String })
+  @ApiResponse({
+    status: 200,
+    description: 'Latest session assessment returned',
+  })
+  async getLatestSessionAssessment(
+    @Param('id') id: string,
+    @Query() query: Record<string, string | undefined>,
+  ) {
+    return this.sendSimulationRequest(
+      SIMULATION_SERVICE_PATTERNS.ASSESSMENT_LATEST,
+      {
+        sessionId: id,
+        iterationId: query.iterationId,
+        sessionMemberId: query.sessionMemberId,
+      },
+      'Failed to fetch latest session assessment',
     );
   }
 
@@ -867,6 +1061,16 @@ export class AdminGatewayController {
     });
   }
 
+  @Get('logs')
+  @ApiOperation({ summary: 'List recent admin error logs' })
+  @ApiResponse({ status: 200, description: 'Recent logs returned' })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  listLogs(@Query() query: Record<string, string | undefined>) {
+    return this.adminService.listErrors({
+      limit: this.parseNumber(query.limit),
+    });
+  }
+
   @Get('request-logs')
   @ApiOperation({ summary: 'List recent HTTP request logs' })
   @ApiResponse({ status: 200, description: 'Request logs returned' })
@@ -875,6 +1079,29 @@ export class AdminGatewayController {
     return this.adminService.listRequestLogs({
       limit: this.parseNumber(query.limit),
     });
+  }
+
+  @Get('log-levels')
+  @ApiOperation({ summary: 'Get runtime log capture settings' })
+  @ApiResponse({
+    status: 200,
+    description: 'Runtime log capture settings returned',
+  })
+  getLogLevels() {
+    return this.adminService.getLogLevels();
+  }
+
+  @Patch('log-levels')
+  @ApiOperation({ summary: 'Update runtime log capture settings' })
+  @ApiResponse({
+    status: 200,
+    description: 'Runtime log capture settings updated',
+  })
+  updateLogLevels(
+    @Body() body: Record<string, unknown>,
+    @UserClaims() userClaims: UserClaimsType,
+  ) {
+    return this.adminService.updateLogLevels(body, userClaims);
   }
 
   @Post('cache/invalidate')

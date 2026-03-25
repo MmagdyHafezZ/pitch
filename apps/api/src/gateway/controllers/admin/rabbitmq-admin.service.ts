@@ -5,6 +5,7 @@ import {
   MICROSERVICES_CONFIG,
   getRabbitMQUrl,
 } from '../../../config/microservices.config';
+import { getDeadLetterQueueName } from '../../../config/rabbitmq-topology';
 
 export interface AdminQueueStats {
   name: string;
@@ -137,24 +138,14 @@ export class RabbitMqAdminService implements OnModuleDestroy {
     channel: Channel,
     queueName: string,
   ): Promise<string | null> {
-    const candidates = [
-      `${queueName}.dlq`,
-      `${queueName}_dlq`,
-      `${queueName}.dead-letter`,
-      `${queueName}.dead_letter`,
-      `${queueName}.retry`,
-    ];
+    const deadLetterQueue = getDeadLetterQueueName(queueName);
 
-    for (const candidate of candidates) {
-      try {
-        await channel.checkQueue(candidate);
-        return candidate;
-      } catch {
-        continue;
-      }
+    try {
+      await channel.checkQueue(deadLetterQueue);
+      return deadLetterQueue;
+    } catch {
+      return null;
     }
-
-    return null;
   }
 
   private async tryGetChannel(): Promise<Channel | null> {

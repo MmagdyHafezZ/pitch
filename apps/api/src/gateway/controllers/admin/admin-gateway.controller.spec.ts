@@ -184,6 +184,28 @@ describe('AdminGatewayController', () => {
       { deleted: true },
     ],
     [
+      'createTeam',
+      () =>
+        controller.createTeam(
+          {
+            name: 'New Team',
+            slug: 'new-team',
+            billingEmail: 'billing@example.com',
+          },
+          userClaims,
+        ),
+      USER_SERVICE_PATTERNS.CREATE_TEAM,
+      {
+        name: 'New Team',
+        slug: 'new-team',
+        billingEmail: 'billing@example.com',
+        ownerId: 'admin-1',
+        createdBy: 'admin-1',
+        userClaims,
+      },
+      { id: 'team-1', name: 'New Team' },
+    ],
+    [
       'getTeams',
       () => controller.getTeams(userClaims),
       USER_SERVICE_PATTERNS.GET_TEAMS,
@@ -196,6 +218,78 @@ describe('AdminGatewayController', () => {
       USER_SERVICE_PATTERNS.GET_TEAM,
       { teamId: 'team-1', userClaims },
       { id: 'team-1' },
+    ],
+    [
+      'updateTeam',
+      () =>
+        controller.updateTeam(
+          'team-1',
+          { name: 'Renamed Team', billingEmail: 'billing@example.com' },
+          userClaims,
+        ),
+      USER_SERVICE_PATTERNS.UPDATE_TEAM,
+      {
+        teamId: 'team-1',
+        name: 'Renamed Team',
+        billingEmail: 'billing@example.com',
+        userClaims,
+      },
+      { id: 'team-1', name: 'Renamed Team' },
+    ],
+    [
+      'deleteTeam',
+      () => controller.deleteTeam('team-1', userClaims),
+      USER_SERVICE_PATTERNS.DELETE_TEAM,
+      { teamId: 'team-1', userClaims },
+      { message: 'deleted' },
+    ],
+    [
+      'addTeamMember',
+      () =>
+        controller.addTeamMember(
+          'team-1',
+          { userId: 'user-2', role: 'MEMBER' },
+          userClaims,
+        ),
+      USER_SERVICE_PATTERNS.ADD_TEAM_MEMBER,
+      { teamId: 'team-1', userId: 'user-2', role: 'MEMBER', userClaims },
+      { id: 'membership-1' },
+    ],
+    [
+      'updateTeamMember',
+      () =>
+        controller.updateTeamMember(
+          'team-1',
+          'user-2',
+          { role: 'ADMIN', tokenLimit: 10 },
+          userClaims,
+        ),
+      USER_SERVICE_PATTERNS.UPDATE_TEAM_MEMBER,
+      {
+        teamId: 'team-1',
+        userId: 'user-2',
+        role: 'ADMIN',
+        tokenLimit: 10,
+        userClaims,
+      },
+      { id: 'membership-1', role: 'ADMIN' },
+    ],
+    [
+      'sendTeamSignupInvite',
+      () =>
+        controller.sendTeamSignupInvite(
+          'team-1',
+          { email: 'new@example.com', role: 'MEMBER' },
+          userClaims,
+        ),
+      USER_SERVICE_PATTERNS.SEND_TEAM_SIGNUP_INVITE,
+      {
+        teamId: 'team-1',
+        email: 'new@example.com',
+        role: 'MEMBER',
+        userClaims,
+      },
+      { queued: true },
     ],
     [
       'getPlans',
@@ -307,6 +401,22 @@ describe('AdminGatewayController', () => {
     },
   );
 
+  it('delegates team member removal to the admin service', async () => {
+    adminService.removeTeamMember = jest.fn().mockResolvedValue({
+      message: 'removed',
+    } as never);
+
+    await expect(
+      controller.removeTeamMember('team-1', 'user-2', userClaims),
+    ).resolves.toEqual({
+      message: 'removed',
+    });
+
+    expect((adminService.removeTeamMember as jest.Mock).mock.calls).toEqual([
+      ['team-1', 'user-2', userClaims],
+    ]);
+  });
+
   it('listSessions parses numeric filters before forwarding', async () => {
     simulationClient.send.mockReturnValue(
       responseOf({ sessions: [], total: 0 }),
@@ -361,6 +471,58 @@ describe('AdminGatewayController', () => {
 
   it.each([
     [
+      'createSession',
+      () =>
+        controller.createSession(
+          { orgId: 'team-1', type: 'text', name: 'Demo session' },
+          userClaims,
+        ),
+      SIMULATION_SERVICE_PATTERNS.CREATE_SESSION,
+      { orgId: 'team-1', type: 'text', name: 'Demo session', userClaims },
+      { id: 'session-1' },
+    ],
+    [
+      'updateSession',
+      () =>
+        controller.updateSession(
+          'session-1',
+          { name: 'Updated session', status: 'ended' },
+          userClaims,
+        ),
+      SIMULATION_SERVICE_PATTERNS.UPDATE_SESSION,
+      {
+        id: 'session-1',
+        name: 'Updated session',
+        status: 'ended',
+        userClaims,
+      },
+      { id: 'session-1', name: 'Updated session' },
+    ],
+    [
+      'addSessionMembers',
+      () =>
+        controller.addSessionMembers(
+          'session-1',
+          { userIds: ['user-2'], role: 'viewer' },
+          userClaims,
+        ),
+      SIMULATION_SERVICE_PATTERNS.ADD_SESSION_MEMBERS,
+      {
+        sessionId: 'session-1',
+        userIds: ['user-2'],
+        role: 'viewer',
+        userClaims,
+      },
+      { members: [{ id: 'member-1' }], created: 1, failed: 0 },
+    ],
+    [
+      'listSessionInvitations',
+      () => controller.listSessionInvitations('session-1', userClaims),
+      SIMULATION_SERVICE_PATTERNS.LIST_SESSION_INVITATIONS,
+      { sessionId: 'session-1', userClaims },
+      [{ id: 'invite-1' }],
+    ],
+    [
       'listSessionMembers',
       () => controller.listSessionMembers('session-1', userClaims),
       SIMULATION_SERVICE_PATTERNS.LIST_SESSION_MEMBERS,
@@ -385,6 +547,22 @@ describe('AdminGatewayController', () => {
       expect(simulationClient.send.mock.calls).toEqual([[pattern, payload]]);
     },
   );
+
+  it('delegates session member removal to the admin service', async () => {
+    adminService.removeSessionMember = jest.fn().mockResolvedValue({
+      message: 'removed',
+    } as never);
+
+    await expect(
+      controller.removeSessionMember('session-1', 'user-2', userClaims),
+    ).resolves.toEqual({
+      message: 'removed',
+    });
+
+    expect((adminService.removeSessionMember as jest.Mock).mock.calls).toEqual([
+      ['session-1', 'user-2', userClaims],
+    ]);
+  });
 
   it('getSessionTimeline parses numeric limits before forwarding', async () => {
     simulationClient.send.mockReturnValue(responseOf([{ id: 'evt-1' }]));
@@ -415,6 +593,28 @@ describe('AdminGatewayController', () => {
           sessionId: 'session-1',
           limit: undefined,
           userClaims,
+        },
+      ],
+    ]);
+  });
+
+  it('forwards latest session assessment lookups to the simulation microservice', async () => {
+    simulationClient.send.mockReturnValue(responseOf({ id: 'assessment-1' }));
+
+    await expect(
+      controller.getLatestSessionAssessment('session-1', {
+        iterationId: 'iter-1',
+        sessionMemberId: 'member-1',
+      }),
+    ).resolves.toEqual({ id: 'assessment-1' });
+
+    expect(simulationClient.send.mock.calls).toEqual([
+      [
+        SIMULATION_SERVICE_PATTERNS.ASSESSMENT_LATEST,
+        {
+          sessionId: 'session-1',
+          iterationId: 'iter-1',
+          sessionMemberId: 'member-1',
         },
       ],
     ]);
@@ -453,6 +653,45 @@ describe('AdminGatewayController', () => {
     expect(
       (adminService.getDependenciesHealth as jest.Mock).mock.calls,
     ).toEqual([[]]);
+  });
+
+  it('delegates logs alias to the error log service', () => {
+    adminService.listErrors = jest.fn().mockReturnValue({
+      logs: [],
+    } as never);
+
+    const result = controller.listLogs({ limit: '25' });
+
+    expect(result).toEqual({ logs: [] });
+    expect((adminService.listErrors as jest.Mock).mock.calls).toEqual([
+      [{ limit: 25 }],
+    ]);
+  });
+
+  it('delegates runtime log level reads to the admin service', () => {
+    adminService.getLogLevels = jest.fn().mockReturnValue({
+      debugEnabled: true,
+    } as never);
+
+    expect(controller.getLogLevels()).toEqual({
+      debugEnabled: true,
+    });
+    expect((adminService.getLogLevels as jest.Mock).mock.calls).toEqual([[]]);
+  });
+
+  it('delegates runtime log level updates to the admin service', () => {
+    adminService.updateLogLevels = jest.fn().mockReturnValue({
+      debugEnabled: false,
+    } as never);
+
+    expect(
+      controller.updateLogLevels({ debugEnabled: false }, userClaims),
+    ).toEqual({
+      debugEnabled: false,
+    });
+    expect((adminService.updateLogLevels as jest.Mock).mock.calls).toEqual([
+      [{ debugEnabled: false }, userClaims],
+    ]);
   });
 
   it('delegates feature flag updates to the admin service', async () => {

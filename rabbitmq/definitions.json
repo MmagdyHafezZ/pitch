@@ -28,7 +28,229 @@
       "value": "pitch-local"
     }
   ],
-  "policies": [],
-  "queues": [],
-  "bindings": []
+  "policies": [
+    {
+      "vhost": "pitch_local",
+      "name": "service-dlq-policy",
+      "pattern": "^(user_queue|simulation_queue|analytics_queue|support_queue|lti_queue|s3_queue|crm_queue|jobs_queue|gateway_queue)$",
+      "apply-to": "queues",
+      "definition": {
+        "dead-letter-exchange": "pitch.services.dlx"
+      },
+      "priority": 0
+    }
+  ],
+  "exchanges": [
+    {
+      "name": "pitch.services.dlx",
+      "vhost": "pitch_local",
+      "type": "direct",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    }
+  ],
+  "queues": [
+    {
+      "name": "user_queue",
+      "vhost": "pitch_local",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {}
+    },
+    {
+      "name": "simulation_queue",
+      "vhost": "pitch_local",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {}
+    },
+    {
+      "name": "analytics_queue",
+      "vhost": "pitch_local",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {}
+    },
+    {
+      "name": "support_queue",
+      "vhost": "pitch_local",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {}
+    },
+    {
+      "name": "lti_queue",
+      "vhost": "pitch_local",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {}
+    },
+    {
+      "name": "s3_queue",
+      "vhost": "pitch_local",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {}
+    },
+    {
+      "name": "crm_queue",
+      "vhost": "pitch_local",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {}
+    },
+    {
+      "name": "jobs_queue",
+      "vhost": "pitch_local",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {}
+    },
+    {
+      "name": "gateway_queue",
+      "vhost": "pitch_local",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {}
+    },
+    {
+      "name": "user_queue.dlq",
+      "vhost": "pitch_local",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {}
+    },
+    {
+      "name": "simulation_queue.dlq",
+      "vhost": "pitch_local",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {}
+    },
+    {
+      "name": "analytics_queue.dlq",
+      "vhost": "pitch_local",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {}
+    },
+    {
+      "name": "support_queue.dlq",
+      "vhost": "pitch_local",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {}
+    },
+    {
+      "name": "lti_queue.dlq",
+      "vhost": "pitch_local",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {}
+    },
+    {
+      "name": "s3_queue.dlq",
+      "vhost": "pitch_local",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {}
+    },
+    {
+      "name": "crm_queue.dlq",
+      "vhost": "pitch_local",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {}
+    },
+    {
+      "name": "jobs_queue.dlq",
+      "vhost": "pitch_local",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {}
+    },
+    {
+      "name": "gateway_queue.dlq",
+      "vhost": "pitch_local",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {}
+    }
+  ],
+  "bindings": [
+    {
+      "source": "pitch.services.dlx",
+      "vhost": "pitch_local",
+      "destination": "user_queue.dlq",
+      "destination_type": "queue",
+      "routing_key": "user_queue",
+      "arguments": {}
+    },
+    {
+      "source": "pitch.services.dlx",
+      "vhost": "pitch_local",
+      "destination": "simulation_queue.dlq",
+      "destination_type": "queue",
+      "routing_key": "simulation_queue",
+      "arguments": {}
+    },
+    {
+      "source": "pitch.services.dlx",
+      "vhost": "pitch_local",
+      "destination": "analytics_queue.dlq",
+      "destination_type": "queue",
+      "routing_key": "analytics_queue",
+      "arguments": {}
+    },
+    {
+      "source": "pitch.services.dlx",
+      "vhost": "pitch_local",
+      "destination": "support_queue.dlq",
+      "destination_type": "queue",
+      "routing_key": "support_queue",
+      "arguments": {}
+    },
+    {
+      "source": "pitch.services.dlx",
+      "vhost": "pitch_local",
+      "destination": "lti_queue.dlq",
+      "destination_type": "queue",
+      "routing_key": "lti_queue",
+      "arguments": {}
+    },
+    {
+      "source": "pitch.services.dlx",
+      "vhost": "pitch_local",
+      "destination": "s3_queue.dlq",
+      "destination_type": "queue",
+      "routing_key": "s3_queue",
+      "arguments": {}
+    },
+    {
+      "source": "pitch.services.dlx",
+      "vhost": "pitch_local",
+      "destination": "crm_queue.dlq",
+      "destination_type": "queue",
+      "routing_key": "crm_queue",
+      "arguments": {}
+    },
+    {
+      "source": "pitch.services.dlx",
+      "vhost": "pitch_local",
+      "destination": "jobs_queue.dlq",
+      "destination_type": "queue",
+      "routing_key": "jobs_queue",
+      "arguments": {}
+    },
+    {
+      "source": "pitch.services.dlx",
+      "vhost": "pitch_local",
+      "destination": "gateway_queue.dlq",
+      "destination_type": "queue",
+      "routing_key": "gateway_queue",
+      "arguments": {}
+    }
+  ]
 }

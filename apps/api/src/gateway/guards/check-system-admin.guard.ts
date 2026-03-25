@@ -7,15 +7,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import type { RequestWithUser } from '@pitch/shared-backend/interfaces/request.interface';
-
-const DEFAULT_DEV_BYPASS_EMAIL = 'dev@local';
-
-function parseEmails(raw: string | undefined): string[] {
-  return (raw ?? '')
-    .split(',')
-    .map((email) => email.trim().toLowerCase())
-    .filter((email) => email.length > 0);
-}
+import { isSystemAdminEmail } from '../utils/system-admin-access';
 
 @Injectable()
 export class CheckSystemAdmin implements CanActivate {
@@ -44,21 +36,19 @@ export class CheckSystemAdmin implements CanActivate {
   }
 
   private isAllowed(email: string): boolean {
-    const configuredAdmins = parseEmails(process.env.SUPER_ADMIN_EMAILS);
-    if (configuredAdmins.includes(email)) return true;
-
-    if (process.env.DEV_BYPASS_ENABLED === 'true') {
-      const bypassEmail = (
-        process.env.DEV_BYPASS_EMAIL ?? DEFAULT_DEV_BYPASS_EMAIL
-      )
-        .trim()
-        .toLowerCase();
-      if (email === bypassEmail) {
-        this.logger.warn(`Allowing DEV_BYPASS_EMAIL ${email} as system admin`);
-        return true;
+    if (isSystemAdminEmail(email)) {
+      if (process.env.DEV_BYPASS_ENABLED === 'true') {
+        const bypassEmail = (process.env.DEV_BYPASS_EMAIL ?? 'dev@local')
+          .trim()
+          .toLowerCase();
+        if (email === bypassEmail) {
+          this.logger.warn(
+            `Allowing DEV_BYPASS_EMAIL ${email} as system admin`,
+          );
+        }
       }
+      return true;
     }
-
     return false;
   }
 }
