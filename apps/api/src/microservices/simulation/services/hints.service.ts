@@ -290,6 +290,7 @@ export class HintsService {
       // 7. Store hints in MongoDB
       const savedHint = await this.hintsRepository.create({
         sessionId: request.sessionId,
+        iterationId: conversationContext.iterationId,
         turnId: request.turnId,
         userId: request.userId,
         orgId: request.orgId,
@@ -345,21 +346,58 @@ export class HintsService {
     request: GetHintHistoryRequestDto,
   ): Promise<HintHistoryResponseDto> {
     const limit = request.limit || 10;
+    let iterationId = request.iterationId;
+
+    if (!iterationId && request.userId) {
+      const latestIteration = await this.prisma.client.iteration.findFirst({
+        where: {
+          sessionId: request.sessionId,
+          sessionMember: { userId: request.userId },
+        },
+        orderBy: { iterationNumber: 'desc' },
+        select: { id: true },
+      });
+      iterationId = latestIteration?.id;
+    }
 
     const [history, totalCount] = await Promise.all([
       request.type
-        ? this.hintsRepository.findBySessionIdAndType(
-            request.sessionId,
-            request.type,
-            limit,
-          )
-        : this.hintsRepository.findBySessionId(request.sessionId, limit),
+        ? iterationId
+          ? this.hintsRepository.findBySessionIdAndIterationAndType(
+              request.sessionId,
+              iterationId,
+              request.type,
+              limit,
+            )
+          : this.hintsRepository.findBySessionIdAndType(
+              request.sessionId,
+              request.type,
+              limit,
+            )
+        : iterationId
+          ? this.hintsRepository.findBySessionIdAndIteration(
+              request.sessionId,
+              iterationId,
+              limit,
+            )
+          : this.hintsRepository.findBySessionId(request.sessionId, limit),
       request.type
-        ? this.hintsRepository.countBySessionIdAndType(
-            request.sessionId,
-            request.type,
-          )
-        : this.hintsRepository.countBySessionId(request.sessionId),
+        ? iterationId
+          ? this.hintsRepository.countBySessionIdAndIterationAndType(
+              request.sessionId,
+              iterationId,
+              request.type,
+            )
+          : this.hintsRepository.countBySessionIdAndType(
+              request.sessionId,
+              request.type,
+            )
+        : iterationId
+          ? this.hintsRepository.countBySessionIdAndIteration(
+              request.sessionId,
+              iterationId,
+            )
+          : this.hintsRepository.countBySessionId(request.sessionId),
     ]);
 
     return {

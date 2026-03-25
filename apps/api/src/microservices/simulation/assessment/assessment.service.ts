@@ -215,8 +215,17 @@ export class AssessmentService {
         iteration.id,
       );
     } else {
-      run = await this.assessmentRepository.findLatestCompletedForSession(
-        sessionId as string,
+      const latestIteration = await this.prisma.client.iteration.findFirst({
+        where: { sessionId: sessionId as string },
+        orderBy: { iterationNumber: 'desc' },
+        select: { id: true, sessionMemberId: true },
+      });
+      if (!latestIteration) {
+        throw new NotFoundException('No iterations found for session');
+      }
+      resolvedSessionMemberId = latestIteration.sessionMemberId;
+      run = await this.assessmentRepository.findLatestCompletedForIteration(
+        latestIteration.id,
       );
     }
 
@@ -656,13 +665,8 @@ export class AssessmentService {
     persona: { id: string; updatedAt?: Date | null } | null;
   }): Promise<string> {
     const turns = await this.prisma.client.turn.findMany({
-      where: {
-        iteration: {
-          sessionId: input.sessionId,
-          sessionMemberId: input.sessionMemberId,
-        },
-      },
-      orderBy: [{ iteration: { iterationNumber: 'asc' } }, { order: 'asc' }],
+      where: { iterationId: input.iterationId },
+      orderBy: [{ order: 'asc' }],
       include: {
         messages: true,
         iteration: { select: { iterationNumber: true } },

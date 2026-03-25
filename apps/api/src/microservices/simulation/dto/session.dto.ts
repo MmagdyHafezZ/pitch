@@ -431,6 +431,23 @@ export class SessionResponseDto {
 
   @ApiPropertyOptional({ example: 0.1 })
   coinPriceUsd?: number;
+
+  @ApiPropertyOptional({
+    example: {
+      id: 'iteration_123',
+      iterationNumber: 2,
+      status: 'completed',
+      endedReason: 'user_hangup',
+      endedAt: '2024-01-01T00:30:00.000Z',
+    },
+  })
+  currentIteration?: {
+    id: string;
+    iterationNumber: number;
+    status: string;
+    endedReason?: string;
+    endedAt?: Date;
+  };
 }
 
 /**

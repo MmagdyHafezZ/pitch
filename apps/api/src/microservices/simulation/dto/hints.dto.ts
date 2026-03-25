@@ -180,6 +180,11 @@ export class GetHintHistoryRequestDto {
   @IsString()
   sessionId: string;
 
+  @ApiPropertyOptional({ description: 'Iteration ID' })
+  @IsString()
+  @IsOptional()
+  iterationId?: string;
+
   @ApiPropertyOptional({ description: 'Limit number of results', default: 10 })
   @IsInt()
   @Min(1)

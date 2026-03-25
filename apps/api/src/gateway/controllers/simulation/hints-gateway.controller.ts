@@ -46,6 +46,7 @@ export class HintsGatewayController {
   @Get('history')
   @ApiOperation({ summary: 'Get hint history for a session' })
   @ApiQuery({ name: 'sessionId', required: true, type: String })
+  @ApiQuery({ name: 'iterationId', required: false, type: String })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiQuery({ name: 'type', required: false, type: String })
   @ApiResponse({
@@ -54,6 +55,7 @@ export class HintsGatewayController {
   })
   getHistory(
     @Query('sessionId') sessionId: string,
+    @Query('iterationId') iterationId: string | undefined,
     @Query('limit') limit: string | undefined,
     @Query('type') type: string | undefined,
     @UserClaims() userClaims: UserClaimsType,
@@ -62,6 +64,7 @@ export class HintsGatewayController {
       .send(SIMULATION_SERVICE_PATTERNS.HINTS_HISTORY, {
         payload: {
           sessionId,
+          iterationId,
           limit: limit ? Number(limit) : undefined,
           type,
           userId: userClaims.id,
