@@ -51,6 +51,7 @@ import { notifications } from '@mantine/notifications'
 import type { SessionType } from '@/features/sessions'
 import type { SessionAttachment } from '@/features/sessions/types/sessions.types'
 import { UploadSection } from '@/app/studio/sessions/create/components/UploadSection'
+import { useInvalidateCoinsBalance } from '@/features/coins/hooks/useCoinsBalance'
 
 type AvatarVideoStatus = 'idle' | 'queued' | 'rendering' | 'ready' | 'failed'
 
@@ -112,17 +113,40 @@ const EMPTY_PHONE_CALL_RUNTIME: PhoneCallRuntimeState = {
   endRequestedReason: null,
 }
 
+const SESSION_TIMER_STORAGE_PREFIX = 'pitch-live-session-timer:'
+const ASSISTANT_FIRST_TURN_DELAY_MS = 5000
+
 const PHONE_TERMINAL_STATUSES = new Set(['ended', 'failed', 'busy', 'no-answer', 'canceled'])
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
 
 const normalizeSessionStatus = (session: unknown): string | null => {
-  if (!isRecord(session) || typeof session.status !== 'string') {
+  if (!isRecord(session)) {
+    return null
+  }
+
+  const currentIteration = isRecord(session.currentIteration) ? session.currentIteration : null
+  const iterationStatus =
+    currentIteration && typeof currentIteration.status === 'string'
+      ? currentIteration.status.trim().toLowerCase()
+      : null
+
+  if (iterationStatus === 'completed') {
+    return 'ended'
+  }
+
+  if (typeof session.status !== 'string') {
     return null
   }
 
   return session.status.trim().toLowerCase()
+}
+
+const readCurrentIterationId = (session: unknown): string | null => {
+  if (!isRecord(session)) return null
+  const currentIteration = isRecord(session.currentIteration) ? session.currentIteration : null
+  return currentIteration && typeof currentIteration.id === 'string' ? currentIteration.id : null
 }
 
 const readAvatarVideoState = (session: unknown): AvatarVideoState => {
@@ -384,6 +408,89 @@ const readPhoneCallRuntime = (session: unknown): PhoneCallRuntimeState => {
     endRequestedReason:
       typeof runtime.endRequestedReason === 'string' ? runtime.endRequestedReason : null,
   }
+}
+
+const parseTimestampMs = (value: unknown): number | null => {
+  if (typeof value !== 'string' || !value.trim()) {
+    return null
+  }
+
+  const parsed = new Date(value).getTime()
+  return Number.isNaN(parsed) ? null : parsed
+}
+
+const getSessionTimerStorageKey = (sessionId: string) =>
+  `${SESSION_TIMER_STORAGE_PREFIX}${sessionId}`
+
+const readPersistedSessionStartMs = (sessionId: string): number | null => {
+  if (typeof window === 'undefined') {
+    return null
+  }
+
+  try {
+    const rawValue = window.sessionStorage.getItem(getSessionTimerStorageKey(sessionId))
+    if (!rawValue) {
+      return null
+    }
+
+    const parsed = Number(rawValue)
+    return Number.isFinite(parsed) ? parsed : null
+  } catch {
+    return null
+  }
+}
+
+const writePersistedSessionStartMs = (sessionId: string, startedAtMs: number) => {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  try {
+    window.sessionStorage.setItem(getSessionTimerStorageKey(sessionId), String(startedAtMs))
+  } catch {
+    // Ignore storage failures and fall back to in-memory state
+  }
+}
+
+const clearPersistedSessionStartMs = (sessionId: string) => {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  try {
+    window.sessionStorage.removeItem(getSessionTimerStorageKey(sessionId))
+  } catch {
+    // Ignore storage failures
+  }
+}
+
+const readSessionEndedAtMs = (session: unknown): number | null => {
+  if (!isRecord(session)) {
+    return null
+  }
+
+  return (
+    parseTimestampMs(session.endedAt) ?? parseTimestampMs(readPhoneCallRuntime(session).endedAt)
+  )
+}
+
+const resolveSessionStartMs = (
+  sessionId: string,
+  session: unknown,
+  history: TranscriptMessage[] = []
+): number | null => {
+  const persistedStartMs = readPersistedSessionStartMs(sessionId)
+  const historyStartMs = history.length > 0 ? (history[0]?.timestamp.getTime() ?? null) : null
+  const phoneStartMs = parseTimestampMs(readPhoneCallRuntime(session).startedAt)
+  const candidates = [persistedStartMs, historyStartMs, phoneStartMs].filter(
+    (value): value is number => value !== null
+  )
+
+  if (candidates.length === 0) {
+    return null
+  }
+
+  return Math.min(...candidates)
 }
 
 const readTimelineConversationHistory = (timeline: unknown): TranscriptMessage[] => {
@@ -1583,7 +1690,10 @@ export default function LiveSessionPage() {
   const router = useRouter()
   const entrySource = searchParams.get('entry')
   const isMobile = useMediaQuery('(max-width: 768px)')
+  const invalidateCoinsBalance = useInvalidateCoinsBalance()
   const [time, setTime] = useState(0)
+  const [sessionStartMs, setSessionStartMs] = useState<number | null>(null)
+  const [sessionEndMs, setSessionEndMs] = useState<number | null>(null)
   const [sessionDuration, setSessionDuration] = useState(0) // total seconds; 0 = no limit
   const [successModalOpen, setSuccessModalOpen] = useState(false)
   const [finalScore, setFinalScore] = useState<number | null>(null)
@@ -1757,6 +1867,7 @@ export default function LiveSessionPage() {
     stopAudio,
     replayAudio,
     clearMessages,
+    hydrateMessages,
     clearHangupRequest,
     clearToolEvents,
     toolEvents,
@@ -1772,6 +1883,7 @@ export default function LiveSessionPage() {
   })
   const assistantSpeaking = isAudioPlaying
   sendMessageRef.current = sendMessage
+  const currentIterationId = readCurrentIterationId(loadedSessionRecord)
 
   const {
     isListening,
@@ -1857,39 +1969,81 @@ export default function LiveSessionPage() {
   const isPhoneSession = sessionType === 'phone'
   const activeConversationMessages = isPhoneSession ? phoneTranscriptMessages : messages
 
-  const syncSessionState = useCallback((session: any) => {
-    const config = (session?.sessionConfig as Record<string, any>) ?? {}
-    const avatarState = readAvatarVideoState(session)
-    const phoneRuntime = readPhoneCallRuntime(session)
-    const normalizedStatus = normalizeSessionStatus(session)
-    const nextAvatarVideoUrl =
-      session?.id && avatarState.status === 'ready' && avatarState.playbackToken
-        ? buildSessionVideoStreamUrl(session.id, avatarState.playbackToken, avatarState.jobId)
-        : avatarState.url
-    const rawDuration =
-      typeof config.durationMinutes === 'number'
-        ? config.durationMinutes
-        : typeof config.duration === 'number'
-          ? config.duration
-          : 0
+  const syncSessionClock = useCallback(
+    (session: unknown, history: TranscriptMessage[] = []) => {
+      const nextSessionStartMs = resolveSessionStartMs(sessionId, session, history)
+      const nextSessionEndMs = readSessionEndedAtMs(session)
 
-    if (rawDuration > 0) {
-      setSessionDuration(rawDuration * 60)
-    }
+      if (nextSessionStartMs !== null) {
+        setSessionStartMs(nextSessionStartMs)
+        writePersistedSessionStartMs(sessionId, nextSessionStartMs)
+      } else {
+        setSessionStartMs(null)
+      }
 
-    setIsMultiTurn(Boolean(config.multiTurnEnabled))
-    setSessionType(session?.type ?? null)
-    setSessionStatus(normalizedStatus)
-    setSessionName((session as any)?.name ?? (session as any)?.scenario?.name ?? '')
-    setPersonaName((session as any)?.persona?.name ?? null)
-    setAvatarVideoStatus(avatarState.status)
-    setAvatarVideoProvider(avatarState.provider)
-    setAvatarVideoError(avatarState.error)
-    setAvatarVideoJobId(avatarState.jobId)
-    setAvatarVideoUrl(nextAvatarVideoUrl)
-    setPhoneCallRuntime(phoneRuntime)
-    setCallStarted(session?.type === 'phone' ? isPhoneCallActive(phoneRuntime) : false)
-  }, [])
+      setSessionEndMs(nextSessionEndMs)
+    },
+    [sessionId]
+  )
+
+  const ensureSessionClockStarted = useCallback(
+    (startedAtMs = Date.now()) => {
+      setSessionStartMs((current) => {
+        if (current !== null) {
+          return current
+        }
+
+        writePersistedSessionStartMs(sessionId, startedAtMs)
+        return startedAtMs
+      })
+      setSessionEndMs(null)
+    },
+    [sessionId]
+  )
+
+  const resetSessionClock = useCallback(() => {
+    setSessionStartMs(null)
+    setSessionEndMs(null)
+    clearPersistedSessionStartMs(sessionId)
+  }, [sessionId])
+
+  const syncSessionState = useCallback(
+    (session: any, history: TranscriptMessage[] = []) => {
+      const config = (session?.sessionConfig as Record<string, any>) ?? {}
+      const avatarState = readAvatarVideoState(session)
+      const phoneRuntime = readPhoneCallRuntime(session)
+      const normalizedStatus = normalizeSessionStatus(session)
+      const nextAvatarVideoUrl =
+        session?.id && avatarState.status === 'ready' && avatarState.playbackToken
+          ? buildSessionVideoStreamUrl(session.id, avatarState.playbackToken, avatarState.jobId)
+          : avatarState.url
+      const rawDuration =
+        typeof config.durationMinutes === 'number'
+          ? config.durationMinutes
+          : typeof config.duration === 'number'
+            ? config.duration
+            : 0
+
+      if (rawDuration > 0) {
+        setSessionDuration(rawDuration * 60)
+      }
+
+      setIsMultiTurn(Boolean(config.multiTurnEnabled))
+      setSessionType(session?.type ?? null)
+      setSessionStatus(normalizedStatus)
+      setSessionName((session as any)?.name ?? (session as any)?.scenario?.name ?? '')
+      setPersonaName((session as any)?.persona?.name ?? null)
+      setAvatarVideoStatus(avatarState.status)
+      setAvatarVideoProvider(avatarState.provider)
+      setAvatarVideoError(avatarState.error)
+      setAvatarVideoJobId(avatarState.jobId)
+      setAvatarVideoUrl(nextAvatarVideoUrl)
+      setPhoneCallRuntime(phoneRuntime)
+      setCallStarted(session?.type === 'phone' ? isPhoneCallActive(phoneRuntime) : false)
+      syncSessionClock(session, history)
+    },
+    [syncSessionClock]
+  )
 
   const applyTimelineResponse = useCallback((response: unknown) => {
     const { progress, stages } = buildTimelineState(response)
@@ -1976,9 +2130,10 @@ export default function LiveSessionPage() {
   )
 
   const requestConversationConnect = useCallback(() => {
+    ensureSessionClockStarted()
     setAutoConnectConversation(true)
     setConversationConnectKey((current) => current + 1)
-  }, [])
+  }, [ensureSessionClockStarted])
 
   const pauseConversationConnect = useCallback(() => {
     setAutoConnectConversation(false)
@@ -2082,17 +2237,34 @@ export default function LiveSessionPage() {
   ])
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      setTime((prev) => prev + 1)
-    }, 1000)
+    if (sessionStartMs === null) {
+      setTime(0)
+      return
+    }
+
+    const updateElapsedTime = () => {
+      const effectiveEndMs = sessionEndMs ?? Date.now()
+      const elapsedSeconds = Math.max(0, Math.floor((effectiveEndMs - sessionStartMs) / 1000))
+      setTime(elapsedSeconds)
+    }
+
+    updateElapsedTime()
+
+    if (sessionEndMs !== null) {
+      return
+    }
+
+    const interval = setInterval(updateElapsedTime, 1000)
     return () => clearInterval(interval)
-  }, [])
+  }, [sessionEndMs, sessionStartMs])
 
   useEffect(() => {
     if (!sessionId) return
 
     let cancelled = false
+    const persistedSessionStartMs = readPersistedSessionStartMs(sessionId)
     pauseConversationConnect()
+    hydrateMessages([])
     setResumePromptOpen(false)
     setEntryPromptMode(null)
     setEntryDecisionLoading(true)
@@ -2123,6 +2295,8 @@ export default function LiveSessionPage() {
     setPhoneTranscriptMessages([])
     setPhoneTranscriptError(null)
     setPhoneNumber('')
+    setSessionStartMs(persistedSessionStartMs)
+    setSessionEndMs(null)
 
     const loadSession = async () => {
       try {
@@ -2143,6 +2317,7 @@ export default function LiveSessionPage() {
             if (cancelled) return
 
             const restartedRecord = isRecord(restartedSession) ? restartedSession : {}
+            clearPersistedSessionStartMs(sessionId)
             setLoadedSessionRecord(restartedRecord)
             syncSessionState(restartedSession)
             setPhoneSetupRetakeMode(true)
@@ -2172,13 +2347,19 @@ export default function LiveSessionPage() {
         }
 
         let hasExistingProgress = false
+        let timelineHistory: TranscriptMessage[] = []
         try {
-          const timeline = await loadTimeline(1, sessionRecord)
+          const timeline = await loadTimeline(200, sessionRecord)
           if (cancelled) return
           const totalTurns = timeline.totalTurns
           const history = Array.isArray(timeline.conversationHistory)
             ? timeline.conversationHistory
             : []
+          timelineHistory = readTimelineConversationHistory({
+            conversationHistory: history,
+          })
+          hydrateMessages(timelineHistory)
+          syncSessionState(session, timelineHistory)
           hasExistingProgress = totalTurns > 0 || history.length > 0
         } catch {
           hasExistingProgress = false
@@ -2186,9 +2367,13 @@ export default function LiveSessionPage() {
 
         if (cancelled) return
 
-        if (hasExistingProgress) {
-          setEntryPromptMode('resume')
-          setResumePromptOpen(true)
+        const shouldAutoResume =
+          hasExistingProgress || persistedSessionStartMs !== null || timelineHistory.length > 0
+
+        if (shouldAutoResume) {
+          setEntryPromptMode(null)
+          setResumePromptOpen(false)
+          requestConversationConnect()
         } else {
           setPendingEntryMode('auto')
           setPrelaunchModalOpen(true)
@@ -2198,7 +2383,7 @@ export default function LiveSessionPage() {
         if (cancelled) return
         setIsMultiTurn(false)
         setEntryPromptMode(null)
-        setAutoConnectConversation(true)
+        requestConversationConnect()
       } finally {
         if (!cancelled) {
           setEntryDecisionLoading(false)
@@ -2211,7 +2396,15 @@ export default function LiveSessionPage() {
     return () => {
       cancelled = true
     }
-  }, [entrySource, loadTimeline, pauseConversationConnect, sessionId, syncSessionState])
+  }, [
+    entrySource,
+    hydrateMessages,
+    loadTimeline,
+    pauseConversationConnect,
+    requestConversationConnect,
+    sessionId,
+    syncSessionState,
+  ])
 
   useEffect(() => {
     if (sessionType !== 'phone' || sessionStatus === 'ended') return
@@ -2262,8 +2455,11 @@ export default function LiveSessionPage() {
       })
       const restartedRecord = isRecord(restartedSession) ? restartedSession : {}
 
+      resetSessionClock()
       clearMessages()
+      hydrateMessages([])
       clearToolEvents()
+      clearCoachingTip()
       clearHangupRequest()
       successTriggeredRef.current = false
       setFinalScore(null)
@@ -2286,18 +2482,6 @@ export default function LiveSessionPage() {
       setLoadedSessionRecord(restartedRecord)
       syncSessionState(restartedSession)
       setEntryPromptMode(null)
-
-      if (hintsEnabled) {
-        try {
-          const response = await api.hints.history(sessionId, 1)
-          const latest = response?.history?.[0]
-          const nextHints = latest?.hints?.map((hint: { content: string }) => hint.content) ?? []
-          setHints(nextHints)
-          setHintsError(null)
-        } catch {
-          setHintsError('Unable to load hints')
-        }
-      }
 
       if (timelineEnabled) {
         await loadTimeline(50, restartedRecord)
@@ -2332,6 +2516,7 @@ export default function LiveSessionPage() {
   }, [
     clearHangupRequest,
     clearMessages,
+    clearCoachingTip,
     clearToolEvents,
     disconnect,
     hintsEnabled,
@@ -2339,6 +2524,7 @@ export default function LiveSessionPage() {
     loadedSessionRecord,
     requestConversationConnect,
     resetTranscript,
+    resetSessionClock,
     sessionId,
     startOverLoading,
     stopAudio,
@@ -2346,6 +2532,7 @@ export default function LiveSessionPage() {
     syncSessionState,
     loadTimeline,
     timelineEnabled,
+    hydrateMessages,
   ])
 
   const handleResumeSession = useCallback(() => {
@@ -2705,7 +2892,7 @@ export default function LiveSessionPage() {
   }, [activeConversationMessages])
 
   useEffect(() => {
-    if (!sessionId || !hintsEnabled) {
+    if (!sessionId || !hintsEnabled || !currentIterationId) {
       hintsRequestSeqRef.current += 1
       setHints([])
       setHintsError(null)
@@ -2722,7 +2909,7 @@ export default function LiveSessionPage() {
       }
       const loadRequestSeq = ++hintsRequestSeqRef.current
       try {
-        const response = await api.hints.history(sessionId, 1)
+        const response = await api.hints.history(sessionId, 1, undefined, currentIterationId)
         if (loadRequestSeq !== hintsRequestSeqRef.current) return
         const latest = response?.history?.[0]
         const nextHints = latest?.hints?.map((hint: { content: string }) => hint.content) ?? []
@@ -2736,7 +2923,7 @@ export default function LiveSessionPage() {
 
     void loadHints()
     scheduleIdleHints()
-  }, [sessionId, hintsEnabled, scheduleIdleHints])
+  }, [currentIterationId, hintsEnabled, scheduleIdleHints, sessionId])
 
   useEffect(() => {
     if (!hintsEnabled || sessionStatus === 'ended') return
@@ -2784,21 +2971,45 @@ export default function LiveSessionPage() {
   }, [])
 
   useEffect(() => {
-    if (sessionStatus === 'ended') return
-    if (sessionType === 'phone') return
-    if (!isMultiTurn || !isConnected) return
-    if (activeConversationMessages.length > 0) return
-
     if (assistantStartTimerRef.current) {
       clearTimeout(assistantStartTimerRef.current)
+      assistantStartTimerRef.current = null
     }
+
+    const shouldLetAssistantOpen =
+      sessionStatus !== 'ended' &&
+      sessionType !== 'phone' &&
+      isConnected &&
+      !isConnecting &&
+      !isProcessing &&
+      !entryDecisionLoading &&
+      !resumePromptOpen &&
+      !prelaunchModalOpen &&
+      activeConversationMessages.length === 0
+
+    if (!shouldLetAssistantOpen) {
+      return
+    }
+
     assistantStartTimerRef.current = setTimeout(() => {
+      assistantStartTimerRef.current = null
       startAssistantTurn()
-    }, 600)
+    }, ASSISTANT_FIRST_TURN_DELAY_MS)
+
+    return () => {
+      if (assistantStartTimerRef.current) {
+        clearTimeout(assistantStartTimerRef.current)
+        assistantStartTimerRef.current = null
+      }
+    }
   }, [
-    isMultiTurn,
     isConnected,
+    isConnecting,
+    isProcessing,
     activeConversationMessages.length,
+    entryDecisionLoading,
+    prelaunchModalOpen,
+    resumePromptOpen,
     startAssistantTurn,
     sessionStatus,
     sessionType,
@@ -2872,8 +3083,9 @@ export default function LiveSessionPage() {
           api.sessions.timeline(sessionId, 200),
         ])
         if (cancelled) return
-        syncSessionState(session)
-        setPhoneTranscriptMessages(readTimelineConversationHistory(timeline))
+        const history = readTimelineConversationHistory(timeline)
+        syncSessionState(session, history)
+        setPhoneTranscriptMessages(history)
         setPhoneTranscriptError(null)
         applyTimelineResponse(timeline)
       } catch {
@@ -2973,6 +3185,7 @@ export default function LiveSessionPage() {
         const endedSession = await api.sessions.end(sessionId, {
           reason: sessionType === 'phone' ? 'hangup' : 'user_hangup',
         })
+        invalidateCoinsBalance()
         const endedRecord = isRecord(endedSession) ? endedSession : loadedSessionRecord
         setLoadedSessionRecord(endedRecord)
         syncSessionState(endedRecord)
@@ -3034,11 +3247,16 @@ export default function LiveSessionPage() {
         ? 'listening'
         : 'idle'
   // ── Tool event derived UI state ────────────────────────────────────────────
+  const hasUserTurnInCurrentIteration = activeConversationMessages.some(
+    (message) => message.role === 'user'
+  )
   const latestMoodEvent = toolEvents.findLast((e) => e.tool === 'update_mood')
-  const currentMood = latestMoodEvent ? (latestMoodEvent.args.mood as string) : null
-  const currentEmotion = latestMoodEvent
-    ? (latestMoodEvent.args.emotion as string | undefined)
-    : undefined
+  const currentMood =
+    hasUserTurnInCurrentIteration && latestMoodEvent ? (latestMoodEvent.args.mood as string) : null
+  const currentEmotion =
+    hasUserTurnInCurrentIteration && latestMoodEvent
+      ? (latestMoodEvent.args.emotion as string | undefined)
+      : undefined
   const moodDotColor =
     currentMood === 'interested' || currentMood === 'satisfied'
       ? 'green'
@@ -3049,12 +3267,14 @@ export default function LiveSessionPage() {
           : 'gray'
 
   const latestPersuasionEvent = toolEvents.findLast((e) => e.tool === 'update_persuasion_score')
-  const currentPersuasionScore = latestPersuasionEvent
-    ? Math.min(100, Math.max(0, Number(latestPersuasionEvent.args.score)))
-    : null
-  const persuasionReasoning = latestPersuasionEvent
-    ? (latestPersuasionEvent.args.reasoning as string)
-    : null
+  const currentPersuasionScore =
+    hasUserTurnInCurrentIteration && latestPersuasionEvent
+      ? Math.min(100, Math.max(0, Number(latestPersuasionEvent.args.score)))
+      : null
+  const persuasionReasoning =
+    hasUserTurnInCurrentIteration && latestPersuasionEvent
+      ? (latestPersuasionEvent.args.reasoning as string)
+      : null
 
   const EMOTION_EMOJI: Record<string, string> = {
     neutral: '😐',

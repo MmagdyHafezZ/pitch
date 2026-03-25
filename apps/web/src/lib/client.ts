@@ -748,8 +748,9 @@ export const api = {
   },
 
   hints: {
-    history: (sessionId: string, limit?: number, type?: string) => {
+    history: (sessionId: string, limit?: number, type?: string, iterationId?: string) => {
       const query = new URLSearchParams({ sessionId })
+      if (iterationId) query.set('iterationId', iterationId)
       if (limit) query.set('limit', String(limit))
       if (type) query.set('type', type)
       return apiRequest<any>(`/simulation/hints/history?${query.toString()}`)
