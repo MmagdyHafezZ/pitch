@@ -229,4 +229,115 @@ describe('SettingsModal', () => {
     expect(await screen.findByText('+15551234567')).toBeInTheDocument()
     expect(screen.getByText('Connected for phone-based sessions.')).toBeInTheDocument()
   })
+
+  it('navigates to the Notifications section', async () => {
+    const user = userEvent.setup()
+    render(<SettingsModal opened onClose={jest.fn()} />)
+
+    await user.click(await screen.findByText('Notifications'))
+    expect(await screen.findByText(/notification settings coming soon/i)).toBeInTheDocument()
+  })
+
+  it('navigates to the Voice & Video section', async () => {
+    const user = userEvent.setup()
+    render(<SettingsModal opened onClose={jest.fn()} />)
+
+    await user.click(await screen.findByText('Voice & Video'))
+    expect(await screen.findByText(/voice & video settings coming soon/i)).toBeInTheDocument()
+  })
+
+  it('navigates to the Appearance section and shows color mode buttons', async () => {
+    const user = userEvent.setup()
+    render(<SettingsModal opened onClose={jest.fn()} />)
+
+    await user.click(await screen.findByText('Appearance'))
+    expect(await screen.findByText('Color Mode')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Light' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Dark' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'System' })).toBeInTheDocument()
+  })
+
+  it('shows theme profiles tab in Appearance section', async () => {
+    const user = userEvent.setup()
+    render(<SettingsModal opened onClose={jest.fn()} />)
+
+    await user.click(await screen.findByText('Appearance'))
+    expect(await screen.findByRole('tab', { name: /theme profiles/i })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /custom theme/i })).toBeInTheDocument()
+    expect(screen.getByText('Ocean')).toBeInTheDocument()
+  })
+
+  it('switches to custom theme tab and shows Surprise me button', async () => {
+    const user = userEvent.setup()
+    render(<SettingsModal opened onClose={jest.fn()} />)
+
+    await user.click(await screen.findByText('Appearance'))
+    await user.click(await screen.findByRole('tab', { name: /custom theme/i }))
+
+    expect(await screen.findByRole('button', { name: /surprise me/i })).toBeInTheDocument()
+    expect(screen.getByText('Save as profile')).toBeInTheDocument()
+  })
+
+  it('shows password field as readonly on Account section', async () => {
+    render(<SettingsModal opened onClose={jest.fn()} />)
+    const passwordInput = await screen.findByLabelText('Password')
+    expect(passwordInput).toHaveAttribute('readonly')
+  })
+
+  it('shows timezone select on Account section', async () => {
+    render(<SettingsModal opened onClose={jest.fn()} />)
+    expect(await screen.findByRole('textbox', { name: 'Time Zone' })).toBeInTheDocument()
+  })
+
+  it('shows Upload button for avatar on Account section', async () => {
+    render(<SettingsModal opened onClose={jest.fn()} />)
+    expect(await screen.findByRole('button', { name: /upload/i })).toBeInTheDocument()
+  })
+
+  it('does not render content when opened is false', () => {
+    render(<SettingsModal opened={false} onClose={jest.fn()} />)
+    expect(screen.queryByLabelText('Name')).not.toBeInTheDocument()
+  })
+
+  it('shows phone error when requesting verification with empty number', async () => {
+    mockRequestPhoneVerification.mockRejectedValue(
+      new Error('Enter the mobile number you want to verify.')
+    )
+    const user = userEvent.setup()
+    render(<SettingsModal opened onClose={jest.fn()} />)
+
+    await user.click(await screen.findByRole('button', { name: 'Add number' }))
+    await user.click(screen.getByRole('button', { name: 'Confirm' }))
+
+    await waitFor(() => {
+      expect(screen.getByText('Enter the mobile number you want to verify.')).toBeInTheDocument()
+    })
+  })
+
+  it('shows phone verification status when phone is already verified', async () => {
+    mockGetMyPhoneVerification.mockResolvedValue({
+      verified: true,
+      phoneNumber: '+15559876543',
+      pendingPhoneNumber: null,
+    })
+
+    render(<SettingsModal opened onClose={jest.fn()} />)
+
+    await waitFor(() => {
+      expect(screen.getByText('+15559876543')).toBeInTheDocument()
+    })
+    expect(screen.getByText('Connected for phone-based sessions.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Change number' })).toBeInTheDocument()
+  })
+
+  it('falls back to "Not connected" when phone status fetch fails', async () => {
+    mockGetMyPhoneVerification.mockRejectedValue(new Error('Network failure'))
+
+    render(<SettingsModal opened onClose={jest.fn()} />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Not connected')).toBeInTheDocument()
+    })
+    expect(screen.getByRole('button', { name: 'Add number' })).toBeInTheDocument()
+  })
 })
