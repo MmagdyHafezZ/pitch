@@ -95,9 +95,15 @@ export function CoinQuotaWidget({ teamId }: Props) {
       px={12}
       py={10}
       style={{
-        background: 'var(--pitch-nav-bg, var(--mantine-color-nav-9))',
+        background: `linear-gradient(
+          180deg,
+          color-mix(in srgb, var(--pitch-nav-bg, var(--mantine-color-nav-9)) 96%, transparent),
+          color-mix(in srgb, var(--pitch-nav-bg, var(--mantine-color-nav-9)) 88%, transparent)
+        )`,
         borderRadius: 12,
-        border: '1px solid var(--pitch-nav-text-dim)',
+        border: '1px solid color-mix(in srgb, var(--pitch-nav-text-dim) 28%, transparent)',
+        boxShadow:
+          'inset 0 0 0 1px color-mix(in srgb, var(--pitch-nav-text-dim) 10%, transparent)',
         overflow: 'hidden',
       }}
     >
@@ -129,8 +135,7 @@ export function CoinQuotaWidget({ teamId }: Props) {
             <Box
               style={{
                 height: 1,
-                background: 'var(--pitch-nav-text-dim)',
-                opacity: 0.2,
+                background: 'color-mix(in srgb, var(--pitch-nav-text-dim) 24%, transparent)',
               }}
             />
             <QuotaRow
