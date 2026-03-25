@@ -12,6 +12,7 @@ import {
   Divider,
   Grid,
   Group,
+  Pagination,
   Progress,
   Select,
   SimpleGrid,
@@ -70,6 +71,8 @@ type MemberData = {
 
 type SortKey = 'date' | 'score' | 'name' | 'type'
 type SortDir = 'asc' | 'desc'
+
+const PAGE_SIZE = 10
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -269,6 +272,7 @@ export default function AnalyticsPage() {
   const [tableStatusFilter, setTableStatusFilter] = useState<string | null>(null)
   const [sortKey, setSortKey] = useState<SortKey>('date')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
+  const [tablePage, setTablePage] = useState(1)
 
   useEffect(() => {
     const startTourParam = searchParams.get('startTour')
@@ -469,7 +473,13 @@ export default function AnalyticsPage() {
       setSortKey(key)
       setSortDir('desc')
     }
+    setTablePage(1)
   }
+
+  // Reset to page 1 whenever filters change
+  useEffect(() => {
+    setTablePage(1)
+  }, [tableQuery, tableTypeFilter, tableStatusFilter])
 
   // ── KPI items ────────────────────────────────────────────────────────────
 
@@ -782,6 +792,8 @@ export default function AnalyticsPage() {
                         <Text fw={700}>Session history</Text>
                         <Text size="xs" c="dimmed">
                           {filteredSessions.length} of {sessions.length} sessions
+                          {filteredSessions.length > PAGE_SIZE &&
+                            ` · page ${tablePage} of ${Math.ceil(filteredSessions.length / PAGE_SIZE)}`}
                         </Text>
                       </Stack>
 
@@ -886,84 +898,97 @@ export default function AnalyticsPage() {
                             </Table.Tr>
                           </Table.Thead>
                           <Table.Tbody>
-                            {filteredSessions.slice(0, 100).map((session) => {
-                              const name =
-                                session.name?.trim() || `Session ${session.id.slice(0, 8)}`
-                              const date = new Date(
-                                session.endedAt ?? session.createdAt
-                              ).toLocaleDateString('en-US', {
-                                month: 'short',
-                                day: 'numeric',
-                                year: 'numeric',
-                              })
-                              return (
-                                <Table.Tr key={session.id}>
-                                  <Table.Td>
-                                    <Text size="sm" fw={500} lineClamp={1} maw={240}>
-                                      {name}
-                                    </Text>
-                                  </Table.Td>
-                                  <Table.Td>
-                                    <Badge
-                                      size="sm"
-                                      variant="dot"
-                                      color={TYPE_COLORS[session.type] ?? 'gray'}
-                                      tt="capitalize"
-                                    >
-                                      {session.type}
-                                    </Badge>
-                                  </Table.Td>
-                                  <Table.Td>
-                                    <Text size="sm" c="dimmed" style={{ whiteSpace: 'nowrap' }}>
-                                      {date}
-                                    </Text>
-                                  </Table.Td>
-                                  <Table.Td>
-                                    <Badge
-                                      size="xs"
-                                      variant="light"
-                                      color={session.status === 'ended' ? 'green' : 'blue'}
-                                    >
-                                      {session.status}
-                                    </Badge>
-                                  </Table.Td>
-                                  <Table.Td>
-                                    {session.totalScore !== null ? (
-                                      <Text
+                            {filteredSessions
+                              .slice((tablePage - 1) * PAGE_SIZE, tablePage * PAGE_SIZE)
+                              .map((session) => {
+                                const name =
+                                  session.name?.trim() || `Session ${session.id.slice(0, 8)}`
+                                const date = new Date(
+                                  session.endedAt ?? session.createdAt
+                                ).toLocaleDateString('en-US', {
+                                  month: 'short',
+                                  day: 'numeric',
+                                  year: 'numeric',
+                                })
+                                return (
+                                  <Table.Tr key={session.id}>
+                                    <Table.Td>
+                                      <Text size="sm" fw={500} lineClamp={1} maw={240}>
+                                        {name}
+                                      </Text>
+                                    </Table.Td>
+                                    <Table.Td>
+                                      <Badge
                                         size="sm"
-                                        fw={700}
-                                        c="teal"
-                                        style={{ whiteSpace: 'nowrap' }}
+                                        variant="dot"
+                                        color={TYPE_COLORS[session.type] ?? 'gray'}
+                                        tt="capitalize"
                                       >
-                                        {session.totalScore > 0 ? '+' : ''}
-                                        {session.totalScore}
+                                        {session.type}
+                                      </Badge>
+                                    </Table.Td>
+                                    <Table.Td>
+                                      <Text size="sm" c="dimmed" style={{ whiteSpace: 'nowrap' }}>
+                                        {date}
                                       </Text>
-                                    ) : (
-                                      <Text size="sm" c="dimmed">
-                                        —
-                                      </Text>
-                                    )}
-                                  </Table.Td>
-                                  <Table.Td>
-                                    <Button
-                                      size="xs"
-                                      variant="subtle"
-                                      rightSection={<IconExternalLink size={11} />}
-                                      onClick={() => {
-                                        const q = session.runId
-                                          ? `?runId=${encodeURIComponent(session.runId)}`
-                                          : ''
-                                        router.push(`/session/${session.id}/performance${q}`)
-                                      }}
-                                    >
-                                      View
-                                    </Button>
-                                  </Table.Td>
-                                </Table.Tr>
-                              )
-                            })}
+                                    </Table.Td>
+                                    <Table.Td>
+                                      <Badge
+                                        size="xs"
+                                        variant="light"
+                                        color={session.status === 'ended' ? 'green' : 'blue'}
+                                      >
+                                        {session.status}
+                                      </Badge>
+                                    </Table.Td>
+                                    <Table.Td>
+                                      {session.totalScore !== null ? (
+                                        <Text
+                                          size="sm"
+                                          fw={700}
+                                          c="teal"
+                                          style={{ whiteSpace: 'nowrap' }}
+                                        >
+                                          {session.totalScore > 0 ? '+' : ''}
+                                          {session.totalScore}
+                                        </Text>
+                                      ) : (
+                                        <Text size="sm" c="dimmed">
+                                          —
+                                        </Text>
+                                      )}
+                                    </Table.Td>
+                                    <Table.Td>
+                                      <Button
+                                        size="xs"
+                                        variant="subtle"
+                                        rightSection={<IconExternalLink size={11} />}
+                                        onClick={() => {
+                                          const q = session.runId
+                                            ? `?runId=${encodeURIComponent(session.runId)}`
+                                            : ''
+                                          router.push(`/session/${session.id}/performance${q}`)
+                                        }}
+                                      >
+                                        View
+                                      </Button>
+                                    </Table.Td>
+                                  </Table.Tr>
+                                )
+                              })}
                           </Table.Tbody>
                         </Table>
+                        {Math.ceil(filteredSessions.length / PAGE_SIZE) > 1 && (
+                          <Group justify="center" mt="md">
+                            <Pagination
+                              total={Math.ceil(filteredSessions.length / PAGE_SIZE)}
+                              value={tablePage}
+                              onChange={setTablePage}
+                              size="sm"
+                              radius="md"
+                            />
+                          </Group>
+                        )}
                       </Box>
                     )}
                   </Card>
