@@ -7,6 +7,7 @@ import { OAuthProviderFactory } from '../../auth/factories/oauth-provider.factor
 import * as userInterface from '@pitch/shared-backend/interfaces/user.interface';
 import * as userClaimsInterface from '@pitch/shared-backend/interfaces/user-claims.interface';
 import { toRpcException } from '@pitch/shared-backend/helpers/exceptions';
+import { UserPrismaService } from '../../prisma/user-prisma.service';
 
 @Controller()
 export class UserController {
@@ -16,6 +17,7 @@ export class UserController {
     private readonly userService: UserService,
     private readonly phoneVerificationService: PhoneVerificationService,
     private readonly oauthProviderFactory: OAuthProviderFactory,
+    private readonly prisma: UserPrismaService,
   ) {}
 
   @MessagePattern(USER_SERVICE_PATTERNS.GET_USERS)
@@ -270,6 +272,22 @@ export class UserController {
       };
     } catch (error) {
       this.logger.error('Failed to check email', error);
+      throw toRpcException(error);
+    }
+  }
+
+  @MessagePattern(USER_SERVICE_PATTERNS.GET_PLATFORM_STATS)
+  async getPlatformStats(): Promise<{
+    activeUsers: number;
+    teamWorkspaces: number;
+  }> {
+    try {
+      const [activeUsers, teamWorkspaces] = await Promise.all([
+        this.prisma.client.user.count({ where: { isActive: true } }),
+        this.prisma.client.team.count({ where: { isActive: true } }),
+      ]);
+      return { activeUsers, teamWorkspaces };
+    } catch (error) {
       throw toRpcException(error);
     }
   }

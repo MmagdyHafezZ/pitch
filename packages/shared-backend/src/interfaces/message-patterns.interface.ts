@@ -55,6 +55,7 @@ export const USER_SERVICE_PATTERNS = {
   GET_PLANS: 'get_plans',
   GET_PLAN: 'get_plan',
   AUTH_LTI_LOGIN: 'auth.lti.login',
+  GET_PLATFORM_STATS: 'user.platform.stats',
 } as const
 
 export const S3_SERVICE_PATTERNS = {

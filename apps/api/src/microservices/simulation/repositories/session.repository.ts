@@ -85,6 +85,7 @@ export interface SessionListFilters {
   status?: string;
   scenarioId?: string;
   personaId?: string;
+  createdAfter?: Date;
 }
 
 /**
@@ -275,6 +276,10 @@ export class SessionRepository {
     if (filters?.personaId) {
       where.personaId = filters.personaId;
     }
+    if (filters?.createdAfter) {
+      where.createdAt = { gte: filters.createdAfter };
+    }
+
     return await this.prisma.client.session.count({ where });
   }
 
