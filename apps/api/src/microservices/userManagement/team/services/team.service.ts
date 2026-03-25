@@ -64,6 +64,7 @@ export class TeamService {
     teamId: string,
     dto: UpdateTeamDto,
     requesterId: string,
+    skipAuthorityCheck = false,
   ): Promise<Team> {
     const existingTeam = await this.teamRepository.findById(teamId);
     if (!existingTeam) {
@@ -87,7 +88,9 @@ export class TeamService {
       slug = await this.createSlug({ name: dto.name, slug: undefined });
     }
 
-    await this.teamRepository.confirmAuthorityOrThrow(requesterId, teamId);
+    if (!skipAuthorityCheck) {
+      await this.teamRepository.confirmAuthorityOrThrow(requesterId, teamId);
+    }
 
     const metadata = this.buildMetadataOnUpdate(
       existingTeam.metadata ?? null,
@@ -114,11 +117,14 @@ export class TeamService {
   async addMember(
     addMemberDto: AddMemberDto,
     requesterId: string,
+    skipAuthorityCheck = false,
   ): Promise<TeamMembership> {
-    await this.teamRepository.confirmAuthorityOrThrow(
-      requesterId,
-      addMemberDto.teamId,
-    );
+    if (!skipAuthorityCheck) {
+      await this.teamRepository.confirmAuthorityOrThrow(
+        requesterId,
+        addMemberDto.teamId,
+      );
+    }
     if (addMemberDto.role === Role.OWNER) {
       const activeOwners = await this.teamRepository.findActiveOwners(
         addMemberDto.teamId,
@@ -152,11 +158,14 @@ export class TeamService {
   async updateMember(
     updateMemberDto: UpdateMemberDto,
     requesterId: string,
+    skipAuthorityCheck = false,
   ): Promise<TeamMembership> {
-    await this.teamRepository.confirmAuthorityOrThrow(
-      requesterId,
-      updateMemberDto.teamId,
-    );
+    if (!skipAuthorityCheck) {
+      await this.teamRepository.confirmAuthorityOrThrow(
+        requesterId,
+        updateMemberDto.teamId,
+      );
+    }
 
     const existingMembership = await this.teamRepository.findMembership(
       updateMemberDto.teamId,
@@ -198,9 +207,10 @@ export class TeamService {
     teamId: string,
     userId: string,
     requesterId: string,
+    skipAuthorityCheck = false,
   ): Promise<{ message: string }> {
     const isSelfLeave = requesterId === userId;
-    if (!isSelfLeave) {
+    if (!isSelfLeave && !skipAuthorityCheck) {
       await this.teamRepository.confirmAuthorityOrThrow(requesterId, teamId);
     }
     const membership = await this.teamRepository.findMembership(teamId, userId);

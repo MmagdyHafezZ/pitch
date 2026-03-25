@@ -34,6 +34,11 @@ export class ElevatedAccessGuard implements CanActivate {
     const raw: unknown = context.switchToRpc().getData();
     const data: unknown = raw ?? {};
 
+    // Admin bypass — the gateway CheckSystemAdmin guard already enforced access
+    if (isRecord(data) && data['isAdmin'] === true) {
+      return true;
+    }
+
     const userId =
       getStringPath(data, ['userClaims', 'id']) ??
       getStringPath(data, ['payload', 'userClaims', 'id']) ??

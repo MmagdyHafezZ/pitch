@@ -19,6 +19,11 @@ export class SalesforceController {
     private readonly salesforceService: SalesforceIntegrationService,
   ) {}
 
+  @MessagePattern('health')
+  health() {
+    return { status: 'ok', service: 'crm' };
+  }
+
   /**
    * Get Salesforce OAuth connect URL
    * Pattern: salesforce.connect
