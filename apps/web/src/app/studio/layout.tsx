@@ -4,6 +4,7 @@ import { AppSidebar } from '@/components/ui/AppSideBar'
 import { AppTopBar } from '@/components/ui/AppTopBar'
 import { TeamSideBar } from '@/components/ui/TeamSideBar'
 import { CoachChatWidget } from '@/components/ui/CoachChatWidget'
+import { ProactiveCalendarNudge } from '@/features/proactive/ProactiveCalendarNudge'
 import { useTeams } from '@/features/teams/hooks/useTeams'
 import { useAuthStore } from '@/features/auth/stores/auth.store'
 import { Box } from '@mantine/core'
@@ -28,40 +29,8 @@ export default function ClientLayerComponent({ children }: { children: React.Rea
   const pathname = usePathname()
   const router = useRouter()
   const searchParams = useSearchParams()
+  const isCreatingTeam = searchParams.get('mode') === 'create'
   const user = useAuthStore((state) => state.user)
-
-  const setSidebarActive = (
-    value:
-      | 'Home'
-      | 'Sessions'
-      | 'Teams'
-      | 'Analytics'
-      | 'Settings'
-      | 'Team Config'
-      | 'Challenges'
-      | ((
-          current:
-            | 'Home'
-            | 'Sessions'
-            | 'Teams'
-            | 'Analytics'
-            | 'Settings'
-            | 'Team Config'
-            | 'Challenges'
-        ) =>
-          | 'Home'
-          | 'Sessions'
-          | 'Teams'
-          | 'Analytics'
-          | 'Settings'
-          | 'Team Config'
-          | 'Challenges')
-  ) => {
-    setActive((current) => {
-      const next = typeof value === 'function' ? value(current) : value
-      return next === 'Challenges' ? current : next
-    })
-  }
 
   useEffect(() => {
     if (user && !user.settings?.onboarding?.completed) {
@@ -85,13 +54,11 @@ export default function ClientLayerComponent({ children }: { children: React.Rea
   ) => {
     return (tab: string) => {
       setTabsByPage((prev) => ({ ...prev, [page]: tab }))
-
       if (page === 'Sessions') {
         const params = new URLSearchParams(searchParams.toString())
         params.set('filter', tab)
         router.replace(`${pathname}?${params.toString()}`)
       }
-
       if (page === 'Analytics') {
         const params = new URLSearchParams(searchParams.toString())
         params.set('tab', tab)
@@ -115,6 +82,9 @@ export default function ClientLayerComponent({ children }: { children: React.Rea
       return { page: 'Home' as const, nav: 'Home' as const }
     }
     if (pathname.startsWith('/studio/sessions')) {
+      return { page: 'Sessions' as const, nav: 'Sessions' as const }
+    }
+    if (pathname.startsWith('/studio/scenarios')) {
       return { page: 'Sessions' as const, nav: 'Sessions' as const }
     }
     if (pathname.startsWith('/studio/analytics')) {
@@ -147,7 +117,7 @@ export default function ClientLayerComponent({ children }: { children: React.Rea
   } else if (pageInfo.page === 'Challenges') {
     selectedTab = challengesPeriod
   } else {
-    selectedTab = tabsByPage[pageInfo.page]
+    selectedTab = tabsByPage[pageInfo.page as keyof typeof tabsByPage] ?? ''
   }
 
   const activeTeam = useMemo(
@@ -173,6 +143,7 @@ export default function ClientLayerComponent({ children }: { children: React.Rea
     const membership = activeTeam?.memberships?.find((m) => m.userId === user.id)
     return membership?.role === 'OWNER' || membership?.role === 'ADMIN'
   }, [activeTeam?.memberships, user?.id])
+
   const handleLeaveTeam = (team: { id: string; name: string; canLeave?: boolean }) => {
     if (!user?.id) return
     modals.openConfirmModal({
@@ -220,7 +191,6 @@ export default function ClientLayerComponent({ children }: { children: React.Rea
   useEffect(() => {
     fetchUserTeams()
   }, [fetchUserTeams])
-
   useEffect(() => {
     if (active !== pageInfo.nav) {
       setActive(pageInfo.nav)
@@ -229,12 +199,13 @@ export default function ClientLayerComponent({ children }: { children: React.Rea
 
   useEffect(() => {
     if (!pathname?.startsWith('/studio/team-config')) return
+    if (isCreatingTeam) return
     if (teamsLoading) return
 
     if (!activeTeam || !canAccessTeamConfig) {
       router.replace('/studio/home')
     }
-  }, [activeTeam, canAccessTeamConfig, pathname, router, teamsLoading])
+  }, [activeTeam, canAccessTeamConfig, isCreatingTeam, pathname, router, teamsLoading])
 
   return (
     <>
@@ -263,7 +234,7 @@ export default function ClientLayerComponent({ children }: { children: React.Rea
             />
             <AppSidebar
               active={active}
-              setActive={setSidebarActive}
+              setActive={setActive}
               selectedDate={selectedDate}
               setSelectedDate={setSelectedDate}
               showTeamConfig={canAccessTeamConfig}
@@ -274,7 +245,13 @@ export default function ClientLayerComponent({ children }: { children: React.Rea
       >
         {children}
       </AppLayout>
-      <CoachChatWidget context={{ page: pathname ?? undefined }} />
+      <CoachChatWidget
+        context={{
+          page: pathname ?? undefined,
+          sessionId: pathname?.match(/^\/studio\/sessions\/([^/]+)$/)?.[1] ?? undefined,
+        }}
+      />
+      <ProactiveCalendarNudge />
     </>
   )
 }

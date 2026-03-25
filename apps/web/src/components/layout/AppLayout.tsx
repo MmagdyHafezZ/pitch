@@ -28,7 +28,7 @@ export function AppLayout({ header, navbar, children }: Props) {
       ? rem(180)
       : currentPage === '/studio/team-config'
         ? rem(150)
-        : rem(68)
+        : rem(100)
   const headerHeight = isMobile
     ? `calc(${mobileBaseHeaderHeight} + env(safe-area-inset-top, 0px))`
     : rem(60)

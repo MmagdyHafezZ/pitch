@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import { useEffect, useMemo, useState } from 'react'
 import {
@@ -39,7 +39,7 @@ import {
 } from '@tabler/icons-react'
 import { useTeams } from '@/features/teams/hooks/useTeams'
 import { useTeamConfigStore } from '@/features/teams/stores/team-config.store'
-import type { TeamMembership } from '@/features/teams/types/teams.types'
+import type { TeamMembership, TeamPendingSignupInvite } from '@/features/teams/types/teams.types'
 import { notifications } from '@mantine/notifications'
 import { modals } from '@mantine/modals'
 import { useMediaQuery } from '@mantine/hooks'
@@ -93,43 +93,9 @@ const isMembershipInTeam = (membership?: TeamMembership | null) => {
   return membership.isActive !== false
 }
 
-const themedPanelStyle = {
-  background: `linear-gradient(
-    180deg,
-    var(--pitch-card-bg, var(--pitch-surface-bg, var(--mantine-color-body))) 0%,
-    color-mix(in srgb, var(--pitch-card-bg-subtle, var(--pitch-card-bg, var(--pitch-surface-bg))) 82%, transparent) 100%
-  )`,
-  borderColor: 'var(--pitch-card-border, var(--pitch-border, var(--mantine-color-default-border)))',
-  boxShadow: `0 8px 20px color-mix(
-    in srgb,
-    var(--pitch-card-shadow, var(--pitch-surface-bg, #000)) 14%,
-    transparent
-  )`,
-}
-
-const themedSubtleStyle = {
-  background:
-    'var(--pitch-card-bg-subtle, var(--pitch-card-bg, var(--pitch-surface-bg, var(--mantine-color-body))))',
-  borderColor: 'var(--pitch-card-border, var(--pitch-border, var(--mantine-color-default-border)))',
-}
-
-const themedIconStyle = {
-  color: 'var(--pitch-accent-strong)',
-}
-
-type TeamPendingSignupInvite = {
-  email: string
-  invitedAt?: string | null
-  role?: string | null
-}
-
 export function TeamMembersPanel() {
-  const teamsApi = useTeams() as ReturnType<typeof useTeams> & {
-    inviteMember: (teamId: string, payload: { userId: string; role: string }) => Promise<void>
-    sendSignupInvite: (teamId: string, payload: { email: string; role: string }) => Promise<void>
-  }
   const { currentTeam, inviteMember, sendSignupInvite, updateMember, deleteMember, loading } =
-    teamsApi
+    useTeams()
   const isMobile = useMediaQuery('(max-width: 48em)')
   const orgUsers = useTeamConfigStore((s) => s.orgUsers)
   const orgUsersLoading = useTeamConfigStore((s) => s.orgUsersLoading)
@@ -172,7 +138,7 @@ export function TeamMembersPanel() {
     [memberships]
   )
   const pendingEmailInvites: TeamPendingSignupInvite[] = useMemo(
-    () => ((currentTeam as any)?.metadata?.pendingSignupInvites ?? []) as TeamPendingSignupInvite[],
+    () => currentTeam?.metadata?.pendingSignupInvites ?? [],
     [currentTeam]
   )
   const currentOwner = useMemo(
@@ -426,7 +392,11 @@ export function TeamMembersPanel() {
       radius="xl"
       shadow="lg"
       p="lg"
-      style={themedPanelStyle}
+      style={{
+        background:
+          'linear-gradient(160deg, color-mix(in srgb, var(--mantine-color-blue-6) 10%, var(--mantine-color-dark-8)), var(--mantine-color-dark-8))',
+        borderColor: 'color-mix(in srgb, var(--mantine-color-blue-6) 25%, transparent)',
+      }}
     >
       {!currentTeam ? (
         <Text size="sm" c="dimmed">
@@ -437,7 +407,7 @@ export function TeamMembersPanel() {
           <Group justify="space-between" align="center">
             <Stack gap={2}>
               <Group gap="xs">
-                <IconUsers size={16} style={themedIconStyle} />
+                <IconUsers size={16} />
                 <Text fw={700}>Team members</Text>
               </Group>
               <Text size="sm" c="dimmed">
@@ -447,7 +417,7 @@ export function TeamMembersPanel() {
           </Group>
 
           <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="sm">
-            <Paper withBorder radius="lg" p="sm" style={themedSubtleStyle}>
+            <Paper withBorder radius="lg" p="sm" bg="dark.7">
               <Text size="xs" c="dimmed">
                 Active members
               </Text>
@@ -455,7 +425,7 @@ export function TeamMembersPanel() {
                 {memberStats.total}
               </Text>
             </Paper>
-            <Paper withBorder radius="lg" p="sm" style={themedSubtleStyle}>
+            <Paper withBorder radius="lg" p="sm" bg="dark.7">
               <Text size="xs" c="dimmed">
                 Admins / Owners
               </Text>
@@ -463,7 +433,7 @@ export function TeamMembersPanel() {
                 {memberStats.admins}
               </Text>
             </Paper>
-            <Paper withBorder radius="lg" p="sm" style={themedSubtleStyle}>
+            <Paper withBorder radius="lg" p="sm" bg="dark.7">
               <Text size="xs" c="dimmed">
                 Pending invites
               </Text>
@@ -640,9 +610,9 @@ export function TeamMembersPanel() {
                               styles={{
                                 input: {
                                   background:
-                                    'var(--pitch-card-bg-subtle, var(--pitch-card-bg, var(--pitch-surface-bg, var(--mantine-color-body))))',
+                                    'color-mix(in srgb, var(--mantine-color-dark-7) 80%, transparent)',
                                   borderColor:
-                                    'var(--pitch-card-border, var(--pitch-border, var(--mantine-color-default-border)))',
+                                    'color-mix(in srgb, var(--mantine-color-blue-6) 18%, var(--mantine-color-dark-4))',
                                   fontWeight: 600,
                                 },
                               }}
@@ -712,7 +682,10 @@ export function TeamMembersPanel() {
               withBorder
               radius="lg"
               p="sm"
-              style={themedSubtleStyle}
+              bg="dark.7"
+              style={{
+                borderColor: 'color-mix(in srgb, var(--mantine-color-dark-4) 35%, transparent)',
+              }}
             >
               <Stack gap="xs">
                 <Text size="sm" fw={600}>
@@ -744,7 +717,10 @@ export function TeamMembersPanel() {
             withBorder
             radius="lg"
             p="sm"
-            style={themedSubtleStyle}
+            bg="dark.7"
+            style={{
+              borderColor: 'color-mix(in srgb, var(--mantine-color-dark-4) 35%, transparent)',
+            }}
           >
             <Stack gap="xs">
               <Text size="sm" fw={600}>
@@ -790,4 +766,3 @@ export function TeamMembersPanel() {
     </Card>
   )
 }
-

@@ -50,27 +50,3 @@
   color: var(--pitch-accent-strong);
   font-weight: 700;
 }
-
-.calendarShell {
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--pitch-nav-bg, var(--mantine-color-nav-9)) 96%, transparent),
-      color-mix(in srgb, var(--pitch-nav-bg, var(--mantine-color-nav-9)) 88%, transparent)
-    );
-  box-shadow:
-    inset -1px 0 0 color-mix(in srgb, var(--pitch-nav-text-dim) 20%, transparent),
-    inset 0 0 0 1px color-mix(in srgb, var(--pitch-nav-text-dim) 14%, transparent),
-    0 6px 14px color-mix(in srgb, var(--pitch-nav-bg, #000) 12%, transparent);
-}
-
-@media (max-width: 48em) {
-  .navLink {
-    border-radius: 8px;
-    padding: 7px 6px 7px 8px;
-  }
-
-  .navLabel {
-    font-size: 13px;
-  }
-}

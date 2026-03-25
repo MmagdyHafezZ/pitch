@@ -1,9 +1,7 @@
 'use client'
 import { ActionIcon, Box, Menu, Stack, Tooltip, Text } from '@mantine/core'
-import { useMediaQuery } from '@mantine/hooks'
 import { useRouter } from 'next/navigation'
 import { useRef, useState } from 'react'
-import classes from './TeamSideBar.module.css'
 
 export type TeamInfo = {
   id: string
@@ -43,11 +41,9 @@ export function TeamSideBar({
   onNavigate,
 }: TeamSideBarProps) {
   const router = useRouter()
-  const isMobile = useMediaQuery('(max-width: 48em)')
   const [menuTeamId, setMenuTeamId] = useState<string | null>(null)
   const [hoveredTeamId, setHoveredTeamId] = useState<string | null>(null)
   const allowContextOpenRef = useRef(false)
-  const teamButtonSize = isMobile ? 32 : 36
 
   const handleTeamClick = (id: string) => {
     setMenuTeamId(null)
@@ -61,10 +57,41 @@ export function TeamSideBar({
   }
 
   return (
-    <Box className={classes.shell}>
+    <Box
+      style={{
+        width: 60,
+        height: '100%',
+        boxSizing: 'border-box',
+        background: 'var(--pitch-nav-bg, var(--mantine-color-nav-9))',
+        borderTopRightRadius: 24,
+        borderBottomRightRadius: 24,
+        border: '1px solid var(--pitch-nav-text-dim)',
+        display: 'flex',
+        flexDirection: 'column',
+        padding: '8px 4px',
+      }}
+    >
       {/* Scrollable content area (teams + plus) */}
-      <Box className={classes.scrollArea}>
-        <Stack gap={isMobile ? 4 : 6} className={classes.stack}>
+      <Box
+        style={{
+          flex: 1,
+          width: '100%',
+          overflowY: 'auto',
+          overflowX: 'hidden',
+          paddingTop: 11,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+        }}
+      >
+        <Stack
+          gap={6}
+          style={{
+            width: '100%',
+            alignItems: 'center',
+            justifyContent: 'flex-start',
+          }}
+        >
           {teams.map((team) => {
             const isActive = team.id === activeTeamId
             const showContextHint = team.canLeave && hoveredTeamId === team.id
@@ -101,8 +128,8 @@ export function TeamSideBar({
                       <ActionIcon
                         radius="xl"
                         size="lg"
-                        variant="subtle"
-                        className={`${classes.teamButton} ${isActive ? classes.teamButtonActive : ''}`}
+                        variant={isActive ? 'filled' : 'light'}
+                        color={isActive ? 'brand' : 'white'}
                         onMouseEnter={() => setHoveredTeamId(team.id)}
                         onMouseLeave={() =>
                           setHoveredTeamId((current) => (current === team.id ? null : current))
@@ -115,8 +142,15 @@ export function TeamSideBar({
                           setMenuTeamId(team.id)
                         }}
                         style={{
-                          width: teamButtonSize,
-                          height: teamButtonSize,
+                          width: 36,
+                          height: 36,
+                          border: isActive
+                            ? '2px solid var(--pitch-accent-strong)'
+                            : '1px solid var(--pitch-nav-text-dim)',
+                          background: isActive
+                            ? 'var(--pitch-accent-strong)'
+                            : 'var(--pitch-nav-accent-soft)',
+                          color: isActive ? 'var(--pitch-nav-text)' : 'var(--pitch-nav-text-dim)',
                           cursor: team.canLeave ? 'context-menu' : 'pointer',
                           boxShadow: showContextHint
                             ? '0 0 0 2px color-mix(in srgb, var(--pitch-accent-strong) 40%, transparent)'
@@ -128,7 +162,7 @@ export function TeamSideBar({
                         <Text
                           fw={700}
                           size="sm"
-                          className={`${classes.teamLabel} ${isActive ? classes.teamLabelActive : ''}`}
+                          c={isActive ? 'var(--pitch-nav-text)' : 'var(--pitch-nav-text-dim)'}
                         >
                           {deriveInitials(team.name)}
                         </Text>
@@ -172,15 +206,18 @@ export function TeamSideBar({
           <ActionIcon
             radius="xl"
             size="lg"
-            variant="subtle"
-            className={`${classes.teamButton} ${classes.createButton}`}
+            variant="light"
+            color="dark"
             style={{
-              width: teamButtonSize,
-              height: teamButtonSize,
+              width: 36,
+              height: 36,
+              border: '1px solid var(--pitch-nav-text-dim)',
+              background: 'var(--pitch-nav-accent-soft)',
+              marginTop: 8,
             }}
             onClick={handleCreateTeam}
           >
-            <Text fw={700} size="sm" className={classes.createLabel}>
+            <Text fw={700} size="sm" c="var(--pitch-nav-text)">
               +
             </Text>
           </ActionIcon>
