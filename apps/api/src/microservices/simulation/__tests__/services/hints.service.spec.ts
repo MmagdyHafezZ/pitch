@@ -633,4 +633,281 @@ describe('HintsService', () => {
       );
     });
   });
+
+  describe('LLM repair flow', () => {
+    it('should retry with repair prompt when first parse fails, and succeed on second attempt', async () => {
+      const request: GenerateHintRequestDto = {
+        sessionId: 'session_1',
+        userId: 'user_1',
+      };
+
+      (prisma.client.hintConfig.findMany as jest.Mock).mockResolvedValue([
+        mockHintConfig as any,
+      ]);
+      (prisma.client.sessionMember.findFirst as jest.Mock).mockResolvedValue(
+        mockSessionMember as any,
+      );
+
+      // First call returns garbage, second (repair) returns valid JSON
+      llmRouter.complete
+        .mockResolvedValueOnce({
+          ...mockLLMResponse,
+          response: { ...mockLLMResponse.response, content: 'not json at all' },
+        } as any)
+        .mockResolvedValueOnce(mockLLMResponse as any);
+      repository.create.mockResolvedValue(mockHintDocument as any);
+
+      const result = await service.generateHints(request);
+
+      expect(llmRouter.complete).toHaveBeenCalledTimes(2);
+      expect(result.hints).toHaveLength(2);
+    });
+
+    it('should use fallback hints when both initial and repair parse fail', async () => {
+      const request: GenerateHintRequestDto = {
+        sessionId: 'session_1',
+        userId: 'user_1',
+      };
+
+      (prisma.client.hintConfig.findMany as jest.Mock).mockResolvedValue([
+        mockHintConfig as any,
+      ]);
+      (prisma.client.sessionMember.findFirst as jest.Mock).mockResolvedValue(
+        mockSessionMember as any,
+      );
+
+      llmRouter.complete.mockResolvedValue({
+        ...mockLLMResponse,
+        response: { ...mockLLMResponse.response, content: 'invalid' },
+      } as any);
+      repository.create.mockResolvedValue(mockHintDocument as any);
+
+      const result = await service.generateHints(request);
+
+      expect(llmRouter.complete).toHaveBeenCalledTimes(2);
+      expect(result.hints.length).toBeGreaterThanOrEqual(1);
+      expect(result.hints[0].type).toBe(HintType.NEXT_TOPIC);
+    });
+  });
+
+  describe('fallback hints', () => {
+    it('should suggest answering latest assistant question when present', async () => {
+      const request: GenerateHintRequestDto = {
+        sessionId: 'session_1',
+        userId: 'user_1',
+      };
+
+      (prisma.client.hintConfig.findMany as jest.Mock).mockResolvedValue([
+        mockHintConfig as any,
+      ]);
+      (prisma.client.sessionMember.findFirst as jest.Mock).mockResolvedValue({
+        ...mockSessionMember,
+        messages: [
+          ...mockSessionMember.messages,
+          {
+            id: 'msg_3',
+            role: 'assistant',
+            content: 'What is your budget for this quarter?',
+            createdAt: new Date(),
+          },
+        ],
+      } as any);
+
+      llmRouter.complete.mockResolvedValue({
+        ...mockLLMResponse,
+        response: { ...mockLLMResponse.response, content: 'garbage' },
+      } as any);
+      repository.create.mockResolvedValue(mockHintDocument as any);
+
+      const result = await service.generateHints(request);
+
+      expect(result.hints.length).toBeGreaterThanOrEqual(1);
+      expect(result.hints[0].content).toContain('answering');
+    });
+  });
+
+  describe('formatConversationForLLM (indirectly via generateHints)', () => {
+    it('should include SESSION CONTEXT when userRole and aiRole are available', async () => {
+      const request: GenerateHintRequestDto = {
+        sessionId: 'session_1',
+        userId: 'user_1',
+        messages: [
+          { role: 'user', content: 'Tell me about the product' },
+          { role: 'assistant', content: 'Our product does X' },
+        ],
+      };
+
+      (prisma.client.hintConfig.findMany as jest.Mock).mockResolvedValue([
+        mockHintConfig as any,
+      ]);
+      // Add session delegate to prisma client for session config lookup
+      (prisma.client as any).session = {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'session_1',
+          sessionConfig: {
+            userRole: 'Sales Rep',
+            aiRole: 'Marketing Manager',
+            scenario: { topic: 'CRM Software', objective: 'Close the deal' },
+          },
+          scenario: null,
+        }),
+      };
+      llmRouter.complete.mockResolvedValue(mockLLMResponse as any);
+      repository.create.mockResolvedValue(mockHintDocument as any);
+
+      await service.generateHints(request);
+
+      const userMessage = llmRouter.complete.mock.calls[0][0].messages.find(
+        (m: any) => m.role === 'user',
+      );
+      expect(userMessage.content).toContain('SESSION CONTEXT');
+      expect(userMessage.content).toContain('Sales Rep');
+      expect(userMessage.content).toContain('Marketing Manager');
+    });
+
+    it('should include objectives in formatted context when provided', async () => {
+      const request: GenerateHintRequestDto = {
+        sessionId: 'session_1',
+        userId: 'user_1',
+        includeObjectives: true,
+      };
+
+      (prisma.client.hintConfig.findMany as jest.Mock).mockResolvedValue([
+        mockHintConfig as any,
+      ]);
+      (prisma.client.sessionMember.findFirst as jest.Mock).mockResolvedValue(
+        mockSessionMember as any,
+      );
+      llmRouter.complete.mockResolvedValue(mockLLMResponse as any);
+      repository.create.mockResolvedValue(mockHintDocument as any);
+
+      await service.generateHints(request);
+
+      const userContent = llmRouter.complete.mock.calls[0][0].messages.find(
+        (m: any) => m.role === 'user',
+      )?.content;
+      expect(userContent).toContain('Session Objectives');
+    });
+
+    it('should include conversation length and latest messages in formatted output', async () => {
+      const request: GenerateHintRequestDto = {
+        sessionId: 'session_1',
+        userId: 'user_1',
+        messages: [
+          { role: 'user', content: 'Hi there' },
+          { role: 'assistant', content: 'Hello! How can I help?' },
+        ],
+      };
+
+      (prisma.client.hintConfig.findMany as jest.Mock).mockResolvedValue([
+        mockHintConfig as any,
+      ]);
+      llmRouter.complete.mockResolvedValue(mockLLMResponse as any);
+      repository.create.mockResolvedValue(mockHintDocument as any);
+
+      await service.generateHints(request);
+
+      const userContent = llmRouter.complete.mock.calls[0][0].messages.find(
+        (m: any) => m.role === 'user',
+      )?.content;
+      expect(userContent).toContain('Conversation Length: 2');
+      expect(userContent).toContain('Hi there');
+      expect(userContent).toContain('Hello! How can I help?');
+    });
+  });
+
+  describe('getConversationContext iteration path', () => {
+    it('should use iteration delegate when available on prisma client', async () => {
+      const request: GenerateHintRequestDto = {
+        sessionId: 'session_1',
+        userId: 'user_1',
+      };
+
+      (prisma.client.hintConfig.findMany as jest.Mock).mockResolvedValue([
+        mockHintConfig as any,
+      ]);
+
+      // Add iteration delegate to prisma client
+      (prisma.client as any).iteration = {
+        findFirst: jest.fn().mockResolvedValue({
+          id: 'iter-1',
+          messages: [
+            { role: 'user', content: 'Hello', createdAt: new Date() },
+            {
+              role: 'assistant',
+              content: 'Hi, what can I help with?',
+              createdAt: new Date(),
+            },
+          ],
+          session: { scenario: null },
+        }),
+      };
+
+      llmRouter.complete.mockResolvedValue(mockLLMResponse as any);
+      repository.create.mockResolvedValue(mockHintDocument as any);
+
+      const result = await service.generateHints(request);
+
+      expect(result.hints).toBeDefined();
+      expect((prisma.client as any).iteration.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ sessionId: 'session_1' }),
+        }),
+      );
+    });
+  });
+
+  describe('error propagation', () => {
+    it('should propagate error from LLM router', async () => {
+      const request: GenerateHintRequestDto = {
+        sessionId: 'session_1',
+        userId: 'user_1',
+      };
+
+      (prisma.client.hintConfig.findMany as jest.Mock).mockResolvedValue([
+        mockHintConfig as any,
+      ]);
+      (prisma.client.sessionMember.findFirst as jest.Mock).mockResolvedValue(
+        mockSessionMember as any,
+      );
+      llmRouter.complete.mockRejectedValue(
+        new Error('LLM service unavailable'),
+      );
+
+      await expect(service.generateHints(request)).rejects.toThrow(
+        'LLM service unavailable',
+      );
+    });
+  });
+
+  describe('hint config strategy validation', () => {
+    it('should fallback to REACTIVE when strategy is invalid', async () => {
+      const request: GenerateHintRequestDto = {
+        sessionId: 'session_1',
+        userId: 'user_1',
+      };
+
+      const invalidStrategyConfig = {
+        ...mockHintConfig,
+        strategy: 'invalid_strategy',
+        scope: 'global',
+      };
+
+      (prisma.client.hintConfig.findMany as jest.Mock).mockResolvedValue([
+        invalidStrategyConfig,
+      ] as any);
+      (prisma.client.sessionMember.findFirst as jest.Mock).mockResolvedValue(
+        mockSessionMember as any,
+      );
+      llmRouter.complete.mockResolvedValue(mockLLMResponse as any);
+      repository.create.mockResolvedValue(mockHintDocument as any);
+
+      const result = await service.generateHints(request);
+
+      expect(result).toBeDefined();
+      expect(repository.create).toHaveBeenCalledWith(
+        expect.objectContaining({ strategy: 'reactive' }),
+      );
+    });
+  });
 });
