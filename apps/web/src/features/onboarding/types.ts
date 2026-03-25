@@ -6,6 +6,7 @@ export type OnboardingStep =
   | 'manager-salesforce'
   | 'manager-invite'
   | 'employee-career'
+  | 'connect-calendar'
   | 'tutorial'
 
 export interface CareerInfo {

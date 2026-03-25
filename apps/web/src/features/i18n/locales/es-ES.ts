@@ -26,6 +26,7 @@ export const esES: LocaleDictionary = {
     'nav.analytics': 'Analíticas',
     'nav.teamConfig': 'Configuración del equipo',
     'nav.challenges': 'Desafíos',
+    'nav.calendar': 'Calendario',
     'nav.settings': 'Configuración',
     'tabs.all': 'Todo',
     'tabs.favorites': 'Favoritos',

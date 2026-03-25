@@ -59,6 +59,156 @@
   }
 }
 
+/* ─── Coach Chat Widget ───────────────────────────────────────────────────── */
+
+/* Message entrance */
+@keyframes coach-msg-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Streaming cursor blink */
+@keyframes coach-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}
+
+/* Typing indicator dots */
+@keyframes coach-dot {
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.4;
+  }
+  30% {
+    transform: translateY(-4px);
+    opacity: 1;
+  }
+}
+
+/* Message rows */
+.coach-message-row {
+  display: flex;
+  width: 100%;
+}
+.coach-message-row-user {
+  justify-content: flex-end;
+}
+.coach-message-row-assistant {
+  justify-content: flex-start;
+}
+
+/* Bubble base */
+.coach-bubble {
+  max-width: 80%;
+  border-radius: 14px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  word-break: break-word;
+}
+
+/* User bubble — indigo gradient, right side */
+.coach-bubble-user {
+  background: linear-gradient(135deg, #3b5bdb 0%, #4c6ef5 100%);
+  color: #fff;
+  border-bottom-right-radius: 4px;
+  align-items: flex-end;
+}
+
+/* Assistant bubble — dark glass, left side */
+.coach-bubble-assistant {
+  background: rgba(30, 40, 70, 0.75);
+  border: 1px solid rgba(90, 127, 201, 0.2);
+  color: #e9ecef;
+  border-bottom-left-radius: 4px;
+  align-items: flex-start;
+}
+
+/* Typing indicator */
+.coach-typing {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  height: 20px;
+  padding: 2px 0;
+}
+.coach-typing span {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: rgba(160, 180, 240, 0.7);
+  animation: coach-dot 1.2s ease-in-out infinite;
+}
+.coach-typing span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+.coach-typing span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+/* Markdown text in assistant bubbles */
+.coach-md {
+  font-size: 14px;
+  color: #e9ecef;
+  line-height: 1.6;
+}
+.coach-md p {
+  margin: 0 0 6px 0;
+}
+.coach-md p:last-child {
+  margin-bottom: 0;
+}
+.coach-md ul,
+.coach-md ol {
+  margin: 4px 0;
+  padding-left: 18px;
+}
+.coach-md li {
+  margin-bottom: 2px;
+}
+.coach-md code {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 3px;
+  padding: 1px 4px;
+  font-size: 12px;
+  font-family: monospace;
+}
+.coach-md a {
+  color: #74c0fc;
+  text-decoration: underline;
+}
+.coach-md strong {
+  font-weight: 700;
+  color: #fff;
+}
+
+/* Highlight flash when Pablo points at a DOM element */
+.coach-action-highlight {
+  outline: 2px solid #4c6ef5 !important;
+  outline-offset: 3px;
+  box-shadow: 0 0 0 6px rgba(76, 110, 245, 0.25);
+  transition:
+    outline 0.15s,
+    box-shadow 0.15s;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────── */
+
 @layer base {
   * {
     @apply border-border;

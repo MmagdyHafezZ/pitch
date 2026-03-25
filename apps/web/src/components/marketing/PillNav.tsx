@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type MouseEvent } from 'react'
 import { AnimatePresence, motion, useReducedMotion, type Transition } from 'framer-motion'
 import styles from './PillNav.module.css'
 
@@ -111,9 +111,24 @@ export function PillNav({ items, className }: PillNavProps) {
     }
   }, [items])
 
-  const handleItemClick = (href: string) => {
+  const handleItemClick = (event: MouseEvent<HTMLAnchorElement>, href: string) => {
     setActiveHref(href)
     setIsMobileMenuOpen(false)
+
+    if (!href.startsWith('#')) {
+      return
+    }
+
+    const target = document.getElementById(href.slice(1))
+    if (!target) {
+      return
+    }
+
+    event.preventDefault()
+
+    const top = Math.max(0, target.offsetTop - (SCROLL_OFFSET - 40))
+    window.history.replaceState(null, '', href)
+    window.scrollTo({ top, behavior: shouldReduceMotion ? 'auto' : 'smooth' })
   }
 
   const containerClassName = className ? `${styles.container} ${className}` : styles.container
@@ -140,7 +155,7 @@ export function PillNav({ items, className }: PillNavProps) {
                     aria-label={item.ariaLabel ?? item.label}
                     aria-current={activeHref === item.href ? 'location' : undefined}
                     className={pillClassName}
-                    onClick={() => handleItemClick(item.href)}
+                    onClick={(event) => handleItemClick(event, item.href)}
                   >
                     <span
                       ref={(node) => {
@@ -151,9 +166,6 @@ export function PillNav({ items, className }: PillNavProps) {
                     />
                     <span className={styles.labelStack}>
                       <span className={styles.label}>{item.label}</span>
-                      <span className={styles.labelHover} aria-hidden="true">
-                        {item.label}
-                      </span>
                     </span>
                   </a>
                 </li>
@@ -202,7 +214,7 @@ export function PillNav({ items, className }: PillNavProps) {
                       href={item.href}
                       aria-label={item.ariaLabel ?? item.label}
                       className={mobileLinkClassName}
-                      onClick={() => handleItemClick(item.href)}
+                      onClick={(event) => handleItemClick(event, item.href)}
                     >
                       {item.label}
                     </a>

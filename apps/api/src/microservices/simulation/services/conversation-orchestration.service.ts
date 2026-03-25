@@ -11,7 +11,11 @@ import {
   buildConversationSystemPrompt,
   isDisallowedGenericFallbackReply,
 } from '../prompts/conversation.prompt';
-import { ConversationToolsService } from './conversation-tools.service';
+import {
+  ConversationToolsService,
+  type IMoodState,
+  type IPersuasionState,
+} from './conversation-tools.service';
 import type {
   LLMConfigDto,
   LLMMessageDto,
@@ -131,7 +135,6 @@ class Semaphore {
   release(): void {
     const next = this.queue.shift();
     if (next) {
-      // Hand the permit directly to the waiter — do NOT increment
       next();
     } else {
       this.permits++;
@@ -777,7 +780,12 @@ export class ConversationOrchestrationService {
     this.throwIfCancelled(requestState, subscriber);
 
     if (pendingToolCalls.length > 0) {
-      const toolContext = { sessionId, iterationId, turnId: assistantTurnId };
+      const toolContext = {
+        sessionId,
+        iterationId,
+        turnId: assistantTurnId,
+        userId,
+      };
       const effects = await this.conversationTools
         .execute(pendingToolCalls, toolContext)
         .catch((err) => {
@@ -813,6 +821,68 @@ export class ConversationOrchestrationService {
           subscriber.next({
             type: 'tool_executed',
             data: { tool: effect.tool, args: effect.args },
+          });
+        }
+      }
+    }
+
+    // System-level analysis: automatically assess AI emotion and persuasion
+    // after every turn using a dedicated lightweight LLM call. This is
+    // guaranteed to run every turn, unlike tool calls which the LLM may skip.
+    if (!this.isCancelled(requestState, subscriber)) {
+      const previousPersuasionState = await this.redis
+        .getPersuasionScore(sessionId)
+        .catch(() => null);
+
+      const analysisResult = await this.analyzeConversationState({
+        sessionId,
+        userId,
+        fullText,
+        userText: !startAsAssistant ? (payload.text ?? undefined) : undefined,
+        historyMessages,
+        personaTraits: personaData?.traits
+          ? (toRecord(personaData.traits) as Record<string, unknown>)
+          : undefined,
+        difficulty: sessionConfig.difficulty as string | undefined,
+        previousScore: previousPersuasionState?.score,
+      });
+
+      if (
+        analysisResult &&
+        !subscriber.closed &&
+        !this.isCancelled(requestState, subscriber)
+      ) {
+        subscriber.next({
+          type: 'tool_executed',
+          data: {
+            tool: 'update_mood',
+            args: {
+              mood: analysisResult.moodState.mood,
+              emotion: analysisResult.moodState.emotion,
+              intensity: analysisResult.moodState.intensity,
+              trigger: analysisResult.moodState.trigger,
+            },
+          },
+        });
+        subscriber.next({
+          type: 'tool_executed',
+          data: {
+            tool: 'update_persuasion_score',
+            args: {
+              score: analysisResult.persuasionState.score,
+              reasoning: analysisResult.persuasionState.reasoning,
+            },
+          },
+        });
+
+        // If the persona is fully unpersuaded, they want to end the call
+        if (analysisResult.persuasionState.score === 0 && !subscriber.closed) {
+          this.logger.log(
+            `Persuasion score hit 0 for session ${sessionId} — emitting hangup_requested`,
+          );
+          subscriber.next({
+            type: 'hangup_requested',
+            data: { reason: 'The persona has decided to end the call.' },
           });
         }
       }
@@ -877,6 +947,21 @@ export class ConversationOrchestrationService {
                 reasoning: stageDetection.reasoning,
               },
             });
+
+            const tip = this.getCoachingTipForStage(
+              stageDetection.currentStage.label,
+              stageDetection.currentStageIndex,
+            );
+            if (tip) {
+              subscriber.next({
+                type: 'coaching_tip',
+                data: {
+                  tip,
+                  stage: stageDetection.currentStage.label,
+                  stageIndex: stageDetection.currentStageIndex,
+                },
+              });
+            }
           }
 
           void this.prisma.client.event
@@ -905,7 +990,178 @@ export class ConversationOrchestrationService {
     }
   }
 
-  // ── Private helpers ─────────────────────────────────────────────────────────
+  /**
+   * Runs a lightweight, non-streaming LLM call after every AI response to
+   * determine the AI persona's current emotion and persuasion level. Results
+   * are stored in Redis and emitted as tool_executed events to the frontend.
+   *
+   * This replaces the old approach of asking the main LLM to call update_mood
+   * and update_persuasion_score as tool calls, which was unreliable with
+   * toolChoice: 'auto'.
+   */
+  private async analyzeConversationState(params: {
+    sessionId: string;
+    userId: string;
+    fullText: string;
+    userText?: string;
+    historyMessages: Array<{ role: string; content: string }>;
+    personaTraits?: Record<string, unknown>;
+    difficulty?: string;
+    previousScore?: number;
+  }): Promise<{
+    moodState: IMoodState;
+    persuasionState: IPersuasionState;
+  } | null> {
+    const recentHistory = params.historyMessages.slice(-6);
+    const contextLines = [
+      ...recentHistory.map(
+        (m) =>
+          `${m.role === 'assistant' ? 'AI' : 'User'}: ${m.content.slice(0, 300)}`,
+      ),
+      ...(params.userText ? [`User: ${params.userText.slice(0, 300)}`] : []),
+      `AI: ${params.fullText.slice(0, 400)}`,
+    ];
+
+    // Build persona context from traits (mirrors conversation.prompt.ts trait extraction)
+    const traits = params.personaTraits ?? {};
+    const pickStr = (v: unknown) => (typeof v === 'string' ? v : null);
+    const personaLines: string[] = [];
+    const personality = pickStr(
+      traits.personality ?? traits.character ?? traits.archetype,
+    );
+    const temperament = pickStr(traits.temperament ?? traits.patience);
+    const negotiationStyle = pickStr(
+      traits.negotiationStyle ?? traits.style ?? traits.approach,
+    );
+    const resistanceLevel = pickStr(
+      traits.resistanceLevel ?? traits.resistance ?? traits.skepticism,
+    );
+    if (personality) personaLines.push(`Personality: ${personality}`);
+    if (temperament) personaLines.push(`Temperament: ${temperament}`);
+    if (negotiationStyle)
+      personaLines.push(`Negotiation style: ${negotiationStyle}`);
+    if (resistanceLevel)
+      personaLines.push(`Resistance level: ${resistanceLevel}`);
+
+    // Map difficulty to delta sensitivity guidance
+    const difficultyNorm = (params.difficulty ?? 'medium').toLowerCase();
+    const difficultyGuide =
+      difficultyNorm === 'easy'
+        ? 'Easy difficulty: the persona is open-minded. Good arguments gain +5 to +15 pts. Poor arguments lose 3 to 8 pts. Offensive/rude remarks lose 10 to 20 pts.'
+        : difficultyNorm === 'hard'
+          ? 'Hard difficulty: the persona is very resistant. Good arguments gain +3 to +8 pts. Poor arguments lose 8 to 18 pts. Offensive/rude remarks lose 20 to 35 pts.'
+          : 'Medium difficulty: Good arguments gain +5 to +12 pts. Poor arguments lose 5 to 12 pts. Offensive/rude remarks lose 15 to 25 pts.';
+
+    const previousScore = params.previousScore ?? 50;
+
+    const systemContent = [
+      'You are an emotion and persuasion analyzer for a sales roleplay simulation.',
+      "Analyze the AI persona's emotional state and persuasion level and return JSON.",
+      '',
+      'Persona profile:',
+      personaLines.length > 0
+        ? personaLines.join('\n')
+        : 'No specific persona traits provided.',
+      '',
+      `Session difficulty: ${difficultyNorm}`,
+      difficultyGuide,
+      '',
+      `Current persuasion score: ${previousScore}/100`,
+      'Compute the new persuasion score by applying a delta to the current score.',
+      'The delta reflects what the USER said in the most recent turn (not the AI):',
+      '  - A compelling, relevant argument → positive delta',
+      '  - A weak, off-topic, or irrelevant argument → small negative delta',
+      '  - Offensive, rude, or manipulative language → large negative delta (the persona is put off)',
+      '  - If only the AI spoke (no user turn), keep the score unchanged (delta = 0)',
+      "Apply the persona's resistance: a highly resistant or impatient persona reacts more sharply to poor arguments.",
+      'The score must stay within 0–100. Never let it go below 0.',
+      '',
+      'Return JSON with these fields:',
+      '- emotion: one of [neutral, happy, excited, curious, surprised, confused, skeptical, nervous, bored, frustrated, angry, sad, impressed]',
+      '- mood: one of [neutral, interested, skeptical, impatient, frustrated, satisfied]',
+      '- intensity: integer 1-10',
+      '- trigger: one sentence describing what caused the current emotional state',
+      '- persuasionScore: integer 0-100 (new score after applying the delta)',
+      '- reasoning: one sentence explaining what the user said and why the score changed',
+    ].join('\n');
+
+    try {
+      const { response } = await this.llmRouter.complete(
+        {
+          sessionId: params.sessionId,
+          userId: params.userId,
+          messages: [
+            {
+              role: 'system',
+              content: systemContent,
+            },
+            {
+              role: 'user',
+              content: `Conversation:\n${contextLines.join('\n')}\n\nAnalyze the AI persona's current emotional state and persuasion level.`,
+            },
+          ],
+          config: {
+            model: 'gpt-4o-mini',
+            temperature: 0,
+            maxTokens: 200,
+            providerOptions: { response_format: { type: 'json_object' } },
+          },
+        },
+        { userId: params.userId, purpose: 'other' },
+      );
+
+      if (!response.content) return null;
+
+      const parsed = JSON.parse(response.content) as {
+        emotion?: string;
+        mood?: string;
+        intensity?: number;
+        trigger?: string;
+        persuasionScore?: number;
+        reasoning?: string;
+      };
+
+      const now = new Date().toISOString();
+
+      const moodState: IMoodState = {
+        mood: (parsed.mood as IMoodState['mood']) ?? 'neutral',
+        emotion: (parsed.emotion as IMoodState['emotion']) ?? 'neutral',
+        intensity: Math.min(
+          10,
+          Math.max(1, Math.round(Number(parsed.intensity ?? 5))),
+        ),
+        trigger: String(parsed.trigger ?? 'Response analyzed'),
+        setAt: now,
+      };
+
+      const persuasionState: IPersuasionState = {
+        score: Math.min(
+          100,
+          Math.max(0, Math.round(Number(parsed.persuasionScore ?? 0))),
+        ),
+        reasoning: String(parsed.reasoning ?? 'Analysis complete'),
+        setAt: now,
+      };
+
+      await Promise.all([
+        this.redis.setMoodState(params.sessionId, moodState).catch(() => {}),
+        this.redis
+          .setPersuasionScore(params.sessionId, persuasionState)
+          .catch(() => {}),
+      ]);
+
+      this.logger.debug(
+        `analyzeConversationState [${params.sessionId}]: emotion=${moodState.emotion} mood=${moodState.mood} intensity=${moodState.intensity} persuasion=${persuasionState.score}`,
+      );
+
+      return { moodState, persuasionState };
+    } catch (err) {
+      this.logger.warn(
+        `analyzeConversationState failed: ${(err as Error)?.message ?? err}`,
+      );
+      return null;
+    }
+  }
 
   /**
    * Synthesise audio for a single sentence and emit an audio_sentence event.
@@ -945,7 +1201,6 @@ export class ConversationOrchestrationService {
       let contentType: string;
 
       try {
-        // Try streaming synthesis first — collect chunks into a single Buffer
         const streamResult = await this.ttsService.synthesizeStream(
           text,
           provider,
@@ -969,7 +1224,6 @@ export class ConversationOrchestrationService {
       } catch (streamErr) {
         const msg = (streamErr as Error)?.message ?? '';
         if (msg.includes('does not support streaming')) {
-          // Provider doesn't support streaming — fall back to blocking synthesis
           const result = await this.ttsService.synthesize(
             text,
             provider,
@@ -1009,7 +1263,6 @@ export class ConversationOrchestrationService {
         return;
       }
 
-      // Try melotts fallback
       if (provider !== 'melotts') {
         try {
           const fallback = await this.ttsService.synthesize(text, 'melotts', {
@@ -1030,13 +1283,15 @@ export class ConversationOrchestrationService {
           }
           return;
         } catch {
-          // fall through — skip audio for this sentence
+          // If the fallback also fails, we'll log the original error below and skip audio for this sentence.
+          this.logger.warn(
+            `TTS failed for sentence ${idx}: ${(err as Error)?.message ?? err}`,
+          );
         }
       }
       this.logger.warn(
         `TTS failed for sentence ${idx}: ${(err as Error)?.message ?? err}`,
       );
-      // Do not throw — a failed sentence must not abort the stream
     } finally {
       semaphore.release();
     }
@@ -1047,6 +1302,44 @@ export class ConversationOrchestrationService {
     subscriber?: Pick<Subscriber<ConversationStreamEvent>, 'closed'>,
   ): boolean {
     return request.cancelled || subscriber?.closed === true;
+  }
+
+  /**
+   * Returns a concise, stage-specific coaching tip to push to the user
+   * the moment a stage transition is detected. Tips are pre-defined to
+   * avoid any additional LLM latency mid-conversation.
+   */
+  private getCoachingTipForStage(
+    stageLabel: string,
+    stageIndex: number,
+  ): string | null {
+    const normalized = stageLabel.toLowerCase();
+
+    if (normalized.includes('introduc') || stageIndex === 0) {
+      return 'Opening strong sets the tone. Introduce yourself clearly and state the purpose of your call early.';
+    }
+    if (normalized.includes('discover') || normalized.includes('needs')) {
+      return 'Ask open-ended questions and listen actively. Let the prospect reveal their real pain points before you pitch.';
+    }
+    if (
+      normalized.includes('present') ||
+      normalized.includes('solution') ||
+      normalized.includes('demo')
+    ) {
+      return 'Connect every feature to a specific need the prospect mentioned. "You said X — our solution handles that by…"';
+    }
+    if (normalized.includes('object') || normalized.includes('concern')) {
+      return 'Acknowledge before you answer. "That\'s a fair concern" builds trust before you address it.';
+    }
+    if (
+      normalized.includes('clos') ||
+      normalized.includes('next step') ||
+      normalized.includes('commit')
+    ) {
+      return 'Summarise the value you discussed and ask a direct closing question. Silence after the ask is okay.';
+    }
+
+    return null;
   }
 
   private throwIfCancelled(
@@ -1376,7 +1669,6 @@ export class ConversationOrchestrationService {
     const cfg: LlmConfigOverride =
       sessionConfig.llm ?? sessionConfig.llmConfig ?? {};
 
-    // Cap token length for voice-like sessions to reduce generation + TTS time
     const isVoiceLike =
       sessionType === 'voice' ||
       sessionType === 'video' ||

@@ -68,7 +68,17 @@ export const AUTH_WHITELIST_ROUTES: WhitelistRoute[] = [
     description: 'LLM service liveness probe',
   },
 
-  // ── LTI endpoints (authenticated by LTI/OAuth, not JWT) ───────────────────
+  {
+    method: 'GET',
+    path: '/api/calendar/google/callback',
+    description: 'Google Calendar OAuth callback',
+  },
+  {
+    method: 'GET',
+    path: '/api/calendar/microsoft/callback',
+    description: 'Microsoft Calendar OAuth callback',
+  },
+
   {
     method: 'POST',
     path: '/api/v1/lti/v1.1/launch',

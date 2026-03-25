@@ -77,7 +77,10 @@ describe('S3Repository', () => {
       expiresInSeconds: 120,
     });
 
-    expect(result).toEqual({ url: 'signed-upload-url' });
+    expect(result).toEqual({
+      url: 'signed-upload-url',
+      bucket: 'override-bucket',
+    });
     expect(getSignedUrlMock).toHaveBeenCalledWith(
       expect.any(Object),
       expect.objectContaining({
@@ -88,6 +91,31 @@ describe('S3Repository', () => {
         },
       }),
       { expiresIn: 120 },
+    );
+  });
+
+  it('creates a presigned upload URL with the default bucket', async () => {
+    getSignedUrlMock.mockResolvedValueOnce('signed-upload-url');
+    const repository = new S3Repository();
+
+    const result = await repository.createPresignedUploadUrl({
+      key: 'path/file.txt',
+    });
+
+    expect(result).toEqual({
+      url: 'signed-upload-url',
+      bucket: 'test-bucket',
+    });
+    expect(getSignedUrlMock).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.objectContaining({
+        input: {
+          Bucket: 'test-bucket',
+          Key: 'path/file.txt',
+          ContentType: undefined,
+        },
+      }),
+      { expiresIn: 900 },
     );
   });
 
