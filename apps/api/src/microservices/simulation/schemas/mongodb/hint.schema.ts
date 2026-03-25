@@ -63,6 +63,7 @@ export interface IConversationContext {
 export interface IHintDocument extends Document {
   _id: string;
   sessionId: string;
+  iterationId?: string;
   turnId?: string;
   userId?: string;
   orgId?: string;
@@ -82,6 +83,7 @@ export const HintSchema = new Schema<IHintDocument>(
   {
     _id: { type: String, required: true },
     sessionId: { type: String, required: true, index: true },
+    iterationId: { type: String, index: true },
     turnId: { type: String, index: true },
     userId: { type: String, index: true },
     orgId: { type: String, index: true },
@@ -149,6 +151,7 @@ export const HintSchema = new Schema<IHintDocument>(
 
 // Create indexes for efficient querying
 HintSchema.index({ sessionId: 1, generatedAt: -1 });
+HintSchema.index({ sessionId: 1, iterationId: 1, generatedAt: -1 });
 HintSchema.index({ userId: 1, generatedAt: -1 });
 HintSchema.index({ orgId: 1, generatedAt: -1 });
 HintSchema.index({ 'hints.type': 1 });

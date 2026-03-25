@@ -591,6 +591,13 @@ export class SimulationRedisService {
     );
   }
 
+  async clearConversationState(sessionId: string): Promise<void> {
+    await this.redis.del(
+      RedisKeys.sessionMood(sessionId),
+      RedisKeys.sessionPersuasion(sessionId),
+    );
+  }
+
   /**
    * Clear all session-related keys (cache, context, SSE, etc.)
    */

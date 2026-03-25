@@ -10,6 +10,19 @@ export interface UserOnboardingSettings {
   }
 }
 
+export interface StudioAccessSettings {
+  status?: 'pending' | 'approved' | 'denied'
+  requestedAt?: string
+  reviewedAt?: string
+  reviewedByUserId?: string
+  reviewedByEmail?: string
+  quota?: number
+  role?: 'MEMBER' | 'ADMIN' | 'OWNER'
+  teamId?: string
+  planId?: string
+  subscriptionId?: string
+}
+
 export interface UserSettings {
   onboarding?: UserOnboardingSettings
   crm?: {
@@ -21,6 +34,7 @@ export interface UserSettings {
   language?: {
     locale?: string
   }
+  studioAccess?: StudioAccessSettings
   [key: string]: unknown
 }
 
@@ -32,6 +46,8 @@ export interface User {
   phoneNumber?: string | null
   phoneVerifiedAt?: string | null
   isActive: boolean
+  hasStudioAccess?: boolean
+  isSystemAdmin?: boolean
   createdAt: string
   updatedAt: string
   settings?: UserSettings | null

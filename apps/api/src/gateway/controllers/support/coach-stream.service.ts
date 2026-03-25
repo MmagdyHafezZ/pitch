@@ -140,6 +140,7 @@ export class CoachStreamService {
     let toolName = '';
     let toolJson = '';
     let toolCallId = '';
+    let contentBuffer = '';
 
     const stream = await this.openai.chat.completions.create({
       model: 'gpt-4o-mini',
@@ -153,7 +154,10 @@ export class CoachStreamService {
 
     for await (const chunk of stream) {
       const delta = chunk.choices[0]?.delta;
-      if (delta?.content) yield delta.content;
+      if (delta?.content) {
+        contentBuffer += delta.content;
+        yield delta.content;
+      }
       if (delta?.tool_calls?.[0]) {
         const tc = delta.tool_calls[0];
         if (tc.id) toolCallId = tc.id;
@@ -162,7 +166,13 @@ export class CoachStreamService {
       }
     }
 
-    if (!toolJson) return;
+    if (!toolJson) {
+      const inferredOptions = this.extractInlineOptions(contentBuffer);
+      if (inferredOptions.length > 0) {
+        yield { suggestions: inferredOptions };
+      }
+      return;
+    }
 
     // ── show_options: emit quick-reply suggestions — no model recursion ─────
     if (toolName === 'show_options') {
@@ -521,6 +531,39 @@ export class CoachStreamService {
       );
       yield "I wasn't able to complete that action — please try again.";
     }
+  }
+
+  private extractInlineOptions(content: string): string[] {
+    const trimmed = content.trim();
+    if (!trimmed) return [];
+
+    const lines = trimmed
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean);
+
+    const bulletOptions = lines
+      .filter((line) => /^[-*•]\s+/.test(line))
+      .map((line) => line.replace(/^[-*•]\s+/, '').trim())
+      .filter(Boolean);
+
+    if (bulletOptions.length >= 2 && bulletOptions.length <= 5) {
+      return bulletOptions;
+    }
+
+    const bracketMatch = trimmed.match(/\[([^[\]]+)\]\s*$/);
+    if (bracketMatch?.[1]) {
+      const bracketOptions = bracketMatch[1]
+        .split(/\s*,\s*/)
+        .map((option) => option.trim())
+        .filter(Boolean);
+
+      if (bracketOptions.length >= 2 && bracketOptions.length <= 5) {
+        return bracketOptions;
+      }
+    }
+
+    return [];
   }
 
   // ─── Message builder ───────────────────────────────────────────────────────

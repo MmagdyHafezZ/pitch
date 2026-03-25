@@ -1,19 +1,18 @@
 'use client'
 
-import { Box, Stack, NavLink, Text, Divider, rem, Group } from '@mantine/core'
+import { Box, Stack, NavLink, Text, Divider, rem } from '@mantine/core'
 import {
   IconHome,
   IconCalendar,
   IconChartBar,
   IconUserCog,
-  IconHelp,
-  IconSettings,
   IconTrophy,
   IconShield,
 } from '@tabler/icons-react'
 import { Dispatch, SetStateAction, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { WeekCalendar } from '@/components/ui/WeekCalendar'
+import { CoinQuotaWidget } from '@/components/ui/CoinQuotaWidget'
 import { SettingsModal } from './SettingsModal'
 import classes from './AppSideBar.module.css'
 import { useI18n } from '@/features/i18n'
@@ -37,6 +36,7 @@ type Props = {
   mainLinks?: SidebarLink[]
   secondaryLinks?: SidebarLink[]
   onNavigate?: () => void
+  teamId?: string | null
 }
 
 const DEFAULT_MAIN: SidebarLink[] = [
@@ -55,6 +55,7 @@ export function AppSidebar({
   showTeamConfig = true,
   mainLinks = DEFAULT_MAIN,
   onNavigate,
+  teamId,
 }: Props) {
   const router = useRouter()
   const { t } = useI18n()
@@ -133,44 +134,42 @@ export function AppSidebar({
                 }}
               />
             ))}
-            {isAdmin === true && (
-              <>
-                <Divider my="xs" color="var(--pitch-nav-text-dim)" />
-                <NavLink
-                  onClick={() => {
-                    router.push('/admin')
-                    onNavigate?.()
-                  }}
-                  leftSection={<IconShield size={18} />}
-                  label={
-                    <Text size="sm" className={classes.navLabel}>
-                      Admin
-                    </Text>
-                  }
-                  variant="subtle"
-                  classNames={{
-                    root: classes.navLink,
-                    section: classes.navSection,
-                    body: classes.navBody,
-                    label: classes.navLabel,
-                  }}
-                />
-              </>
-            )}
-            <Box
-              mt="auto"
-              pt="lg"
-              mx="0"
-              pb={10}
-              style={{
-                width: '100%',
-                background: 'var(--pitch-nav-bg, var(--mantine-color-nav-9))',
-                borderRadius: 12,
-                border: '1px solid var(--pitch-nav-text-dim)',
-                overflow: 'hidden',
-              }}
-            >
-              <WeekCalendar value={selectedDate} onChange={(date) => setSelectedDate(date)} />
+            <Box mt="auto" pt="lg" mx="0" pb={10} style={{ width: '100%' }}>
+              {isAdmin === true && (
+                <>
+                  <Divider my="xs" color="var(--pitch-nav-text-dim)" />
+                  <NavLink
+                    onClick={() => {
+                      router.push('/admin')
+                      onNavigate?.()
+                    }}
+                    leftSection={<IconShield size={18} />}
+                    label={
+                      <Text size="sm" className={classes.navLabel}>
+                        Admin
+                      </Text>
+                    }
+                    variant="subtle"
+                    classNames={{
+                      root: classes.navLink,
+                      section: classes.navSection,
+                      body: classes.navBody,
+                      label: classes.navLabel,
+                    }}
+                  />
+                </>
+              )}
+              <Box
+                style={{
+                  background: 'var(--pitch-nav-bg, var(--mantine-color-nav-9))',
+                  borderRadius: 12,
+                  border: '1px solid var(--pitch-nav-text-dim)',
+                  overflow: 'hidden',
+                }}
+              >
+                <WeekCalendar value={selectedDate} onChange={(date) => setSelectedDate(date)} />
+              </Box>
+              <CoinQuotaWidget teamId={teamId} />
             </Box>
           </Stack>
         </Box>

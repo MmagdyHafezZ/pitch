@@ -1,4 +1,5 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'crypto';
 
 import { CoinRedisService } from './coin-redis.service';
@@ -17,7 +18,10 @@ import { SubscriptionRepository } from '../../subscription/repositories/subscrip
 
 @Injectable()
 export class CoinAccountingService {
+  private readonly logger = new Logger(CoinAccountingService.name);
+
   constructor(
+    private readonly config: ConfigService,
     private readonly redis: CoinRedisService,
     private readonly coinLedgerRepo: CoinLedgerRepository,
     private readonly coinBalanceRepo: CoinBalanceRepository,
@@ -133,7 +137,12 @@ export class CoinAccountingService {
     }
 
     const redisRemaining = await this.redis.getRemaining(teamId, ent.periodKey);
+
+    const redisKey = this.redis.keyRemaining(teamId, ent.periodKey);
     if (redisRemaining !== null) {
+      this.logger.debug(
+        `getRemainingCoins [REDIS HIT] key=${redisKey} remaining=${redisRemaining} allowance=${ent.allowance}`,
+      );
       return {
         ok: true,
         teamId,
@@ -146,6 +155,9 @@ export class CoinAccountingService {
     const mongoRemaining = await this.coinBalanceRepo.getRemaining(
       teamId,
       ent.periodKey,
+    );
+    this.logger.warn(
+      `getRemainingCoins [REDIS MISS] key=${redisKey} — falling back to mongo=${mongoRemaining ?? 'null'} → returning ${mongoRemaining ?? ent.allowance}`,
     );
     return {
       ok: true,
@@ -243,9 +255,15 @@ export class CoinAccountingService {
       throw new Error(`Reservation ${event.reservationId} already adjusted`);
     }
 
+    // Personal-quota sessions have periodKey = "personal:{userId}:YYYY-MM".
+    // Derive the correct entity key so Redis targets the right namespace.
+    const entityKey = event.periodKey.startsWith('personal:')
+      ? `user:${event.periodKey.split(':')[1]}`
+      : event.teamId;
+
     const ttlSeconds = 60 * 60 * 24 * 40;
     const res = await this.redis.applyDeltaIdempotent({
-      teamId: event.teamId,
+      teamId: entityKey,
       periodKey: event.periodKey,
       deltaCoins: event.deltaCoins,
       eventId: event.eventId,
@@ -271,7 +289,7 @@ export class CoinAccountingService {
       reservationId: event.reservationId,
       requestId: event.requestId,
       sessionId: event.sessionId,
-      teamId: event.teamId,
+      teamId: entityKey,
       userId: reserved_entry.userId,
       subscriptionId: reserved_entry.subscriptionId,
       planId: reserved_entry.planId,
@@ -281,7 +299,7 @@ export class CoinAccountingService {
     });
 
     await this.coinBalanceRepo.upsertAdjust({
-      teamId: event.teamId,
+      teamId: entityKey,
       periodKey: event.periodKey,
       remainingAfter: res.remainingAfter,
       eventId: event.eventId,
@@ -317,5 +335,150 @@ export class CoinAccountingService {
       return { hasReserve: true, hasAdjust: false };
     }
     throw new Error(`Invalid ledger state for reservation ${reservationId}`);
+  }
+
+  /**
+   * Reserve coins from the user's personal monthly quota.
+   * Bypasses the team-subscription lookup — uses "user:{userId}" as entity key.
+   */
+  async reservePersonalCoins(args: {
+    userId: string;
+    requestId: string;
+    idempotencyKey: string;
+    estimatedCoins: number;
+    sessionId?: string;
+  }): Promise<{
+    approved: boolean;
+    reservationId?: string;
+    periodKey?: string;
+    remainingAfter?: number;
+    reason?: 'INSUFFICIENT_COINS';
+  }> {
+    const allowance = Number(
+      this.config.get('PERSONAL_COINS_PER_MONTH') ?? 100,
+    );
+    const now = new Date();
+    const ym = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const periodKey = `personal:${args.userId}:${ym}`;
+    const entityKey = `user:${args.userId}`;
+
+    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    const ttlSeconds = Math.max(
+      3600,
+      Math.floor((endOfMonth.getTime() - now.getTime()) / 1000) + 7 * 24 * 3600,
+    );
+
+    await this.redis.initRemainingIfMissing(
+      entityKey,
+      periodKey,
+      allowance,
+      ttlSeconds,
+    );
+
+    const reserveRes = await this.redis.reserveIfEnough({
+      teamId: entityKey,
+      periodKey,
+      estimatedCoins: args.estimatedCoins,
+      idempotencyKey: args.idempotencyKey,
+      ttlSeconds,
+    });
+
+    if (!reserveRes.approved) {
+      return { approved: false, reason: 'INSUFFICIENT_COINS' };
+    }
+
+    if (reserveRes.alreadyProcessed) {
+      return {
+        approved: true,
+        periodKey,
+        remainingAfter: reserveRes.remainingAfter,
+      };
+    }
+
+    const reservationId = randomUUID();
+
+    await this.coinLedgerRepo.create({
+      type: CoinLedgerType.RESERVE,
+      reservationId,
+      requestId: args.requestId,
+      sessionId: args.sessionId,
+      teamId: entityKey,
+      userId: args.userId,
+      subscriptionId: 'personal',
+      planId: 'personal',
+      periodKey,
+      estimatedCoins: args.estimatedCoins,
+    });
+
+    await this.coinBalanceRepo.upsertReserve({
+      teamId: entityKey,
+      subscriptionId: 'personal',
+      periodKey,
+      allowance,
+      estimatedCoins: args.estimatedCoins,
+      remainingAfter: reserveRes.remainingAfter!,
+      reservationId,
+      requestId: args.requestId,
+    });
+
+    return {
+      approved: true,
+      reservationId,
+      periodKey,
+      remainingAfter: reserveRes.remainingAfter,
+    };
+  }
+
+  /**
+   * Get remaining personal coins for a user.
+   *
+   * Personal quota is per-user, per-month, independent of team membership.
+   * Allowance is controlled by the PERSONAL_COINS_PER_MONTH env var (default 100).
+   *
+   * The user entity is stored in Redis / Mongo under the key prefix "user:{userId}"
+   * so it never collides with team IDs.
+   */
+  async getRemainingCoinsForUser(userId: string): Promise<{
+    ok: true;
+    userId: string;
+    remaining: number;
+    allowance: number;
+    periodKey: string;
+  }> {
+    const allowance = Number(
+      this.config.get('PERSONAL_COINS_PER_MONTH') ?? 100,
+    );
+
+    // Build a stable monthly period key
+    const now = new Date();
+    const ym = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const periodKey = `personal:${userId}:${ym}`;
+
+    // Entity key uses "user:" prefix to avoid collision with UUID team IDs
+    const entityKey = `user:${userId}`;
+
+    // TTL: rest of month + 7-day buffer
+    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    const ttlSeconds = Math.max(
+      3600,
+      Math.floor((endOfMonth.getTime() - now.getTime()) / 1000) + 7 * 24 * 3600,
+    );
+
+    await this.redis.initRemainingIfMissing(
+      entityKey,
+      periodKey,
+      allowance,
+      ttlSeconds,
+    );
+
+    const remaining = await this.redis.getRemaining(entityKey, periodKey);
+
+    return {
+      ok: true,
+      userId,
+      remaining: remaining ?? allowance,
+      allowance,
+      periodKey,
+    };
   }
 }

@@ -239,6 +239,7 @@ export default function ClientLayerComponent({ children }: { children: React.Rea
               setSelectedDate={setSelectedDate}
               showTeamConfig={canAccessTeamConfig}
               onNavigate={closeMobileNav}
+              teamId={activeTeamId}
             />
           </Box>
         )}

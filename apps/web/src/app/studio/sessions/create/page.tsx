@@ -52,6 +52,7 @@ import { getBrainCompatibleModels, getPreferredBrainModel } from './lib/brain-mo
 import { useCrm } from '@/features/crm'
 import { useI18n } from '@/features/i18n'
 import { useTour } from '@/features/onboarding'
+import { useInvalidateCoinsBalance } from '@/features/coins/hooks/useCoinsBalance'
 import type {
   EditableScenarioDraft,
   Scenario,
@@ -162,6 +163,7 @@ export default function CreateSessionPage() {
   const { teams, activeTeamId, fetchUserTeams, loading: teamsLoading } = useTeams()
   const { createSession, loading, error } = useSessions()
   const { providers: ttsProviders, loading: ttsLoading } = useTtsProviders()
+  const invalidateCoinsBalance = useInvalidateCoinsBalance()
   const { data: llmProvidersData, isLoading: llmProvidersLoading } = useLLMProviders()
   const isStepperCompact = useMediaQuery('(max-width: 900px)')
 
@@ -1004,6 +1006,7 @@ export default function CreateSessionPage() {
       }
 
       await createSession(sessionData)
+      invalidateCoinsBalance()
 
       notifications.show({
         title: 'Success',

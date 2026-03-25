@@ -179,7 +179,7 @@ const CSS = `
   font-weight: 600;
   letter-spacing: 0.07em;
   text-transform: uppercase;
-  color: #bbb;
+  color: #d4d4d8;
   flex: 1;
 }
 .vos-collapse-btn {
@@ -188,13 +188,13 @@ const CSS = `
   cursor: pointer;
   padding: 4px 6px;
   border-radius: 6px;
-  color: #bbb;
+  color: #d4d4d8;
   font-size: 13px;
   line-height: 1;
   transition: color .2s, background .2s;
   flex-shrink: 0;
 }
-.vos-collapse-btn:hover { color: #888; background: rgba(0,0,0,.05); }
+.vos-collapse-btn:hover { color: #ffffff; background: rgba(255,255,255,.08); }
 
 /* ─── status bar ─── */
 .vos-status-bar {
@@ -317,6 +317,9 @@ const CSS = `
   padding: 1.5rem 1rem 1rem;
   gap: .4rem;
 }
+.chats > :first-child {
+  margin-top: 2rem;
+}
 
 /* ─── messages ─── */
 .chat-user { display: flex; justify-content: flex-end; }
@@ -330,7 +333,7 @@ const CSS = `
   gap: .25rem;
   line-height: 1.5;
   padding: .55rem .75rem;
-  color: #555;
+  color: #1f2937;
   border-radius: .6rem .6rem 0 .6rem;
   background-color: rgba(255,255,255,.62);
   animation: vos-chat 1s calc(var(--delay,0) * 1s) both cubic-bezier(.175,.885,.32,1.275);
@@ -351,11 +354,12 @@ const CSS = `
   gap: .25rem;
   line-height: 1.5;
   padding: .55rem 0;
-  color: #393754;
+  color: rgba(255,255,255,.94);
   animation: vos-chat 1s calc(var(--delay,0) * 1s) both cubic-bezier(.175,.885,.32,1.275);
 }
 .chat-ia p span {
   opacity: 0;
+  color: #111827 !important
   transform: translateY(10px);
   display: inline-block;
   animation: vos-chat 1s calc(var(--delay,0) * 1s + var(--word,0) * .1s) both cubic-bezier(.175,.885,.32,1.275);
@@ -367,10 +371,12 @@ const CSS = `
 /* ─── controls row ─── */
 .vos-controls {
   display: flex;
+  width: 100%;
   align-items: center;
   justify-content: center;
   gap: 14px;
   padding: 10px 14px 6px;
+  margin: 0 auto;
   flex-shrink: 0;
   z-index: 2;
 }
@@ -391,7 +397,7 @@ const CSS = `
 .vos-btn-mic {
   width: 44px; height: 44px;
   background: rgba(0,0,0,.08);
-  color: #666;
+  color: #374151;
 }
 .vos-btn-mic.listening {
   background: #10b981;
@@ -419,7 +425,7 @@ const CSS = `
 .vos-btn-replay {
   width: 44px; height: 44px;
   background: rgba(0,0,0,.08);
-  color: #666;
+  color: #374151;
 }
 .vos-btn-replay.active {
   background: #3b82f6;
@@ -443,11 +449,11 @@ const CSS = `
   border: none;
   background: transparent;
   font-size: 13px;
-  color: #333;
+  color: #111827;
   outline: none;
   padding: 3px 0;
 }
-.vos-input::placeholder { color: #bbb; }
+.vos-input::placeholder { color: #6b7280; }
 .vos-input:disabled     { opacity: .45; }
 .vos-send {
   background: none;
@@ -463,34 +469,36 @@ const CSS = `
 .vos-send:hover    { background: rgba(59,130,246,.1); }
 .vos-send:disabled { opacity: .3; cursor: not-allowed; }
 
-/* ─── resume speech bubble ─── */
-.vos-speech-bubble {
+/* ─── attempt checkpoint modal ─── */
+.vos-prompt-modal {
   position: absolute;
-  bottom: calc(100% + 16px);
-  left: 50%;
-  transform: translateX(-50%);
-  width: 240px;
-  background: rgba(255,255,255,.96);
-  backdrop-filter: blur(14px);
-  border-radius: 18px;
-  padding: 14px 16px 12px;
-  box-shadow: 0 8px 32px rgba(0,0,0,.18), 0 2px 8px rgba(0,0,0,.08);
-  animation: vos-bubble-in .4s cubic-bezier(.175,.885,.32,1.275) both;
+  inset: 0;
   z-index: 1000000;
-  pointer-events: all;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
 }
-.vos-speech-bubble::after {
-  content: '';
+.vos-prompt-modal-backdrop {
   position: absolute;
-  top: 100%;
-  left: 50%;
-  transform: translateX(-50%);
-  border: 9px solid transparent;
-  border-top-color: rgba(255,255,255,.96);
+  inset: 0;
+  background: rgba(3,7,18,.58);
+  backdrop-filter: blur(10px);
 }
-@keyframes vos-bubble-in {
-  from { opacity: 0; transform: translateX(-50%) translateY(8px) scale(.92); }
-  to   { opacity: 1; transform: translateX(-50%) translateY(0)   scale(1); }
+.vos-prompt-modal-card {
+  position: relative;
+  width: min(420px, calc(100vw - 32px));
+  background: rgba(255,255,255,.96);
+  backdrop-filter: blur(18px);
+  border-radius: 22px;
+  padding: 20px 20px 18px;
+  border: 1px solid rgba(59,130,246,.12);
+  box-shadow: 0 20px 60px rgba(0,0,0,.28), 0 6px 16px rgba(0,0,0,.12);
+  animation: vos-modal-in .22s ease-out both;
+}
+@keyframes vos-modal-in {
+  from { opacity: 0; transform: translateY(10px) scale(.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 .vos-bubble-heading {
   font-size: 13px;
@@ -676,15 +684,15 @@ html.dark .container-chat::after {
 
 /* messages */
 html.dark .chat-user p {
-  background-color: rgba(255,255,255,.07);
-  color: #c4c4cc;
+  background-color: rgba(96,165,250,.14);
+  color: rgba(240,249,255,.96);
 }
-html.dark .chat-ia p { color: #9898b4; }
+html.dark .chat-ia p { color: rgba(244,244,245,.94); }
 
 /* title bar */
-html.dark .vos-panel-name  { color: #444; }
-html.dark .vos-collapse-btn { color: #444; }
-html.dark .vos-collapse-btn:hover { color: #777; background: rgba(255,255,255,.06); }
+html.dark .vos-panel-name  { color: #d4d4d8; }
+html.dark .vos-collapse-btn { color: #cbd5e1; }
+html.dark .vos-collapse-btn:hover { color: #fff; background: rgba(255,255,255,.08); }
 
 /* status bar — colours stay; only tweak the idle background */
 html.dark .vos-status-bar.status-idle { background: rgba(107,114,128,.12); }
@@ -694,24 +702,25 @@ html.dark .vos-input-row {
   background: rgba(14, 14, 20, 0.9);
   border-top: 1px solid rgba(255,255,255,.06);
 }
-html.dark .vos-input             { color: #d4d4d8; }
-html.dark .vos-input::placeholder{ color: #333340; }
+html.dark .vos-input             { color: #f4f4f5; }
+html.dark .vos-input::placeholder{ color: #a1a1aa; }
 html.dark .vos-send              { color: #60a5fa; }
 html.dark .vos-send:hover        { background: rgba(59,130,246,.12); }
 
 /* control buttons */
-html.dark .vos-btn-mic    { background: rgba(255,255,255,.07); color: #777; }
-html.dark .vos-btn-replay { background: rgba(255,255,255,.07); color: #777; }
+html.dark .vos-btn-mic    { background: rgba(255,255,255,.09); color: #e4e4e7; }
+html.dark .vos-btn-replay { background: rgba(255,255,255,.09); color: #e4e4e7; }
 
-/* speech bubble */
-html.dark .vos-speech-bubble {
-  background: rgba(22, 22, 30, 0.97);
-  box-shadow: 0 8px 32px rgba(0,0,0,.45), 0 2px 8px rgba(0,0,0,.25);
+/* attempt checkpoint modal */
+html.dark .vos-prompt-modal-backdrop { background: rgba(2,6,23,.72); }
+html.dark .vos-prompt-modal-card {
+  background: rgba(22,22,30,.97);
+  border-color: rgba(96,165,250,.16);
+  box-shadow: 0 24px 70px rgba(0,0,0,.48), 0 8px 20px rgba(0,0,0,.3);
 }
-html.dark .vos-speech-bubble::after { border-top-color: rgba(22,22,30,.97); }
 html.dark .vos-bubble-heading { color: #e4e4e7; }
-html.dark .vos-bubble-desc    { color: #666; }
-html.dark .vos-bubble-btn-secondary { background: rgba(255,255,255,.08); color: #999; }
+html.dark .vos-bubble-desc    { color: #cbd5e1; }
+html.dark .vos-bubble-btn-secondary { background: rgba(255,255,255,.08); color: #f4f4f5; }
 
 /* ─── text mode: no orb, always-open full panel ─── */
 .vos-text-mode .orb  { display: none; }
@@ -766,7 +775,7 @@ html.dark .vos-bubble-btn-secondary { background: rgba(255,255,255,.08); color: 
 .vos-zoom-status.status-speaking  { color: #60a5fa; }
 .vos-zoom-status.status-thinking  { color: #a78bfa; }
 .vos-zoom-status.status-listening { color: #34d399; }
-.vos-zoom-status.status-idle      { color: rgba(255,255,255,.5); }
+.vos-zoom-status.status-idle      { color: rgba(255,255,255,.78); }
 
 /* User camera PiP */
 .vos-zoom-pip {
@@ -786,14 +795,14 @@ html.dark .vos-bubble-btn-secondary { background: rgba(255,255,255,.08); color: 
   width: 100%; height: 100%;
   display: flex; flex-direction: column;
   align-items: center; justify-content: center; gap: 4px;
-  color: rgba(255,255,255,.25); font-size: 10px; font-weight: 600;
+  color: rgba(255,255,255,.62); font-size: 10px; font-weight: 600;
 }
 
 /* Transcript */
 .vos-zoom-transcript {
   flex-shrink: 0; height: 160px;
-  background: rgba(0,0,0,.35);
-  border-top: 1px solid rgba(255,255,255,.06);
+  background: rgba(6,10,22,.72);
+  border-top: 1px solid rgba(255,255,255,.12);
   overflow-y: auto; padding: 10px 14px;
   display: flex; flex-direction: column; gap: 5px;
   scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.1) transparent;
@@ -802,7 +811,7 @@ html.dark .vos-bubble-btn-secondary { background: rgba(255,255,255,.08); color: 
   mask: linear-gradient(0deg, white 80%, transparent 100%);
 }
 .vos-zoom-transcript-empty {
-  color: rgba(255,255,255,.25); font-size: 12px;
+  color: rgba(255,255,255,.68); font-size: 12px;
   align-self: center; margin: auto;
 }
 
@@ -1087,19 +1096,27 @@ export default function VoiceOrbSession({
       : 'AI Speaking'
     : isProcessing
       ? 'Thinking…'
-      : isListening
-        ? 'Your Turn'
-        : isConnected
-          ? 'Ready'
-          : connectionError
-            ? 'Connection error'
-            : 'Connecting…'
+      : sessionStatus === 'ended'
+        ? entryPromptMode === 'retake'
+          ? 'Session ended'
+          : 'Ended'
+        : isListening
+          ? 'Your Turn'
+          : isConnected
+            ? 'Ready'
+            : connectionError
+              ? 'Connection error'
+              : 'Connecting…'
 
   // In-panel status shows interrupt hint when AI is talking and user hasn't cut in yet
   const panelStatusLabel =
     assistantSpeaking && !isListening ? 'AI Speaking — tap mic to interrupt' : statusLabel
 
   const canSend = !!textInput.trim() && isConnected && sessionStatus !== 'ended'
+  const promptHeading = isRetakePrompt ? 'Start a new attempt?' : 'Resume where you left off?'
+  const promptDescription = isRetakePrompt
+    ? 'This session has ended. Start a new iteration on the same session and continue tracking attempts separately.'
+    : 'This session already has progress. You can continue the existing attempt or start a new iteration on the same session.'
 
   return (
     <div
@@ -1107,6 +1124,38 @@ export default function VoiceOrbSession({
       style={{ '--vos-ball-color': ballColor } as React.CSSProperties}
     >
       <style>{CSS}</style>
+
+      {resumePromptOpen && (
+        <div className="vos-prompt-modal">
+          <div className="vos-prompt-modal-backdrop" />
+          <div className="vos-prompt-modal-card" role="dialog" aria-modal="true">
+            <p className="vos-bubble-heading">{promptHeading}</p>
+            <p className="vos-bubble-desc">{promptDescription}</p>
+            <div className="vos-bubble-actions">
+              {!isRetakePrompt && (
+                <button
+                  className="vos-bubble-btn vos-bubble-btn-secondary"
+                  onClick={onStartOver}
+                  disabled={startOverLoading}
+                >
+                  {startOverLoading ? 'Starting…' : 'New Iteration'}
+                </button>
+              )}
+              <button
+                className="vos-bubble-btn vos-bubble-btn-primary"
+                onClick={isRetakePrompt ? onStartOver : onResume}
+                disabled={startOverLoading}
+              >
+                {isRetakePrompt
+                  ? startOverLoading
+                    ? 'Starting…'
+                    : 'Start New Attempt'
+                  : 'Continue'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {isVideoMode ? (
         /* ── Zoom-like video layout ── */
@@ -1287,32 +1336,6 @@ export default function VoiceOrbSession({
               <div className="container-lines" ref={linesRef} />
               <div className="container-rings" ref={ringsRef} />
             </div>
-
-            {/* Resume prompt — appears as a speech bubble above the orb */}
-            {resumePromptOpen && (
-              <div className="vos-speech-bubble">
-                <p className="vos-bubble-heading">What would you like to do?</p>
-                <p className="vos-bubble-desc">
-                  Continue this round where you left off, or start a brand-new iteration.
-                </p>
-                <div className="vos-bubble-actions">
-                  <button
-                    className="vos-bubble-btn vos-bubble-btn-secondary"
-                    onClick={onStartOver}
-                    disabled={startOverLoading}
-                  >
-                    {startOverLoading ? 'Starting…' : 'New Iteration'}
-                  </button>
-                  <button
-                    className="vos-bubble-btn vos-bubble-btn-primary"
-                    onClick={isRetakePrompt ? onStartOver : onResume}
-                    disabled={startOverLoading}
-                  >
-                    Continue
-                  </button>
-                </div>
-              </div>
-            )}
 
             {/* Status label — visible below orb only when panel is closed */}
             <div className={`vos-orb-label status-${statusState}`}>{statusLabel}</div>
@@ -1498,9 +1521,11 @@ export default function VoiceOrbSession({
                   className="vos-input"
                   placeholder={
                     !isConnected
-                      ? connectionError
-                        ? 'Connection error — please refresh'
-                        : 'Connecting…'
+                      ? sessionStatus === 'ended'
+                        ? 'Session ended — start a new iteration'
+                        : connectionError
+                          ? 'Connection error — please refresh'
+                          : 'Connecting…'
                       : sessionStatus === 'ended'
                         ? 'Session ended'
                         : 'Type a message…'

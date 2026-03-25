@@ -12,6 +12,7 @@ import {
   Loader,
   Progress,
   SimpleGrid,
+  Skeleton,
   Stack,
   Text,
   ThemeIcon,
@@ -21,6 +22,7 @@ import {
   IconArrowLeft,
   IconCalendar,
   IconCalendarEvent,
+  IconCoin,
   IconEdit,
   IconInfoCircle,
   IconLink,
@@ -35,6 +37,7 @@ import { JsonViewer } from '@/components/ui/JsonViewer'
 import { LtiEmbedModal } from '@/components/ui/LtiEmbedModal'
 import { useAuth } from '@/features/auth'
 import type { Session, SessionConfigData } from '@/features/sessions'
+import { useSessionCoinEstimate } from '@/features/coins/hooks/useCoinsBalance'
 import {
   normalizeScenarioConfig,
   alignPitchRolePair,
@@ -369,6 +372,16 @@ export default function SessionDetailPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [ltiEmbedOpen, setLtiEmbedOpen] = useState(false)
+
+  const _coinRaw = (session?.sessionConfig ?? {}) as Record<string, unknown>
+  const _coinLlm = isRecord(_coinRaw.llm) ? (_coinRaw.llm as Record<string, unknown>) : {}
+  const { data: coinEstimate, isLoading: coinEstimateLoading } = useSessionCoinEstimate({
+    model: toText(_coinLlm.model) ?? undefined,
+    provider: toText(_coinLlm.provider) ?? undefined,
+    sessionType: session?.type ?? 'text',
+    durationMinutes: toNumber(_coinRaw.durationMinutes) ?? undefined,
+    enabled: session !== null,
+  })
 
   useEffect(() => {
     if (!id) return
@@ -795,15 +808,25 @@ export default function SessionDetailPage() {
               >
                 Embed in LMS
               </Button>
-              <Button
-                size="sm"
-                variant="filled"
-                color="brand"
-                leftSection={<IconPlayerPlay size={15} />}
-                onClick={() => router.push(`/session/${session.id}`)}
-              >
-                Launch
-              </Button>
+              <Stack gap={2} align="center">
+                <Button
+                  size="sm"
+                  variant="filled"
+                  color="brand"
+                  leftSection={<IconPlayerPlay size={15} />}
+                  onClick={() => router.push(`/session/${session.id}`)}
+                >
+                  Launch
+                </Button>
+                {coinEstimate && !coinEstimateLoading && (
+                  <Group gap={3}>
+                    <IconCoin size={11} color="var(--mantine-color-dimmed)" />
+                    <Text size="xs" c="dimmed">
+                      ~{coinEstimate.estimatedCoins} coins
+                    </Text>
+                  </Group>
+                )}
+              </Stack>
             </Group>
           </Group>
 
@@ -1246,6 +1269,28 @@ export default function SessionDetailPage() {
                         toText(llmConfig.provider) ??
                         'Default configuration'}
                     </Text>
+                  }
+                />
+                <DetailRow
+                  label="Session cost"
+                  value={
+                    coinEstimateLoading ? (
+                      <Skeleton height={14} width={72} radius="sm" />
+                    ) : coinEstimate ? (
+                      <Group gap={4}>
+                        <IconCoin size={13} color="var(--mantine-color-yellow-5)" />
+                        <Text size="sm" c="yellow.5" fw={700}>
+                          ~{coinEstimate.estimatedCoins} coins
+                        </Text>
+                        <Text size="xs" c="dimmed">
+                          (~${coinEstimate.estimatedCostUsd.toFixed(3)})
+                        </Text>
+                      </Group>
+                    ) : (
+                      <Text size="sm" c="dimmed">
+                        —
+                      </Text>
+                    )
                   }
                 />
                 <DetailRow
