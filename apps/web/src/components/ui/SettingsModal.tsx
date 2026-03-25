@@ -23,8 +23,8 @@ import {
   Popover,
   ColorPicker,
   useComputedColorScheme,
-  Alert,
-  PinInput,
+  useMantineTheme,
+  UnstyledButton,
 } from '@mantine/core'
 import {
   IconUser,
@@ -39,120 +39,37 @@ import {
   IconShare2,
   IconDownload,
   IconSparkles,
-  IconCalendarEvent,
-  IconAlertCircle,
+  IconChevronDown,
 } from '@tabler/icons-react'
-import { CalendarConnectCards } from '@/features/calendar/components/CalendarConnectCards'
 import { modals } from '@mantine/modals'
-import { useMediaQuery } from '@mantine/hooks'
-import { useAuth, useAuthStore } from '@/features/auth'
+import { useAuth } from '@/features/auth'
 import { useRouter } from 'next/navigation'
 import { useAppearanceStore } from '@/lib/stores/appearance.store'
-import { useI18n } from '@/features/i18n'
-import { api } from '@/lib/client'
 import type { ThemeTokens } from '@/lib/stores/appearance.store'
 import { getReadableMutedColor, getReadableTextColor, mixColors } from '@/lib/colors/contrast'
+import { useMediaQuery } from '@mantine/hooks'
 import classes from './SettingsModal.module.css'
 import inputClasses from './settingsInputs.module.css'
 
-type SettingsSection =
-  | 'Account'
-  | 'Notifications'
-  | 'Voice & Video'
-  | 'Appearance'
-  | 'Language'
-  | 'Integrations'
+type SettingsSection = 'Account' | 'Notifications' | 'Voice & Video' | 'Appearance' | 'Language'
 
 interface SettingsModalProps {
   opened: boolean
   onClose: () => void
 }
 
-type PhoneVerificationState = {
-  verified: boolean
-  phoneNumber?: string | null
-  verifiedAt?: string | Date | null
-  pendingPhoneNumber?: string | null
-  pendingExpiresAt?: string | Date | null
-  resendAvailableAt?: string | Date | null
-  remainingAttempts?: number
-  remainingSends?: number
-}
-
-const PHONE_COUNTRY_OPTIONS = [
-  { value: '+1', label: 'Canada / US (+1)' },
-  { value: '+44', label: 'United Kingdom (+44)' },
-  { value: '+61', label: 'Australia (+61)' },
-  { value: '+33', label: 'France (+33)' },
-  { value: '+49', label: 'Germany (+49)' },
-  { value: '+34', label: 'Spain (+34)' },
-  { value: '+39', label: 'Italy (+39)' },
-  { value: '+31', label: 'Netherlands (+31)' },
-  { value: '+52', label: 'Mexico (+52)' },
-  { value: '+55', label: 'Brazil (+55)' },
-  { value: '+91', label: 'India (+91)' },
-  { value: '+81', label: 'Japan (+81)' },
-  { value: '+82', label: 'South Korea (+82)' },
-  { value: '+65', label: 'Singapore (+65)' },
-]
-
-const DEFAULT_PHONE_COUNTRY_CODE = '+1'
-
 export function SettingsModal({ opened, onClose }: SettingsModalProps) {
-  const splitPhoneNumber = (
-    rawPhoneNumber: string | null | undefined
-  ): { countryCode: string; localNumber: string } => {
-    const normalized = rawPhoneNumber?.trim()
-    if (!normalized) {
-      return { countryCode: DEFAULT_PHONE_COUNTRY_CODE, localNumber: '' }
-    }
-
-    const withPlus = normalized.startsWith('+') ? normalized : `+${normalized}`
-    const digitsOnly = withPlus.replace(/[^\d+]/g, '')
-    const sortedOptions = [...PHONE_COUNTRY_OPTIONS].sort(
-      (left, right) => right.value.length - left.value.length
-    )
-    const match = sortedOptions.find((option) => digitsOnly.startsWith(option.value))
-
-    if (!match) {
-      return {
-        countryCode: DEFAULT_PHONE_COUNTRY_CODE,
-        localNumber: digitsOnly.replace(/^\+/, '').replace(/\D/g, ''),
-      }
-    }
-
-    return {
-      countryCode: match.value,
-      localNumber: digitsOnly.slice(match.value.length).replace(/\D/g, ''),
-    }
-  }
-
   const router = useRouter()
   const { user, logout } = useAuth()
-  const setUser = useAuthStore((state) => state.setUser)
-  const { locale, setLocale, localeOptions, t, isSavingLocale, localeSaveError } = useI18n()
+  const theme = useMantineTheme()
   const computedColorScheme = useComputedColorScheme('light')
-  const isMobile = useMediaQuery('(max-width: 48em)')
   const isDark = computedColorScheme === 'dark'
+  const isMobile = useMediaQuery(`(max-width: ${theme.breakpoints.sm})`)
   const [activeSection, setActiveSection] = useState<SettingsSection>('Account')
-  const [name, setName] = useState(user?.name ?? '')
-  const [email, setEmail] = useState(user?.email ?? '')
+  const [name, setName] = useState(user?.name || 'John Doe')
+  const [email, setEmail] = useState(user?.email || 'john.doe@ibm.com')
   const [timezone, setTimezone] = useState('(GMT-5:00) Eastern Time')
-  const initialPhoneParts = splitPhoneNumber(
-    (user as { phoneNumber?: string | null } | null)?.phoneNumber ?? ''
-  )
-  const [phoneCountryCode, setPhoneCountryCode] = useState(initialPhoneParts.countryCode)
-  const [phoneLocalNumber, setPhoneLocalNumber] = useState(initialPhoneParts.localNumber)
-  const [phoneNumber, setPhoneNumber] = useState(
-    (user as { phoneNumber?: string | null } | null)?.phoneNumber ?? ''
-  )
-  const [verificationCode, setVerificationCode] = useState('')
-  const [phoneVerification, setPhoneVerification] = useState<PhoneVerificationState | null>(null)
-  const [phoneStatusLoading, setPhoneStatusLoading] = useState(false)
-  const [phoneActionLoading, setPhoneActionLoading] = useState(false)
-  const [phoneError, setPhoneError] = useState<string | null>(null)
-  const [phoneOverlayOpened, setPhoneOverlayOpened] = useState(false)
-  const [phoneOverlayStep, setPhoneOverlayStep] = useState<'number' | 'verify'>('number')
+  const [platformLanguage, setPlatformLanguage] = useState('English')
   const {
     colorMode,
     setColorMode,
@@ -214,68 +131,13 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
   const [activeTab, setActiveTab] = useState<'profiles' | 'custom'>('profiles')
   const [activePicker, setActivePicker] = useState<keyof ThemeTokens | null>(null)
   const [draggingPicker, setDraggingPicker] = useState(false)
-
-  const syncPhoneInputState = (rawPhoneNumber: string | null | undefined) => {
-    const parts = splitPhoneNumber(rawPhoneNumber)
-    setPhoneCountryCode(parts.countryCode)
-    setPhoneLocalNumber(parts.localNumber)
-    setPhoneNumber(rawPhoneNumber?.trim() ?? '')
-  }
-
-  const buildPhoneNumber = (countryCode: string, localNumber: string) => {
-    const digits = localNumber.replace(/\D/g, '')
-    return digits ? `${countryCode}${digits}` : ''
-  }
+  const [mobileSectionsOpened, setMobileSectionsOpened] = useState(false)
 
   useEffect(() => {
     if (activeProfile) {
       setProfileName(activeProfile.name)
     }
   }, [activeProfile])
-
-  useEffect(() => {
-    setName(user?.name ?? '')
-    setEmail(user?.email ?? '')
-    syncPhoneInputState((user as { phoneNumber?: string | null } | null)?.phoneNumber ?? '')
-  }, [user?.name, user?.email, (user as { phoneNumber?: string | null } | null)?.phoneNumber])
-
-  useEffect(() => {
-    if (!opened) return
-
-    let cancelled = false
-
-    const loadPhoneVerification = async () => {
-      setPhoneStatusLoading(true)
-      setPhoneError(null)
-      try {
-        const status = (await api.users.getMyPhoneVerification()) as PhoneVerificationState
-        if (cancelled) return
-        setPhoneVerification(status)
-        if (status.phoneNumber) {
-          syncPhoneInputState(status.phoneNumber)
-        } else if (status.pendingPhoneNumber) {
-          syncPhoneInputState(status.pendingPhoneNumber)
-        }
-      } catch (error) {
-        if (cancelled) return
-        setPhoneError(
-          error instanceof Error
-            ? error.message
-            : 'Unable to load your phone verification status right now.'
-        )
-      } finally {
-        if (!cancelled) {
-          setPhoneStatusLoading(false)
-        }
-      }
-    }
-
-    void loadPhoneVerification()
-
-    return () => {
-      cancelled = true
-    }
-  }, [opened])
 
   useEffect(() => {
     const handlePointerUp = () => setDraggingPicker(false)
@@ -302,7 +164,6 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
     { icon: IconMicrophone, label: 'Voice & Video' },
     { icon: IconPalette, label: 'Appearance' },
     { icon: IconWorld, label: 'Language' },
-    { icon: IconCalendarEvent, label: 'Integrations' },
   ]
 
   const handleLogout = async () => {
@@ -315,6 +176,9 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
     onClose()
   }
 
+  const activeSectionMeta =
+    sections.find((section) => section.label === activeSection) ?? sections[0]
+
   const openConfirmDelete = (id: string, name: string) => {
     modals.openConfirmModal({
       title: 'Delete theme',
@@ -325,263 +189,188 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
     })
   }
 
-  const isResendCoolingDown = useMemo(() => {
-    const resendAvailableAt = phoneVerification?.resendAvailableAt
-    if (!resendAvailableAt) return false
-    return new Date(resendAvailableAt).getTime() > Date.now()
-  }, [phoneVerification?.resendAvailableAt])
-
-  const hasVerifiedPhone = Boolean(phoneVerification?.verified && phoneVerification.phoneNumber)
-  const hasPendingPhone = Boolean(
-    phoneVerification?.pendingPhoneNumber && !phoneVerification?.verified
-  )
-  const phoneStatusDescription = phoneStatusLoading
-    ? 'Loading your phone setup...'
-    : hasVerifiedPhone
-      ? (phoneVerification?.phoneNumber ?? '')
-      : hasPendingPhone
-        ? `Code sent to ${phoneVerification?.pendingPhoneNumber}`
-        : 'Add a mobile number to unlock phone-based sessions.'
-  const phoneActionLabel = hasVerifiedPhone
-    ? 'Change number'
-    : hasPendingPhone
-      ? 'Finish setup'
-      : 'Add number'
-
-  const openPhoneOverlay = () => {
-    setPhoneError(null)
-    setPhoneOverlayStep(hasPendingPhone ? 'verify' : 'number')
-    setPhoneOverlayOpened(true)
-  }
-
-  const closePhoneOverlay = () => {
-    setPhoneOverlayOpened(false)
-    setPhoneError(null)
-    if (!hasPendingPhone) {
-      setVerificationCode('')
-    }
-  }
-
-  const handlePhoneCountryCodeChange = (value: string | null) => {
-    const nextCountryCode = value ?? DEFAULT_PHONE_COUNTRY_CODE
-    setPhoneCountryCode(nextCountryCode)
-    setPhoneNumber(buildPhoneNumber(nextCountryCode, phoneLocalNumber))
-  }
-
-  const handlePhoneLocalNumberChange = (value: string) => {
-    if (value.trim().startsWith('+')) {
-      const parts = splitPhoneNumber(value)
-      setPhoneCountryCode(parts.countryCode)
-      setPhoneLocalNumber(parts.localNumber)
-      setPhoneNumber(buildPhoneNumber(parts.countryCode, parts.localNumber))
-      return
-    }
-
-    const digits = value.replace(/\D/g, '')
-    setPhoneLocalNumber(digits)
-    setPhoneNumber(buildPhoneNumber(phoneCountryCode, digits))
-  }
-
-  const handleRequestPhoneVerification = async () => {
-    const nextPhoneNumber = phoneNumber.trim()
-    if (!nextPhoneNumber) {
-      setPhoneError('Enter the mobile number you want to verify.')
-      return
-    }
-
-    setPhoneActionLoading(true)
-    setPhoneError(null)
-    try {
-      const status = (await api.users.requestPhoneVerification({
-        phoneNumber: nextPhoneNumber,
-      })) as PhoneVerificationState
-      setPhoneVerification(status)
-      setVerificationCode('')
-      setPhoneOverlayStep('verify')
-    } catch (error) {
-      setPhoneError(
-        error instanceof Error ? error.message : 'Unable to send the verification code right now.'
-      )
-    } finally {
-      setPhoneActionLoading(false)
-    }
-  }
-
-  const handleResendPhoneVerification = async () => {
-    setPhoneActionLoading(true)
-    setPhoneError(null)
-    try {
-      const status = (await api.users.resendPhoneVerification()) as PhoneVerificationState
-      setPhoneVerification(status)
-      setVerificationCode('')
-    } catch (error) {
-      setPhoneError(
-        error instanceof Error ? error.message : 'Unable to resend the verification code right now.'
-      )
-    } finally {
-      setPhoneActionLoading(false)
-    }
-  }
-
-  const handleVerifyPhoneCode = async () => {
-    const code = verificationCode.trim()
-    if (!code) {
-      setPhoneError('Enter the verification code from the text message.')
-      return
-    }
-
-    setPhoneActionLoading(true)
-    setPhoneError(null)
-    try {
-      const status = (await api.users.verifyPhoneVerification({ code })) as PhoneVerificationState
-      setPhoneVerification(status)
-      setVerificationCode('')
-      if (status.phoneNumber) {
-        syncPhoneInputState(status.phoneNumber)
-        if (user) {
-          setUser({
-            ...user,
-            phoneNumber: status.phoneNumber,
-            phoneVerifiedAt:
-              typeof status.verifiedAt === 'string'
-                ? status.verifiedAt
-                : (status.verifiedAt?.toISOString?.() ?? null),
-          } as typeof user)
-        }
-      }
-      setPhoneOverlayOpened(false)
-      setPhoneOverlayStep('number')
-    } catch (error) {
-      setPhoneError(
-        error instanceof Error ? error.message : 'Unable to verify that code right now.'
-      )
-    } finally {
-      setPhoneActionLoading(false)
-    }
-  }
-
   return (
     <Modal
       opened={opened}
       onClose={onClose}
       size={isMobile ? '100%' : '800px'}
+      fullScreen={isMobile}
       padding={0}
       withCloseButton={false}
       styles={{
-        body: { padding: 0, height: isMobile ? 'calc(100dvh - 28px)' : 'min(80vh, 720px)' },
+        body: { padding: 0, height: isMobile ? '100vh' : 'min(80vh, 720px)' },
         content: {
-          borderRadius: rem(isMobile ? 10 : 12),
+          borderRadius: isMobile ? 0 : rem(12),
           overflow: 'hidden',
           backgroundColor: contentBackground,
+          height: isMobile ? '100vh' : undefined,
         },
       }}
     >
       <Group
         align="stretch"
         gap={0}
-        wrap="nowrap"
-        style={{ height: '100%', minHeight: 0, flexDirection: isMobile ? 'column' : 'row' }}
+        wrap={isMobile ? 'wrap' : 'nowrap'}
+        style={{
+          height: '100%',
+          minHeight: 0,
+          flexWrap: isMobile ? 'nowrap' : undefined,
+          flexDirection: isMobile ? 'column' : 'row',
+        }}
       >
-        {/* Left Sidebar */}
+        {/* Sidebar / Mobile Nav */}
         <Box
           style={{
             width: isMobile ? '100%' : 280,
             flexShrink: 0,
             backgroundColor: navBackground,
-            padding: isMobile ? `${rem(8)} ${rem(12)}` : rem(24),
+            padding: rem(isMobile ? 14 : 24),
             position: 'relative',
-            borderBottom: isMobile ? `1px solid ${inputBorder}` : undefined,
+            borderBottom: isMobile ? '1px solid rgba(255,255,255,0.08)' : undefined,
           }}
         >
-          {isMobile ? (
-            /* Mobile: icon grid nav — no scrolling, 3×2 grid */
-            <Box py={rem(8)} px={rem(12)} style={{ position: 'relative' }}>
-              <Group justify="flex-end" mb={rem(6)}>
-                <ActionIcon variant="subtle" size="sm" onClick={onClose}>
-                  <IconX size={16} color={navText} />
-                </ActionIcon>
-              </Group>
-              <SimpleGrid cols={3} spacing={rem(4)}>
-                {sections.map((section) => {
-                  const Icon = section.icon
-                  const isActive = activeSection === section.label
-                  const mobileLabel =
-                    section.label === 'Account'
-                      ? t('topbar.account')
-                      : section.label === 'Notifications'
-                        ? 'Alerts'
-                        : section.label === 'Voice & Video'
-                          ? 'Audio'
-                          : section.label === 'Appearance'
-                            ? 'Theme'
-                            : section.label === 'Integrations'
-                              ? 'Calendar'
-                              : t('settings.language.title')
-                  return (
-                    <Box
-                      key={section.label}
-                      onClick={() => setActiveSection(section.label)}
-                      style={{
-                        padding: `${rem(10)} ${rem(4)}`,
-                        borderRadius: rem(8),
-                        cursor: 'pointer',
-                        backgroundColor: isActive ? 'rgba(255,255,255,0.14)' : 'transparent',
-                        textAlign: 'center',
-                        transition: 'background-color 0.2s',
-                      }}
-                    >
-                      <Stack gap={rem(4)} align="center">
-                        <Box style={{ opacity: isActive ? 1 : 0.5, display: 'flex' }}>
-                          <Icon size={20} color={navText} />
-                        </Box>
-                        <Text
-                          c={navText}
-                          size="xs"
-                          fw={isActive ? 700 : 400}
-                          lh={1.2}
-                          ta="center"
-                          style={{ opacity: isActive ? 1 : 0.6 }}
-                        >
-                          {mobileLabel}
-                        </Text>
-                      </Stack>
-                    </Box>
-                  )
-                })}
-                {/* Logout tile */}
-                <Box
-                  onClick={handleLogout}
-                  style={{
-                    padding: `${rem(10)} ${rem(4)}`,
-                    borderRadius: rem(8),
-                    cursor: 'pointer',
-                    textAlign: 'center',
-                    transition: 'background-color 0.2s',
-                  }}
-                >
-                  <Stack gap={rem(4)} align="center">
-                    <IconX size={20} color="rgba(255,100,100,0.85)" />
-                    <Text c="rgba(255,100,100,0.85)" size="xs" fw={400} lh={1.2} ta="center">
-                      {t('common.logout')}
-                    </Text>
-                  </Stack>
-                </Box>
-              </SimpleGrid>
-            </Box>
-          ) : (
-            /* Desktop: vertical sidebar */
-            <>
-              <ActionIcon
-                variant="subtle"
-                color="white"
-                size="lg"
-                onClick={onClose}
-                style={{ position: 'absolute', top: 16, left: 16 }}
-              >
+            <Group justify="space-between" align="center" mb={isMobile ? 'sm' : 0}>
+              <Text c={navText} fw={700} size={isMobile ? 'md' : 'sm'}>
+                Settings
+              </Text>
+              <ActionIcon variant="subtle" color="white" size="lg" onClick={onClose}>
                 <IconX size={20} />
               </ActionIcon>
+            </Group>
 
-              <Stack gap="xs" mt={rem(40)}>
+          {isMobile ? (
+            <Popover
+              width="target"
+              position="bottom-start"
+              withArrow
+              shadow="md"
+              opened={mobileSectionsOpened}
+              onChange={setMobileSectionsOpened}
+            >
+              <Popover.Target>
+                <UnstyledButton
+                  onClick={() => setMobileSectionsOpened((opened) => !opened)}
+                  style={{
+                    width: '100%',
+                    padding: `${rem(10)} ${rem(12)}`,
+                    borderRadius: rem(16),
+                    border: '1px solid rgba(255,255,255,0.1)',
+                    background:
+                      'linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.04))',
+                    boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05)',
+                  }}
+                >
+                  <Group justify="space-between" align="center" wrap="nowrap">
+                    <Group gap="sm" wrap="nowrap" style={{ minWidth: 0 }}>
+                      <Box
+                        style={{
+                          width: rem(34),
+                          height: rem(34),
+                          borderRadius: rem(11),
+                          display: 'grid',
+                          placeItems: 'center',
+                          background: 'rgba(255,255,255,0.08)',
+                          color: navText,
+                          flexShrink: 0,
+                        }}
+                      >
+                        <activeSectionMeta.icon size={16} />
+                      </Box>
+                      <Stack gap={0} style={{ minWidth: 0 }}>
+                        <Text size="xs" c={navText} style={{ opacity: 0.65, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+                          Current Section
+                        </Text>
+                        <Text c={navText} fw={700} size="sm" truncate="end">
+                          {activeSectionMeta.label}
+                        </Text>
+                      </Stack>
+                    </Group>
+                    <Box
+                      style={{
+                        width: rem(28),
+                        height: rem(28),
+                        borderRadius: rem(999),
+                        display: 'grid',
+                        placeItems: 'center',
+                        background: 'rgba(255,255,255,0.08)',
+                        color: navText,
+                        flexShrink: 0,
+                      }}
+                    >
+                      <IconChevronDown size={16} />
+                    </Box>
+                  </Group>
+                </UnstyledButton>
+              </Popover.Target>
+
+              <Popover.Dropdown
+                style={{
+                  background: navBackground,
+                  border: '1px solid rgba(255,255,255,0.08)',
+                  borderRadius: rem(18),
+                  padding: rem(8),
+                }}
+              >
+                <Stack gap={6}>
+                  {sections.map((section) => {
+                    const isActive = section.label === activeSection
+                    const Icon = section.icon
+                    return (
+                      <UnstyledButton
+                        key={section.label}
+                        onClick={() => {
+                          setActiveSection(section.label)
+                          setMobileSectionsOpened(false)
+                        }}
+                        style={{
+                          width: '100%',
+                          padding: `${rem(10)} ${rem(12)}`,
+                          borderRadius: rem(14),
+                          background: isActive
+                            ? 'linear-gradient(180deg, rgba(255,255,255,0.14), rgba(255,255,255,0.08))'
+                            : 'transparent',
+                          border: isActive
+                            ? '1px solid rgba(255,255,255,0.12)'
+                            : '1px solid transparent',
+                        }}
+                      >
+                        <Group gap="sm" wrap="nowrap">
+                          <Box
+                            style={{
+                              width: rem(32),
+                              height: rem(32),
+                              borderRadius: rem(10),
+                              display: 'grid',
+                              placeItems: 'center',
+                              background: isActive ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.05)',
+                              color: navText,
+                              flexShrink: 0,
+                            }}
+                          >
+                            <Icon size={15} />
+                          </Box>
+                          <Stack gap={0} style={{ minWidth: 0 }}>
+                            <Text c={navText} fw={700} size="sm">
+                              {section.label}
+                            </Text>
+                            <Text size="xs" c={navText} style={{ opacity: 0.66 }}>
+                              {section.label === 'Appearance'
+                                ? 'Theme, profiles, and color mode'
+                                : section.label === 'Account'
+                                  ? 'Profile details and security'
+                                  : `${section.label} preferences`}
+                            </Text>
+                          </Stack>
+                        </Group>
+                      </UnstyledButton>
+                    )
+                  })}
+                </Stack>
+              </Popover.Dropdown>
+            </Popover>
+          ) : (
+            <>
+              <Stack gap="xs" mt={rem(24)}>
                 {sections.map((section) => {
                   const Icon = section.icon
                   return (
@@ -600,17 +389,7 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
                       <Group gap="sm">
                         <Icon size={20} color={navText} />
                         <Text c={navText} size="sm" fw={500}>
-                          {section.label === 'Account'
-                            ? t('topbar.account')
-                            : section.label === 'Notifications'
-                              ? t('topbar.notifications')
-                              : section.label === 'Voice & Video'
-                                ? 'Voice & Video'
-                                : section.label === 'Appearance'
-                                  ? 'Appearance'
-                                  : section.label === 'Integrations'
-                                    ? 'Integrations'
-                                    : t('settings.language.title')}
+                          {section.label}
                         </Text>
                       </Group>
                     </Box>
@@ -618,7 +397,6 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
                 })}
               </Stack>
 
-              {/* Logout Button */}
               <Box
                 onClick={handleLogout}
                 style={{
@@ -636,7 +414,7 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
                 <Group gap="sm">
                   <IconX size={20} color={navText} />
                   <Text c={navText} size="sm" fw={500}>
-                    {t('common.logout')}
+                    Logout
                   </Text>
                 </Group>
               </Box>
@@ -648,7 +426,12 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
         <ScrollArea style={{ flex: 1, minHeight: 0 }}>
           <Box
             style={{
-              padding: rem(isMobile ? 16 : 40),
+              minHeight: isMobile ? 'calc(100vh - 88px)' : '100%',
+            }}
+          >
+          <Box
+            style={{
+              padding: rem(isMobile ? 18 : 40),
               backgroundColor: contentBackground,
               minHeight: '100%',
               color: contentText,
@@ -662,14 +445,14 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
           >
             {activeSection === 'Account' && (
               <Stack gap="xl">
-                <Group justify="space-between" align="start">
-                  <Group gap="lg">
-                    <Avatar size={100} radius="xl" color="brand">
+                <Group justify="space-between" align="start" wrap={isMobile ? 'wrap' : 'nowrap'}>
+                  <Group gap="lg" wrap={isMobile ? 'wrap' : 'nowrap'}>
+                    <Avatar size={isMobile ? 72 : 100} radius="xl" color="brand">
                       {name.charAt(0).toUpperCase()}
                     </Avatar>
                     <Box>
                       <Text size="xl" fw={600} mb="xs" c="var(--pitch-surface-text)">
-                        {t('topbar.account')}
+                        Account
                       </Text>
                       <Button leftSection={<IconUpload size={16} />} variant="light" size="xs">
                         Upload
@@ -703,47 +486,6 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
                   classNames={settingsInputClassNames}
                 />
 
-                <Box>
-                  <Text
-                    size="sm"
-                    fw={500}
-                    mb={8}
-                    c="var(--pitch-surface-text-dim)"
-                    className={inputClasses.label}
-                  >
-                    Phone number
-                  </Text>
-                  <Box className={classes.phoneField}>
-                    <Group justify="space-between" align="center" wrap="wrap" gap="md">
-                      <Box style={{ minWidth: 0, flex: 1 }}>
-                        <Text fw={500} c="var(--pitch-surface-text)">
-                          {hasVerifiedPhone
-                            ? phoneVerification?.phoneNumber
-                            : hasPendingPhone
-                              ? 'Verification pending'
-                              : 'Not connected'}
-                        </Text>
-                        <Text size="sm" c="var(--pitch-surface-text-dim)" mt={4}>
-                          {hasVerifiedPhone
-                            ? 'Connected for phone-based sessions.'
-                            : hasPendingPhone
-                              ? phoneStatusDescription
-                              : 'Add a mobile number for phone-based sessions.'}
-                        </Text>
-                      </Box>
-
-                      <Button
-                        onClick={openPhoneOverlay}
-                        variant="subtle"
-                        size="sm"
-                        loading={phoneStatusLoading}
-                      >
-                        {phoneActionLabel}
-                      </Button>
-                    </Group>
-                  </Box>
-                </Box>
-
                 <Select
                   label="Time Zone"
                   value={timezone}
@@ -758,7 +500,7 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
                   classNames={settingsInputClassNames}
                 />
 
-                <Group justify="space-between" mt="xl">
+                <Group justify="space-between" mt="xl" wrap="wrap">
                   <Text
                     size="sm"
                     c="var(--pitch-accent-strong)"
@@ -769,17 +511,23 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
                   >
                     Delete Account
                   </Text>
-                  <Button onClick={handleSave} size="md">
-                    {t('common.save')}
+                  <Button onClick={handleSave} size="md" fullWidth={isMobile}>
+                    Save
                   </Button>
                 </Group>
+
+                {isMobile ? (
+                  <Button variant="subtle" color="red" onClick={() => void handleLogout()} fullWidth>
+                    Logout
+                  </Button>
+                ) : null}
               </Stack>
             )}
 
             {activeSection === 'Notifications' && (
               <Stack gap="md">
                 <Text size="xl" fw={600} mb="md" c="var(--pitch-surface-text)">
-                  {t('topbar.notifications')}
+                  Notifications
                 </Text>
                 <Text c="var(--pitch-surface-text-dim)">Notification settings coming soon...</Text>
               </Stack>
@@ -801,12 +549,12 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
                     Color Mode
                   </Text>
                   <Text size="sm" c="var(--pitch-surface-text-dim)">
-                    Choose if PITCH’s appearance should be light or dark, or follow your device’s
+                    Choose if PITCH?s appearance should be light or dark, or follow your device?s
                     settings.
                   </Text>
                 </Stack>
 
-                <Group gap="xs">
+                <Group gap="xs" wrap="wrap">
                   {(['light', 'dark', 'system'] as const).map((mode) => (
                     <Button
                       key={mode}
@@ -923,7 +671,7 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
                   </Tabs.Panel>
 
                   <Tabs.Panel value="custom" pt="md">
-                    <Group gap="xs">
+                    <Group gap="xs" wrap="wrap">
                       <Tooltip label="Coming soon">
                         <span>
                           <Button
@@ -969,8 +717,8 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
                             backgroundColor: 'var(--pitch-input-bg)',
                           }}
                         >
-                          <Group justify="space-between" align="center">
-                            <Group gap="sm">
+                          <Group justify="space-between" align="center" wrap="wrap">
+                            <Group gap="sm" wrap="nowrap">
                               <Box
                                 style={{
                                   width: rem(28),
@@ -1062,17 +810,19 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
                       <Text size="sm" fw={600} c="var(--pitch-surface-text)">
                         Save as profile
                       </Text>
-                      <Group align="flex-end">
+                      <Group align="flex-end" wrap="wrap">
                         <TextInput
                           label="Profile name"
                           value={profileName}
                           onChange={(event) => setProfileName(event.currentTarget.value)}
                           size="sm"
                           classNames={settingsInputClassNames}
+                          style={{ flex: 1, minWidth: isMobile ? '100%' : 220 }}
                         />
                         <Button
                           onClick={() => createProfileFromDraft(profileName)}
                           disabled={!profileName.trim()}
+                          fullWidth={isMobile}
                         >
                           Save
                         </Button>
@@ -1083,218 +833,38 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
               </Stack>
             )}
 
-            {activeSection === 'Integrations' && (
-              <Stack gap="md">
-                <Text size="xl" fw={600} mb="xs" c="var(--pitch-surface-text)">
-                  Integrations
-                </Text>
-                <Text size="sm" c="var(--pitch-surface-text-dim)" mb="sm">
-                  Connect your work calendars so PITCH can read upcoming meetings and suggest
-                  tailored practice sessions.
-                </Text>
-                <CalendarConnectCards />
-              </Stack>
-            )}
-
             {activeSection === 'Language' && (
-              <Stack gap="md">
-                <Text size="xl" fw={600} mb="md" c="var(--pitch-surface-text)">
-                  {t('settings.language.title')}
+              <Stack gap="lg">
+                <Text size="xl" fw={600} mb="xs" c="var(--pitch-surface-text)">
+                  Language
                 </Text>
-                <Text c="var(--pitch-surface-text-dim)">{t('settings.language.description')}</Text>
+                <Text c="var(--pitch-surface-text-dim)">
+                  Choose the language used across PITCH and as the default for new training
+                  sessions.
+                </Text>
                 <Select
-                  data-i18n-skip="true"
-                  label={t('settings.language.platformLabel')}
-                  value={locale}
-                  onChange={(value) => {
-                    if (value) {
-                      setLocale(value)
-                    }
-                  }}
-                  data={localeOptions.map((option) => ({
-                    value: option.value,
-                    label: `${option.nativeLabel} (${option.value})`,
-                  }))}
+                  label="Platform language"
+                  value={platformLanguage}
+                  onChange={(value) => setPlatformLanguage(value || 'English')}
+                  data={['English']}
                   allowDeselect={false}
+                  size="md"
                   classNames={settingsInputClassNames}
                 />
                 <Text size="sm" c="var(--pitch-surface-text-dim)">
-                  {t('settings.language.defaultSessionDescription')}
+                  This language will be used by default.
                 </Text>
-                <Text size="sm" c={localeSaveError ? 'red' : 'var(--pitch-surface-text-dim)'}>
-                  {localeSaveError ??
-                    (isSavingLocale ? t('settings.language.saving') : t('settings.language.saved'))}
-                </Text>
+                <Group justify="flex-end">
+                  <Button onClick={handleSave} size="md" fullWidth={isMobile}>
+                    Save
+                  </Button>
+                </Group>
               </Stack>
             )}
           </Box>
+          </Box>
         </ScrollArea>
       </Group>
-
-      <Modal
-        opened={phoneOverlayOpened}
-        onClose={closePhoneOverlay}
-        centered
-        withCloseButton
-        title={phoneOverlayStep === 'number' ? 'Add phone number' : 'Verify phone number'}
-        size="sm"
-        styles={{
-          content: {
-            backgroundColor: contentBackground,
-          },
-          header: {
-            backgroundColor: contentBackground,
-          },
-        }}
-      >
-        <Stack
-          gap="lg"
-          style={{
-            color: contentText,
-            ['--pitch-surface-text' as string]: contentText,
-            ['--pitch-surface-text-dim' as string]: contentMuted,
-            ['--pitch-input-bg' as string]: inputBackground,
-            ['--pitch-input-text' as string]: contentText,
-            ['--pitch-input-placeholder' as string]: inputPlaceholder,
-            ['--pitch-border' as string]: inputBorder,
-          }}
-        >
-          {phoneOverlayStep === 'number' ? (
-            <>
-              <Box>
-                <Text fw={600} c="var(--pitch-surface-text)">
-                  Add a mobile number
-                </Text>
-                <Text size="sm" c="var(--pitch-surface-text-dim)" mt={4}>
-                  We&apos;ll text you a 6-digit verification code right away.
-                </Text>
-              </Box>
-
-              <Box>
-                <Text
-                  size="sm"
-                  fw={500}
-                  mb={8}
-                  c="var(--pitch-surface-text-dim)"
-                  className={inputClasses.label}
-                >
-                  Mobile number
-                </Text>
-                <Group gap="sm" wrap="nowrap" align="flex-end">
-                  <Select
-                    aria-label="Country code"
-                    data={PHONE_COUNTRY_OPTIONS}
-                    value={phoneCountryCode}
-                    onChange={handlePhoneCountryCodeChange}
-                    allowDeselect={false}
-                    size="md"
-                    w={190}
-                    classNames={settingsInputClassNames}
-                  />
-                  <TextInput
-                    aria-label="Phone number"
-                    placeholder="555 123 4567"
-                    value={phoneLocalNumber}
-                    onChange={(event) => handlePhoneLocalNumberChange(event.currentTarget.value)}
-                    size="md"
-                    classNames={settingsInputClassNames}
-                    style={{ flex: 1 }}
-                  />
-                </Group>
-              </Box>
-
-              {phoneError && (
-                <Alert variant="light" color="red" icon={<IconAlertCircle size={16} />} radius="md">
-                  {phoneError}
-                </Alert>
-              )}
-
-              <Group justify="space-between">
-                <Button variant="subtle" onClick={closePhoneOverlay}>
-                  Cancel
-                </Button>
-                <Button
-                  onClick={() => void handleRequestPhoneVerification()}
-                  loading={phoneActionLoading}
-                >
-                  Confirm
-                </Button>
-              </Group>
-            </>
-          ) : (
-            <>
-              <Box>
-                <Text fw={600} c="var(--pitch-surface-text)">
-                  Please enter verification code below
-                </Text>
-                <Text size="sm" c="var(--pitch-surface-text-dim)" mt={4}>
-                  {phoneVerification?.pendingPhoneNumber
-                    ? `We sent a code to ${phoneVerification.pendingPhoneNumber}.`
-                    : 'Enter the 6-digit code we just sent.'}
-                </Text>
-              </Box>
-
-              <PinInput
-                data-testid="phone-code-input"
-                length={6}
-                type="number"
-                oneTimeCode
-                size="lg"
-                value={verificationCode}
-                onChange={setVerificationCode}
-                styles={{
-                  root: { justifyContent: 'space-between', gap: rem(10) },
-                  input: {
-                    width: rem(48),
-                    height: rem(56),
-                    borderRadius: rem(14),
-                    border: '1px solid var(--pitch-border)',
-                    backgroundColor: 'var(--pitch-input-bg)',
-                    color: 'var(--pitch-input-text)',
-                    fontSize: rem(22),
-                    fontWeight: 700,
-                  },
-                }}
-              />
-
-              {typeof phoneVerification?.remainingAttempts === 'number' && (
-                <Text size="sm" c="var(--pitch-surface-text-dim)">
-                  {phoneVerification.remainingAttempts} attempt
-                  {phoneVerification.remainingAttempts === 1 ? '' : 's'} remaining
-                </Text>
-              )}
-
-              {phoneError && (
-                <Alert variant="light" color="red" icon={<IconAlertCircle size={16} />} radius="md">
-                  {phoneError}
-                </Alert>
-              )}
-
-              <Group justify="space-between" align="center">
-                <Button
-                  variant="subtle"
-                  onClick={() => void handleResendPhoneVerification()}
-                  loading={phoneActionLoading}
-                  disabled={
-                    isResendCoolingDown ||
-                    (typeof phoneVerification?.remainingSends === 'number' &&
-                      phoneVerification.remainingSends <= 0)
-                  }
-                >
-                  {isResendCoolingDown ? 'Wait to resend' : 'Resend code'}
-                </Button>
-                <Button
-                  onClick={() => void handleVerifyPhoneCode()}
-                  loading={phoneActionLoading}
-                  disabled={verificationCode.trim().length !== 6}
-                >
-                  Verify code
-                </Button>
-              </Group>
-            </>
-          )}
-        </Stack>
-      </Modal>
     </Modal>
   )
 }

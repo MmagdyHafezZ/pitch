@@ -95,7 +95,7 @@ export function LoadingScreen() {
           <div
             style={{
               position: 'absolute',
-              bottom: -16,
+              bottom: -36,
               left: '50%',
               transform: 'translateX(-50%)',
               width: 100,
@@ -107,10 +107,10 @@ export function LoadingScreen() {
             }}
           />
           <Image
-            src="/pitchMascot.png"
+            src="/loadingMascot.png"
             alt="PITCH"
-            width={170}
-            height={200}
+            width={270}
+            height={300}
             priority
             style={{
               objectFit: 'contain',
