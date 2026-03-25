@@ -24,7 +24,7 @@
     "test:cov": "pnpm --filter api test:cov",
     "test:coverage": "pnpm --filter web test:coverage",
     "test:all": "pnpm --filter api test:all",
-    "postinstall": "bash ./scripts/install-detect-secrets.sh",
+    "postinstall": "sh ./scripts/install-detect-secrets.sh",
     "prepare": "husky install",
     "pre-commit": "lint-staged",
     "commit": "cz",
