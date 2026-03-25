@@ -13,6 +13,7 @@ import {
 import { Dispatch, SetStateAction, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { WeekCalendar } from '@/components/ui/WeekCalendar'
+import { CoinQuotaWidget } from '@/components/ui/CoinQuotaWidget'
 import { SettingsModal } from './SettingsModal'
 import classes from './AppSideBar.module.css'
 import { useI18n } from '@/features/i18n'
@@ -35,6 +36,7 @@ type Props = {
   mainLinks?: SidebarLink[]
   secondaryLinks?: SidebarLink[]
   onNavigate?: () => void
+  teamId?: string | null
 }
 
 const DEFAULT_MAIN: SidebarLink[] = [
@@ -53,6 +55,7 @@ export function AppSidebar({
   showTeamConfig = true,
   mainLinks = DEFAULT_MAIN,
   onNavigate,
+  teamId,
 }: Props) {
   const router = useRouter()
   const { t } = useI18n()
@@ -125,20 +128,18 @@ export function AppSidebar({
                 }}
               />
             ))}
-            <Box
-              mt="auto"
-              pt="lg"
-              mx="0"
-              pb={10}
-              style={{
-                width: '100%',
-                background: 'var(--pitch-nav-bg, var(--mantine-color-nav-9))',
-                borderRadius: 12,
-                border: '1px solid var(--pitch-nav-text-dim)',
-                overflow: 'hidden',
-              }}
-            >
-              <WeekCalendar value={selectedDate} onChange={(date) => setSelectedDate(date)} />
+            <Box mt="auto" pt="lg" mx="0" pb={10} style={{ width: '100%' }}>
+              <Box
+                style={{
+                  background: 'var(--pitch-nav-bg, var(--mantine-color-nav-9))',
+                  borderRadius: 12,
+                  border: '1px solid var(--pitch-nav-text-dim)',
+                  overflow: 'hidden',
+                }}
+              >
+                <WeekCalendar value={selectedDate} onChange={(date) => setSelectedDate(date)} />
+              </Box>
+              <CoinQuotaWidget teamId={teamId} />
             </Box>
           </Stack>
         </Box>

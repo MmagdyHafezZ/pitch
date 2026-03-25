@@ -591,11 +591,19 @@ export const api = {
       const queryString = query.toString()
       return apiRequest<any>(`/simulation/sessions?${queryString}`)
     },
-    create: (data: any) =>
-      apiRequest<any>('/simulation/sessions', {
+    create: async (data: any) => {
+      const response = await apiRequest<any>('/simulation/sessions', {
         method: 'POST',
         body: JSON.stringify(data),
-      }),
+      })
+
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['coins', 'my-balance'] }),
+        queryClient.invalidateQueries({ queryKey: ['coins', 'balance'] }),
+      ])
+
+      return response
+    },
     update: (id: string, data: any) =>
       apiRequest<any>(`/simulation/sessions/${id}`, {
         method: 'PUT',
@@ -603,11 +611,19 @@ export const api = {
       }),
     timeline: (id: string, limit?: number) =>
       apiRequest<any>(`/simulation/sessions/${id}/timeline${limit ? `?limit=${limit}` : ''}`),
-    end: (id: string, data?: { reason?: string }) =>
-      apiRequest<any>(`/simulation/sessions/${id}/end`, {
+    end: async (id: string, data?: { reason?: string }) => {
+      const response = await apiRequest<any>(`/simulation/sessions/${id}/end`, {
         method: 'POST',
         body: JSON.stringify(data || {}),
-      }),
+      })
+
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['coins', 'my-balance'] }),
+        queryClient.invalidateQueries({ queryKey: ['coins', 'balance'] }),
+      ])
+
+      return response
+    },
     restart: (id: string, data?: { reason?: string }) =>
       apiRequest<any>(`/simulation/sessions/${id}/restart`, {
         method: 'POST',
@@ -809,6 +825,42 @@ export const api = {
         apiRequestRoot<{ success: boolean }>(`/calendar/suggestions/${sessionId}`, {
           method: 'DELETE',
         }),
+    },
+  },
+
+  coins: {
+    balance: (teamId: string) =>
+      apiRequest<
+        | { ok: false; reason: 'NO_ACTIVE_SUBSCRIPTION' }
+        | { ok: true; teamId: string; periodKey: string; allowance: number; remaining: number }
+      >(`/coins/balance?teamId=${encodeURIComponent(teamId)}`),
+    myBalance: () =>
+      apiRequest<{
+        ok: true
+        userId: string
+        periodKey: string
+        allowance: number
+        remaining: number
+      }>('/coins/my-balance'),
+    sessionEstimate: (params: {
+      model?: string
+      provider?: string
+      sessionType: string
+      durationMinutes?: number
+    }) => {
+      const qs = new URLSearchParams({ sessionType: params.sessionType })
+      if (params.model) qs.set('model', params.model)
+      if (params.provider) qs.set('provider', params.provider)
+      if (params.durationMinutes != null) qs.set('durationMinutes', String(params.durationMinutes))
+      return apiRequest<{
+        estimatedCoins: number
+        estimatedCostUsd: number
+        coinPriceUsd: number
+        markupMultiplier: number
+        model: string
+        provider: string
+        durationMinutes: number
+      }>(`/coins/session-estimate?${qs.toString()}`)
     },
   },
 
