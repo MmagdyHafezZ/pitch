@@ -6,6 +6,7 @@ import { AuthGatewayController } from './controllers/userManagement/auth-gateway
 import { TeamGatewayController } from './controllers/userManagement/team-gateway.controller';
 import { PlanGatewayController } from './controllers/userManagement/plans.controller';
 import { SubscriptionGatewayController } from './controllers/userManagement/subscription.controller';
+import { StudioAccessGatewayController } from './controllers/userManagement/studio-access-gateway.controller';
 import { SalesforceGatewayController } from './controllers/crm/salesforce-gateway.controller';
 import { SessionGatewayController } from './controllers/simulation/session-gateway.controller';
 import { ScenarioGatewayController } from './controllers/simulation/scenario-gateway.controller';
@@ -70,6 +71,7 @@ import { CoinsGatewayController } from './controllers/userManagement/coins-gatew
     TeamGatewayController,
     PlanGatewayController,
     SubscriptionGatewayController,
+    StudioAccessGatewayController,
     SalesforceGatewayController,
     TtsGatewayController,
     SessionGatewayController,

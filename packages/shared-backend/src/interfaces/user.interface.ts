@@ -15,10 +15,27 @@ export interface User {
   phoneVerifiedAt?: Date | null
   settings?: UserSettings | null
   isActive: boolean
+  hasStudioAccess?: boolean
+  isSystemAdmin?: boolean
   createdAt: Date
   updatedAt: Date
   oauthAccounts?: OAuthAccount[]
   memberships?: TeamMembership[]
+}
+
+export type StudioAccessStatus = 'pending' | 'approved' | 'denied'
+
+export interface StudioAccessSettings {
+  status?: StudioAccessStatus
+  requestedAt?: string
+  reviewedAt?: string
+  reviewedByUserId?: string
+  reviewedByEmail?: string
+  quota?: number
+  role?: Role
+  teamId?: string
+  planId?: string
+  subscriptionId?: string
 }
 
 export interface PhoneVerificationStatus {
@@ -91,6 +108,23 @@ export interface UserSettings {
       linkedIn?: string
     }
   }
+  studioAccess?: StudioAccessSettings
+}
+
+export interface StudioAccessRequestSummary {
+  userId: string
+  email: string
+  name: string
+  status: StudioAccessStatus
+  requestedAt: string
+  reviewedAt?: string
+  reviewedByUserId?: string
+  reviewedByEmail?: string
+  quota?: number
+  role?: Role
+  teamId?: string
+  planId?: string
+  subscriptionId?: string
 }
 
 export interface UserSummary {
@@ -252,6 +286,13 @@ export interface VerifyPhoneVerificationDto {
 
 export interface UpdateMySettingsDto {
   settings: UserSettings
+}
+
+export interface RequestStudioAccessDto {}
+
+export interface ReviewStudioAccessRequestDto {
+  quota: number
+  role?: Role
 }
 
 export interface CreateTeamDto {
