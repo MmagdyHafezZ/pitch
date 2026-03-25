@@ -93,6 +93,7 @@ interface Message {
   action?: UIAction
   actionState?: ActionState
   attachments?: Attachment[]
+  quickReplies?: string[]
   /** Indices of sequence steps that have been successfully completed */
   completedStepIndices?: number[]
 }
@@ -165,6 +166,7 @@ const sanitizeMessagesForPersistence = (messages: Message[]): Message[] => {
       content: message.content ?? '',
       ...(message.action ? { action: message.action } : {}),
       ...(message.actionState ? { actionState: message.actionState } : {}),
+      ...(message.quickReplies?.length ? { quickReplies: message.quickReplies } : {}),
       ...(message.completedStepIndices?.length
         ? { completedStepIndices: message.completedStepIndices }
         : {}),
@@ -235,6 +237,62 @@ const compactPersistedState = (state: PersistedCoachChatState): PersistedCoachCh
   ),
 })
 
+const extractInlineQuickReplies = (
+  content: string
+): { content: string; quickReplies?: string[] } => {
+  const normalized = content.trimEnd()
+  const lines = normalized.split('\n')
+  const lastLine = lines[lines.length - 1]?.trim() ?? ''
+  const bulletLines = lines.filter((line) => /^[-*•]\s+/.test(line.trim()))
+
+  if (bulletLines.length >= 2 && bulletLines.length <= 5) {
+    const quickReplies = bulletLines
+      .map((line) =>
+        line
+          .trim()
+          .replace(/^[-*•]\s+/, '')
+          .trim()
+      )
+      .filter(Boolean)
+
+    if (quickReplies.length >= 2) {
+      const contentWithoutBullets = lines
+        .filter((line) => !/^[-*•]\s+/.test(line.trim()))
+        .join('\n')
+        .trimEnd()
+
+      return {
+        content: contentWithoutBullets,
+        quickReplies,
+      }
+    }
+  }
+
+  if (!lastLine.startsWith('[') || !lastLine.endsWith(']')) {
+    return { content }
+  }
+
+  const inner = lastLine.slice(1, -1).trim()
+  if (!inner) {
+    return { content }
+  }
+
+  const options = inner
+    .split(/\s*,\s*/)
+    .map((option) => option.trim())
+    .filter(Boolean)
+
+  if (options.length < 2 || options.length > 5) {
+    return { content }
+  }
+
+  const nextContent = lines.slice(0, -1).join('\n').trimEnd()
+  return {
+    content: nextContent,
+    quickReplies: options,
+  }
+}
+
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export function CoachChatWidget({ context }: CoachChatWidgetProps) {
@@ -255,9 +313,6 @@ export function CoachChatWidget({ context }: CoachChatWidgetProps) {
   )
   /** Live status text shown while a sequence step is executing (e.g. "Clicking Create Session button…") */
   const [executionStatus, setExecutionStatus] = useState<string | null>(null)
-  /** Quick-reply pill buttons surfaced by the AI's show_options tool call */
-  const [quickReplies, setQuickReplies] = useState<string[]>([])
-
   const router = useRouter()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const restoredPersistenceKeyRef = useRef<string | null>(null)
@@ -1056,7 +1111,6 @@ export function CoachChatWidget({ context }: CoachChatWidgetProps) {
     const text = (overrideText ?? input).trim()
     const readyAttachments = attachments.filter((attachment) => !attachment.uploading)
     if ((!text && readyAttachments.length === 0) || streaming || hasUploading) return
-    setQuickReplies([])
 
     const nextSavedContextAttachments = mergeSavedContextAttachments(
       savedContextAttachments.filter((attachment) => !attachment.uploading),
@@ -1068,7 +1122,10 @@ export function CoachChatWidget({ context }: CoachChatWidgetProps) {
       content: text,
       attachments: readyAttachments.length > 0 ? [...readyAttachments] : undefined,
     }
-    const nextMessages = [...messages, userMsg]
+    const nextMessages = [
+      ...messages.map((message) => ({ ...message, quickReplies: undefined })),
+      userMsg,
+    ]
     const nextContext = {
       ...context,
       recentTurns: includeRecentTurns ? context?.recentTurns : undefined,
@@ -1125,13 +1182,26 @@ export function CoachChatWidget({ context }: CoachChatWidgetProps) {
                 suggestions?: string[]
               }
               if (parsed.suggestions?.length) {
-                setQuickReplies(parsed.suggestions)
+                setMessages((prev) => {
+                  const updated = [...prev]
+                  const last = updated[updated.length - 1]
+                  updated[updated.length - 1] = {
+                    ...last,
+                    quickReplies: parsed.suggestions,
+                  }
+                  return updated
+                })
               }
               if (parsed.delta) {
                 content += parsed.delta
                 setMessages((prev) => {
                   const updated = [...prev]
-                  updated[updated.length - 1] = { role: 'assistant', content }
+                  const last = updated[updated.length - 1]
+                  updated[updated.length - 1] = {
+                    ...last,
+                    role: 'assistant',
+                    content,
+                  }
                   return updated
                 })
               }
@@ -1202,7 +1272,6 @@ export function CoachChatWidget({ context }: CoachChatWidgetProps) {
     setAttachments([])
     setInput('')
     setExecutionStatus(null)
-    setQuickReplies([])
   }
 
   // ─── Derived ─────────────────────────────────────────────────────────────
@@ -1646,8 +1715,14 @@ export function CoachChatWidget({ context }: CoachChatWidgetProps) {
             >
               <Stack gap="sm" p="md">
                 {messages.map((msg, i) => {
+                  const parsedAssistantMessage =
+                    msg.role === 'assistant' && !msg.quickReplies
+                      ? extractInlineQuickReplies(msg.content)
+                      : { content: msg.content, quickReplies: msg.quickReplies }
                   const thisIsStreaming = isLastStreaming && i === messages.length - 1
-                  const hideBubble = !msg.content && !thisIsStreaming && msg.role === 'assistant'
+                  const visibleContent = parsedAssistantMessage.content
+                  const visibleQuickReplies = parsedAssistantMessage.quickReplies
+                  const hideBubble = !visibleContent && !thisIsStreaming && msg.role === 'assistant'
                   return (
                     <Box
                       key={i}
@@ -1742,7 +1817,7 @@ export function CoachChatWidget({ context }: CoachChatWidgetProps) {
                                       ),
                                     }}
                                   >
-                                    {msg.content}
+                                    {visibleContent}
                                   </ReactMarkdown>
                                   {thisIsStreaming && (
                                     <span
@@ -1959,6 +2034,23 @@ export function CoachChatWidget({ context }: CoachChatWidgetProps) {
                           )}
                         </Box>
                       )}
+
+                      {visibleQuickReplies && visibleQuickReplies.length > 0 && (
+                        <Group mt={8} gap={6} wrap="wrap">
+                          {visibleQuickReplies.map((option, qi) => (
+                            <Button
+                              key={`${option}-${qi}`}
+                              size="xs"
+                              variant="light"
+                              color="blue"
+                              radius="xl"
+                              onClick={() => void send(option)}
+                            >
+                              {option}
+                            </Button>
+                          ))}
+                        </Group>
+                      )}
                     </Box>
                   )
                 })}
@@ -2007,27 +2099,6 @@ export function CoachChatWidget({ context }: CoachChatWidgetProps) {
                   >
                     {att.uploading ? `${att.name} (uploading…)` : att.name}
                   </Badge>
-                ))}
-              </Group>
-            )}
-
-            {/* Quick-reply pills from show_options tool */}
-            {quickReplies.length > 0 && !streaming && (
-              <Group px="md" pb={6} pt={4} gap={6} wrap="wrap" style={{ flexShrink: 0 }}>
-                {quickReplies.map((option, qi) => (
-                  <Button
-                    key={qi}
-                    size="xs"
-                    variant="light"
-                    color="blue"
-                    radius="xl"
-                    onClick={() => {
-                      setQuickReplies([])
-                      void send(option)
-                    }}
-                  >
-                    {option}
-                  </Button>
                 ))}
               </Group>
             )}
