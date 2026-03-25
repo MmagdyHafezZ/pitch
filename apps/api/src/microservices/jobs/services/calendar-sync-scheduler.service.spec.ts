@@ -1,3 +1,4 @@
+/* eslint-disable */
 import { of } from 'rxjs';
 import { CalendarSyncSchedulerService } from './calendar-sync-scheduler.service';
 import {
