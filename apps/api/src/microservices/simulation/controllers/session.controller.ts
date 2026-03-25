@@ -208,13 +208,20 @@ export class SessionController {
   @MessagePattern(SIMULATION_SERVICE_PATTERNS.DELETE_SESSION)
   async deleteSession(
     @Payload()
-    data: { id: string } & userClaimsInterface.MessageWithUserClaims,
+    data: {
+      id: string;
+      isAdmin?: boolean;
+    } & userClaimsInterface.MessageWithUserClaims,
   ) {
     try {
       this.logger.log(
         `Deleting session ${data.id} - Requested by: ${data.userClaims?.email || 'unknown'}`,
       );
-      return await this.sessionService.remove(data.id, data.userClaims?.id);
+      return await this.sessionService.remove(
+        data.id,
+        data.userClaims?.id,
+        data.isAdmin === true,
+      );
     } catch (error) {
       this.logger.error(`Failed to delete session ${data.id}`, error);
       throw toRpcException(error);

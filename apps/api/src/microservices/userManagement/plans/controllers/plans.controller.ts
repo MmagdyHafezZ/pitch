@@ -104,7 +104,7 @@ export class PlanController {
   async getPlans(@Payload() data: userClaimsInterface.MessageWithUserClaims) {
     try {
       this.logger.log(
-        `Getting plans - Requested by: ${data.userClaims.email} (${data.userClaims.id})`,
+        `Getting plans - Requested by: ${data.userClaims?.email ?? 'admin'} (${data.userClaims?.id ?? 'N/A'})`,
       );
       return await this.planService.findAll();
     } catch (error) {

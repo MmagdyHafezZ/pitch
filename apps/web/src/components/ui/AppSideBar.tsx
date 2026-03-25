@@ -9,14 +9,16 @@ import {
   IconHelp,
   IconSettings,
   IconTrophy,
+  IconShield,
 } from '@tabler/icons-react'
-import { Dispatch, SetStateAction, useState } from 'react'
+import { Dispatch, SetStateAction, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { WeekCalendar } from '@/components/ui/WeekCalendar'
 import { CoinQuotaWidget } from '@/components/ui/CoinQuotaWidget'
 import { SettingsModal } from './SettingsModal'
 import classes from './AppSideBar.module.css'
 import { useI18n } from '@/features/i18n'
+import { useAdminStore } from '@/app/admin/stores/admin.store'
 
 export type SidebarLink = {
   icon: React.ComponentType<{ size?: number }>
@@ -60,6 +62,12 @@ export function AppSidebar({
   const router = useRouter()
   const { t } = useI18n()
   const [settingsOpened, setSettingsOpened] = useState(false)
+  const { isAdmin, check } = useAdminStore()
+
+  useEffect(() => {
+    check()
+  }, [check])
+
   const resolvedMainLinks = showTeamConfig
     ? mainLinks
     : mainLinks.filter((link) => link.label !== 'Team Config')
@@ -129,7 +137,32 @@ export function AppSidebar({
               />
             ))}
             <Box mt="auto" pt="lg" mx="0" pb={10} style={{ width: '100%' }}>
-              <Box
+              
+            {isAdmin === true && (
+              <>
+                <Divider my="xs" color="var(--pitch-nav-text-dim)" />
+                <NavLink
+                  onClick={() => {
+                    router.push('/admin')
+                    onNavigate?.()
+                  }}
+                  leftSection={<IconShield size={18} />}
+                  label={
+                    <Text size="sm" className={classes.navLabel}>
+                      Admin
+                    </Text>
+                  }
+                  variant="subtle"
+                  classNames={{
+                    root: classes.navLink,
+                    section: classes.navSection,
+                    body: classes.navBody,
+                    label: classes.navLabel,
+                  }}
+                />
+              </>
+            )}
+            <Box
                 style={{
                   background: 'var(--pitch-nav-bg, var(--mantine-color-nav-9))',
                   borderRadius: 12,
@@ -140,7 +173,6 @@ export function AppSidebar({
                 <WeekCalendar value={selectedDate} onChange={(date) => setSelectedDate(date)} />
               </Box>
               <CoinQuotaWidget teamId={teamId} />
-            </Box>
           </Stack>
         </Box>
       </Box>

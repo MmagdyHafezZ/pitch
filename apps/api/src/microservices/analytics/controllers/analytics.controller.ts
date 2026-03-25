@@ -24,6 +24,11 @@ export class AnalyticsController {
     private readonly reportService: ReportService,
   ) {}
 
+  @MessagePattern('health')
+  health() {
+    return { status: 'ok', service: 'analytics' };
+  }
+
   // ===== Metrics =====
   @MessagePattern('analytics.metrics.record')
   async recordMetric(@Payload() data: RecordMetricDto) {

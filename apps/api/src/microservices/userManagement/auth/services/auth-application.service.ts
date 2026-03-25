@@ -135,6 +135,10 @@ export class AuthApplicationService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
+    if (!user.isActive) {
+      throw new UnauthorizedException('Account is deactivated');
+    }
+
     const oauthAccounts = await this.authRepository.getOAuthAccounts(user.id);
     if (oauthAccounts.length === 0) {
       throw new UnauthorizedException(
@@ -211,6 +215,10 @@ export class AuthApplicationService {
 
       if (user.id !== payload.sub) {
         throw new UnauthorizedException('Token user mismatch');
+      }
+
+      if (!user.isActive) {
+        throw new UnauthorizedException('Account is deactivated');
       }
 
       const tokens = this.generateTokens(user);
@@ -398,6 +406,10 @@ export class AuthApplicationService {
     createdAt: Date;
     updatedAt: Date;
   }): Promise<AuthResponseDto> {
+    if (!user.isActive) {
+      throw new UnauthorizedException('Account is deactivated');
+    }
+
     const tokens = this.generateTokens(user);
 
     const expiresAt = new Date();
