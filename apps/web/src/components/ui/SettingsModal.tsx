@@ -23,6 +23,7 @@ import {
   Popover,
   ColorPicker,
   useComputedColorScheme,
+  UnstyledButton,
   Alert,
   PinInput,
 } from '@mantine/core'
@@ -39,12 +40,12 @@ import {
   IconShare2,
   IconDownload,
   IconSparkles,
+  IconChevronDown,
   IconCalendarEvent,
   IconAlertCircle,
 } from '@tabler/icons-react'
 import { CalendarConnectCards } from '@/features/calendar/components/CalendarConnectCards'
 import { modals } from '@mantine/modals'
-import { useMediaQuery } from '@mantine/hooks'
 import { useAuth, useAuthStore } from '@/features/auth'
 import { useRouter } from 'next/navigation'
 import { useAppearanceStore } from '@/lib/stores/appearance.store'
@@ -52,6 +53,7 @@ import { useI18n } from '@/features/i18n'
 import { api } from '@/lib/client'
 import type { ThemeTokens } from '@/lib/stores/appearance.store'
 import { getReadableMutedColor, getReadableTextColor, mixColors } from '@/lib/colors/contrast'
+import { useMediaQuery } from '@mantine/hooks'
 import classes from './SettingsModal.module.css'
 import inputClasses from './settingsInputs.module.css'
 
@@ -132,8 +134,8 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
   const setUser = useAuthStore((state) => state.setUser)
   const { locale, setLocale, localeOptions, t, isSavingLocale, localeSaveError } = useI18n()
   const computedColorScheme = useComputedColorScheme('light')
-  const isMobile = useMediaQuery('(max-width: 48em)')
   const isDark = computedColorScheme === 'dark'
+  const isMobile = useMediaQuery('(max-width: 48em)')
   const [activeSection, setActiveSection] = useState<SettingsSection>('Account')
   const [name, setName] = useState(user?.name ?? '')
   const [email, setEmail] = useState(user?.email ?? '')
@@ -214,6 +216,7 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
   const [activeTab, setActiveTab] = useState<'profiles' | 'custom'>('profiles')
   const [activePicker, setActivePicker] = useState<keyof ThemeTokens | null>(null)
   const [draggingPicker, setDraggingPicker] = useState(false)
+  const [mobileSectionsOpened, setMobileSectionsOpened] = useState(false)
 
   const syncPhoneInputState = (rawPhoneNumber: string | null | undefined) => {
     const parts = splitPhoneNumber(rawPhoneNumber)
@@ -314,6 +317,9 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
   const handleSave = () => {
     onClose()
   }
+
+  const activeSectionMeta =
+    sections.find((section) => section.label === activeSection) ?? sections[0]
 
   const openConfirmDelete = (id: string, name: string) => {
     modals.openConfirmModal({
@@ -416,7 +422,9 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
       setVerificationCode('')
     } catch (error) {
       setPhoneError(
-        error instanceof Error ? error.message : 'Unable to resend the verification code right now.'
+        error instanceof Error
+          ? error.message
+          : 'Unable to resend the verification code right now.'
       )
     } finally {
       setPhoneActionLoading(false)
@@ -465,123 +473,183 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
       opened={opened}
       onClose={onClose}
       size={isMobile ? '100%' : '800px'}
+      fullScreen={isMobile}
       padding={0}
       withCloseButton={false}
       styles={{
-        body: { padding: 0, height: isMobile ? 'calc(100dvh - 28px)' : 'min(80vh, 720px)' },
+        body: { padding: 0, height: isMobile ? '100vh' : 'min(80vh, 720px)' },
         content: {
-          borderRadius: rem(isMobile ? 10 : 12),
+          borderRadius: isMobile ? 0 : rem(12),
           overflow: 'hidden',
           backgroundColor: contentBackground,
+          height: isMobile ? '100vh' : undefined,
         },
       }}
     >
       <Group
         align="stretch"
         gap={0}
-        wrap="nowrap"
-        style={{ height: '100%', minHeight: 0, flexDirection: isMobile ? 'column' : 'row' }}
+        wrap={isMobile ? 'wrap' : 'nowrap'}
+        style={{
+          height: '100%',
+          minHeight: 0,
+          flexWrap: isMobile ? 'nowrap' : undefined,
+          flexDirection: isMobile ? 'column' : 'row',
+        }}
       >
-        {/* Left Sidebar */}
+        {/* Sidebar / Mobile Nav */}
         <Box
           style={{
             width: isMobile ? '100%' : 280,
             flexShrink: 0,
             backgroundColor: navBackground,
-            padding: isMobile ? `${rem(8)} ${rem(12)}` : rem(24),
+            padding: rem(isMobile ? 14 : 24),
             position: 'relative',
-            borderBottom: isMobile ? `1px solid ${inputBorder}` : undefined,
+            borderBottom: isMobile ? '1px solid rgba(255,255,255,0.08)' : undefined,
           }}
         >
-          {isMobile ? (
-            /* Mobile: icon grid nav — no scrolling, 3×2 grid */
-            <Box py={rem(8)} px={rem(12)} style={{ position: 'relative' }}>
-              <Group justify="flex-end" mb={rem(6)}>
-                <ActionIcon variant="subtle" size="sm" onClick={onClose}>
-                  <IconX size={16} color={navText} />
-                </ActionIcon>
-              </Group>
-              <SimpleGrid cols={3} spacing={rem(4)}>
-                {sections.map((section) => {
-                  const Icon = section.icon
-                  const isActive = activeSection === section.label
-                  const mobileLabel =
-                    section.label === 'Account'
-                      ? t('topbar.account')
-                      : section.label === 'Notifications'
-                        ? 'Alerts'
-                        : section.label === 'Voice & Video'
-                          ? 'Audio'
-                          : section.label === 'Appearance'
-                            ? 'Theme'
-                            : section.label === 'Integrations'
-                              ? 'Calendar'
-                              : t('settings.language.title')
-                  return (
-                    <Box
-                      key={section.label}
-                      onClick={() => setActiveSection(section.label)}
-                      style={{
-                        padding: `${rem(10)} ${rem(4)}`,
-                        borderRadius: rem(8),
-                        cursor: 'pointer',
-                        backgroundColor: isActive ? 'rgba(255,255,255,0.14)' : 'transparent',
-                        textAlign: 'center',
-                        transition: 'background-color 0.2s',
-                      }}
-                    >
-                      <Stack gap={rem(4)} align="center">
-                        <Box style={{ opacity: isActive ? 1 : 0.5, display: 'flex' }}>
-                          <Icon size={20} color={navText} />
-                        </Box>
-                        <Text
-                          c={navText}
-                          size="xs"
-                          fw={isActive ? 700 : 400}
-                          lh={1.2}
-                          ta="center"
-                          style={{ opacity: isActive ? 1 : 0.6 }}
-                        >
-                          {mobileLabel}
-                        </Text>
-                      </Stack>
-                    </Box>
-                  )
-                })}
-                {/* Logout tile */}
-                <Box
-                  onClick={handleLogout}
-                  style={{
-                    padding: `${rem(10)} ${rem(4)}`,
-                    borderRadius: rem(8),
-                    cursor: 'pointer',
-                    textAlign: 'center',
-                    transition: 'background-color 0.2s',
-                  }}
-                >
-                  <Stack gap={rem(4)} align="center">
-                    <IconX size={20} color="rgba(255,100,100,0.85)" />
-                    <Text c="rgba(255,100,100,0.85)" size="xs" fw={400} lh={1.2} ta="center">
-                      {t('common.logout')}
-                    </Text>
-                  </Stack>
-                </Box>
-              </SimpleGrid>
-            </Box>
-          ) : (
-            /* Desktop: vertical sidebar */
-            <>
-              <ActionIcon
-                variant="subtle"
-                color="white"
-                size="lg"
-                onClick={onClose}
-                style={{ position: 'absolute', top: 16, left: 16 }}
-              >
+            <Group justify="space-between" align="center" mb={isMobile ? 'sm' : 0}>
+              <Text c={navText} fw={700} size={isMobile ? 'md' : 'sm'}>
+                Settings
+              </Text>
+              <ActionIcon variant="subtle" color="white" size="lg" onClick={onClose}>
                 <IconX size={20} />
               </ActionIcon>
+            </Group>
 
-              <Stack gap="xs" mt={rem(40)}>
+          {isMobile ? (
+            <Popover
+              width="target"
+              position="bottom-start"
+              withArrow
+              shadow="md"
+              opened={mobileSectionsOpened}
+              onChange={setMobileSectionsOpened}
+            >
+              <Popover.Target>
+                <UnstyledButton
+                  onClick={() => setMobileSectionsOpened((opened) => !opened)}
+                  style={{
+                    width: '100%',
+                    padding: `${rem(10)} ${rem(12)}`,
+                    borderRadius: rem(16),
+                    border: '1px solid rgba(255,255,255,0.1)',
+                    background:
+                      'linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.04))',
+                    boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05)',
+                  }}
+                >
+                  <Group justify="space-between" align="center" wrap="nowrap">
+                    <Group gap="sm" wrap="nowrap" style={{ minWidth: 0 }}>
+                      <Box
+                        style={{
+                          width: rem(34),
+                          height: rem(34),
+                          borderRadius: rem(11),
+                          display: 'grid',
+                          placeItems: 'center',
+                          background: 'rgba(255,255,255,0.08)',
+                          color: navText,
+                          flexShrink: 0,
+                        }}
+                      >
+                        <activeSectionMeta.icon size={16} />
+                      </Box>
+                      <Stack gap={0} style={{ minWidth: 0 }}>
+                        <Text size="xs" c={navText} style={{ opacity: 0.65, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+                          Current Section
+                        </Text>
+                        <Text c={navText} fw={700} size="sm" truncate="end">
+                          {activeSectionMeta.label}
+                        </Text>
+                      </Stack>
+                    </Group>
+                    <Box
+                      style={{
+                        width: rem(28),
+                        height: rem(28),
+                        borderRadius: rem(999),
+                        display: 'grid',
+                        placeItems: 'center',
+                        background: 'rgba(255,255,255,0.08)',
+                        color: navText,
+                        flexShrink: 0,
+                      }}
+                    >
+                      <IconChevronDown size={16} />
+                    </Box>
+                  </Group>
+                </UnstyledButton>
+              </Popover.Target>
+
+              <Popover.Dropdown
+                style={{
+                  background: navBackground,
+                  border: '1px solid rgba(255,255,255,0.08)',
+                  borderRadius: rem(18),
+                  padding: rem(8),
+                }}
+              >
+                <Stack gap={6}>
+                  {sections.map((section) => {
+                    const isActive = section.label === activeSection
+                    const Icon = section.icon
+                    return (
+                      <UnstyledButton
+                        key={section.label}
+                        onClick={() => {
+                          setActiveSection(section.label)
+                          setMobileSectionsOpened(false)
+                        }}
+                        style={{
+                          width: '100%',
+                          padding: `${rem(10)} ${rem(12)}`,
+                          borderRadius: rem(14),
+                          background: isActive
+                            ? 'linear-gradient(180deg, rgba(255,255,255,0.14), rgba(255,255,255,0.08))'
+                            : 'transparent',
+                          border: isActive
+                            ? '1px solid rgba(255,255,255,0.12)'
+                            : '1px solid transparent',
+                        }}
+                      >
+                        <Group gap="sm" wrap="nowrap">
+                          <Box
+                            style={{
+                              width: rem(32),
+                              height: rem(32),
+                              borderRadius: rem(10),
+                              display: 'grid',
+                              placeItems: 'center',
+                              background: isActive ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.05)',
+                              color: navText,
+                              flexShrink: 0,
+                            }}
+                          >
+                            <Icon size={15} />
+                          </Box>
+                          <Stack gap={0} style={{ minWidth: 0 }}>
+                            <Text c={navText} fw={700} size="sm">
+                              {section.label}
+                            </Text>
+                            <Text size="xs" c={navText} style={{ opacity: 0.66 }}>
+                              {section.label === 'Appearance'
+                                ? 'Theme, profiles, and color mode'
+                                : section.label === 'Account'
+                                  ? 'Profile details and security'
+                                  : `${section.label} preferences`}
+                            </Text>
+                          </Stack>
+                        </Group>
+                      </UnstyledButton>
+                    )
+                  })}
+                </Stack>
+              </Popover.Dropdown>
+            </Popover>
+          ) : (
+            <>
+              <Stack gap="xs" mt={rem(24)}>
                 {sections.map((section) => {
                   const Icon = section.icon
                   return (
@@ -600,17 +668,7 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
                       <Group gap="sm">
                         <Icon size={20} color={navText} />
                         <Text c={navText} size="sm" fw={500}>
-                          {section.label === 'Account'
-                            ? t('topbar.account')
-                            : section.label === 'Notifications'
-                              ? t('topbar.notifications')
-                              : section.label === 'Voice & Video'
-                                ? 'Voice & Video'
-                                : section.label === 'Appearance'
-                                  ? 'Appearance'
-                                  : section.label === 'Integrations'
-                                    ? 'Integrations'
-                                    : t('settings.language.title')}
+                          {section.label}
                         </Text>
                       </Group>
                     </Box>
@@ -618,7 +676,6 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
                 })}
               </Stack>
 
-              {/* Logout Button */}
               <Box
                 onClick={handleLogout}
                 style={{
@@ -636,7 +693,7 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
                 <Group gap="sm">
                   <IconX size={20} color={navText} />
                   <Text c={navText} size="sm" fw={500}>
-                    {t('common.logout')}
+                    Logout
                   </Text>
                 </Group>
               </Box>
@@ -648,7 +705,12 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
         <ScrollArea style={{ flex: 1, minHeight: 0 }}>
           <Box
             style={{
-              padding: rem(isMobile ? 16 : 40),
+              minHeight: isMobile ? 'calc(100vh - 88px)' : '100%',
+            }}
+          >
+          <Box
+            style={{
+              padding: rem(isMobile ? 18 : 40),
               backgroundColor: contentBackground,
               minHeight: '100%',
               color: contentText,
@@ -662,9 +724,9 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
           >
             {activeSection === 'Account' && (
               <Stack gap="xl">
-                <Group justify="space-between" align="start">
-                  <Group gap="lg">
-                    <Avatar size={100} radius="xl" color="brand">
+                <Group justify="space-between" align="start" wrap={isMobile ? 'wrap' : 'nowrap'}>
+                  <Group gap="lg" wrap={isMobile ? 'wrap' : 'nowrap'}>
+                    <Avatar size={isMobile ? 72 : 100} radius="xl" color="brand">
                       {name.charAt(0).toUpperCase()}
                     </Avatar>
                     <Box>
@@ -758,7 +820,7 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
                   classNames={settingsInputClassNames}
                 />
 
-                <Group justify="space-between" mt="xl">
+                <Group justify="space-between" mt="xl" wrap="wrap">
                   <Text
                     size="sm"
                     c="var(--pitch-accent-strong)"
@@ -769,10 +831,16 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
                   >
                     Delete Account
                   </Text>
-                  <Button onClick={handleSave} size="md">
+                  <Button onClick={handleSave} size="md" fullWidth={isMobile}>
                     {t('common.save')}
                   </Button>
                 </Group>
+
+                {isMobile ? (
+                  <Button variant="subtle" color="red" onClick={() => void handleLogout()} fullWidth>
+                    {t('common.logout')}
+                  </Button>
+                ) : null}
               </Stack>
             )}
 
@@ -801,12 +869,12 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
                     Color Mode
                   </Text>
                   <Text size="sm" c="var(--pitch-surface-text-dim)">
-                    Choose if PITCH’s appearance should be light or dark, or follow your device’s
+                    Choose if PITCH&apos;s appearance should be light or dark, or follow your device&apos;s
                     settings.
                   </Text>
                 </Stack>
 
-                <Group gap="xs">
+                <Group gap="xs" wrap="wrap">
                   {(['light', 'dark', 'system'] as const).map((mode) => (
                     <Button
                       key={mode}
@@ -923,7 +991,7 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
                   </Tabs.Panel>
 
                   <Tabs.Panel value="custom" pt="md">
-                    <Group gap="xs">
+                    <Group gap="xs" wrap="wrap">
                       <Tooltip label="Coming soon">
                         <span>
                           <Button
@@ -969,8 +1037,8 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
                             backgroundColor: 'var(--pitch-input-bg)',
                           }}
                         >
-                          <Group justify="space-between" align="center">
-                            <Group gap="sm">
+                          <Group justify="space-between" align="center" wrap="wrap">
+                            <Group gap="sm" wrap="nowrap">
                               <Box
                                 style={{
                                   width: rem(28),
@@ -1062,17 +1130,19 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
                       <Text size="sm" fw={600} c="var(--pitch-surface-text)">
                         Save as profile
                       </Text>
-                      <Group align="flex-end">
+                      <Group align="flex-end" wrap="wrap">
                         <TextInput
                           label="Profile name"
                           value={profileName}
                           onChange={(event) => setProfileName(event.currentTarget.value)}
                           size="sm"
                           classNames={settingsInputClassNames}
+                          style={{ flex: 1, minWidth: isMobile ? '100%' : 220 }}
                         />
                         <Button
                           onClick={() => createProfileFromDraft(profileName)}
                           disabled={!profileName.trim()}
+                          fullWidth={isMobile}
                         >
                           Save
                         </Button>
@@ -1123,14 +1193,16 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
                 </Text>
                 <Text size="sm" c={localeSaveError ? 'red' : 'var(--pitch-surface-text-dim)'}>
                   {localeSaveError ??
-                    (isSavingLocale ? t('settings.language.saving') : t('settings.language.saved'))}
+                    (isSavingLocale
+                      ? t('settings.language.saving')
+                      : t('settings.language.saved'))}
                 </Text>
               </Stack>
             )}
           </Box>
+          </Box>
         </ScrollArea>
       </Group>
-
       <Modal
         opened={phoneOverlayOpened}
         onClose={closePhoneOverlay}
