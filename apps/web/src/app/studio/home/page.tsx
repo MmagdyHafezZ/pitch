@@ -500,6 +500,15 @@ export default function DashboardHome() {
             </Group>
           </Stack>
           <Group>
+            {user?.isSystemAdmin && (
+              <Button
+                variant="light"
+                color="yellow"
+                onClick={() => router.push('/studio/admin/access')}
+              >
+                Review access requests
+              </Button>
+            )}
             <Button
               variant="white"
               color="dark"

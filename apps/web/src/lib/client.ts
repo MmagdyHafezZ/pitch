@@ -340,6 +340,23 @@ export const api = {
       }),
   },
 
+  studioAccess: {
+    request: () =>
+      apiRequest<any>('/studio-access/request', {
+        method: 'POST',
+      }),
+    listRequests: () => apiRequest<any[]>('/studio-access/requests'),
+    approveRequest: (userId: string, data: { quota: number; role?: 'MEMBER' | 'ADMIN' }) =>
+      apiRequest<any>(`/studio-access/requests/${userId}/approve`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    denyRequest: (userId: string) =>
+      apiRequest<any>(`/studio-access/requests/${userId}/deny`, {
+        method: 'POST',
+      }),
+  },
+
   oauth: {
     getProviders: () =>
       apiRequest<
