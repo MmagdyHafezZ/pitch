@@ -212,13 +212,8 @@ export class AssessmentGraphRunner {
   private loadSessionData = async (state: AssessmentStateType) => {
     const [turns, session] = await Promise.all([
       this.prisma.client.turn.findMany({
-        where: {
-          iteration: {
-            sessionId: state.sessionId,
-            sessionMemberId: state.sessionMemberId,
-          },
-        },
-        orderBy: [{ iteration: { iterationNumber: 'asc' } }, { order: 'asc' }],
+        where: { iterationId: state.iterationId },
+        orderBy: [{ order: 'asc' }],
         include: {
           messages: true,
           iteration: { select: { iterationNumber: true } },

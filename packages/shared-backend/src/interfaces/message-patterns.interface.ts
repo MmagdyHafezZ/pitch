@@ -1,3 +1,11 @@
+export const USER_SERVICE_COIN_PATTERNS = {
+  COIN_RESERVE: 'coin.reserve',
+  COIN_SESSION_RESERVE: 'coin.session.reserve',
+  COIN_ADJUST: 'coin.adjust',
+  COIN_BALANCE_GET: 'coin.balance.get',
+  COIN_USER_BALANCE_GET: 'coin.user.balance.get',
+} as const
+
 export const USER_SERVICE_PATTERNS = {
   GET_USER: 'get_user',
   GET_MY_SETTINGS: 'get_my_settings',
@@ -8,6 +16,10 @@ export const USER_SERVICE_PATTERNS = {
   REQUEST_PHONE_VERIFICATION: 'request_phone_verification',
   RESEND_PHONE_VERIFICATION: 'resend_phone_verification',
   VERIFY_PHONE_VERIFICATION: 'verify_phone_verification',
+  REQUEST_STUDIO_ACCESS: 'request_studio_access',
+  LIST_STUDIO_ACCESS_REQUESTS: 'list_studio_access_requests',
+  APPROVE_STUDIO_ACCESS_REQUEST: 'approve_studio_access_request',
+  DENY_STUDIO_ACCESS_REQUEST: 'deny_studio_access_request',
   DELETE_USER: 'delete_user',
   GET_USERS: 'get_users',
   REGISTER: 'auth.register',
@@ -43,6 +55,7 @@ export const USER_SERVICE_PATTERNS = {
   GET_PLANS: 'get_plans',
   GET_PLAN: 'get_plan',
   AUTH_LTI_LOGIN: 'auth.lti.login',
+  GET_PLATFORM_STATS: 'user.platform.stats',
 } as const
 
 export const S3_SERVICE_PATTERNS = {
@@ -73,6 +86,21 @@ export const CRM_SERVICE_PATTERNS = {
   SALESFORCE_QUERY: 'salesforce.query',
   SALESFORCE_SEARCH: 'salesforce.search',
   SALESFORCE_DISCONNECT: 'salesforce.disconnect',
+
+  GOOGLE_CALENDAR_CONNECT: 'calendar.google.connect',
+  GOOGLE_CALENDAR_CALLBACK: 'calendar.google.callback',
+  GOOGLE_CALENDAR_STATUS: 'calendar.google.status',
+  GOOGLE_CALENDAR_DISCONNECT: 'calendar.google.disconnect',
+  GOOGLE_CALENDAR_GET_EVENTS: 'calendar.google.getEvents',
+
+  MICROSOFT_CALENDAR_CONNECT: 'calendar.microsoft.connect',
+  MICROSOFT_CALENDAR_CALLBACK: 'calendar.microsoft.callback',
+  MICROSOFT_CALENDAR_STATUS: 'calendar.microsoft.status',
+  MICROSOFT_CALENDAR_DISCONNECT: 'calendar.microsoft.disconnect',
+  MICROSOFT_CALENDAR_GET_EVENTS: 'calendar.microsoft.getEvents',
+
+  CALENDAR_GET_UPCOMING: 'calendar.getUpcoming',
+  CALENDAR_LIST_ALL_CONNECTED: 'calendar.listAllConnected',
 } as const
 export const SIMULATION_SERVICE_PATTERNS = {
   CREATE_SESSION: 'simulation.session.create',
@@ -120,6 +148,8 @@ export const SIMULATION_SERVICE_PATTERNS = {
 
   GET_SCENARIO: 'simulation.scenario.get',
   LIST_SCENARIOS: 'simulation.scenario.list',
+  GENERATE_SCENARIO: 'simulation.scenario.generate',
+  GENERATE_SCENARIO_BATCH: 'simulation.scenario.generateBatch',
   CREATE_SCENARIO: 'simulation.scenario.create',
   UPDATE_SCENARIO: 'simulation.scenario.update',
   DELETE_SCENARIO: 'simulation.scenario.delete',
@@ -171,6 +201,13 @@ export const SIMULATION_SERVICE_PATTERNS = {
   CHALLENGE_SUBMIT_SCORE: 'simulation.challenge.submitScore',
   CHALLENGE_LEADERBOARD: 'simulation.challenge.leaderboard',
   CHALLENGE_TRIGGER_GENERATE: 'simulation.challenge.triggerGenerate',
+
+  SESSION_FIND_BY_CALENDAR_EVENT: 'simulation.session.findByCalendarEvent',
+  CALENDAR_SESSION_SUGGESTIONS_LIST: 'simulation.calendar.suggestions.list',
+  CALENDAR_SESSION_SUGGESTIONS_ACCEPT: 'simulation.calendar.suggestions.accept',
+  CALENDAR_SESSION_SUGGESTIONS_DISMISS: 'simulation.calendar.suggestions.dismiss',
+
+  COIN_SESSION_ESTIMATE: 'simulation.coin.session.estimate',
 } as const
 
 export type UserServicePattern = (typeof USER_SERVICE_PATTERNS)[keyof typeof USER_SERVICE_PATTERNS]

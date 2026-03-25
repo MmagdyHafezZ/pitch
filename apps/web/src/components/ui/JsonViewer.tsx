@@ -16,15 +16,17 @@ export function JsonViewer({ data }: JsonViewerProps) {
         fontFamily: 'monospace',
         fontSize: 'var(--mantine-font-size-xs)',
         color: 'white',
+        minWidth: 0,
+        overflowX: 'auto',
       }}
     >
       <Stack gap="xs">
         {Object.entries(data).map(([key, value]) => (
-          <Box key={key}>
+          <Box key={key} style={{ minWidth: 0, overflowWrap: 'anywhere', wordBreak: 'break-word' }}>
             <Text component="span" c="blue.4" fw={700}>
               {key}:
             </Text>{' '}
-            <Text component="span" c="green.4">
+            <Text component="span" c="green.4" style={{ whiteSpace: 'pre-wrap' }}>
               {JSON.stringify(value, null, 2)}
             </Text>
           </Box>

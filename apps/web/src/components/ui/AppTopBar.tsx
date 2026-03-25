@@ -484,6 +484,7 @@ export function AppTopBar({
   )
   const [settingsOpened, setSettingsOpened] = useState(false)
   const [notificationsOpened, setNotificationsOpened] = useState(false)
+  const [selectedNotification, setSelectedNotification] = useState<NotificationItem | null>(null)
   const [acceptingInviteIds, setAcceptingInviteIds] = useState<string[]>([])
   const [acceptedInviteIds, setAcceptedInviteIds] = useState<string[]>([])
   const router = useRouter()
@@ -712,9 +713,7 @@ export function AppTopBar({
           })
           return
         }
-      } catch {
-        // Fall through to the original error toast.
-      }
+      } catch {}
 
       notifications.show({
         title: 'Failed to accept invitation',
@@ -736,6 +735,158 @@ export function AppTopBar({
         return 'blue'
     }
   }
+  const closeNotificationsModal = () => {
+    setNotificationsOpened(false)
+    setSelectedNotification(null)
+  }
+  const closeNotificationDetails = () => setSelectedNotification(null)
+
+  const markNotificationAsRead = async (notificationId: string) => {
+    await markReadMutation.mutateAsync([notificationId])
+  }
+
+  const handleNotificationAction = async (notification: NotificationItem) => {
+    const teamId =
+      notification.type === 'TEAM_INVITE' && typeof notification.metadata?.teamId === 'string'
+        ? notification.metadata.teamId
+        : null
+    const decision =
+      notification.type === 'STUDIO_ACCESS_REVIEWED' &&
+      typeof notification.metadata?.decision === 'string'
+        ? notification.metadata.decision
+        : null
+
+    if (teamId) {
+      if (acceptedInviteIds.includes(notification.id)) return
+
+      setAcceptingInviteIds((previous) =>
+        previous.includes(notification.id) ? previous : [...previous, notification.id]
+      )
+
+      acceptTeamInviteMutation.mutate(
+        {
+          teamId,
+          notificationId: notification.id,
+        },
+        {
+          onSettled: () => {
+            setAcceptingInviteIds((previous) => previous.filter((id) => id !== notification.id))
+            setSelectedNotification(null)
+          },
+        }
+      )
+      return
+    }
+
+    if (!notification.readAt) {
+      await markNotificationAsRead(notification.id)
+    }
+
+    if (notification.type === 'STUDIO_ACCESS_REQUEST') {
+      closeNotificationsModal()
+      router.push('/studio/admin/access')
+      return
+    }
+
+    if (notification.type === 'STUDIO_ACCESS_REVIEWED') {
+      closeNotificationsModal()
+      router.push(decision === 'denied' ? '/access/request' : '/studio/home')
+      return
+    }
+
+    setSelectedNotification(null)
+  }
+
+  const selectedNotificationMetadata = useMemo(() => {
+    if (!selectedNotification?.metadata) return []
+
+    const metadata = selectedNotification.metadata
+    const entries: Array<{ label: string; value: string }> = []
+
+    if (typeof metadata.teamName === 'string') {
+      entries.push({ label: 'Team', value: metadata.teamName })
+    }
+    if (typeof metadata.requesterEmail === 'string') {
+      entries.push({ label: 'Requester', value: metadata.requesterEmail })
+    }
+    if (typeof metadata.reviewedByEmail === 'string') {
+      entries.push({ label: 'Reviewed by', value: metadata.reviewedByEmail })
+    }
+    if (typeof metadata.decision === 'string') {
+      entries.push({ label: 'Decision', value: metadata.decision })
+    }
+    if (typeof metadata.role === 'string') {
+      entries.push({
+        label: 'Role',
+        value: metadata.role === 'MEMBER' ? 'Regular user' : metadata.role,
+      })
+    }
+    if (typeof metadata.quota === 'number') {
+      entries.push({ label: 'Quota', value: `${metadata.quota} coins` })
+    }
+
+    return entries
+  }, [selectedNotification])
+
+  const selectedNotificationAction = useMemo(() => {
+    if (!selectedNotification) return null
+
+    const teamId =
+      selectedNotification.type === 'TEAM_INVITE' &&
+      typeof selectedNotification.metadata?.teamId === 'string'
+        ? selectedNotification.metadata.teamId
+        : null
+    const isAccepted = acceptedInviteIds.includes(selectedNotification.id)
+    const isAccepting = acceptingInviteIds.includes(selectedNotification.id)
+    const isAlreadyTeamMember =
+      !!teamId &&
+      !!currentUser?.id &&
+      !!teams
+        .find((team) => team.id === teamId)
+        ?.memberships?.some(
+          (membership) => membership.userId === currentUser.id && membership.isActive !== false
+        )
+
+    if (teamId) {
+      return {
+        label: isAccepted || isAlreadyTeamMember ? 'Accepted' : 'Accept invitation',
+        disabled: isAccepted || isAlreadyTeamMember,
+        loading: isAccepting,
+      }
+    }
+
+    if (selectedNotification.type === 'STUDIO_ACCESS_REQUEST') {
+      return {
+        label: 'Review request',
+        disabled: false,
+        loading: false,
+      }
+    }
+
+    if (selectedNotification.type === 'STUDIO_ACCESS_REVIEWED') {
+      return {
+        label:
+          selectedNotification.metadata?.decision === 'denied'
+            ? 'View access status'
+            : 'Open Studio',
+        disabled: false,
+        loading: false,
+      }
+    }
+
+    return {
+      label: selectedNotification.readAt ? 'Close' : 'Mark as read',
+      disabled: false,
+      loading: markReadMutation.isPending,
+    }
+  }, [
+    acceptedInviteIds,
+    acceptingInviteIds,
+    currentUser?.id,
+    markReadMutation.isPending,
+    selectedNotification,
+    teams,
+  ])
 
   const actionArea = rightSlot ?? (
     <ActionConfig
@@ -888,7 +1039,7 @@ export function AppTopBar({
       <SettingsModal opened={settingsOpened} onClose={() => setSettingsOpened(false)} />
       <Modal
         opened={notificationsOpened}
-        onClose={() => setNotificationsOpened(false)}
+        onClose={closeNotificationsModal}
         title={t('topbar.notifications')}
         centered
         size="lg"
@@ -951,11 +1102,9 @@ export function AppTopBar({
                       withBorder
                       p="sm"
                       radius="md"
-                      onClick={() =>
-                        isUnread ? markReadMutation.mutate([notification.id]) : undefined
-                      }
+                      onClick={() => setSelectedNotification(notification)}
                       style={{
-                        cursor: isUnread ? 'pointer' : 'default',
+                        cursor: 'pointer',
                         background: isUnread
                           ? 'color-mix(in srgb, var(--pitch-surface-bg) 85%, var(--pitch-accent) 15%)'
                           : 'var(--pitch-surface-bg)',
@@ -1000,24 +1149,7 @@ export function AppTopBar({
                             onClick={(event) => {
                               event.stopPropagation()
                               if (disableAcceptButton) return
-                              setAcceptingInviteIds((previous) =>
-                                previous.includes(notification.id)
-                                  ? previous
-                                  : [...previous, notification.id]
-                              )
-                              acceptTeamInviteMutation.mutate(
-                                {
-                                  teamId,
-                                  notificationId: notification.id,
-                                },
-                                {
-                                  onSettled: () => {
-                                    setAcceptingInviteIds((previous) =>
-                                      previous.filter((id) => id !== notification.id)
-                                    )
-                                  },
-                                }
-                              )
+                              void handleNotificationAction(notification)
                             }}
                           >
                             {isAccepted || isAlreadyTeamMember ? 'Accepted' : 'Accept invitation'}
@@ -1031,6 +1163,63 @@ export function AppTopBar({
             </ScrollArea>
           )}
         </Stack>
+      </Modal>
+      <Modal
+        opened={!!selectedNotification}
+        onClose={closeNotificationDetails}
+        title={selectedNotification?.title ?? 'Notification details'}
+        centered
+        size="md"
+        styles={{
+          title: { fontWeight: 700 },
+        }}
+      >
+        {selectedNotification ? (
+          <Stack gap="md">
+            <Group justify="space-between" align="center">
+              <Badge color={severityColor(selectedNotification.severity)} variant="light">
+                {selectedNotification.severity}
+              </Badge>
+              <Text size="xs" c="dimmed">
+                {dayjs(selectedNotification.createdAt).format('MMM D, YYYY HH:mm')}
+              </Text>
+            </Group>
+
+            <Text size="sm" style={{ lineHeight: 1.7 }}>
+              {selectedNotification.message}
+            </Text>
+
+            {selectedNotificationMetadata.length > 0 ? (
+              <Stack gap={8}>
+                {selectedNotificationMetadata.map((item) => (
+                  <Group key={`${item.label}-${item.value}`} justify="space-between" gap="sm">
+                    <Text size="xs" tt="uppercase" fw={700} c="dimmed">
+                      {item.label}
+                    </Text>
+                    <Text size="sm" fw={500}>
+                      {item.value}
+                    </Text>
+                  </Group>
+                ))}
+              </Stack>
+            ) : null}
+
+            <Group justify="flex-end">
+              <Button variant="subtle" color="gray" onClick={closeNotificationDetails}>
+                Close
+              </Button>
+              {selectedNotificationAction ? (
+                <Button
+                  loading={selectedNotificationAction.loading}
+                  disabled={selectedNotificationAction.disabled}
+                  onClick={() => void handleNotificationAction(selectedNotification)}
+                >
+                  {selectedNotificationAction.label}
+                </Button>
+              ) : null}
+            </Group>
+          </Stack>
+        ) : null}
       </Modal>
       <Box
         style={{

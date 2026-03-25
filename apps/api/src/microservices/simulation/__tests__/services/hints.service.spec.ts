@@ -151,6 +151,9 @@ describe('HintsService', () => {
               hintConfig: {
                 findMany: jest.fn(),
               },
+              iteration: {
+                findFirst: jest.fn().mockResolvedValue(null),
+              },
               sessionMember: {
                 findFirst: jest.fn(),
               },

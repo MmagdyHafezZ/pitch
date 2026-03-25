@@ -1,11 +1,14 @@
 'use client'
 
-import { Stack, Group, Box, Title, Text, Paper, Badge, ThemeIcon } from '@mantine/core'
-import { IconChecklist } from '@tabler/icons-react'
+import { Stack, Group, Box, Title, Text, Paper, Badge, ThemeIcon, Skeleton } from '@mantine/core'
+import { IconChecklist, IconCoin } from '@tabler/icons-react'
 import { SessionType } from '@/features/sessions'
+import type { EditableScenarioDraft, Scenario } from '@/features/scenarios/types/scenario.types'
+import { getScenarioSummary } from '@/features/scenarios/utils/scenario-editor'
 import { Persona } from '../lib/types'
 import { getVoiceProfile } from '../lib/helpers'
 import { LLMProvider } from '@/features/sessions/hooks/useLLMProviders'
+import { useSessionCoinEstimate } from '@/features/coins/hooks/useCoinsBalance'
 import classes from '../create-session.module.css'
 
 interface Team {
@@ -27,8 +30,8 @@ interface ReviewStepProps {
   scenarioTopic: string
   scenarioObjective: string
   scenarioContext: string
-  scenarioId: string | null
-  scenarios: Array<{ id: string; name: string; description?: string }>
+  selectedScenario: Scenario | null
+  selectedDraft: EditableScenarioDraft | null
   aiRole: string
   userRole: string
   durationMinutes: number
@@ -72,8 +75,8 @@ export function ReviewStep({
   scenarioTopic,
   scenarioObjective,
   scenarioContext,
-  scenarioId,
-  scenarios,
+  selectedScenario,
+  selectedDraft,
   aiRole,
   userRole,
   durationMinutes,
@@ -90,20 +93,26 @@ export function ReviewStep({
   difficulty,
   multiTurnEnabled,
 }: ReviewStepProps) {
+  const { data: coinEstimate, isLoading: coinEstimateLoading } = useSessionCoinEstimate({
+    model: llmModel ?? undefined,
+    provider: llmProvider ?? undefined,
+    sessionType: sessionType ?? 'text',
+    durationMinutes,
+    enabled: Boolean(llmModel && sessionType),
+  })
+
   const selectedDifficulty = difficultyOptions.find((option) => option.value === difficulty)
-  const selectedScenario = scenarios.find((scenario) => scenario.id === scenarioId) ?? null
+  const scenarioSummary = getScenarioSummary(selectedDraft ?? selectedScenario)
+  const scenarioSource = selectedDraft
+    ? 'Generated option'
+    : selectedScenario
+      ? 'Saved scenario'
+      : 'Quick prompt'
   const crmSelectionCount =
     crmSelections.accounts.length +
     crmSelections.opportunities.length +
     crmSelections.leads.length +
     crmSelections.contacts.length
-  const selectedModelDetail =
-    llmProvider && llmModel
-      ? llmProvidersData?.providers
-          .find((provider) => provider.name === llmProvider)
-          ?.modelDetails.find((model) => model.name === llmModel)
-      : undefined
-
   return (
     <Stack gap="lg">
       <Group>
@@ -192,37 +201,54 @@ export function ReviewStep({
           </Title>
           <Stack gap="xs">
             <Group justify="apart" className={classes.reviewRow}>
-              <Text fw={600}>Topic</Text>
-              <Text c="dimmed">{scenarioTopic || 'Not set'}</Text>
-            </Group>
-            <Group justify="apart" className={classes.reviewRow}>
-              <Text fw={600}>Objective</Text>
-              <Text c="dimmed">{scenarioObjective || 'Not set'}</Text>
+              <Text fw={600}>Source</Text>
+              <Text c="dimmed">{scenarioSource}</Text>
             </Group>
             <Group justify="apart" className={classes.reviewRow}>
               <Text fw={600}>Scenario</Text>
               <Text c="dimmed">
-                {selectedScenario?.name || (scenarioId ? scenarioId : 'Not selected')}
+                {scenarioSummary?.name || scenarioTopic || 'Prompt-only setup'}
               </Text>
             </Group>
-            {scenarioContext && (
+            {(scenarioSummary?.objective || scenarioObjective) && (
+              <Group justify="apart" className={classes.reviewRow}>
+                <Text fw={600}>Objective</Text>
+                <Text c="dimmed">{scenarioSummary?.objective || scenarioObjective}</Text>
+              </Group>
+            )}
+            {(scenarioSummary?.background || scenarioContext) && (
               <Group justify="apart" className={classes.reviewRow}>
                 <Text fw={600}>Context</Text>
-                <Text c="dimmed">{scenarioContext}</Text>
+                <Text c="dimmed">{scenarioSummary?.background || scenarioContext}</Text>
+              </Group>
+            )}
+            {scenarioSummary && (
+              <Group justify="apart" className={classes.reviewRow}>
+                <Text fw={600}>Visibility</Text>
+                <Text c="dimmed">{scenarioSummary.visibility.toLowerCase()}</Text>
               </Group>
             )}
             <Group justify="apart" className={classes.reviewRow}>
               <Text fw={600}>AI role</Text>
-              <Text c="dimmed">{aiRole || 'Not set'}</Text>
+              <Text c="dimmed">{scenarioSummary?.aiRole || aiRole || 'Not set'}</Text>
             </Group>
             <Group justify="apart" className={classes.reviewRow}>
               <Text fw={600}>Your role</Text>
-              <Text c="dimmed">{userRole || 'Not set'}</Text>
+              <Text c="dimmed">{scenarioSummary?.userRole || userRole || 'Not set'}</Text>
             </Group>
             <Group justify="apart" className={classes.reviewRow}>
               <Text fw={600}>Session length</Text>
-              <Text c="dimmed">{durationMinutes} min</Text>
+              <Text c="dimmed">{scenarioSummary?.durationMinutes || durationMinutes} min</Text>
             </Group>
+            {scenarioSummary?.tags.length ? (
+              <Group gap="xs" mt="xs">
+                {scenarioSummary.tags.map((tag) => (
+                  <Badge key={tag} variant="light" color="gray">
+                    {tag}
+                  </Badge>
+                ))}
+              </Group>
+            ) : null}
           </Stack>
         </Paper>
 
@@ -241,14 +267,26 @@ export function ReviewStep({
               <Text fw={600}>Model</Text>
               <Text c="dimmed">{llmModel || 'Not selected'}</Text>
             </Group>
-            {llmProvider && llmModel && llmProvidersData && (
+            {llmProvider && llmModel && (
               <Group justify="apart" className={classes.reviewRow}>
-                <Text fw={600}>Estimated Cost</Text>
-                <Text c="dimmed" size="sm">
-                  {selectedModelDetail
-                    ? `$${selectedModelDetail.pricing.inputTokensPerMillion.toFixed(2)}/M tokens input`
-                    : 'Pricing unavailable'}
-                </Text>
+                <Group gap={4}>
+                  <IconCoin size={14} color="var(--mantine-color-yellow-5)" />
+                  <Text fw={600}>Session cost</Text>
+                </Group>
+                {coinEstimateLoading ? (
+                  <Skeleton height={14} width={60} radius="sm" />
+                ) : coinEstimate ? (
+                  <Text size="sm" fw={600} c="yellow.5">
+                    ~{coinEstimate.estimatedCoins} coins
+                    <Text span size="xs" c="dimmed" ml={4}>
+                      (~${coinEstimate.estimatedCostUsd.toFixed(3)})
+                    </Text>
+                  </Text>
+                ) : (
+                  <Text c="dimmed" size="sm">
+                    Estimate unavailable
+                  </Text>
+                )}
               </Group>
             )}
           </Stack>

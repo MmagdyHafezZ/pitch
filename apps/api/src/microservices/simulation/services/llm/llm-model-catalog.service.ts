@@ -8,12 +8,35 @@ type CatalogCacheEntry = {
   fetchedAt: number;
 };
 
+/**
+ * Rich metadata parsed from the Watsonx /ml/v1/foundation_model_specs API.
+ * Fields are optional because not every model record exposes all of them.
+ */
+export type WatsonxModelSpec = {
+  /** Total context window (input + output) in tokens */
+  maxSequenceLength?: number;
+  /** Maximum tokens the model can generate in one response */
+  maxOutputTokens?: number;
+  /** Human-readable display label, e.g. "Granite 13B Chat v2" */
+  label?: string;
+  /** Supported task IDs, e.g. ["text_generation"] */
+  tasks?: string[];
+  /** Parameter count string, e.g. "13B" */
+  numberParams?: string;
+};
+
 @Injectable()
 export class LLMModelCatalogService {
   private readonly logger = new Logger(LLMModelCatalogService.name);
   private readonly cacheTtlMs: number;
   private readonly cacheTtlSeconds: number;
   private refreshPromise: Promise<void> | null = null;
+
+  /**
+   * In-memory Watsonx model specs populated when the catalog is refreshed.
+   * Accessed synchronously by WatsonxProvider.getModelCapabilities().
+   */
+  private readonly watsonxSpecsCache = new Map<string, WatsonxModelSpec>();
 
   constructor(
     private readonly configService: ConfigService,
@@ -27,6 +50,15 @@ export class LLMModelCatalogService {
       ? ttlSeconds
       : RedisTTL.LLM_MODEL_CATALOG;
     this.cacheTtlMs = this.cacheTtlSeconds * 1000;
+  }
+
+  /**
+   * Returns the cached Watsonx model spec for the given model ID.
+   * Returns null if the catalog has not been loaded yet or the model is unknown.
+   * This method is synchronous so providers can call it inside getModelCapabilities().
+   */
+  getWatsonxModelSpec(modelId: string): WatsonxModelSpec | null {
+    return this.watsonxSpecsCache.get(modelId) ?? null;
   }
 
   async listModels(provider: string): Promise<string[]> {
@@ -88,12 +120,11 @@ export class LLMModelCatalogService {
     if (providers.includes('watsonx')) {
       const watsonxRequest = await this.buildWatsonxRequest();
       if (watsonxRequest) {
+        // Watsonx gets its own refresh path so we can also parse model specs.
         tasks.push(
-          this.refreshProvider(
-            'watsonx',
+          this.refreshWatsonxProvider(
             watsonxRequest.url,
             watsonxRequest.headers,
-            (payload) => this.parseWatsonxModels(payload),
           ),
         );
       }
@@ -210,6 +241,143 @@ export class LLMModelCatalogService {
     }
   }
 
+  /**
+   * Watsonx-specific refresh: fetches /ml/v1/foundation_model_specs, stores
+   * model IDs in the Redis catalog cache, and also populates the in-memory
+   * specs cache with token-limit metadata for each model.
+   */
+  private async refreshWatsonxProvider(
+    url: string,
+    headers: Record<string, string>,
+  ): Promise<void> {
+    try {
+      const response = await fetch(url, { headers });
+      if (!response.ok) {
+        this.logger.warn(
+          `Model catalog error for watsonx: ${response.status} ${response.statusText}`,
+        );
+        return;
+      }
+
+      const payload: unknown = await response.json();
+      const { models, specs } = this.parseWatsonxPayload(payload);
+      const normalizedModels = this.normalizeModels(models);
+
+      if (normalizedModels.length === 0) {
+        this.logger.warn(`Model catalog returned no models for watsonx`);
+      }
+
+      // Persist model IDs to Redis (same as the generic path)
+      const fetchedAt = Date.now();
+      await this.redisService.set(
+        this.catalogCacheKey('watsonx'),
+        { models: normalizedModels, fetchedAt } satisfies CatalogCacheEntry,
+        { ttl: this.cacheTtlSeconds },
+      );
+
+      // Store specs in-memory (not persisted to Redis — cheap to re-derive)
+      this.watsonxSpecsCache.clear();
+      for (const [modelId, spec] of specs.entries()) {
+        this.watsonxSpecsCache.set(modelId, spec);
+      }
+
+      this.logger.log(
+        `Watsonx catalog refreshed: ${normalizedModels.length} models, ` +
+          `${specs.size} specs loaded`,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Failed to refresh watsonx model catalog: ${String(
+          (error as Error)?.message ?? error,
+        )}`,
+      );
+    }
+  }
+
+  /**
+   * Parse the Watsonx foundation_model_specs response, extracting both model
+   * IDs and rich model metadata (token limits, tasks, etc.).
+   */
+  private parseWatsonxPayload(payload: unknown): {
+    models: string[];
+    specs: Map<string, WatsonxModelSpec>;
+  } {
+    const models: string[] = [];
+    const specs = new Map<string, WatsonxModelSpec>();
+
+    if (!payload || typeof payload !== 'object') {
+      return { models, specs };
+    }
+
+    const data = payload as {
+      resources?: unknown;
+      data?: unknown;
+      models?: unknown;
+      results?: unknown;
+    };
+
+    const items = Array.isArray(data.resources)
+      ? data.resources
+      : Array.isArray(data.data)
+        ? data.data
+        : Array.isArray(data.models)
+          ? data.models
+          : Array.isArray(data.results)
+            ? data.results
+            : [];
+
+    for (const item of items) {
+      if (!item || typeof item !== 'object') continue;
+      const entry = item as Record<string, unknown>;
+
+      const modelId =
+        (entry.model_id as string | undefined) ??
+        (entry.modelId as string | undefined) ??
+        (entry.id as string | undefined) ??
+        (entry.name as string | undefined);
+
+      if (!modelId) continue;
+      models.push(modelId);
+
+      // Parse rich spec data from model_limits
+      const spec: WatsonxModelSpec = {};
+
+      const limits = entry.model_limits as Record<string, unknown> | undefined;
+      if (limits && typeof limits === 'object') {
+        const maxSeq = limits.max_sequence_length ?? limits.maxSequenceLength;
+        if (typeof maxSeq === 'number' && maxSeq > 0) {
+          spec.maxSequenceLength = maxSeq;
+        }
+        const maxOut = limits.max_output_tokens ?? limits.maxOutputTokens;
+        if (typeof maxOut === 'number' && maxOut > 0) {
+          spec.maxOutputTokens = maxOut;
+        }
+      }
+
+      if (typeof entry.label === 'string') {
+        spec.label = entry.label;
+      }
+
+      if (typeof entry.number_params === 'string') {
+        spec.numberParams = entry.number_params;
+      }
+
+      const supportedTasks = entry.supported_tasks;
+      if (Array.isArray(supportedTasks)) {
+        spec.tasks = supportedTasks
+          .map((t: unknown) => {
+            if (!t || typeof t !== 'object') return undefined;
+            return (t as Record<string, unknown>).id as string | undefined;
+          })
+          .filter((id): id is string => Boolean(id));
+      }
+
+      specs.set(modelId, spec);
+    }
+
+    return { models, specs };
+  }
+
   private parseOpenAiModels(payload: unknown): string[] {
     if (!payload || typeof payload !== 'object') {
       return [];
@@ -233,42 +401,6 @@ export class LLMModelCatalogService {
         return (
           (entry.id as string | undefined) ??
           (entry.model as string | undefined) ??
-          (entry.name as string | undefined)
-        );
-      })
-      .filter((value): value is string => Boolean(value));
-  }
-
-  private parseWatsonxModels(payload: unknown): string[] {
-    if (!payload || typeof payload !== 'object') {
-      return [];
-    }
-
-    const data = payload as {
-      resources?: unknown;
-      data?: unknown;
-      models?: unknown;
-      results?: unknown;
-    };
-
-    const items = Array.isArray(data.resources)
-      ? data.resources
-      : Array.isArray(data.data)
-        ? data.data
-        : Array.isArray(data.models)
-          ? data.models
-          : Array.isArray(data.results)
-            ? data.results
-            : [];
-
-    return items
-      .map((item) => {
-        if (!item || typeof item !== 'object') return undefined;
-        const entry = item as Record<string, unknown>;
-        return (
-          (entry.model_id as string | undefined) ??
-          (entry.modelId as string | undefined) ??
-          (entry.id as string | undefined) ??
           (entry.name as string | undefined)
         );
       })

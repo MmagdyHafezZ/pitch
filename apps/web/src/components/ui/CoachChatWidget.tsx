@@ -16,6 +16,7 @@ import {
   Divider,
   Loader,
   Badge,
+  Modal,
 } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
 import {
@@ -32,10 +33,12 @@ import {
   IconFileText,
   IconDownload,
   IconCheck,
+  IconDatabase,
 } from '@tabler/icons-react'
 import { useRouter } from 'next/navigation'
 import ReactMarkdown from 'react-markdown'
 import { API_CONFIG, getAccessToken } from '@/lib/client'
+import { useAuthStore } from '@/features/auth/stores/auth.store'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -44,6 +47,7 @@ interface CoachChatWidgetProps {
     page?: string
     sessionId?: string
     recentTurns?: Array<{ role: string; text: string }>
+    sessionName?: string
   }
 }
 
@@ -53,11 +57,17 @@ export interface Attachment {
   content: string
   mimeType: string
   size: number
-  /** Presigned S3 URL — set for files uploaded to S3 instead of sent inline. */
+  /** Signed attachment URL — set for files uploaded to storage instead of sent inline. */
   s3Url?: string
   /** True while the S3 upload is in flight. */
   uploading?: boolean
 }
+
+interface SavedContextAttachment extends Attachment {
+  savedAt: number
+}
+
+type FilePickerTarget = 'draft' | 'context'
 
 interface UIAction {
   type: string
@@ -83,6 +93,7 @@ interface Message {
   action?: UIAction
   actionState?: ActionState
   attachments?: Attachment[]
+  quickReplies?: string[]
   /** Indices of sequence steps that have been successfully completed */
   completedStepIndices?: number[]
 }
@@ -90,6 +101,16 @@ interface Message {
 interface Pos {
   x: number
   y: number
+}
+
+interface PersistedCoachChatState {
+  version: 1
+  open: boolean
+  isFullscreen: boolean
+  pos: Pos | null
+  includeRecentTurns: boolean
+  messages: Message[]
+  savedContextAttachments: SavedContextAttachment[]
 }
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -106,22 +127,315 @@ const WELCOME: Message = {
 }
 
 const ACCEPTED_FILE_TYPES = '.txt,.md,.csv,.pdf,.png,.jpg,.jpeg,.webp'
+const COACH_CHAT_STORAGE_PREFIX = 'pitch.coach-chat.v1'
+
+const formatAttachmentSize = (size: number) => {
+  if (size < 1024) return `${size} B`
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`
+}
+
+const getDefaultCoachPosition = (): Pos => ({
+  x: window.innerWidth - BTN - 28,
+  y: window.innerHeight - BTN - 28,
+})
+
+const sanitizeMessageAttachments = (
+  attachments: Attachment[] | undefined
+): Attachment[] | undefined => {
+  if (!attachments?.length) return undefined
+
+  const nextAttachments = attachments
+    .filter((attachment) => Boolean(attachment?.name))
+    .map((attachment) => ({
+      name: attachment.name,
+      content: attachment.content ?? '',
+      mimeType: attachment.mimeType || 'application/octet-stream',
+      size: Number.isFinite(attachment.size) ? attachment.size : 0,
+      ...(attachment.s3Url ? { s3Url: attachment.s3Url } : {}),
+      ...(attachment.uploading ? { uploading: true } : {}),
+    }))
+
+  return nextAttachments.length > 0 ? nextAttachments : undefined
+}
+
+const sanitizeMessagesForPersistence = (messages: Message[]): Message[] => {
+  const normalized = messages
+    .map((message) => ({
+      role: (message.role === 'user' ? 'user' : 'assistant') as 'user' | 'assistant',
+      content: message.content ?? '',
+      ...(message.action ? { action: message.action } : {}),
+      ...(message.actionState ? { actionState: message.actionState } : {}),
+      ...(message.quickReplies?.length ? { quickReplies: message.quickReplies } : {}),
+      ...(message.completedStepIndices?.length
+        ? { completedStepIndices: message.completedStepIndices }
+        : {}),
+      ...(sanitizeMessageAttachments(message.attachments)
+        ? { attachments: sanitizeMessageAttachments(message.attachments) }
+        : {}),
+    }))
+    .filter(
+      (message) =>
+        Boolean(message.content.trim()) ||
+        Boolean(message.attachments?.length) ||
+        Boolean(message.action)
+    )
+
+  while (
+    normalized.length > 0 &&
+    normalized[normalized.length - 1]?.role === 'assistant' &&
+    !normalized[normalized.length - 1]?.content.trim() &&
+    !normalized[normalized.length - 1]?.attachments?.length &&
+    !normalized[normalized.length - 1]?.action
+  ) {
+    normalized.pop()
+  }
+
+  return normalized.length > 0 ? normalized : [WELCOME]
+}
+
+const sanitizeSavedContextAttachments = (
+  attachments: SavedContextAttachment[]
+): SavedContextAttachment[] =>
+  attachments
+    .filter((attachment) => Boolean(attachment?.name) && !attachment.uploading)
+    .map((attachment) => ({
+      name: attachment.name,
+      content: attachment.content ?? '',
+      mimeType: attachment.mimeType || 'application/octet-stream',
+      size: Number.isFinite(attachment.size) ? attachment.size : 0,
+      ...(attachment.s3Url ? { s3Url: attachment.s3Url } : {}),
+      savedAt: Number.isFinite(attachment.savedAt) ? attachment.savedAt : Date.now(),
+    }))
+
+const compactPersistedState = (state: PersistedCoachChatState): PersistedCoachChatState => ({
+  ...state,
+  messages: sanitizeMessagesForPersistence(state.messages.slice(-24)).map((message) => ({
+    ...message,
+    ...(message.attachments?.length
+      ? {
+          attachments: message.attachments.map((attachment) => ({
+            ...attachment,
+            content: attachment.s3Url
+              ? ''
+              : attachment.mimeType.startsWith('image/')
+                ? ''
+                : attachment.content.slice(0, 4000),
+          })),
+        }
+      : {}),
+  })),
+  savedContextAttachments: sanitizeSavedContextAttachments(state.savedContextAttachments).map(
+    (attachment) => ({
+      ...attachment,
+      content: attachment.s3Url
+        ? ''
+        : attachment.mimeType.startsWith('image/')
+          ? ''
+          : attachment.content.slice(0, 4000),
+    })
+  ),
+})
+
+const extractInlineQuickReplies = (
+  content: string
+): { content: string; quickReplies?: string[] } => {
+  const normalized = content.trimEnd()
+  const lines = normalized.split('\n')
+  const lastLine = lines[lines.length - 1]?.trim() ?? ''
+  const bulletLines = lines.filter((line) => /^[-*•]\s+/.test(line.trim()))
+
+  if (bulletLines.length >= 2 && bulletLines.length <= 5) {
+    const quickReplies = bulletLines
+      .map((line) =>
+        line
+          .trim()
+          .replace(/^[-*•]\s+/, '')
+          .trim()
+      )
+      .filter(Boolean)
+
+    if (quickReplies.length >= 2) {
+      const contentWithoutBullets = lines
+        .filter((line) => !/^[-*•]\s+/.test(line.trim()))
+        .join('\n')
+        .trimEnd()
+
+      return {
+        content: contentWithoutBullets,
+        quickReplies,
+      }
+    }
+  }
+
+  if (!lastLine.startsWith('[') || !lastLine.endsWith(']')) {
+    return { content }
+  }
+
+  const inner = lastLine.slice(1, -1).trim()
+  if (!inner) {
+    return { content }
+  }
+
+  const options = inner
+    .split(/\s*,\s*/)
+    .map((option) => option.trim())
+    .filter(Boolean)
+
+  if (options.length < 2 || options.length > 5) {
+    return { content }
+  }
+
+  const nextContent = lines.slice(0, -1).join('\n').trimEnd()
+  return {
+    content: nextContent,
+    quickReplies: options,
+  }
+}
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export function CoachChatWidget({ context }: CoachChatWidgetProps) {
+  const userId = useAuthStore((state) => state.user?.id)
   const [open, setOpen] = useState(false)
   const [isFullscreen, setIsFullscreen] = useState(false)
+  const [contextModalOpen, setContextModalOpen] = useState(false)
+  const [includeRecentTurns, setIncludeRecentTurns] = useState(true)
+  const [hasRestoredPersistedState, setHasRestoredPersistedState] = useState(false)
   const [messages, setMessages] = useState<Message[]>([WELCOME])
   const [input, setInput] = useState('')
   const [streaming, setStreaming] = useState(false)
   const [pos, setPos] = useState<Pos | null>(null)
   const [attachments, setAttachments] = useState<Attachment[]>([])
+  const [filePickerTarget, setFilePickerTarget] = useState<FilePickerTarget>('draft')
+  const [savedContextAttachments, setSavedContextAttachments] = useState<SavedContextAttachment[]>(
+    []
+  )
   /** Live status text shown while a sequence step is executing (e.g. "Clicking Create Session button…") */
   const [executionStatus, setExecutionStatus] = useState<string | null>(null)
-
   const router = useRouter()
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const restoredPersistenceKeyRef = useRef<string | null>(null)
+  const contextScope =
+    context?.sessionId != null
+      ? `session:${context.page ?? 'unknown'}:${context.sessionId}`
+      : context?.page
+        ? `page:${context.page}`
+        : 'global'
+  const persistenceKey = `${COACH_CHAT_STORAGE_PREFIX}:${userId ?? 'anonymous'}:${contextScope}`
+
+  const getAttachmentKey = useCallback(
+    (attachment: Pick<Attachment, 'name' | 'mimeType' | 'size' | 's3Url'>) =>
+      attachment.s3Url ?? `${attachment.name}::${attachment.mimeType}::${attachment.size}`,
+    []
+  )
+
+  const mergeSavedContextAttachments = useCallback(
+    (existing: SavedContextAttachment[], incoming: Attachment[]) => {
+      const merged = new Map(
+        existing.map((attachment) => [getAttachmentKey(attachment), attachment])
+      )
+
+      incoming.forEach((attachment) => {
+        const key = getAttachmentKey(attachment)
+        const previous = merged.get(key)
+        merged.set(key, {
+          name: attachment.name,
+          content: attachment.content,
+          mimeType: attachment.mimeType,
+          size: attachment.size,
+          ...(attachment.s3Url ? { s3Url: attachment.s3Url } : {}),
+          savedAt: previous?.savedAt ?? Date.now(),
+        })
+      })
+
+      return Array.from(merged.values()).sort((a, b) => b.savedAt - a.savedAt)
+    },
+    [getAttachmentKey]
+  )
+
+  const stripAttachmentsFromMessages = useCallback(
+    (keysToRemove: Set<string>) => {
+      setMessages((prev) =>
+        prev.flatMap((msg) => {
+          if (!msg.attachments?.length) {
+            return [msg]
+          }
+
+          const nextAttachments = msg.attachments.filter(
+            (attachment) => !keysToRemove.has(getAttachmentKey(attachment))
+          )
+
+          if (nextAttachments.length === msg.attachments.length) {
+            return [msg]
+          }
+
+          if (!msg.content.trim() && nextAttachments.length === 0) {
+            return []
+          }
+
+          return [
+            {
+              ...msg,
+              attachments: nextAttachments.length > 0 ? nextAttachments : undefined,
+            },
+          ]
+        })
+      )
+    },
+    [getAttachmentKey]
+  )
+
+  const removeSavedContextAttachment = useCallback(
+    (attachmentKey: string) => {
+      setSavedContextAttachments((prev) =>
+        prev.filter((attachment) => getAttachmentKey(attachment) !== attachmentKey)
+      )
+      setAttachments((prev) =>
+        prev.filter((attachment) => getAttachmentKey(attachment) !== attachmentKey)
+      )
+      stripAttachmentsFromMessages(new Set([attachmentKey]))
+    },
+    [getAttachmentKey, stripAttachmentsFromMessages]
+  )
+
+  const clearSavedContextAttachments = useCallback(() => {
+    const keysToRemove = new Set(
+      savedContextAttachments.map((attachment) => getAttachmentKey(attachment))
+    )
+    setSavedContextAttachments([])
+    if (keysToRemove.size > 0) {
+      stripAttachmentsFromMessages(keysToRemove)
+    }
+  }, [getAttachmentKey, savedContextAttachments, stripAttachmentsFromMessages])
+
+  const serializeContextAttachments = useCallback(
+    (items: SavedContextAttachment[]) =>
+      items.map((attachment) => ({
+        name: attachment.name,
+        content: attachment.content,
+        mimeType: attachment.mimeType,
+        size: attachment.size,
+        ...(attachment.s3Url ? { s3Url: attachment.s3Url } : {}),
+      })),
+    []
+  )
+
+  const addAttachmentsToContext = useCallback(
+    (items: Attachment[]) => {
+      if (items.length === 0) return
+      setSavedContextAttachments((prev) => mergeSavedContextAttachments(prev, items))
+    },
+    [mergeSavedContextAttachments]
+  )
+
+  const saveDraftAttachmentsToContext = useCallback(() => {
+    const readyDraftAttachments = attachments.filter((attachment) => !attachment.uploading)
+    if (readyDraftAttachments.length === 0) return
+
+    addAttachmentsToContext(readyDraftAttachments)
+    setAttachments((prev) => prev.filter((attachment) => attachment.uploading))
+  }, [addAttachmentsToContext, attachments])
 
   const requiresPermission = (action: UIAction): boolean => {
     if (action.type === 'generate_document') return false
@@ -440,7 +754,7 @@ export function CoachChatWidget({ context }: CoachChatWidgetProps) {
 
   /**
    * Upload a file to the coach-attachments S3 endpoint and return its
-   * presigned URL + metadata.  Called for PDFs and large (>50 KB) non-image files.
+   * signed download URL + metadata. Called for PDFs and large (>50 KB) non-image files.
    */
   const uploadToS3 = useCallback(async (file: File) => {
     const formData = new FormData()
@@ -457,18 +771,12 @@ export function CoachChatWidget({ context }: CoachChatWidgetProps) {
   }, [])
 
   const handleFileSelect = useCallback(
-    (files: FileList | null) => {
+    (files: FileList | null, target: FilePickerTarget = 'draft') => {
       if (!files) return
-      Array.from(files).forEach(async (file) => {
-        const isPdf = file.type === 'application/pdf'
-        // Route PDFs or large non-image files through S3 to avoid the 5 MB JSON limit
-        const isLargeText = file.size > 50 * 1024 && !file.type.startsWith('image/')
 
-        if (isPdf || isLargeText) {
-          // Add a placeholder badge with uploading state
-          const placeholderId = `${file.name}_${Date.now()}`
-          setAttachments((prev) => [
-            ...prev,
+      const addUploadingPlaceholder = (file: File, placeholderId: string) => {
+        if (target === 'context') {
+          setSavedContextAttachments((prev) => [
             {
               name: file.name,
               content: '',
@@ -476,28 +784,93 @@ export function CoachChatWidget({ context }: CoachChatWidgetProps) {
               size: file.size,
               uploading: true,
               s3Url: placeholderId,
+              savedAt: Date.now(),
             },
+            ...prev,
           ])
+          return
+        }
+
+        setAttachments((prev) => [
+          ...prev,
+          {
+            name: file.name,
+            content: '',
+            mimeType: file.type || 'application/octet-stream',
+            size: file.size,
+            uploading: true,
+            s3Url: placeholderId,
+          },
+        ])
+      }
+
+      const removeUploadingPlaceholder = (placeholderId: string) => {
+        if (target === 'context') {
+          setSavedContextAttachments((prev) =>
+            prev.filter((attachment) => attachment.s3Url !== placeholderId)
+          )
+          return
+        }
+
+        setAttachments((prev) => prev.filter((attachment) => attachment.s3Url !== placeholderId))
+      }
+
+      const finalizeUploadedAttachment = (placeholderId: string, attachment: Attachment) => {
+        if (target === 'context') {
+          setSavedContextAttachments((prev) => {
+            const hasPlaceholder = prev.some((item) => item.s3Url === placeholderId)
+            if (!hasPlaceholder) return prev
+            const withoutPlaceholder = prev.filter((item) => item.s3Url !== placeholderId)
+            return mergeSavedContextAttachments(withoutPlaceholder, [attachment])
+          })
+          return
+        }
+
+        setAttachments((prev) =>
+          prev.map((item) =>
+            item.s3Url === placeholderId
+              ? {
+                  name: attachment.name,
+                  content: attachment.content,
+                  mimeType: attachment.mimeType,
+                  size: attachment.size,
+                  ...(attachment.s3Url ? { s3Url: attachment.s3Url } : {}),
+                  uploading: false,
+                }
+              : item
+          )
+        )
+      }
+
+      const finalizeInlineAttachment = (attachment: Attachment) => {
+        if (target === 'context') {
+          addAttachmentsToContext([attachment])
+          return
+        }
+
+        setAttachments((prev) => [...prev, attachment])
+      }
+
+      Array.from(files).forEach(async (file) => {
+        const isPdf = file.type === 'application/pdf'
+        // Route PDFs or large non-image files through S3 to avoid the 5 MB JSON limit
+        const isLargeText = file.size > 50 * 1024 && !file.type.startsWith('image/')
+
+        if (isPdf || isLargeText) {
+          const placeholderId = `${file.name}_${Date.now()}`
+          addUploadingPlaceholder(file, placeholderId)
+
           try {
             const result = await uploadToS3(file)
-            // Replace placeholder with real S3 URL
-            setAttachments((prev) =>
-              prev.map((att) =>
-                att.s3Url === placeholderId
-                  ? {
-                      name: result.name,
-                      content: '',
-                      mimeType: result.mimeType,
-                      size: result.size,
-                      s3Url: result.url,
-                      uploading: false,
-                    }
-                  : att
-              )
-            )
+            finalizeUploadedAttachment(placeholderId, {
+              name: result.name,
+              content: '',
+              mimeType: result.mimeType,
+              size: result.size,
+              s3Url: result.url,
+            })
           } catch {
-            // Remove placeholder on failure
-            setAttachments((prev) => prev.filter((att) => att.s3Url !== placeholderId))
+            removeUploadingPlaceholder(placeholderId)
             notifications.show({
               message: `Failed to upload ${file.name}`,
               color: 'red',
@@ -509,10 +882,12 @@ export function CoachChatWidget({ context }: CoachChatWidgetProps) {
           const reader = new FileReader()
           reader.onload = (e) => {
             const content = (e.target?.result as string) ?? ''
-            setAttachments((prev) => [
-              ...prev,
-              { name: file.name, content, mimeType: file.type || 'text/plain', size: file.size },
-            ])
+            finalizeInlineAttachment({
+              name: file.name,
+              content,
+              mimeType: file.type || 'text/plain',
+              size: file.size,
+            })
           }
           if (isImage) {
             reader.readAsDataURL(file)
@@ -524,7 +899,7 @@ export function CoachChatWidget({ context }: CoachChatWidgetProps) {
       // Reset so the same file can be re-selected after removal
       if (fileInputRef.current) fileInputRef.current.value = ''
     },
-    [uploadToS3]
+    [addAttachmentsToContext, mergeSavedContextAttachments, uploadToS3]
   )
 
   const removeAttachment = useCallback((index: number) => {
@@ -538,15 +913,6 @@ export function CoachChatWidget({ context }: CoachChatWidgetProps) {
   const isDragging = useRef(false)
   const hasMoved = useRef(false)
   const dragOrigin = useRef({ px: 0, py: 0, wx: 0, wy: 0 })
-
-  // ─── Init position ───────────────────────────────────────────────────────
-
-  useEffect(() => {
-    setPos({
-      x: window.innerWidth - BTN - 28,
-      y: window.innerHeight - BTN - 28,
-    })
-  }, [])
 
   // ─── Auto-scroll ─────────────────────────────────────────────────────────
 
@@ -567,6 +933,109 @@ export function CoachChatWidget({ context }: CoachChatWidgetProps) {
     }),
     []
   )
+
+  // ─── Persistence ─────────────────────────────────────────────────────────
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    restoredPersistenceKeyRef.current = null
+    const defaultPos = clampPos(getDefaultCoachPosition().x, getDefaultCoachPosition().y)
+
+    try {
+      const raw = window.sessionStorage.getItem(persistenceKey)
+      if (!raw) {
+        setOpen(false)
+        setIsFullscreen(false)
+        setMessages([WELCOME])
+        setSavedContextAttachments([])
+        setIncludeRecentTurns(true)
+        setPos(defaultPos)
+        setHasRestoredPersistedState(true)
+        return
+      }
+
+      const parsed = JSON.parse(raw) as Partial<PersistedCoachChatState>
+      setOpen(Boolean(parsed.open))
+      setIsFullscreen(Boolean(parsed.isFullscreen))
+      setContextModalOpen(false)
+      setIncludeRecentTurns(parsed.includeRecentTurns ?? true)
+      setMessages(
+        Array.isArray(parsed.messages) ? sanitizeMessagesForPersistence(parsed.messages) : [WELCOME]
+      )
+      setSavedContextAttachments(
+        Array.isArray(parsed.savedContextAttachments)
+          ? sanitizeSavedContextAttachments(
+              parsed.savedContextAttachments as SavedContextAttachment[]
+            )
+          : []
+      )
+      setPos(
+        parsed.pos && Number.isFinite(parsed.pos.x) && Number.isFinite(parsed.pos.y)
+          ? clampPos(parsed.pos.x, parsed.pos.y)
+          : defaultPos
+      )
+    } catch {
+      window.sessionStorage.removeItem(persistenceKey)
+      setOpen(false)
+      setIsFullscreen(false)
+      setContextModalOpen(false)
+      setMessages([WELCOME])
+      setSavedContextAttachments([])
+      setIncludeRecentTurns(true)
+      setPos(defaultPos)
+    } finally {
+      setAttachments([])
+      setStreaming(false)
+      setExecutionStatus(null)
+      setContextModalOpen(false)
+      restoredPersistenceKeyRef.current = persistenceKey
+      setHasRestoredPersistedState(true)
+    }
+  }, [clampPos, persistenceKey])
+
+  useEffect(() => {
+    if (
+      typeof window === 'undefined' ||
+      !hasRestoredPersistedState ||
+      pos == null ||
+      restoredPersistenceKeyRef.current !== persistenceKey
+    ) {
+      return
+    }
+
+    const stateToPersist: PersistedCoachChatState = {
+      version: 1,
+      open,
+      isFullscreen,
+      pos,
+      includeRecentTurns,
+      messages: sanitizeMessagesForPersistence(messages),
+      savedContextAttachments: sanitizeSavedContextAttachments(savedContextAttachments),
+    }
+
+    try {
+      window.sessionStorage.setItem(persistenceKey, JSON.stringify(stateToPersist))
+    } catch {
+      try {
+        window.sessionStorage.setItem(
+          persistenceKey,
+          JSON.stringify(compactPersistedState(stateToPersist))
+        )
+      } catch {
+        window.sessionStorage.removeItem(persistenceKey)
+      }
+    }
+  }, [
+    hasRestoredPersistedState,
+    includeRecentTurns,
+    isFullscreen,
+    messages,
+    open,
+    persistenceKey,
+    pos,
+    savedContextAttachments,
+  ])
 
   const startDrag = useCallback((e: React.PointerEvent, currentPos: Pos) => {
     e.preventDefault()
@@ -634,18 +1103,39 @@ export function CoachChatWidget({ context }: CoachChatWidgetProps) {
 
   // ─── Streaming chat ───────────────────────────────────────────────────────
 
-  const hasUploading = attachments.some((a) => a.uploading)
+  const hasUploading =
+    attachments.some((attachment) => attachment.uploading) ||
+    savedContextAttachments.some((attachment) => attachment.uploading)
 
-  const send = async () => {
-    const text = input.trim()
-    if ((!text && attachments.length === 0) || streaming || hasUploading) return
+  const send = async (overrideText?: string) => {
+    const text = (overrideText ?? input).trim()
+    const readyAttachments = attachments.filter((attachment) => !attachment.uploading)
+    if ((!text && readyAttachments.length === 0) || streaming || hasUploading) return
+
+    const nextSavedContextAttachments = mergeSavedContextAttachments(
+      savedContextAttachments.filter((attachment) => !attachment.uploading),
+      readyAttachments
+    )
 
     const userMsg: Message = {
       role: 'user',
       content: text,
-      attachments: attachments.length > 0 ? [...attachments] : undefined,
+      attachments: readyAttachments.length > 0 ? [...readyAttachments] : undefined,
     }
-    const nextMessages = [...messages, userMsg]
+    const nextMessages = [
+      ...messages.map((message) => ({ ...message, quickReplies: undefined })),
+      userMsg,
+    ]
+    const nextContext = {
+      ...context,
+      recentTurns: includeRecentTurns ? context?.recentTurns : undefined,
+      savedAttachments:
+        nextSavedContextAttachments.length > 0
+          ? serializeContextAttachments(nextSavedContextAttachments)
+          : undefined,
+    }
+
+    setSavedContextAttachments(nextSavedContextAttachments)
     setMessages([...nextMessages, { role: 'assistant', content: '' }])
     setInput('')
     setAttachments([])
@@ -663,7 +1153,7 @@ export function CoachChatWidget({ context }: CoachChatWidgetProps) {
           ...(getAccessToken() ? { Authorization: `Bearer ${getAccessToken()}` } : {}),
         },
         credentials: 'include',
-        body: JSON.stringify({ messages: nextMessages, context }),
+        body: JSON.stringify({ messages: nextMessages, context: nextContext }),
       })
 
       if (!response.ok || !response.body) throw new Error(`HTTP ${response.status}`)
@@ -686,12 +1176,32 @@ export function CoachChatWidget({ context }: CoachChatWidgetProps) {
             const data = line.slice(6).trim()
             if (data === '[DONE]') continue
             try {
-              const parsed = JSON.parse(data) as { delta?: string; action?: UIAction }
+              const parsed = JSON.parse(data) as {
+                delta?: string
+                action?: UIAction
+                suggestions?: string[]
+              }
+              if (parsed.suggestions?.length) {
+                setMessages((prev) => {
+                  const updated = [...prev]
+                  const last = updated[updated.length - 1]
+                  updated[updated.length - 1] = {
+                    ...last,
+                    quickReplies: parsed.suggestions,
+                  }
+                  return updated
+                })
+              }
               if (parsed.delta) {
                 content += parsed.delta
                 setMessages((prev) => {
                   const updated = [...prev]
-                  updated[updated.length - 1] = { role: 'assistant', content }
+                  const last = updated[updated.length - 1]
+                  updated[updated.length - 1] = {
+                    ...last,
+                    role: 'assistant',
+                    content,
+                  }
                   return updated
                 })
               }
@@ -750,6 +1260,7 @@ export function CoachChatWidget({ context }: CoachChatWidgetProps) {
 
   const handleClose = () => {
     abortRef.current?.abort()
+    setContextModalOpen(false)
     setOpen(false)
     setIsFullscreen(false)
   }
@@ -759,20 +1270,338 @@ export function CoachChatWidget({ context }: CoachChatWidgetProps) {
     setStreaming(false)
     setMessages([WELCOME])
     setAttachments([])
+    setInput('')
     setExecutionStatus(null)
   }
 
   // ─── Derived ─────────────────────────────────────────────────────────────
 
+  const sourceRecentTurns = context?.recentTurns ?? []
+  const recentTurns = includeRecentTurns ? sourceRecentTurns : []
   const lastMsg = messages[messages.length - 1]
   const isLastStreaming = streaming && lastMsg?.role === 'assistant'
+  const conversationTurns = messages.filter((msg) => msg.role === 'user').length
+  const readyDraftAttachmentCount = attachments.filter((attachment) => !attachment.uploading).length
+  const isReadyForRender =
+    hasRestoredPersistedState && restoredPersistenceKeyRef.current === persistenceKey
 
-  if (!pos) return null
+  if (!pos || !isReadyForRender) return null
 
   // ─── Render ──────────────────────────────────────────────────────────────
 
   return (
     <>
+      <Modal
+        opened={contextModalOpen}
+        onClose={() => setContextModalOpen(false)}
+        title="Coach Context"
+        centered
+        size="lg"
+        overlayProps={{ blur: 6, backgroundOpacity: 0.45 }}
+        styles={{
+          content: {
+            background: 'linear-gradient(180deg, rgba(11,18,35,0.98) 0%, rgba(8,13,27,0.98) 100%)',
+            border: '1px solid rgba(90, 127, 201, 0.22)',
+          },
+          header: {
+            background: 'transparent',
+            borderBottom: '1px solid rgba(123, 158, 224, 0.16)',
+          },
+          title: {
+            color: 'white',
+            fontWeight: 800,
+            letterSpacing: 0.3,
+          },
+          close: {
+            color: 'white',
+          },
+          body: {
+            paddingTop: 14,
+          },
+        }}
+      >
+        <Stack gap="md">
+          <Paper
+            radius="md"
+            p="sm"
+            style={{
+              background: 'rgba(19, 29, 54, 0.72)',
+              border: '1px solid rgba(95, 132, 199, 0.2)',
+            }}
+          >
+            <Text size="xs" fw={700} c="blue.2" tt="uppercase" mb={8}>
+              Current Window
+            </Text>
+            <Group gap="xs" wrap="wrap">
+              <Badge size="sm" variant="light" color="blue">
+                {context?.page ?? 'unknown page'}
+              </Badge>
+              {context?.sessionId && (
+                <Badge size="sm" variant="light" color="grape">
+                  session {context.sessionId}
+                </Badge>
+              )}
+              {context?.sessionName && (
+                <Badge size="sm" variant="light" color="indigo">
+                  {context.sessionName}
+                </Badge>
+              )}
+              <Badge size="sm" variant="light" color="teal">
+                {savedContextAttachments.length} saved file
+                {savedContextAttachments.length === 1 ? '' : 's'}
+              </Badge>
+              <Badge size="sm" variant="light" color="cyan">
+                {conversationTurns} conversation turn
+                {conversationTurns === 1 ? '' : 's'}
+              </Badge>
+              <Badge size="sm" variant="light" color={includeRecentTurns ? 'gray' : 'yellow'}>
+                {sourceRecentTurns.length} live turn
+                {sourceRecentTurns.length === 1 ? '' : 's'}
+                {includeRecentTurns ? ' in context' : ' excluded'}
+              </Badge>
+            </Group>
+            <Text size="xs" c="dimmed" mt="sm" style={{ lineHeight: 1.5 }}>
+              Files saved here are sent with future coach requests until you remove them, and they
+              survive page refreshes for this chat scope. Use this panel to prune the context window
+              when you want the coach to forget a document.
+            </Text>
+          </Paper>
+
+          <Paper
+            radius="md"
+            p="sm"
+            style={{
+              background: 'rgba(12, 19, 37, 0.82)',
+              border: '1px solid rgba(95, 132, 199, 0.16)',
+            }}
+          >
+            <Group justify="space-between" align="center" mb="sm">
+              <Text size="sm" fw={700} c="white">
+                Saved Files
+              </Text>
+              <Group gap="xs">
+                <Button
+                  size="xs"
+                  variant="light"
+                  color="blue"
+                  leftSection={<IconPaperclip size={12} />}
+                  onClick={() => {
+                    setFilePickerTarget('context')
+                    fileInputRef.current?.click()
+                  }}
+                  disabled={streaming}
+                >
+                  Add files
+                </Button>
+                <Button
+                  size="xs"
+                  variant="subtle"
+                  color="red"
+                  leftSection={<IconTrash size={12} />}
+                  disabled={savedContextAttachments.length === 0}
+                  onClick={clearSavedContextAttachments}
+                >
+                  Clear all
+                </Button>
+              </Group>
+            </Group>
+
+            {savedContextAttachments.length === 0 ? (
+              <Text size="sm" c="dimmed">
+                No files are pinned in context yet. Upload a file here or save a draft into context.
+              </Text>
+            ) : (
+              <Stack gap="xs">
+                {savedContextAttachments.map((attachment) => {
+                  const attachmentKey = getAttachmentKey(attachment)
+                  return (
+                    <Paper
+                      key={attachmentKey}
+                      radius="md"
+                      p="sm"
+                      style={{
+                        background: 'rgba(19, 28, 51, 0.68)',
+                        border: '1px solid rgba(90, 127, 201, 0.14)',
+                      }}
+                    >
+                      <Group justify="space-between" align="flex-start" gap="sm">
+                        <Box style={{ minWidth: 0, flex: 1 }}>
+                          <Group gap={6} mb={4} wrap="wrap">
+                            <Badge
+                              size="xs"
+                              variant="light"
+                              color={
+                                attachment.uploading ? 'gray' : attachment.s3Url ? 'blue' : 'gray'
+                              }
+                              leftSection={<IconFileText size={9} />}
+                            >
+                              {attachment.uploading
+                                ? 'uploading'
+                                : attachment.s3Url
+                                  ? 'retrievable document'
+                                  : attachment.mimeType}
+                            </Badge>
+                            <Badge size="xs" variant="light" color="dark">
+                              {formatAttachmentSize(attachment.size)}
+                            </Badge>
+                          </Group>
+                          <Text size="sm" fw={600} c="white" truncate>
+                            {attachment.name}
+                          </Text>
+                          {attachment.uploading ? (
+                            <Text size="xs" c="dimmed" mt={4}>
+                              Uploading to coach context...
+                            </Text>
+                          ) : attachment.s3Url ? (
+                            <Text size="xs" c="dimmed" mt={4} style={{ wordBreak: 'break-all' }}>
+                              {attachment.s3Url}
+                            </Text>
+                          ) : (
+                            <Text size="xs" c="dimmed" mt={4} lineClamp={3}>
+                              {attachment.content ||
+                                'This file is stored in chat context without inline text.'}
+                            </Text>
+                          )}
+                        </Box>
+
+                        <ActionIcon
+                          variant="subtle"
+                          color="red"
+                          onClick={() => removeSavedContextAttachment(attachmentKey)}
+                          aria-label={`Remove ${attachment.name} from coach context`}
+                        >
+                          <IconX size={14} />
+                        </ActionIcon>
+                      </Group>
+                    </Paper>
+                  )
+                })}
+              </Stack>
+            )}
+          </Paper>
+
+          <Paper
+            radius="md"
+            p="sm"
+            style={{
+              background: 'rgba(12, 19, 37, 0.82)',
+              border: '1px solid rgba(95, 132, 199, 0.16)',
+            }}
+          >
+            <Group justify="space-between" align="center" mb="sm">
+              <Text size="sm" fw={700} c="white">
+                Draft Attachments
+              </Text>
+              <Button
+                size="xs"
+                variant="subtle"
+                color="teal"
+                disabled={readyDraftAttachmentCount === 0}
+                onClick={saveDraftAttachmentsToContext}
+              >
+                Save drafts to context
+              </Button>
+            </Group>
+            {attachments.length === 0 ? (
+              <Text size="sm" c="dimmed">
+                No draft files. Use the paperclip button to stage a file before sending.
+              </Text>
+            ) : (
+              <Group gap="xs" wrap="wrap">
+                {attachments.map((attachment, index) => (
+                  <Badge
+                    key={`${attachment.name}-${index}`}
+                    size="sm"
+                    variant="light"
+                    color={attachment.uploading ? 'gray' : 'blue'}
+                    rightSection={
+                      !attachment.uploading ? (
+                        <ActionIcon
+                          size="xs"
+                          variant="transparent"
+                          color="blue"
+                          onClick={() => removeAttachment(index)}
+                          aria-label={`Remove ${attachment.name}`}
+                        >
+                          <IconX size={10} />
+                        </ActionIcon>
+                      ) : undefined
+                    }
+                  >
+                    {attachment.uploading
+                      ? `${attachment.name} (uploading…)`
+                      : `${attachment.name} • ${formatAttachmentSize(attachment.size)}`}
+                  </Badge>
+                ))}
+              </Group>
+            )}
+          </Paper>
+
+          <Paper
+            radius="md"
+            p="sm"
+            style={{
+              background: 'rgba(12, 19, 37, 0.82)',
+              border: '1px solid rgba(95, 132, 199, 0.16)',
+            }}
+          >
+            <Group justify="space-between" align="center" mb="sm">
+              <Text size="sm" fw={700} c="white">
+                Recent Turns In Context
+              </Text>
+              <Group gap="xs">
+                <Button
+                  size="xs"
+                  variant="subtle"
+                  color={includeRecentTurns ? 'yellow' : 'blue'}
+                  disabled={sourceRecentTurns.length === 0}
+                  onClick={() => setIncludeRecentTurns((current) => !current)}
+                >
+                  {includeRecentTurns ? 'Exclude from context' : 'Include again'}
+                </Button>
+                <Button size="xs" variant="subtle" color="gray" onClick={handleClear}>
+                  Clear widget chat
+                </Button>
+              </Group>
+            </Group>
+            {sourceRecentTurns.length === 0 ? (
+              <Text size="sm" c="dimmed">
+                No live-session turns are currently being injected into coach context.
+              </Text>
+            ) : !includeRecentTurns ? (
+              <Text size="sm" c="dimmed" style={{ lineHeight: 1.6 }}>
+                These live-session turns still exist on the page, but they are currently excluded
+                from future coach requests. Re-enable them if you want the coach to use the latest
+                session transcript again.
+              </Text>
+            ) : (
+              <Box style={{ maxHeight: 220, overflowY: 'auto' }}>
+                <Stack gap="xs">
+                  {recentTurns.map((turn, index) => (
+                    <Paper
+                      key={`${turn.role}-${index}`}
+                      radius="md"
+                      p="xs"
+                      style={{
+                        background: 'rgba(19, 28, 51, 0.68)',
+                        border: '1px solid rgba(90, 127, 201, 0.12)',
+                      }}
+                    >
+                      <Text size="xs" fw={700} c="blue.2" tt="uppercase" mb={4}>
+                        {turn.role}
+                      </Text>
+                      <Text size="sm" c="gray.2" style={{ lineHeight: 1.5 }}>
+                        {turn.text}
+                      </Text>
+                    </Paper>
+                  ))}
+                </Stack>
+              </Box>
+            )}
+          </Paper>
+        </Stack>
+      </Modal>
+
       {/* ── Chat Panel ─────────────────────────────────────────────────── */}
       {open && (
         <Box style={panelStyle} className={`coach-shell ${isFullscreen ? 'is-fullscreen' : ''}`}>
@@ -831,6 +1660,17 @@ export function CoachChatWidget({ context }: CoachChatWidgetProps) {
                   color="blue"
                   size="sm"
                   className="coach-header-btn"
+                  onClick={() => setContextModalOpen(true)}
+                  aria-label="Open coach context"
+                  title="Open coach context"
+                >
+                  <IconDatabase size={14} />
+                </ActionIcon>
+                <ActionIcon
+                  variant="subtle"
+                  color="blue"
+                  size="sm"
+                  className="coach-header-btn"
                   onClick={() => setIsFullscreen((v) => !v)}
                   aria-label={isFullscreen ? 'Restore panel' : 'Expand to fullscreen'}
                   title={isFullscreen ? 'Restore panel' : 'Expand to fullscreen'}
@@ -875,8 +1715,14 @@ export function CoachChatWidget({ context }: CoachChatWidgetProps) {
             >
               <Stack gap="sm" p="md">
                 {messages.map((msg, i) => {
+                  const parsedAssistantMessage =
+                    msg.role === 'assistant' && !msg.quickReplies
+                      ? extractInlineQuickReplies(msg.content)
+                      : { content: msg.content, quickReplies: msg.quickReplies }
                   const thisIsStreaming = isLastStreaming && i === messages.length - 1
-                  const hideBubble = !msg.content && !thisIsStreaming && msg.role === 'assistant'
+                  const visibleContent = parsedAssistantMessage.content
+                  const visibleQuickReplies = parsedAssistantMessage.quickReplies
+                  const hideBubble = !visibleContent && !thisIsStreaming && msg.role === 'assistant'
                   return (
                     <Box
                       key={i}
@@ -971,7 +1817,7 @@ export function CoachChatWidget({ context }: CoachChatWidgetProps) {
                                       ),
                                     }}
                                   >
-                                    {msg.content}
+                                    {visibleContent}
                                   </ReactMarkdown>
                                   {thisIsStreaming && (
                                     <span
@@ -1188,6 +2034,23 @@ export function CoachChatWidget({ context }: CoachChatWidgetProps) {
                           )}
                         </Box>
                       )}
+
+                      {visibleQuickReplies && visibleQuickReplies.length > 0 && (
+                        <Group mt={8} gap={6} wrap="wrap">
+                          {visibleQuickReplies.map((option, qi) => (
+                            <Button
+                              key={`${option}-${qi}`}
+                              size="xs"
+                              variant="light"
+                              color="blue"
+                              radius="xl"
+                              onClick={() => void send(option)}
+                            >
+                              {option}
+                            </Button>
+                          ))}
+                        </Group>
+                      )}
                     </Box>
                   )
                 })}
@@ -1255,14 +2118,17 @@ export function CoachChatWidget({ context }: CoachChatWidgetProps) {
                 accept={ACCEPTED_FILE_TYPES}
                 multiple
                 style={{ display: 'none' }}
-                onChange={(e) => handleFileSelect(e.currentTarget.files)}
+                onChange={(e) => handleFileSelect(e.currentTarget.files, filePickerTarget)}
               />
               <ActionIcon
                 variant="subtle"
                 color="blue"
                 size="md"
                 className="coach-footer-icon"
-                onClick={() => fileInputRef.current?.click()}
+                onClick={() => {
+                  setFilePickerTarget('draft')
+                  fileInputRef.current?.click()
+                }}
                 aria-label="Attach file"
                 title="Attach a file"
                 disabled={streaming}

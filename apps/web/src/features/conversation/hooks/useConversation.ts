@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { conversationService } from '../services/conversation.service'
-import { getAccessToken } from '@/lib/client'
+import { getAccessToken, refreshAccessToken } from '@/lib/client'
 import {
   ConversationStartPayload,
   WsEnvelope,
@@ -12,6 +12,7 @@ import {
   ConversationErrorPayload,
   ConversationHangupRequestedPayload,
   ConversationToolExecutedPayload,
+  ConversationCoachingTipPayload,
 } from '../types/conversation.types'
 
 export interface ConversationToolEvent {
@@ -43,6 +44,7 @@ interface QueuedAudioChunk {
 interface UseConversationOptions {
   sessionId: string
   autoConnect?: boolean
+  autoConnectKey?: number
   audioOutput?: 'browser' | 'external'
   onExternalAudioChunk?: (chunk: {
     requestId: string
@@ -58,6 +60,7 @@ export function useConversation(options: UseConversationOptions) {
   const {
     sessionId,
     autoConnect = true,
+    autoConnectKey = 0,
     audioOutput = 'browser',
     onExternalAudioChunk,
     onExternalAudioStop,
@@ -73,6 +76,11 @@ export function useConversation(options: UseConversationOptions) {
   const [isAudioPlaying, setIsAudioPlaying] = useState(false)
   const [hangupRequest, setHangupRequest] = useState<{ reason: string } | null>(null)
   const [toolEvents, setToolEvents] = useState<ConversationToolEvent[]>([])
+  const [coachingTip, setCoachingTip] = useState<{
+    tip: string
+    stage: string
+    stageIndex: number
+  } | null>(null)
 
   const currentRequestIdRef = useRef<string | null>(null)
   const currentAudioRef = useRef<HTMLAudioElement | null>(null)
@@ -82,6 +90,8 @@ export function useConversation(options: UseConversationOptions) {
   const onExternalAudioStopRef = useRef(onExternalAudioStop)
   const messagesRef = useRef<ConversationMessage[]>([])
   const isHungUpRef = useRef(false)
+  const reconnectAttemptsRef = useRef(0)
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Sentence audio queue — keyed by sentenceIndex for ordered playback
   const audioQueueRef = useRef<Map<number, QueuedAudioChunk>>(new Map())
@@ -272,6 +282,15 @@ export function useConversation(options: UseConversationOptions) {
   }, [audioOutput, playAudio])
 
   const disconnect = useCallback(() => {
+    // Cancel any scheduled reconnect timer and reset the attempt counter so
+    // stale timers can't fire and race with the next connect() call.
+    if (reconnectTimerRef.current) {
+      clearTimeout(reconnectTimerRef.current)
+      reconnectTimerRef.current = null
+    }
+    reconnectAttemptsRef.current = 0
+
+    conversationService.clearSocketDisconnect()
     conversationService.offConversationText()
     conversationService.offConversationStreamDelta()
     conversationService.offConversationStreamCompleted()
@@ -282,9 +301,11 @@ export function useConversation(options: UseConversationOptions) {
     conversationService.offConversationCancel()
     conversationService.offConversationHangupRequested()
     conversationService.offConversationToolExecuted()
+    conversationService.offConversationCoachingTip()
 
     conversationService.disconnect()
     setIsConnected(false)
+    setIsConnecting(false)
   }, [])
 
   const revokeAudioUrls = useCallback(() => {
@@ -474,36 +495,147 @@ export function useConversation(options: UseConversationOptions) {
         setToolEvents((prev) => [...prev.slice(-9), event])
       }
     )
+
+    conversationService.onConversationCoachingTip(
+      (data: WsEnvelope<ConversationCoachingTipPayload>) => {
+        if (isHungUpRef.current) return
+        setCoachingTip({
+          tip: data.payload.tip,
+          stage: data.payload.stage,
+          stageIndex: data.payload.stageIndex,
+        })
+      }
+    )
   }, [playAudio, stopAudio, revokeAudioUrls, tryPlayNext, clearAudioQueue])
 
-  const connect = useCallback(async () => {
-    const token = getAccessToken()
-    if (!token) {
-      const errorMsg = 'No authentication token found'
-      setError(errorMsg)
-      onErrorRef.current?.(errorMsg)
-      return
-    }
+  const connect = useCallback(
+    async (resetAttempts = true) => {
+      // If this is a retry but the socket is already connected, skip.
+      if (!resetAttempts && conversationService.isConnected()) return
 
-    setIsConnecting(true)
-    setError(null)
+      let token = getAccessToken()
+      if (!token) {
+        token = await refreshAccessToken()
+      }
+      if (!token) {
+        const errorMsg = 'No authentication token found'
+        setError(errorMsg)
+        onErrorRef.current?.(errorMsg)
+        return
+      }
 
-    try {
-      await conversationService.connect(token)
-      setIsConnected(true)
-      setupEventListeners()
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : 'Failed to connect'
-      setError(errorMsg)
-      onErrorRef.current?.(errorMsg)
-    } finally {
-      setIsConnecting(false)
-    }
-  }, [setupEventListeners])
+      // Clear any scheduled reconnect timer
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current)
+        reconnectTimerRef.current = null
+      }
+
+      if (resetAttempts) {
+        reconnectAttemptsRef.current = 0
+      }
+
+      // Clear hung-up flag so events are processed on this new connection
+      isHungUpRef.current = false
+
+      setIsConnecting(true)
+      setError(null)
+
+      // Flags used in finally to avoid incorrect state resets
+      let superseded = false
+      let willRetry = false
+
+      try {
+        await conversationService.connect(token)
+        setIsConnected(true)
+        setError(null)
+        setupEventListeners()
+
+        // Register mid-session drop handler. On unexpected disconnect, auto-reconnect
+        // up to 3 times with linear backoff before giving up.
+        conversationService.onSocketDisconnect((reason) => {
+          if (isHungUpRef.current) return
+
+          setIsConnected(false)
+
+          const attempt = reconnectAttemptsRef.current + 1
+          reconnectAttemptsRef.current = attempt
+
+          if (attempt > 3) {
+            console.error(
+              `[useConversation] Mid-session drop — max reconnect attempts (3) exceeded, giving up. Last reason: ${reason}`
+            )
+            setIsConnecting(false)
+            setError('Connection lost. Please refresh the page.')
+            return
+          }
+
+          const delay = attempt * 1500 // 1.5s, 3s, 4.5s
+          console.warn(
+            `[useConversation] Mid-session drop (attempt ${attempt}/3), reason: ${reason} — reconnecting in ${delay}ms`
+          )
+          setIsConnecting(true)
+          reconnectTimerRef.current = setTimeout(() => {
+            if (!isHungUpRef.current) {
+              void connect(false)
+            }
+          }, delay)
+        })
+      } catch (err) {
+        // Ignore errors from connections that were superseded by a newer connect() call.
+        // The superseding connection owns isConnecting from this point on.
+        if (err instanceof Error && err.message === 'Connection superseded') {
+          superseded = true
+          return
+        }
+
+        const attempt = reconnectAttemptsRef.current + 1
+        reconnectAttemptsRef.current = attempt
+        const errorMsg = err instanceof Error ? err.message : 'Failed to connect'
+
+        if (attempt <= 3 && !isHungUpRef.current) {
+          // Auto-retry failed initial connections with the same linear backoff
+          // used for mid-session drops.
+          const delay = attempt * 1500 // 1.5s, 3s, 4.5s
+          console.warn(
+            `[useConversation] Connection failed (attempt ${attempt}/3): ${errorMsg} — retrying in ${delay}ms`
+          )
+          willRetry = true
+          setIsConnecting(true)
+          reconnectTimerRef.current = setTimeout(() => {
+            if (!isHungUpRef.current) {
+              void connect(false)
+            }
+          }, delay)
+        } else {
+          console.error(
+            `[useConversation] Connection failed after ${attempt} attempt(s) — showing error: ${errorMsg}`
+          )
+          setError(errorMsg)
+          onErrorRef.current?.(errorMsg)
+        }
+      } finally {
+        // Don't reset isConnecting if:
+        // - This connection was superseded (the newer connect() owns the state)
+        // - A retry is already scheduled (isConnecting stays true until retry resolves)
+        if (!superseded && !willRetry) {
+          setIsConnecting(false)
+        }
+      }
+    },
+    [setupEventListeners]
+  )
 
   const hangUp = useCallback(() => {
     // Mark as hung up to prevent further message processing
     isHungUpRef.current = true
+
+    // Cancel any pending reconnect attempt
+    if (reconnectTimerRef.current) {
+      clearTimeout(reconnectTimerRef.current)
+      reconnectTimerRef.current = null
+    }
+    reconnectAttemptsRef.current = 0
+    conversationService.clearSocketDisconnect()
 
     // Cancel any ongoing conversation
     if (currentRequestIdRef.current) {
@@ -634,6 +766,24 @@ export function useConversation(options: UseConversationOptions) {
     setMessages([])
   }, [revokeAudioUrls])
 
+  const hydrateMessages = useCallback(
+    (
+      nextMessages: Array<
+        Pick<ConversationMessage, 'id' | 'role' | 'text' | 'timestamp' | 'usage' | 'audioUrl'>
+      >
+    ) => {
+      revokeAudioUrls()
+      setMessages(
+        nextMessages.map((message) => ({
+          ...message,
+          timestamp:
+            message.timestamp instanceof Date ? message.timestamp : new Date(message.timestamp),
+        }))
+      )
+    },
+    [revokeAudioUrls]
+  )
+
   const clearHangupRequest = useCallback(() => {
     setHangupRequest(null)
   }, [])
@@ -667,7 +817,7 @@ export function useConversation(options: UseConversationOptions) {
   useEffect(() => {
     if (autoConnect) {
       isHungUpRef.current = false
-      connect()
+      void connect()
     }
 
     return () => {
@@ -677,7 +827,7 @@ export function useConversation(options: UseConversationOptions) {
       disconnect()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoConnect, revokeAudioUrls])
+  }, [autoConnect, autoConnectKey, revokeAudioUrls])
 
   return {
     isConnected,
@@ -689,6 +839,7 @@ export function useConversation(options: UseConversationOptions) {
     isAudioPlaying,
     hangupRequest,
     toolEvents,
+    coachingTip,
     connect,
     disconnect,
     hangUp,
@@ -696,8 +847,10 @@ export function useConversation(options: UseConversationOptions) {
     sendMessage,
     startAssistantTurn,
     clearMessages,
+    hydrateMessages,
     clearHangupRequest,
     clearToolEvents,
+    clearCoachingTip: () => setCoachingTip(null),
     stopAudio,
     replayAudio,
     audioElementRef: currentAudioRef,

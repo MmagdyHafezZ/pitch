@@ -238,8 +238,8 @@ describe('buildConversationSystemPrompt', () => {
       },
     });
 
-    expect(response).toContain('Hello, I am IBM Procurement Reviewer.');
-    expect(response).toContain('Our objective today is');
+    expect(response).toContain('As IBM Procurement Reviewer,');
+    expect(response).toContain('Give me specifics, not a high-level pitch.');
   });
 
   it('flags the legacy generic clarification fallback as disallowed', () => {
@@ -253,5 +253,74 @@ describe('buildConversationSystemPrompt', () => {
         'As Procurement Director, I need a concrete answer.',
       ),
     ).toBe(false);
+  });
+
+  it('includes uploaded session document previews in the prompt context', () => {
+    const prompt = buildConversationSystemPrompt(
+      makeInput(undefined, {
+        attachments: [
+          {
+            filename: 'discovery-notes.pdf',
+            textPreview:
+              'Customer priorities: reduce onboarding time, keep SSO mandatory, and confirm legal review before rollout.',
+          },
+        ],
+      }),
+    );
+
+    expect(prompt).toContain('[SESSION DOCUMENTS]');
+    expect(prompt).toContain('discovery-notes.pdf');
+    expect(prompt).toContain('Customer priorities: reduce onboarding time');
+  });
+
+  it('forbids prep-coach meta questions in the live roleplay prompt', () => {
+    const prompt = buildConversationSystemPrompt(makeInput());
+
+    expect(prompt).toContain('Do not switch into prep-coach mode.');
+    expect(prompt).toContain('what the user plans to highlight');
+    expect(prompt).toContain('What do you have in mind?');
+  });
+
+  it('uses counterpartProfile details when no linked persona exists', () => {
+    const prompt = buildConversationSystemPrompt(
+      makeInput(undefined, {
+        counterpartProfile: {
+          name: 'Skeptical VP of Engineering',
+          role: 'Skeptical VP of Engineering',
+          background:
+            'Responsible for platform reliability, engineering efficiency, and rollout risk.',
+          objections: [
+            'Integration complexity',
+            'Unclear ROI',
+            'Developer adoption risk',
+          ],
+          signatureTraits: [
+            'Asks for specifics',
+            'Pushes on implementation risk',
+          ],
+          personality:
+            'Analytical, skeptical, and impatient with vague answers.',
+        },
+      }),
+    );
+
+    expect(prompt).toContain('- You are Skeptical VP of Engineering.');
+    expect(prompt).toContain('[COUNTERPART]');
+    expect(prompt).toContain('Integration complexity');
+    expect(prompt).toContain('Pushes on implementation risk');
+    expect(prompt).toContain(
+      'Analytical, skeptical, and impatient with vague answers.',
+    );
+  });
+
+  it('tells the AI to challenge vague answers instead of rewarding them', () => {
+    const prompt = buildConversationSystemPrompt(makeInput());
+
+    expect(prompt).toContain(
+      'If the user gives a vague, generic, or promotional answer, push back and force specificity instead of rewarding it.',
+    );
+    expect(prompt).toContain(
+      'Ask for evidence, examples, tradeoffs, timing, risk, rollout details, ROI, ownership, or next steps',
+    );
   });
 });

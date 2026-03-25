@@ -10,6 +10,19 @@ const sessionOwnerInclude = {
   members: {
     where: { role: 'owner' },
     take: 1,
+    include: {
+      iterations: {
+        orderBy: { iterationNumber: 'desc' },
+        take: 1,
+        select: {
+          id: true,
+          iterationNumber: true,
+          status: true,
+          endedReason: true,
+          endedAt: true,
+        },
+      },
+    },
   },
 } satisfies Prisma.SessionInclude;
 
@@ -33,6 +46,10 @@ export interface CreateSessionData {
   personaId?: string;
   language?: string;
   crmContextId?: string;
+  coinReservationId?: string;
+  coinPeriodKey?: string;
+  estimatedCoins?: number;
+  coinPriceUsd?: number;
 }
 
 /**
@@ -44,7 +61,7 @@ export interface UpdateSessionData {
   name?: string;
   type?: SessionType;
   tags?: string[];
-  sessionConfig?: Prisma.InputJsonValue;
+  sessionConfig?: Prisma.InputJsonValue | typeof Prisma.JsonNull;
   scenarioId?: string;
   personaId?: string;
   language?: string;
@@ -52,6 +69,10 @@ export interface UpdateSessionData {
   status?: string;
   endedReason?: string | null;
   endedAt?: Date | null;
+  coinReservationId?: string | null;
+  coinPeriodKey?: string | null;
+  estimatedCoins?: number | null;
+  coinPriceUsd?: number | null;
 }
 
 /**
@@ -64,6 +85,7 @@ export interface SessionListFilters {
   status?: string;
   scenarioId?: string;
   personaId?: string;
+  createdAfter?: Date;
 }
 
 /**
@@ -172,6 +194,10 @@ export class SessionRepository {
         personaId: data.personaId,
         language: data.language,
         crmContextId: data.crmContextId,
+        coinReservationId: data.coinReservationId,
+        coinPeriodKey: data.coinPeriodKey,
+        estimatedCoins: data.estimatedCoins,
+        coinPriceUsd: data.coinPriceUsd,
         members: {
           create: {
             userId: data.ownerUserId,
@@ -250,6 +276,9 @@ export class SessionRepository {
     if (filters?.personaId) {
       where.personaId = filters.personaId;
     }
+    if (filters?.createdAfter) {
+      where.createdAt = { gte: filters.createdAfter };
+    }
 
     return await this.prisma.client.session.count({ where });
   }
@@ -296,6 +325,49 @@ export class SessionRepository {
       where: {
         id: { in: ids },
       },
+      include: this.ownerInclude,
+    });
+  }
+
+  /**
+   * Find a session created from a specific calendar event (deduplication).
+   * Queries the sessionConfig JSON field for calendarEventId.
+   */
+  async findByCalendarEventId(
+    calendarEventId: string,
+    userId: string,
+  ): Promise<SessionWithOwner | null> {
+    const sessions = await this.prisma.client.session.findMany({
+      where: {
+        sessionConfig: {
+          path: ['calendarEventId'],
+          equals: calendarEventId,
+        },
+        members: { some: { userId } },
+      },
+      take: 1,
+      include: this.ownerInclude,
+    });
+    return sessions[0] ?? null;
+  }
+
+  /**
+   * Find calendar-generated suggestion sessions for a user in an org.
+   */
+  async findSuggestionsForUser(
+    userId: string,
+    orgId: string,
+  ): Promise<SessionWithOwner[]> {
+    return await this.prisma.client.session.findMany({
+      where: {
+        orgId,
+        members: { some: { userId } },
+        sessionConfig: {
+          path: ['isSuggestion'],
+          equals: true,
+        },
+      },
+      orderBy: { createdAt: 'desc' },
       include: this.ownerInclude,
     });
   }

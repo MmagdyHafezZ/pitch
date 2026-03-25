@@ -13,17 +13,18 @@ describe('FileService', () => {
 
   it('delegates presign upload to repository', async () => {
     const repository = createRepositoryMock();
-    repository.createPresignedUploadUrl.mockResolvedValue({ url: 'upload' });
+    repository.createPresignedUploadUrl.mockResolvedValue({
+      url: 'upload',
+      bucket: 'resolved-bucket',
+    });
     const service = new FileService(repository);
 
     const result = await service.createPresignedUploadUrl({
-      bucket: 'b',
       key: 'k',
     });
 
-    expect(result).toEqual({ url: 'upload' });
+    expect(result).toEqual({ url: 'upload', bucket: 'resolved-bucket' });
     expect(repository.createPresignedUploadUrl).toHaveBeenCalledWith({
-      bucket: 'b',
       key: 'k',
     });
   });

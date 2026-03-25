@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import Redis from 'ioredis';
 
 export type ApplyDeltaResult =
@@ -14,6 +14,7 @@ export type ApplyDeltaResult =
 
 @Injectable()
 export class CoinRedisService {
+  private readonly logger = new Logger(CoinRedisService.name);
   private readonly redis: Redis;
   constructor() {
     this.redis = new Redis(process.env.REDIS_URL!);
@@ -48,7 +49,7 @@ export class CoinRedisService {
   ): Promise<void> {
     const key = this.keyRemaining(teamId, periodKey);
     try {
-      await this.redis.call(
+      const result = await this.redis.call(
         'SET',
         key,
         String(allowance),
@@ -56,6 +57,16 @@ export class CoinRedisService {
         ttlSeconds,
         'NX',
       );
+      // SET NX returns "OK" if key was created, null if it already existed
+      if (result === 'OK') {
+        this.logger.debug(
+          `initRemainingIfMissing: CREATED key=${key} allowance=${allowance} ttl=${ttlSeconds}s`,
+        );
+      } else {
+        this.logger.debug(
+          `initRemainingIfMissing: SKIPPED (key exists) key=${key}`,
+        );
+      }
     } catch (err) {
       throw new Error(`Redis SET failed for key=${key}: ${String(err)}`);
     }
@@ -126,6 +137,12 @@ export class CoinRedisService {
     const approved = res[0] === 1;
     const remainingAfter = Number(res[1]);
     const alreadyProcessed = res[2] === 1;
+
+    this.logger.log(
+      `reserveIfEnough: key=${remainingKey} est=${estimatedCoins} ` +
+        `approved=${approved} remainingAfter=${remainingAfter} alreadyProcessed=${alreadyProcessed}`,
+    );
+
     return { approved, remainingAfter, alreadyProcessed };
   }
 
@@ -187,6 +204,11 @@ export class CoinRedisService {
 
     const code = Number(res[0]);
     const remainingAfter = Number(res[1]);
+
+    this.logger.log(
+      `applyDeltaIdempotent: key=${remainingKey} delta=${deltaCoins} ` +
+        `code=${code} remainingAfter=${remainingAfter}`,
+    );
 
     if (code === 1) return { applied: true, remainingAfter, reason: 'APPLIED' };
 

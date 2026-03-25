@@ -17,7 +17,7 @@
   position: relative;
   min-height: 100vh;
   overflow-x: clip;
-  padding: 1.1rem clamp(0.95rem, 3vw, 3.6rem) 2.6rem;
+  padding: 1.1rem clamp(0.95rem, 3vw, 3.6rem) 0;
   color: var(--text);
   font-family: var(--font-body), 'Avenir Next', 'Segoe UI', sans-serif;
   background: var(--bg-0);
@@ -232,8 +232,12 @@
   padding: 0.47rem 0.92rem;
   border: 1px solid rgba(166, 183, 255, 0.22);
   border-radius: 999px;
-  background:
-    linear-gradient(135deg, rgba(5, 8, 20, 0.95), rgba(18, 24, 56, 0.88) 58%, rgba(30, 45, 95, 0.84) 100%);
+  background: linear-gradient(
+    135deg,
+    rgba(5, 8, 20, 0.95),
+    rgba(18, 24, 56, 0.88) 58%,
+    rgba(30, 45, 95, 0.84) 100%
+  );
   color: #eef6ff;
   font-size: 0.78rem;
   font-weight: 700;
@@ -253,8 +257,12 @@
 .headerStarCta:hover .headerStarInner {
   transform: translateY(-1px);
   border-color: rgba(150, 221, 255, 0.34);
-  background:
-    linear-gradient(135deg, rgba(8, 12, 28, 0.98), rgba(28, 37, 85, 0.92) 60%, rgba(40, 58, 119, 0.9) 100%);
+  background: linear-gradient(
+    135deg,
+    rgba(8, 12, 28, 0.98),
+    rgba(28, 37, 85, 0.92) 60%,
+    rgba(40, 58, 119, 0.9) 100%
+  );
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.12),
     0 12px 24px rgba(39, 42, 150, 0.24);
@@ -280,7 +288,14 @@
 
 .screenFinal {
   min-height: calc(100svh - 7.2rem);
-  padding-bottom: 2rem;
+  padding-bottom: 0;
+  align-items: stretch;
+}
+
+.screenFinal .screenInner {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
 }
 
 .reveal {
@@ -306,6 +321,26 @@
   text-transform: uppercase;
   letter-spacing: 0.05em;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.kicker {
+  max-width: 100%;
+  display: flex;
+  overflow: hidden;
+}
+
+.kickerTrack {
+  display: inline-flex;
+  align-items: center;
+  gap: 1.5rem;
+  min-width: 0;
+  width: max-content;
+  flex: 0 0 auto;
+  animation: marqueeKicker 14s linear infinite;
+}
+
+.kickerText {
+  white-space: nowrap;
 }
 
 .heroGrid {
@@ -1072,9 +1107,10 @@
 }
 
 .finalCard {
-  max-width: 58rem;
+  max-width: 64rem;
   margin: 0 auto;
-  padding: clamp(1.15rem, 2.4vw, 1.9rem);
+  min-height: clamp(22rem, 34vw, 28rem);
+  padding: clamp(3rem, 5vw, 4rem);
   text-align: center;
   background:
     radial-gradient(circle at 14% 10%, rgba(150, 221, 255, 0.14), transparent 26%),
@@ -1085,7 +1121,7 @@
 .finalCard h2 {
   margin: 0.95rem 0 0;
   font-family: var(--font-heading), 'Futura PT', sans-serif;
-  font-size: clamp(1.7rem, 3vw, 2.5rem);
+  font-size: clamp(1.9rem, 3.3vw, 2.85rem);
   line-height: 1.16;
 }
 
@@ -1101,7 +1137,8 @@
 }
 
 .footer {
-  margin-top: 1rem;
+  margin-top: auto;
+  padding-top: 0.5rem;
   display: flex;
   justify-content: space-between;
   flex-wrap: wrap;
@@ -1195,7 +1232,7 @@
   }
 
   .screenHero {
-    padding-top: 4.5rem;
+    padding-top: 1.2rem;
   }
 
   .headerActions {
@@ -1257,6 +1294,10 @@
     transform: none;
     stroke-dashoffset: 0;
   }
+
+  .kickerTrack {
+    transform: none;
+  }
 }
 
 @keyframes reveal {
@@ -1312,5 +1353,14 @@
   }
   to {
     transform: translate3d(14px, -18px, 0);
+  }
+}
+
+@keyframes marqueeKicker {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(calc(-50% - 0.75rem));
   }
 }

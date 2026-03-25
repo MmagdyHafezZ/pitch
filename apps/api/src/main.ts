@@ -43,7 +43,8 @@ export class LogAllHttpExceptionsFilter implements ExceptionFilter {
     const req = ctx.getRequest<any>();
 
     if (exception instanceof HttpException) {
-      const status = exception.getStatus();
+      const rawStatus = exception.getStatus();
+      const status = typeof rawStatus === 'number' ? rawStatus : 500;
       const payload = exception.getResponse();
 
       this.logger.error(

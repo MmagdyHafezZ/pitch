@@ -58,6 +58,58 @@ export class AuthGatewayController {
 
   constructor(@Inject('USER_SERVICE') private userService: ClientProxy) {}
 
+  private getSuperAdminEmails(): string[] {
+    return (process.env.SUPER_ADMIN_EMAILS ?? '')
+      .split(',')
+      .map((email) => email.trim().toLowerCase())
+      .filter(Boolean);
+  }
+
+  private getStudioAccessEmails(): string[] {
+    return (process.env.STUDIO_ACCESS_EMAILS ?? '')
+      .split(',')
+      .map((email) => email.trim().toLowerCase())
+      .filter(Boolean);
+  }
+
+  private readStudioAccessStatus(user: unknown): string | undefined {
+    if (!user || typeof user !== 'object') return undefined;
+    const settings = (user as { settings?: unknown }).settings;
+    if (!settings || typeof settings !== 'object' || Array.isArray(settings)) {
+      return undefined;
+    }
+    const studioAccess = (settings as { studioAccess?: unknown }).studioAccess;
+    if (
+      !studioAccess ||
+      typeof studioAccess !== 'object' ||
+      Array.isArray(studioAccess)
+    ) {
+      return undefined;
+    }
+    const status = (studioAccess as { status?: unknown }).status;
+    return typeof status === 'string' ? status : undefined;
+  }
+
+  private decorateUser<T extends { email?: string | null }>(
+    user: T,
+  ): T & {
+    isSystemAdmin: boolean;
+    hasStudioAccess: boolean;
+  } {
+    const normalizedEmail = (user.email ?? '').trim().toLowerCase();
+    const isSystemAdmin = this.getSuperAdminEmails().includes(normalizedEmail);
+    const hasStudioAccess =
+      isSystemAdmin ||
+      this.getStudioAccessEmails().includes(normalizedEmail) ||
+      this.readStudioAccessStatus(user) === 'approved';
+
+    return {
+      ...user,
+      isSystemAdmin,
+      hasStudioAccess,
+    };
+  }
+
   private setRefreshCookie(res: ExpressResponse, refreshToken: string) {
     const secure =
       this.refreshCookieSameSite === 'none' ? true : this.refreshCookieSecure;
@@ -105,7 +157,10 @@ export class AuthGatewayController {
         timeout(10000),
         map((payload: AuthResponseDto) => {
           this.setRefreshCookie(res, payload.refreshToken);
-          return { user: payload.user, accessToken: payload.token };
+          return {
+            user: this.decorateUser(payload.user),
+            accessToken: payload.token,
+          };
         }),
         retry({
           count: 2,
@@ -131,39 +186,6 @@ export class AuthGatewayController {
         }),
       );
   }
-
-  @Post('login')
-  @Public()
-  @ApiOperation({ summary: 'Login user' })
-  @ApiResponse({
-    status: 200,
-    description: 'User logged in successfully',
-    type: AuthTokenResponseDto,
-  })
-  @ApiResponse({ status: 401, description: 'Invalid credentials' })
-  login(
-    @Body() loginDto: LoginDto,
-    @Res({ passthrough: true }) res: ExpressResponse,
-  ) {
-    this.logger.log(`Login attempt for: ${loginDto.email}`);
-
-    return this.userService.send('auth.login', loginDto).pipe(
-      timeout(10000),
-      map((payload: AuthResponseDto) => {
-        this.setRefreshCookie(res, payload.refreshToken);
-        return { user: payload.user, accessToken: payload.token };
-      }),
-      catchError((err: unknown) => {
-        const error = normalizeError(err);
-        const stack = error.stack ?? JSON.stringify(err);
-        this.logger.error(`Login failed for ${loginDto.email}`, stack);
-        const status = error.status ?? HttpStatus.UNAUTHORIZED;
-        const message = error.message ?? 'Login failed';
-        return throwError(() => new HttpException(message, status));
-      }),
-    );
-  }
-
   @Post('refresh')
   @Public()
   @ApiOperation({ summary: 'Refresh access token' })
@@ -253,8 +275,12 @@ export class AuthGatewayController {
     this.logger.log(`Profile request for user: ${userId}`);
 
     return this.userService
-      .send(USER_SERVICE_PATTERNS.GET_USER, { userId, userClaims })
+      .send<UserResponseDto>(USER_SERVICE_PATTERNS.GET_USER, {
+        userId,
+        userClaims,
+      })
       .pipe(
+        map((payload: UserResponseDto) => this.decorateUser(payload)),
         timeout(10000),
         catchError((err: unknown) => {
           const error = normalizeError(err);

@@ -16,6 +16,11 @@ import {
   Loader,
   Modal,
   Button,
+  RingProgress,
+  Tooltip,
+  Progress,
+  ThemeIcon,
+  Divider,
   Checkbox,
 } from '@mantine/core'
 import {
@@ -28,6 +33,11 @@ import {
   IconMessage2,
   IconPhone,
   IconSparkles,
+  IconX,
+  IconTarget,
+  IconTrophy,
+  IconRefresh,
+  IconCheck,
 } from '@tabler/icons-react'
 import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import { useConversation, useVisualState, CameraEngagementIndicator } from '@/features/conversation'
@@ -39,6 +49,9 @@ import { useSpeechToText } from '@/features/stt'
 import { API_CONFIG, api } from '@/lib/client'
 import { notifications } from '@mantine/notifications'
 import type { SessionType } from '@/features/sessions'
+import type { SessionAttachment } from '@/features/sessions/types/sessions.types'
+import { UploadSection } from '@/app/studio/sessions/create/components/UploadSection'
+import { useInvalidateCoinsBalance } from '@/features/coins/hooks/useCoinsBalance'
 
 type AvatarVideoStatus = 'idle' | 'queued' | 'rendering' | 'ready' | 'failed'
 
@@ -100,17 +113,40 @@ const EMPTY_PHONE_CALL_RUNTIME: PhoneCallRuntimeState = {
   endRequestedReason: null,
 }
 
+const SESSION_TIMER_STORAGE_PREFIX = 'pitch-live-session-timer:'
+const ASSISTANT_FIRST_TURN_DELAY_MS = 5000
+
 const PHONE_TERMINAL_STATUSES = new Set(['ended', 'failed', 'busy', 'no-answer', 'canceled'])
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
 
 const normalizeSessionStatus = (session: unknown): string | null => {
-  if (!isRecord(session) || typeof session.status !== 'string') {
+  if (!isRecord(session)) {
+    return null
+  }
+
+  const currentIteration = isRecord(session.currentIteration) ? session.currentIteration : null
+  const iterationStatus =
+    currentIteration && typeof currentIteration.status === 'string'
+      ? currentIteration.status.trim().toLowerCase()
+      : null
+
+  if (iterationStatus === 'completed') {
+    return 'ended'
+  }
+
+  if (typeof session.status !== 'string') {
     return null
   }
 
   return session.status.trim().toLowerCase()
+}
+
+const readCurrentIterationId = (session: unknown): string | null => {
+  if (!isRecord(session)) return null
+  const currentIteration = isRecord(session.currentIteration) ? session.currentIteration : null
+  return currentIteration && typeof currentIteration.id === 'string' ? currentIteration.id : null
 }
 
 const readAvatarVideoState = (session: unknown): AvatarVideoState => {
@@ -162,6 +198,185 @@ const buildSessionVideoStreamUrl = (sessionId: string, token: string, jobId?: st
   return url.toString()
 }
 
+const isSessionAttachment = (value: unknown): value is SessionAttachment =>
+  isRecord(value) &&
+  typeof value.bucket === 'string' &&
+  typeof value.key === 'string' &&
+  typeof value.filename === 'string' &&
+  typeof value.contentType === 'string' &&
+  typeof value.size === 'number' &&
+  Number.isFinite(value.size) &&
+  typeof value.uploadedAt === 'string'
+
+const readSessionAttachments = (session: Record<string, unknown> | null): SessionAttachment[] => {
+  if (!session) return []
+
+  const sessionConfig = isRecord(session.sessionConfig) ? session.sessionConfig : {}
+  const attachments = sessionConfig.attachments
+  if (!Array.isArray(attachments)) return []
+
+  return attachments.filter(isSessionAttachment)
+}
+
+const mergeSessionAttachments = (
+  existing: SessionAttachment[],
+  incoming: SessionAttachment[]
+): SessionAttachment[] => {
+  const byKey = new Map<string, SessionAttachment>()
+
+  for (const attachment of [...existing, ...incoming]) {
+    byKey.set(`${attachment.bucket}:${attachment.key}`, attachment)
+  }
+
+  return [...byKey.values()]
+}
+
+type EntryFlowMode = 'auto' | 'resume'
+
+type TimelineStage = {
+  order: number
+  label: string
+  description?: string
+  estimatedDuration?: number
+  active: boolean
+  completed: boolean
+}
+
+const clampProgress = (value: unknown): number => {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return 0
+  }
+
+  return Math.max(0, Math.min(100, Math.round(value)))
+}
+
+const readText = (...values: unknown[]): string | undefined => {
+  for (const value of values) {
+    if (typeof value === 'string' && value.trim().length > 0) {
+      return value.trim()
+    }
+  }
+
+  return undefined
+}
+
+const normalizeTimelinePlan = (
+  rawStages: unknown
+): Array<{ order: number; label: string; description?: string; estimatedDuration?: number }> => {
+  if (!Array.isArray(rawStages)) {
+    return []
+  }
+
+  return rawStages
+    .map((stage, index) => {
+      if (typeof stage === 'string') {
+        const label = stage.trim()
+        return label
+          ? {
+              order: index + 1,
+              label,
+            }
+          : null
+      }
+
+      if (!isRecord(stage)) {
+        return null
+      }
+
+      const label = readText(stage.label, stage.name, stage.title, `Stage ${index + 1}`)
+      if (!label) {
+        return null
+      }
+
+      const description = readText(stage.description, stage.goal, stage.summary)
+      const estimatedDuration =
+        typeof stage.estimatedDuration === 'number' && Number.isFinite(stage.estimatedDuration)
+          ? stage.estimatedDuration
+          : typeof stage.duration === 'number' && Number.isFinite(stage.duration)
+            ? stage.duration
+            : undefined
+
+      return {
+        order: index + 1,
+        label,
+        description,
+        estimatedDuration,
+      }
+    })
+    .filter(
+      (
+        stage
+      ): stage is {
+        order: number
+        label: string
+        description?: string
+        estimatedDuration?: number
+      } => Boolean(stage)
+    )
+}
+
+const extractTimelinePlanFromSession = (
+  session: Record<string, unknown> | null
+): Array<{ order: number; label: string; description?: string; estimatedDuration?: number }> => {
+  if (!session) {
+    return []
+  }
+
+  const sessionConfig = isRecord(session.sessionConfig) ? session.sessionConfig : {}
+  const scenario = isRecord(session.scenario) ? session.scenario : {}
+  const scenarioConfig = isRecord(scenario.config) ? scenario.config : {}
+  const embeddedScenario = isRecord(sessionConfig.scenario) ? sessionConfig.scenario : {}
+
+  const sources = [
+    scenarioConfig.stages,
+    scenarioConfig.phases,
+    scenarioConfig.plan,
+    embeddedScenario.stages,
+    embeddedScenario.phases,
+    embeddedScenario.plan,
+    sessionConfig.stages,
+  ]
+
+  for (const source of sources) {
+    const normalized = normalizeTimelinePlan(source)
+    if (normalized.length > 0) {
+      return normalized
+    }
+  }
+
+  return []
+}
+
+const buildTimelineStages = (
+  plannedStages: unknown,
+  progress: unknown,
+  totalTurns: unknown,
+  fallbackSession: Record<string, unknown> | null
+): TimelineStage[] => {
+  const normalizedProgress = clampProgress(progress)
+  const normalizedTotalTurns =
+    typeof totalTurns === 'number' && Number.isFinite(totalTurns) ? Math.max(0, totalTurns) : 0
+  const plan =
+    normalizeTimelinePlan(plannedStages).length > 0
+      ? normalizeTimelinePlan(plannedStages)
+      : extractTimelinePlanFromSession(fallbackSession)
+
+  if (plan.length === 0) {
+    return []
+  }
+
+  const activeIndex =
+    normalizedTotalTurns === 0
+      ? 0
+      : Math.min(plan.length - 1, Math.floor((normalizedProgress / 100) * plan.length))
+
+  return plan.map((stage, index) => ({
+    ...stage,
+    active: index === activeIndex,
+    completed: normalizedTotalTurns > 0 && index < activeIndex,
+  }))
+}
+
 const normalizePhoneRuntimeStatus = (status: string | null | undefined) =>
   typeof status === 'string' && status.trim().length > 0 ? status.trim().toLowerCase() : null
 
@@ -193,6 +408,89 @@ const readPhoneCallRuntime = (session: unknown): PhoneCallRuntimeState => {
     endRequestedReason:
       typeof runtime.endRequestedReason === 'string' ? runtime.endRequestedReason : null,
   }
+}
+
+const parseTimestampMs = (value: unknown): number | null => {
+  if (typeof value !== 'string' || !value.trim()) {
+    return null
+  }
+
+  const parsed = new Date(value).getTime()
+  return Number.isNaN(parsed) ? null : parsed
+}
+
+const getSessionTimerStorageKey = (sessionId: string) =>
+  `${SESSION_TIMER_STORAGE_PREFIX}${sessionId}`
+
+const readPersistedSessionStartMs = (sessionId: string): number | null => {
+  if (typeof window === 'undefined') {
+    return null
+  }
+
+  try {
+    const rawValue = window.sessionStorage.getItem(getSessionTimerStorageKey(sessionId))
+    if (!rawValue) {
+      return null
+    }
+
+    const parsed = Number(rawValue)
+    return Number.isFinite(parsed) ? parsed : null
+  } catch {
+    return null
+  }
+}
+
+const writePersistedSessionStartMs = (sessionId: string, startedAtMs: number) => {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  try {
+    window.sessionStorage.setItem(getSessionTimerStorageKey(sessionId), String(startedAtMs))
+  } catch {
+    // Ignore storage failures and fall back to in-memory state
+  }
+}
+
+const clearPersistedSessionStartMs = (sessionId: string) => {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  try {
+    window.sessionStorage.removeItem(getSessionTimerStorageKey(sessionId))
+  } catch {
+    // Ignore storage failures
+  }
+}
+
+const readSessionEndedAtMs = (session: unknown): number | null => {
+  if (!isRecord(session)) {
+    return null
+  }
+
+  return (
+    parseTimestampMs(session.endedAt) ?? parseTimestampMs(readPhoneCallRuntime(session).endedAt)
+  )
+}
+
+const resolveSessionStartMs = (
+  sessionId: string,
+  session: unknown,
+  history: TranscriptMessage[] = []
+): number | null => {
+  const persistedStartMs = readPersistedSessionStartMs(sessionId)
+  const historyStartMs = history.length > 0 ? (history[0]?.timestamp.getTime() ?? null) : null
+  const phoneStartMs = parseTimestampMs(readPhoneCallRuntime(session).startedAt)
+  const candidates = [persistedStartMs, historyStartMs, phoneStartMs].filter(
+    (value): value is number => value !== null
+  )
+
+  if (candidates.length === 0) {
+    return null
+  }
+
+  return Math.min(...candidates)
 }
 
 const readTimelineConversationHistory = (timeline: unknown): TranscriptMessage[] => {
@@ -1386,27 +1684,28 @@ function PhoneTranscriptPanel({
 }
 
 export default function LiveSessionPage() {
-  const router = useRouter()
   const params = useParams()
   const searchParams = useSearchParams()
   const sessionId = params.id as string
+  const router = useRouter()
   const entrySource = searchParams.get('entry')
   const isMobile = useMediaQuery('(max-width: 768px)')
+  const invalidateCoinsBalance = useInvalidateCoinsBalance()
   const [time, setTime] = useState(0)
+  const [sessionStartMs, setSessionStartMs] = useState<number | null>(null)
+  const [sessionEndMs, setSessionEndMs] = useState<number | null>(null)
+  const [sessionDuration, setSessionDuration] = useState(0) // total seconds; 0 = no limit
+  const [successModalOpen, setSuccessModalOpen] = useState(false)
+  const [finalScore, setFinalScore] = useState<number | null>(null)
+  const [timeAtSuccess, setTimeAtSuccess] = useState<number | null>(null)
+  const successTriggeredRef = useRef(false)
   const [textInput, setTextInput] = useState('')
   const [hints, setHints] = useState<string[]>([])
-  const [timelineStages, setTimelineStages] = useState<
-    Array<{
-      order: number
-      label: string
-      description?: string
-      active: boolean
-      completed: boolean
-    }>
-  >([])
+  const [timelineStages, setTimelineStages] = useState<TimelineStage[]>([])
   const [currentProgress, setCurrentProgress] = useState(0)
   const [hintsError, setHintsError] = useState<string | null>(null)
   const [timelineError, setTimelineError] = useState<string | null>(null)
+  const [timelineLoading, setTimelineLoading] = useState(false)
   const [sessionType, setSessionType] = useState<SessionType | null>(null)
   const [sessionStatus, setSessionStatus] = useState<string | null>(null)
   const [sessionName, setSessionName] = useState<string>('')
@@ -1440,6 +1739,7 @@ export default function LiveSessionPage() {
   const [avatarVideoError, setAvatarVideoError] = useState<string | null>(null)
   const [avatarVideoJobId, setAvatarVideoJobId] = useState<string | null>(null)
   const [autoConnectConversation, setAutoConnectConversation] = useState(false)
+  const [conversationConnectKey, setConversationConnectKey] = useState(0)
   const [resumePromptOpen, setResumePromptOpen] = useState(false)
   const [entryPromptMode, setEntryPromptMode] = useState<EntryPromptMode | null>(null)
   const [entryDecisionLoading, setEntryDecisionLoading] = useState(true)
@@ -1447,6 +1747,18 @@ export default function LiveSessionPage() {
   const [loadedSessionRecord, setLoadedSessionRecord] = useState<Record<string, unknown> | null>(
     null
   )
+  // Keep a ref always in sync with loadedSessionRecord so useCallback functions
+  // (like loadTimeline) can read the latest value without listing it as a dep.
+  // Updated every render — always current when async code reads it.
+  const loadedSessionRecordRef = useRef<Record<string, unknown> | null>(null)
+  loadedSessionRecordRef.current = loadedSessionRecord
+  const [sessionAttachments, setSessionAttachments] = useState<SessionAttachment[]>([])
+  const [launchAttachments, setLaunchAttachments] = useState<SessionAttachment[]>([])
+  const [launchAttachmentsUploading, setLaunchAttachmentsUploading] = useState(false)
+  const [launchAttachmentErrors, setLaunchAttachmentErrors] = useState(false)
+  const [prelaunchModalOpen, setPrelaunchModalOpen] = useState(false)
+  const [prelaunchSaving, setPrelaunchSaving] = useState(false)
+  const [pendingEntryMode, setPendingEntryMode] = useState<EntryFlowMode | null>(null)
   const [sttCommitRemainingMs, setSttCommitRemainingMs] = useState(0)
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const latestMessagesRef = useRef<Array<{ role: 'user' | 'assistant'; text: string }>>([])
@@ -1551,21 +1863,27 @@ export default function LiveSessionPage() {
     hangupRequest,
     hangUp,
     interrupt,
+    disconnect,
     stopAudio,
     replayAudio,
     clearMessages,
+    hydrateMessages,
     clearHangupRequest,
     clearToolEvents,
     toolEvents,
+    coachingTip,
+    clearCoachingTip,
     audioElementRef,
   } = useConversation({
     sessionId,
     autoConnect: autoConnectConversation,
+    autoConnectKey: conversationConnectKey,
     audioOutput: 'browser',
     onError: () => {},
   })
   const assistantSpeaking = isAudioPlaying
   sendMessageRef.current = sendMessage
+  const currentIterationId = readCurrentIterationId(loadedSessionRecord)
 
   const {
     isListening,
@@ -1651,29 +1969,81 @@ export default function LiveSessionPage() {
   const isPhoneSession = sessionType === 'phone'
   const activeConversationMessages = isPhoneSession ? phoneTranscriptMessages : messages
 
-  const syncSessionState = useCallback((session: any) => {
-    const config = (session?.sessionConfig as Record<string, any>) ?? {}
-    const avatarState = readAvatarVideoState(session)
-    const phoneRuntime = readPhoneCallRuntime(session)
-    const normalizedStatus = normalizeSessionStatus(session)
-    const nextAvatarVideoUrl =
-      session?.id && avatarState.status === 'ready' && avatarState.playbackToken
-        ? buildSessionVideoStreamUrl(session.id, avatarState.playbackToken, avatarState.jobId)
-        : avatarState.url
+  const syncSessionClock = useCallback(
+    (session: unknown, history: TranscriptMessage[] = []) => {
+      const nextSessionStartMs = resolveSessionStartMs(sessionId, session, history)
+      const nextSessionEndMs = readSessionEndedAtMs(session)
 
-    setIsMultiTurn(Boolean(config.multiTurnEnabled))
-    setSessionType(session?.type ?? null)
-    setSessionStatus(normalizedStatus)
-    setSessionName((session as any)?.name ?? (session as any)?.scenario?.name ?? '')
-    setPersonaName((session as any)?.persona?.name ?? null)
-    setAvatarVideoStatus(avatarState.status)
-    setAvatarVideoProvider(avatarState.provider)
-    setAvatarVideoError(avatarState.error)
-    setAvatarVideoJobId(avatarState.jobId)
-    setAvatarVideoUrl(nextAvatarVideoUrl)
-    setPhoneCallRuntime(phoneRuntime)
-    setCallStarted(session?.type === 'phone' ? isPhoneCallActive(phoneRuntime) : false)
-  }, [])
+      if (nextSessionStartMs !== null) {
+        setSessionStartMs(nextSessionStartMs)
+        writePersistedSessionStartMs(sessionId, nextSessionStartMs)
+      } else {
+        setSessionStartMs(null)
+      }
+
+      setSessionEndMs(nextSessionEndMs)
+    },
+    [sessionId]
+  )
+
+  const ensureSessionClockStarted = useCallback(
+    (startedAtMs = Date.now()) => {
+      setSessionStartMs((current) => {
+        if (current !== null) {
+          return current
+        }
+
+        writePersistedSessionStartMs(sessionId, startedAtMs)
+        return startedAtMs
+      })
+      setSessionEndMs(null)
+    },
+    [sessionId]
+  )
+
+  const resetSessionClock = useCallback(() => {
+    setSessionStartMs(null)
+    setSessionEndMs(null)
+    clearPersistedSessionStartMs(sessionId)
+  }, [sessionId])
+
+  const syncSessionState = useCallback(
+    (session: any, history: TranscriptMessage[] = []) => {
+      const config = (session?.sessionConfig as Record<string, any>) ?? {}
+      const avatarState = readAvatarVideoState(session)
+      const phoneRuntime = readPhoneCallRuntime(session)
+      const normalizedStatus = normalizeSessionStatus(session)
+      const nextAvatarVideoUrl =
+        session?.id && avatarState.status === 'ready' && avatarState.playbackToken
+          ? buildSessionVideoStreamUrl(session.id, avatarState.playbackToken, avatarState.jobId)
+          : avatarState.url
+      const rawDuration =
+        typeof config.durationMinutes === 'number'
+          ? config.durationMinutes
+          : typeof config.duration === 'number'
+            ? config.duration
+            : 0
+
+      if (rawDuration > 0) {
+        setSessionDuration(rawDuration * 60)
+      }
+
+      setIsMultiTurn(Boolean(config.multiTurnEnabled))
+      setSessionType(session?.type ?? null)
+      setSessionStatus(normalizedStatus)
+      setSessionName((session as any)?.name ?? (session as any)?.scenario?.name ?? '')
+      setPersonaName((session as any)?.persona?.name ?? null)
+      setAvatarVideoStatus(avatarState.status)
+      setAvatarVideoProvider(avatarState.provider)
+      setAvatarVideoError(avatarState.error)
+      setAvatarVideoJobId(avatarState.jobId)
+      setAvatarVideoUrl(nextAvatarVideoUrl)
+      setPhoneCallRuntime(phoneRuntime)
+      setCallStarted(session?.type === 'phone' ? isPhoneCallActive(phoneRuntime) : false)
+      syncSessionClock(session, history)
+    },
+    [syncSessionClock]
+  )
 
   const applyTimelineResponse = useCallback((response: unknown) => {
     const { progress, stages } = buildTimelineState(response)
@@ -1711,23 +2081,202 @@ export default function LiveSessionPage() {
     }
   }, [])
 
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setTime((prev) => prev + 1)
-    }, 1000)
-    return () => clearInterval(interval)
+  const loadTimeline = useCallback(
+    async (limit = 50, sessionRecord?: Record<string, unknown> | null) => {
+      if (!sessionId) {
+        return { totalTurns: 0, stages: [] as TimelineStage[] }
+      }
+
+      setTimelineLoading(true)
+
+      try {
+        const response = await api.sessions.timeline(sessionId, limit)
+        const stages = buildTimelineStages(
+          response?.plannedStages,
+          response?.currentProgress,
+          response?.total,
+          sessionRecord ?? loadedSessionRecordRef.current
+        )
+
+        setTimelineStages(stages)
+        setTimelineError(null)
+
+        return {
+          totalTurns: typeof response?.total === 'number' ? response.total : 0,
+          stages,
+          conversationHistory: Array.isArray(response?.conversationHistory)
+            ? response.conversationHistory
+            : [],
+        }
+      } catch {
+        const stages = buildTimelineStages(
+          [],
+          0,
+          0,
+          sessionRecord ?? loadedSessionRecordRef.current
+        )
+        setTimelineStages(stages)
+        setTimelineError('Unable to load timeline')
+        return {
+          totalTurns: 0,
+          stages,
+          conversationHistory: [],
+        }
+      } finally {
+        setTimelineLoading(false)
+      }
+    },
+    [sessionId]
+  )
+
+  const requestConversationConnect = useCallback(() => {
+    ensureSessionClockStarted()
+    setAutoConnectConversation(true)
+    setConversationConnectKey((current) => current + 1)
+  }, [ensureSessionClockStarted])
+
+  const pauseConversationConnect = useCallback(() => {
+    setAutoConnectConversation(false)
   }, [])
+
+  const completeEntryFlow = useCallback(
+    (mode: EntryFlowMode, sessionRecord?: Record<string, unknown> | null) => {
+      const effectiveRecord = sessionRecord ?? loadedSessionRecord
+      const effectiveType =
+        typeof effectiveRecord?.type === 'string' ? effectiveRecord.type : sessionType
+      const effectiveStatus = normalizeSessionStatus(effectiveRecord) ?? sessionStatus
+
+      setPrelaunchModalOpen(false)
+      setPendingEntryMode(null)
+      setPhoneSetupModalOpen(effectiveType === 'phone' && effectiveStatus !== 'ended')
+
+      if (mode === 'resume') {
+        setResumePromptOpen(true)
+        pauseConversationConnect()
+        return
+      }
+
+      setResumePromptOpen(false)
+      requestConversationConnect()
+    },
+    [
+      loadedSessionRecord,
+      pauseConversationConnect,
+      requestConversationConnect,
+      sessionStatus,
+      sessionType,
+    ]
+  )
+
+  const handleSkipPrelaunch = useCallback(() => {
+    if (!pendingEntryMode || launchAttachmentsUploading || prelaunchSaving) {
+      return
+    }
+
+    setLaunchAttachments([])
+    setLaunchAttachmentErrors(false)
+    completeEntryFlow(pendingEntryMode)
+  }, [completeEntryFlow, launchAttachmentsUploading, pendingEntryMode, prelaunchSaving])
+
+  const handleContinueFromPrelaunch = useCallback(async () => {
+    if (
+      !pendingEntryMode ||
+      !loadedSessionRecord ||
+      launchAttachmentsUploading ||
+      launchAttachmentErrors ||
+      prelaunchSaving
+    ) {
+      return
+    }
+
+    setPrelaunchSaving(true)
+
+    try {
+      if (launchAttachments.length > 0) {
+        const currentConfig = isRecord(loadedSessionRecord.sessionConfig)
+          ? loadedSessionRecord.sessionConfig
+          : {}
+        const mergedAttachments = mergeSessionAttachments(sessionAttachments, launchAttachments)
+        const updatedSession = await api.sessions.update(sessionId, {
+          sessionConfig: {
+            ...currentConfig,
+            attachments: mergedAttachments,
+          },
+        })
+        const updatedRecord = isRecord(updatedSession) ? updatedSession : loadedSessionRecord
+
+        setLoadedSessionRecord(updatedRecord)
+        setSessionAttachments(readSessionAttachments(updatedRecord))
+        syncSessionState(updatedSession)
+        completeEntryFlow(pendingEntryMode, updatedRecord)
+        return
+      }
+
+      completeEntryFlow(pendingEntryMode)
+    } catch (error) {
+      notifications.show({
+        title: 'Unable to save documents',
+        message:
+          error instanceof Error ? error.message : 'The session context could not be updated.',
+        color: 'red',
+      })
+    } finally {
+      setPrelaunchSaving(false)
+    }
+  }, [
+    completeEntryFlow,
+    launchAttachmentErrors,
+    launchAttachments,
+    launchAttachmentsUploading,
+    loadedSessionRecord,
+    pendingEntryMode,
+    prelaunchSaving,
+    sessionAttachments,
+    sessionId,
+    syncSessionState,
+  ])
+
+  useEffect(() => {
+    if (sessionStartMs === null) {
+      setTime(0)
+      return
+    }
+
+    const updateElapsedTime = () => {
+      const effectiveEndMs = sessionEndMs ?? Date.now()
+      const elapsedSeconds = Math.max(0, Math.floor((effectiveEndMs - sessionStartMs) / 1000))
+      setTime(elapsedSeconds)
+    }
+
+    updateElapsedTime()
+
+    if (sessionEndMs !== null) {
+      return
+    }
+
+    const interval = setInterval(updateElapsedTime, 1000)
+    return () => clearInterval(interval)
+  }, [sessionEndMs, sessionStartMs])
 
   useEffect(() => {
     if (!sessionId) return
 
     let cancelled = false
-    setAutoConnectConversation(false)
+    const persistedSessionStartMs = readPersistedSessionStartMs(sessionId)
+    pauseConversationConnect()
+    hydrateMessages([])
     setResumePromptOpen(false)
     setEntryPromptMode(null)
     setEntryDecisionLoading(true)
     setStartOverLoading(false)
     setLoadedSessionRecord(null)
+    setSessionAttachments([])
+    setLaunchAttachments([])
+    setLaunchAttachmentsUploading(false)
+    setLaunchAttachmentErrors(false)
+    setPrelaunchModalOpen(false)
+    setPrelaunchSaving(false)
+    setPendingEntryMode(null)
     setCallStarted(false)
     setPhoneSetupModalOpen(false)
     setCallLoading(false)
@@ -1746,6 +2295,8 @@ export default function LiveSessionPage() {
     setPhoneTranscriptMessages([])
     setPhoneTranscriptError(null)
     setPhoneNumber('')
+    setSessionStartMs(persistedSessionStartMs)
+    setSessionEndMs(null)
 
     const loadSession = async () => {
       try {
@@ -1754,6 +2305,7 @@ export default function LiveSessionPage() {
 
         const sessionRecord = isRecord(session) ? session : {}
         setLoadedSessionRecord(sessionRecord)
+        setSessionAttachments(readSessionAttachments(sessionRecord))
         const status = normalizeSessionStatus(session)
         const isPhoneSession = sessionRecord.type === 'phone'
 
@@ -1765,6 +2317,7 @@ export default function LiveSessionPage() {
             if (cancelled) return
 
             const restartedRecord = isRecord(restartedSession) ? restartedSession : {}
+            clearPersistedSessionStartMs(sessionId)
             setLoadedSessionRecord(restartedRecord)
             syncSessionState(restartedSession)
             setPhoneSetupRetakeMode(true)
@@ -1794,13 +2347,19 @@ export default function LiveSessionPage() {
         }
 
         let hasExistingProgress = false
+        let timelineHistory: TranscriptMessage[] = []
         try {
-          const timeline = await api.sessions.timeline(sessionId, 1)
+          const timeline = await loadTimeline(200, sessionRecord)
           if (cancelled) return
-          const totalTurns = typeof timeline?.total === 'number' ? timeline.total : 0
-          const history = Array.isArray(timeline?.conversationHistory)
+          const totalTurns = timeline.totalTurns
+          const history = Array.isArray(timeline.conversationHistory)
             ? timeline.conversationHistory
             : []
+          timelineHistory = readTimelineConversationHistory({
+            conversationHistory: history,
+          })
+          hydrateMessages(timelineHistory)
+          syncSessionState(session, timelineHistory)
           hasExistingProgress = totalTurns > 0 || history.length > 0
         } catch {
           hasExistingProgress = false
@@ -1808,19 +2367,23 @@ export default function LiveSessionPage() {
 
         if (cancelled) return
 
-        if (hasExistingProgress) {
-          setEntryPromptMode('resume')
-          setResumePromptOpen(true)
-          setAutoConnectConversation(false)
-        } else {
+        const shouldAutoResume =
+          hasExistingProgress || persistedSessionStartMs !== null || timelineHistory.length > 0
+
+        if (shouldAutoResume) {
           setEntryPromptMode(null)
-          setAutoConnectConversation(true)
+          setResumePromptOpen(false)
+          requestConversationConnect()
+        } else {
+          setPendingEntryMode('auto')
+          setPrelaunchModalOpen(true)
+          setEntryPromptMode(null)
         }
       } catch {
         if (cancelled) return
         setIsMultiTurn(false)
         setEntryPromptMode(null)
-        setAutoConnectConversation(true)
+        requestConversationConnect()
       } finally {
         if (!cancelled) {
           setEntryDecisionLoading(false)
@@ -1833,7 +2396,15 @@ export default function LiveSessionPage() {
     return () => {
       cancelled = true
     }
-  }, [entrySource, sessionId, syncSessionState])
+  }, [
+    entrySource,
+    hydrateMessages,
+    loadTimeline,
+    pauseConversationConnect,
+    requestConversationConnect,
+    sessionId,
+    syncSessionState,
+  ])
 
   useEffect(() => {
     if (sessionType !== 'phone' || sessionStatus === 'ended') return
@@ -1869,20 +2440,13 @@ export default function LiveSessionPage() {
     sessionType,
   ])
 
-  const handleResumeSession = useCallback(() => {
-    setResumePromptOpen(false)
-    setEntryPromptMode(null)
-    if (sessionType !== 'phone') {
-      setAutoConnectConversation(true)
-    }
-  }, [sessionType])
-
   const handleStartOver = useCallback(async () => {
     if (!loadedSessionRecord || startOverLoading) return
 
     setStartOverLoading(true)
     try {
       await interrupt()
+      disconnect()
       stopListening()
       stopAudio()
 
@@ -1891,14 +2455,20 @@ export default function LiveSessionPage() {
       })
       const restartedRecord = isRecord(restartedSession) ? restartedSession : {}
 
+      resetSessionClock()
       clearMessages()
+      hydrateMessages([])
       clearToolEvents()
+      clearCoachingTip()
       clearHangupRequest()
+      successTriggeredRef.current = false
+      setFinalScore(null)
+      setTimeAtSuccess(null)
+      setTime(0)
       setTextInput('')
       setHints([])
       setHintsError(null)
       setTimelineStages([])
-      setCurrentProgress(0)
       setTimelineError(null)
       setPhoneTranscriptMessages([])
       setPhoneTranscriptError(null)
@@ -1913,25 +2483,8 @@ export default function LiveSessionPage() {
       syncSessionState(restartedSession)
       setEntryPromptMode(null)
 
-      if (hintsEnabled) {
-        try {
-          const response = await api.hints.history(sessionId, 1)
-          const latest = response?.history?.[0]
-          const nextHints = latest?.hints?.map((hint: { content: string }) => hint.content) ?? []
-          setHints(nextHints)
-          setHintsError(null)
-        } catch {
-          setHintsError('Unable to load hints')
-        }
-      }
-
       if (timelineEnabled) {
-        try {
-          const response = await api.sessions.timeline(sessionId, 50)
-          applyTimelineResponse(response)
-        } catch {
-          setTimelineError('Unable to load timeline')
-        }
+        await loadTimeline(50, restartedRecord)
       }
 
       notifications.show({
@@ -1947,7 +2500,7 @@ export default function LiveSessionPage() {
       } else {
         setPhoneSetupRetakeMode(false)
         setPhoneRetakeChoice('saved')
-        setAutoConnectConversation(true)
+        requestConversationConnect()
       }
     } catch (error) {
       const message =
@@ -1963,19 +2516,37 @@ export default function LiveSessionPage() {
   }, [
     clearHangupRequest,
     clearMessages,
+    clearCoachingTip,
     clearToolEvents,
+    disconnect,
     hintsEnabled,
     interrupt,
     loadedSessionRecord,
+    requestConversationConnect,
     resetTranscript,
+    resetSessionClock,
     sessionId,
     startOverLoading,
     stopAudio,
     stopListening,
     syncSessionState,
-    applyTimelineResponse,
+    loadTimeline,
     timelineEnabled,
+    hydrateMessages,
   ])
+
+  const handleResumeSession = useCallback(() => {
+    if (normalizeSessionStatus(loadedSessionRecord) === 'ended') {
+      void handleStartOver()
+      return
+    }
+
+    setResumePromptOpen(false)
+    setEntryPromptMode(null)
+    if (sessionType !== 'phone') {
+      requestConversationConnect()
+    }
+  }, [handleStartOver, loadedSessionRecord, requestConversationConnect, sessionType])
 
   // Hidden pose camera for MediaPipe across session types.
   // The visible video area is reserved for the AI avatar on video sessions.
@@ -2321,7 +2892,7 @@ export default function LiveSessionPage() {
   }, [activeConversationMessages])
 
   useEffect(() => {
-    if (!sessionId || !hintsEnabled) {
+    if (!sessionId || !hintsEnabled || !currentIterationId) {
       hintsRequestSeqRef.current += 1
       setHints([])
       setHintsError(null)
@@ -2338,7 +2909,7 @@ export default function LiveSessionPage() {
       }
       const loadRequestSeq = ++hintsRequestSeqRef.current
       try {
-        const response = await api.hints.history(sessionId, 1)
+        const response = await api.hints.history(sessionId, 1, undefined, currentIterationId)
         if (loadRequestSeq !== hintsRequestSeqRef.current) return
         const latest = response?.history?.[0]
         const nextHints = latest?.hints?.map((hint: { content: string }) => hint.content) ?? []
@@ -2352,7 +2923,7 @@ export default function LiveSessionPage() {
 
     void loadHints()
     scheduleIdleHints()
-  }, [sessionId, hintsEnabled, scheduleIdleHints])
+  }, [currentIterationId, hintsEnabled, scheduleIdleHints, sessionId])
 
   useEffect(() => {
     if (!hintsEnabled || sessionStatus === 'ended') return
@@ -2371,23 +2942,13 @@ export default function LiveSessionPage() {
   useEffect(() => {
     if (!sessionId || !timelineEnabled) {
       setTimelineStages([])
-      setCurrentProgress(0)
       setTimelineError(null)
       return
     }
     if (sessionType === 'phone') return
 
-    const loadTimeline = async () => {
-      try {
-        const response = await api.sessions.timeline(sessionId, 50)
-        applyTimelineResponse(response)
-      } catch (err) {
-        setTimelineError('Unable to load timeline')
-      }
-    }
-
-    void loadTimeline()
-  }, [sessionId, timelineEnabled, sessionType, applyTimelineResponse])
+    void loadTimeline(50)
+  }, [loadTimeline, sessionId, timelineEnabled, sessionType])
 
   useEffect(() => {
     return () => {
@@ -2410,21 +2971,45 @@ export default function LiveSessionPage() {
   }, [])
 
   useEffect(() => {
-    if (sessionStatus === 'ended') return
-    if (sessionType === 'phone') return
-    if (!isMultiTurn || !isConnected) return
-    if (activeConversationMessages.length > 0) return
-
     if (assistantStartTimerRef.current) {
       clearTimeout(assistantStartTimerRef.current)
+      assistantStartTimerRef.current = null
     }
+
+    const shouldLetAssistantOpen =
+      sessionStatus !== 'ended' &&
+      sessionType !== 'phone' &&
+      isConnected &&
+      !isConnecting &&
+      !isProcessing &&
+      !entryDecisionLoading &&
+      !resumePromptOpen &&
+      !prelaunchModalOpen &&
+      activeConversationMessages.length === 0
+
+    if (!shouldLetAssistantOpen) {
+      return
+    }
+
     assistantStartTimerRef.current = setTimeout(() => {
+      assistantStartTimerRef.current = null
       startAssistantTurn()
-    }, 600)
+    }, ASSISTANT_FIRST_TURN_DELAY_MS)
+
+    return () => {
+      if (assistantStartTimerRef.current) {
+        clearTimeout(assistantStartTimerRef.current)
+        assistantStartTimerRef.current = null
+      }
+    }
   }, [
-    isMultiTurn,
     isConnected,
+    isConnecting,
+    isProcessing,
     activeConversationMessages.length,
+    entryDecisionLoading,
+    prelaunchModalOpen,
+    resumePromptOpen,
     startAssistantTurn,
     sessionStatus,
     sessionType,
@@ -2498,8 +3083,9 @@ export default function LiveSessionPage() {
           api.sessions.timeline(sessionId, 200),
         ])
         if (cancelled) return
-        syncSessionState(session)
-        setPhoneTranscriptMessages(readTimelineConversationHistory(timeline))
+        const history = readTimelineConversationHistory(timeline)
+        syncSessionState(session, history)
+        setPhoneTranscriptMessages(history)
         setPhoneTranscriptError(null)
         applyTimelineResponse(timeline)
       } catch {
@@ -2566,18 +3152,9 @@ export default function LiveSessionPage() {
     if (!timelineEnabled) return
     if (sessionType === 'phone') return
     if (messages.length > 0 && sessionId) {
-      const loadTimeline = async () => {
-        try {
-          const response = await api.sessions.timeline(sessionId, 50)
-          applyTimelineResponse(response)
-        } catch {
-          // Silently fail on updates
-        }
-      }
-
-      void loadTimeline()
+      void loadTimeline(50)
     }
-  }, [messages.length, sessionId, timelineEnabled, sessionType, applyTimelineResponse])
+  }, [loadTimeline, messages.length, sessionId, timelineEnabled, sessionType])
 
   const handleHangUp = useCallback(async () => {
     clearSpeechFinalizeState()
@@ -2601,13 +3178,31 @@ export default function LiveSessionPage() {
         }
       }
 
-      await api.sessions.end(sessionId, { reason: 'hangup' })
-      setSessionStatus('ended')
-      setCallStarted(false)
+      const hasConversation = activeConversationMessages.length > 0
+      const sessionAlreadyEnded = normalizeSessionStatus(loadedSessionRecord) === 'ended'
+
+      if (!sessionAlreadyEnded && (hasConversation || sessionType === 'phone')) {
+        const endedSession = await api.sessions.end(sessionId, {
+          reason: sessionType === 'phone' ? 'hangup' : 'user_hangup',
+        })
+        invalidateCoinsBalance()
+        const endedRecord = isRecord(endedSession) ? endedSession : loadedSessionRecord
+        setLoadedSessionRecord(endedRecord)
+        syncSessionState(endedRecord)
+      } else if (sessionType === 'phone') {
+        setSessionStatus('ended')
+        setCallStarted(false)
+      }
+
       hangUp()
-      router.push(`/session/${sessionId}/performance`)
+      if (hasConversation || sessionType === 'phone') {
+        router.push(`/session/${sessionId}/performance`)
+      } else {
+        window.history.back()
+      }
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Unable to hang up the phone call.'
+      const message =
+        err instanceof Error ? err.message : 'Unable to finish or hang up the session.'
       notifications.show({
         title: 'Hang up failed',
         message,
@@ -2619,11 +3214,14 @@ export default function LiveSessionPage() {
     clearSpeechFinalizeState,
     hangUp,
     isListening,
+    activeConversationMessages.length,
+    loadedSessionRecord,
     phoneCallRuntime.callId,
     router,
     sessionId,
     sessionType,
     stopListening,
+    syncSessionState,
   ])
 
   useEffect(() => {
@@ -2649,8 +3247,16 @@ export default function LiveSessionPage() {
         ? 'listening'
         : 'idle'
   // ── Tool event derived UI state ────────────────────────────────────────────
+  const hasUserTurnInCurrentIteration = activeConversationMessages.some(
+    (message) => message.role === 'user'
+  )
   const latestMoodEvent = toolEvents.findLast((e) => e.tool === 'update_mood')
-  const currentMood = latestMoodEvent ? (latestMoodEvent.args.mood as string) : null
+  const currentMood =
+    hasUserTurnInCurrentIteration && latestMoodEvent ? (latestMoodEvent.args.mood as string) : null
+  const currentEmotion =
+    hasUserTurnInCurrentIteration && latestMoodEvent
+      ? (latestMoodEvent.args.emotion as string | undefined)
+      : undefined
   const moodDotColor =
     currentMood === 'interested' || currentMood === 'satisfied'
       ? 'green'
@@ -2659,6 +3265,218 @@ export default function LiveSessionPage() {
         : currentMood === 'impatient' || currentMood === 'frustrated'
           ? 'red'
           : 'gray'
+
+  const latestPersuasionEvent = toolEvents.findLast((e) => e.tool === 'update_persuasion_score')
+  const currentPersuasionScore =
+    hasUserTurnInCurrentIteration && latestPersuasionEvent
+      ? Math.min(100, Math.max(0, Number(latestPersuasionEvent.args.score)))
+      : null
+  const persuasionReasoning =
+    hasUserTurnInCurrentIteration && latestPersuasionEvent
+      ? (latestPersuasionEvent.args.reasoning as string)
+      : null
+
+  const EMOTION_EMOJI: Record<string, string> = {
+    neutral: '😐',
+    happy: '😊',
+    excited: '🤩',
+    curious: '🤔',
+    surprised: '😮',
+    confused: '😕',
+    skeptical: '🤨',
+    nervous: '😰',
+    bored: '😒',
+    frustrated: '😤',
+    angry: '😠',
+    sad: '😔',
+    impressed: '🌟',
+  }
+
+  const renderTimelineContent = () => {
+    const completedCount = timelineStages.filter((s) => s.completed).length
+
+    return (
+      <Stack gap={0}>
+        {/* Status line */}
+        {timelineLoading ? (
+          <Loader size="xs" color="dimmed" mb="md" />
+        ) : timelineError ? (
+          <Text size="xs" c="red.4" mb="md">
+            {timelineError}
+          </Text>
+        ) : !timelineLoading && timelineStages.length === 0 ? (
+          <Text size="xs" c="dimmed" mb="md">
+            No plan available yet.
+          </Text>
+        ) : timelineStages.length > 0 ? (
+          <Text size="xs" c="dimmed" mb="lg">
+            {completedCount} of {timelineStages.length} completed
+          </Text>
+        ) : null}
+
+        {/* Timeline */}
+        {timelineStages.map((stage, index) => {
+          const isFirst = index === 0
+          const isLast = index === timelineStages.length - 1
+          const prevCompleted = index > 0 && timelineStages[index - 1].completed
+
+          // Spine segment colors
+          const topColor = isFirst
+            ? 'transparent'
+            : prevCompleted
+              ? '#4f83cc'
+              : 'rgba(255,255,255,0.1)'
+          const bottomColor = isLast
+            ? 'transparent'
+            : stage.completed
+              ? '#4f83cc'
+              : 'rgba(255,255,255,0.1)'
+
+          // Node appearance
+          const nodeSize = stage.active ? 22 : stage.completed ? 18 : 12
+          const nodeOffset = (22 - nodeSize) / 2 // keeps spine centered
+
+          return (
+            <Box key={`${stage.order}-${stage.label}`} style={{ display: 'flex', gap: 14 }}>
+              {/* ── Spine column ── */}
+              <Box
+                style={{
+                  width: 22,
+                  flexShrink: 0,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                }}
+              >
+                {/* top segment */}
+                <Box
+                  style={{
+                    width: 2,
+                    height: isFirst ? 12 : 16,
+                    background: topColor,
+                    borderRadius: 1,
+                    flexShrink: 0,
+                  }}
+                />
+
+                {/* node */}
+                <Box
+                  style={{
+                    position: 'relative',
+                    flexShrink: 0,
+                    marginLeft: nodeOffset,
+                    marginRight: nodeOffset,
+                  }}
+                >
+                  {/* active glow ring */}
+                  {stage.active ? (
+                    <Box
+                      style={{
+                        position: 'absolute',
+                        inset: -5,
+                        borderRadius: '50%',
+                        border: '1.5px solid rgba(79,131,204,0.35)',
+                        animation: 'pulse 2s infinite',
+                      }}
+                    />
+                  ) : null}
+
+                  <Box
+                    style={{
+                      width: nodeSize,
+                      height: nodeSize,
+                      borderRadius: '50%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                      // completed: solid green fill
+                      // active: solid blue fill
+                      // pending: dim outline only
+                      background: stage.completed
+                        ? '#22c55e'
+                        : stage.active
+                          ? '#4f83cc'
+                          : 'transparent',
+                      border: stage.completed
+                        ? 'none'
+                        : stage.active
+                          ? 'none'
+                          : '1.5px solid rgba(255,255,255,0.2)',
+                    }}
+                  >
+                    {stage.completed ? <IconCheck size={10} color="white" strokeWidth={3} /> : null}
+                  </Box>
+                </Box>
+
+                {/* bottom segment */}
+                <Box
+                  style={{
+                    width: 2,
+                    flex: 1,
+                    minHeight: isLast ? 12 : 24,
+                    background: bottomColor,
+                    borderRadius: 1,
+                    flexShrink: 0,
+                  }}
+                />
+              </Box>
+
+              {/* ── Content column ── */}
+              <Box
+                style={{
+                  flex: 1,
+                  minWidth: 0,
+                  paddingTop: isFirst ? 4 : 8,
+                  paddingBottom: isLast ? 4 : 8,
+                }}
+              >
+                <Group justify="space-between" align="flex-start" wrap="nowrap" gap={6}>
+                  <Text
+                    size="sm"
+                    fw={stage.active ? 600 : 400}
+                    c={
+                      stage.completed
+                        ? 'rgba(255,255,255,0.3)'
+                        : stage.active
+                          ? 'white'
+                          : 'rgba(255,255,255,0.4)'
+                    }
+                    style={{ lineHeight: 1.35 }}
+                  >
+                    {stage.label}
+                  </Text>
+                  {stage.estimatedDuration && !stage.completed ? (
+                    <Text
+                      size="xs"
+                      c="rgba(255,255,255,0.2)"
+                      style={{ flexShrink: 0, lineHeight: 1.4, marginTop: 1 }}
+                    >
+                      {stage.estimatedDuration}m
+                    </Text>
+                  ) : null}
+                </Group>
+                {stage.active && stage.description ? (
+                  <Text size="xs" c="dimmed" mt={4} style={{ lineHeight: 1.55 }}>
+                    {stage.description}
+                  </Text>
+                ) : null}
+              </Box>
+            </Box>
+          )
+        })}
+      </Stack>
+    )
+  }
+
+  const persuasionColor =
+    currentPersuasionScore === null
+      ? 'gray'
+      : currentPersuasionScore >= 70
+        ? 'green'
+        : currentPersuasionScore >= 40
+          ? 'yellow'
+          : 'red'
 
   const activeObjections = toolEvents.filter((e) => e.tool === 'raise_objection')
   const latestNextStep = toolEvents.findLast((e) => e.tool === 'propose_next_step') ?? null
@@ -2678,6 +3496,24 @@ export default function LiveSessionPage() {
     })
   }, [toolEvents])
 
+  // Detect persuasion = 100 → compute score + show success modal
+  useEffect(() => {
+    if (currentPersuasionScore === null || currentPersuasionScore < 100) return
+    if (successTriggeredRef.current) return
+    successTriggeredRef.current = true
+
+    const elapsed = time
+    const total = sessionDuration > 0 ? sessionDuration : 600 // fallback 10 min
+    const timeRemaining = Math.max(0, total - elapsed)
+    const speedRatio = timeRemaining / total
+    const score = Math.round(65 + speedRatio * 35)
+
+    setTimeAtSuccess(elapsed)
+    setFinalScore(score)
+    setSuccessModalOpen(true)
+    stopAudio()
+  }, [currentPersuasionScore, time, sessionDuration, stopAudio])
+
   return (
     <Box
       style={{
@@ -2688,6 +3524,68 @@ export default function LiveSessionPage() {
         overflow: 'hidden',
       }}
     >
+      <Modal
+        opened={prelaunchModalOpen}
+        onClose={() => {}}
+        title="Add documents before you start"
+        centered
+        size="lg"
+        withCloseButton={false}
+        closeOnClickOutside={false}
+        closeOnEscape={false}
+      >
+        <Stack gap="md">
+          <Text size="sm" c="dimmed">
+            Would you like to upload documents into this session&apos;s context before the
+            simulation begins? These files stay attached to the session so you can launch with the
+            right background material.
+          </Text>
+
+          {sessionAttachments.length > 0 ? (
+            <Stack gap="xs">
+              <Text size="sm" fw={600}>
+                Already attached
+              </Text>
+              <Group gap="xs">
+                {sessionAttachments.map((attachment) => (
+                  <Badge
+                    key={`${attachment.bucket}:${attachment.key}`}
+                    variant="light"
+                    color="blue"
+                  >
+                    {attachment.filename}
+                  </Badge>
+                ))}
+              </Group>
+            </Stack>
+          ) : null}
+
+          <UploadSection
+            sessionDraftId={sessionId}
+            onAttachmentsChange={setLaunchAttachments}
+            onUploadingChange={setLaunchAttachmentsUploading}
+            onHasErrorsChange={setLaunchAttachmentErrors}
+          />
+
+          <Group justify="flex-end">
+            <Button
+              variant="default"
+              onClick={handleSkipPrelaunch}
+              disabled={launchAttachmentsUploading || prelaunchSaving}
+            >
+              Skip for now
+            </Button>
+            <Button
+              onClick={() => void handleContinueFromPrelaunch()}
+              loading={prelaunchSaving}
+              disabled={launchAttachmentsUploading || launchAttachmentErrors}
+            >
+              Continue
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+
       <Modal
         opened={phoneSetupModalOpen && isPhoneSession}
         onClose={handleClosePhoneSetupModal}
@@ -2789,6 +3687,133 @@ export default function LiveSessionPage() {
         </Stack>
       </Modal>
 
+      {/* ── Success Modal ───────────────────────────────────────────── */}
+      <Modal
+        opened={successModalOpen}
+        onClose={() => {}}
+        withCloseButton={false}
+        closeOnClickOutside={false}
+        closeOnEscape={false}
+        centered
+        size="sm"
+        radius="lg"
+        styles={{
+          content: { background: 'var(--mantine-color-dark-7)', overflow: 'hidden' },
+        }}
+      >
+        <Stack align="center" gap="md" py="sm">
+          {/* Trophy icon */}
+          <ThemeIcon
+            size={72}
+            radius="xl"
+            variant="gradient"
+            gradient={{ from: 'yellow.5', to: 'orange.5', deg: 135 }}
+          >
+            <IconTrophy size={38} />
+          </ThemeIcon>
+
+          <Stack gap={4} align="center">
+            <Title order={2} ta="center">
+              You did it!
+            </Title>
+            <Text c="dimmed" ta="center" size="sm">
+              You successfully convinced the AI
+              {personaName ? ` — ${personaName}` : ''}.
+            </Text>
+          </Stack>
+
+          <Divider w="100%" />
+
+          {/* Score ring */}
+          <Stack align="center" gap={6}>
+            <RingProgress
+              size={120}
+              thickness={10}
+              roundCaps
+              sections={[
+                {
+                  value: finalScore ?? 0,
+                  color:
+                    (finalScore ?? 0) >= 90 ? 'green' : (finalScore ?? 0) >= 75 ? 'teal' : 'yellow',
+                },
+              ]}
+              label={
+                <Stack gap={0} align="center">
+                  <Text fw={800} size="xl" lh={1}>
+                    {finalScore ?? 0}
+                  </Text>
+                  <Text size="xs" c="dimmed">
+                    / 100
+                  </Text>
+                </Stack>
+              }
+            />
+            <Text fw={600} size="md" ta="center">
+              {(finalScore ?? 0) >= 95
+                ? 'Perfect — lightning fast!'
+                : (finalScore ?? 0) >= 85
+                  ? 'Excellent — very convincing!'
+                  : (finalScore ?? 0) >= 75
+                    ? 'Great work!'
+                    : 'Good job — you got there!'}
+            </Text>
+          </Stack>
+
+          {/* Speed bar */}
+          {sessionDuration > 0 && timeAtSuccess !== null && (
+            <Box w="100%">
+              <Group justify="space-between" mb={4}>
+                <Text size="xs" c="dimmed">
+                  Time used
+                </Text>
+                <Text size="xs" fw={600}>
+                  {formatTime(timeAtSuccess)} / {formatTime(sessionDuration)}
+                </Text>
+              </Group>
+              <Progress
+                value={(timeAtSuccess / sessionDuration) * 100}
+                color={
+                  timeAtSuccess / sessionDuration <= 0.4
+                    ? 'green'
+                    : timeAtSuccess / sessionDuration <= 0.7
+                      ? 'yellow'
+                      : 'orange'
+                }
+                size="sm"
+                radius="xl"
+              />
+            </Box>
+          )}
+
+          <Divider w="100%" />
+
+          <Group w="100%" grow>
+            <Button
+              variant="default"
+              leftSection={<IconRefresh size={15} />}
+              loading={startOverLoading}
+              onClick={() => {
+                setSuccessModalOpen(false)
+                successTriggeredRef.current = false
+                setFinalScore(null)
+                setTimeAtSuccess(null)
+                void handleStartOver()
+              }}
+            >
+              New Round
+            </Button>
+            <Button
+              variant="gradient"
+              gradient={{ from: 'violet', to: 'blue', deg: 135 }}
+              leftSection={<IconTrophy size={15} />}
+              onClick={() => setSuccessModalOpen(false)}
+            >
+              Keep Going
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+
       {/* Top Bar */}
       <Box
         style={{
@@ -2810,26 +3835,49 @@ export default function LiveSessionPage() {
                   <Text size="xs" c="dimmed">
                     with {personaName}
                   </Text>
-                  {currentMood && (
-                    <Box
-                      title={`Mood: ${currentMood}`}
-                      style={{
-                        width: 8,
-                        height: 8,
-                        borderRadius: '50%',
-                        backgroundColor: `var(--mantine-color-${moodDotColor}-5)`,
-                        flexShrink: 0,
-                        transition: 'background-color 0.4s ease',
-                      }}
-                    />
+                  {(currentEmotion || currentMood) && (
+                    <Tooltip
+                      label={currentMood ? `Mood: ${currentMood}` : ''}
+                      disabled={!currentMood}
+                      position="bottom"
+                    >
+                      <Badge
+                        variant="light"
+                        color={moodDotColor}
+                        size="sm"
+                        style={{
+                          cursor: 'default',
+                          transition: 'all 0.4s ease',
+                          fontWeight: 500,
+                          gap: 4,
+                        }}
+                        leftSection={
+                          currentEmotion ? (EMOTION_EMOJI[currentEmotion] ?? '😐') : undefined
+                        }
+                      >
+                        {currentEmotion ?? currentMood}
+                      </Badge>
+                    </Tooltip>
                   )}
                 </Group>
               )}
             </Stack>
           </Group>
           <Group gap={isMobile ? 'xs' : 'xl'} wrap="nowrap" style={{ flexShrink: 0 }}>
-            <Text size={isMobile ? 'md' : 'xl'} fw={700} c="white">
-              {formatTime(time)}
+            <Text
+              size={isMobile ? 'md' : 'xl'}
+              fw={700}
+              c={
+                sessionDuration > 0 && time > sessionDuration * 0.85
+                  ? 'red'
+                  : sessionDuration > 0 && time > sessionDuration * 0.6
+                    ? 'orange'
+                    : 'white'
+              }
+            >
+              {sessionDuration > 0
+                ? formatTime(Math.max(0, sessionDuration - time))
+                : formatTime(time)}
             </Text>
             {!isMobile && !isPhoneSession && (
               <Group gap="xs">
@@ -2889,6 +3937,26 @@ export default function LiveSessionPage() {
                   isReady={poseIsReady}
                   onToggle={() => setVisualEnabled((v) => !v)}
                 />
+              )}
+              {sessionType === 'phone' && sessionStatus !== 'ended' && !callStarted && (
+                <Button
+                  size="xs"
+                  variant="light"
+                  color="blue"
+                  onClick={() => setPhoneSetupModalOpen(true)}
+                >
+                  Start call
+                </Button>
+              )}
+              {isMobile && (
+                <Button
+                  size="xs"
+                  variant="light"
+                  color="brand"
+                  onClick={() => setTimelineEnabled(true)}
+                >
+                  Timeline
+                </Button>
               )}
               <ActionIcon
                 size="lg"
@@ -3070,6 +4138,16 @@ export default function LiveSessionPage() {
         )}
       </Box>
 
+      <Modal
+        opened={Boolean(isMobile && timelineEnabled)}
+        onClose={() => setTimelineEnabled(false)}
+        title="Timeline"
+        centered
+        fullScreen
+      >
+        {renderTimelineContent()}
+      </Modal>
+
       {/* Hidden MediaPipe pose video.
           Must stay within the viewport (opacity:0.001 not display:none) so the
           browser scheduler doesn't throttle its frame callbacks. */}
@@ -3103,10 +4181,192 @@ export default function LiveSessionPage() {
         }
       `}</style>
 
+      {/* In-session proactive coaching tip — appears on stage transitions */}
+      {coachingTip && (
+        <Box
+          style={{
+            position: 'fixed',
+            top: 72,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 400,
+            width: 'min(460px, calc(100vw - 32px))',
+            animation: 'coaching-tip-in 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
+          }}
+        >
+          <style>{`
+            @keyframes coaching-tip-in {
+              from { opacity: 0; transform: translateX(-50%) translateY(-12px) scale(0.95); }
+              to   { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+            }
+          `}</style>
+          <Paper withBorder shadow="lg" radius="md" px="md" py="sm">
+            <Group gap="sm" wrap="nowrap" align="flex-start">
+              <Box
+                style={{
+                  width: 30,
+                  height: 30,
+                  borderRadius: '50%',
+                  background: 'linear-gradient(135deg, #7950f2, #4dabf7)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                  marginTop: 2,
+                }}
+              >
+                <IconSparkles size={15} color="white" />
+              </Box>
+              <Stack gap={2} style={{ flex: 1 }}>
+                <Group gap={6} align="center">
+                  <Text size="xs" fw={600} c="violet.6">
+                    Coach tip
+                  </Text>
+                  <Badge size="xs" variant="light" color="violet">
+                    {coachingTip.stage}
+                  </Badge>
+                </Group>
+                <Text size="sm" lh={1.5}>
+                  {coachingTip.tip}
+                </Text>
+              </Stack>
+              <ActionIcon
+                size="sm"
+                variant="subtle"
+                color="gray"
+                onClick={clearCoachingTip}
+                style={{ flexShrink: 0, marginTop: 2 }}
+              >
+                <IconX size={14} />
+              </ActionIcon>
+            </Group>
+          </Paper>
+        </Box>
+      )}
+
+      {/* AI State Panel — always visible on desktop */}
+      {!isMobile && (
+        <Box
+          style={{
+            position: 'fixed',
+            bottom: 24,
+            left: 24,
+            zIndex: 300,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 8,
+            width: 188,
+          }}
+        >
+          {/* Emotion Box */}
+          <Paper withBorder radius="md" px="sm" py="xs" shadow="sm">
+            <Text
+              size="xs"
+              c="dimmed"
+              fw={500}
+              tt="uppercase"
+              mb={6}
+              style={{ letterSpacing: '0.04em' }}
+            >
+              AI Emotion
+            </Text>
+            <Group gap="xs" align="center" wrap="nowrap">
+              <Text size="xl" style={{ lineHeight: 1, flexShrink: 0, transition: 'all 0.4s ease' }}>
+                {EMOTION_EMOJI[currentEmotion ?? ''] ?? EMOTION_EMOJI[currentMood ?? ''] ?? '😐'}
+              </Text>
+              <Stack gap={2} style={{ minWidth: 0 }}>
+                <Text
+                  size="sm"
+                  fw={600}
+                  tt="capitalize"
+                  c={(currentEmotion ?? currentMood) ? undefined : 'dimmed'}
+                  style={{ lineHeight: 1.2, transition: 'all 0.4s ease' }}
+                >
+                  {currentEmotion ?? currentMood ?? 'Neutral'}
+                </Text>
+                {latestMoodEvent?.args.trigger ? (
+                  <Text size="xs" c="dimmed" style={{ lineHeight: 1.3 }} lineClamp={2}>
+                    {String(latestMoodEvent.args.trigger)}
+                  </Text>
+                ) : (
+                  <Text size="xs" c="dimmed" style={{ lineHeight: 1.3 }}>
+                    Waiting for response…
+                  </Text>
+                )}
+              </Stack>
+            </Group>
+          </Paper>
+
+          {/* Persuasion Meter */}
+          <Tooltip
+            label={persuasionReasoning ?? ''}
+            disabled={!persuasionReasoning}
+            position="right"
+            multiline
+            w={200}
+          >
+            <Paper
+              withBorder
+              radius="md"
+              px="sm"
+              py="xs"
+              shadow="sm"
+              style={{ cursor: persuasionReasoning ? 'help' : 'default' }}
+            >
+              <Group gap="xs" mb={6} align="center">
+                <IconTarget size={12} color="var(--mantine-color-dimmed)" />
+                <Text
+                  size="xs"
+                  c="dimmed"
+                  fw={500}
+                  tt="uppercase"
+                  style={{ letterSpacing: '0.04em' }}
+                >
+                  Persuasion
+                </Text>
+              </Group>
+              <Group gap="xs" align="center" wrap="nowrap">
+                <RingProgress
+                  size={52}
+                  thickness={5}
+                  roundCaps
+                  sections={[
+                    {
+                      value: currentPersuasionScore ?? 0,
+                      color: currentPersuasionScore !== null ? persuasionColor : 'gray',
+                    },
+                  ]}
+                  label={
+                    <Text
+                      fw={700}
+                      ta="center"
+                      size="xs"
+                      c={currentPersuasionScore !== null ? persuasionColor : 'dimmed'}
+                    >
+                      {currentPersuasionScore ?? '—'}
+                    </Text>
+                  }
+                />
+                <Text size="xs" c="dimmed" style={{ lineHeight: 1.3 }}>
+                  {currentPersuasionScore === null
+                    ? 'Waiting for response…'
+                    : currentPersuasionScore >= 70
+                      ? 'Almost convinced'
+                      : currentPersuasionScore >= 40
+                        ? 'On the fence'
+                        : 'Not convinced'}
+                </Text>
+              </Group>
+            </Paper>
+          </Tooltip>
+        </Box>
+      )}
+
       <CoachChatWidget
         context={{
           page: 'session',
           sessionId,
+          sessionName: sessionName || undefined,
           recentTurns: activeConversationMessages
             .slice(-6)
             .map((message) => ({ role: message.role, text: message.text })),

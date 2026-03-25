@@ -1,5 +1,6 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { ClientsModule, Transport } from '@nestjs/microservices';
 import { ChatController } from './controllers/chat.controller';
 import { LLMRoutingController } from './controllers/llm-routing.controller';
 import { LLMTestController } from './controllers/llm-test.controller';
@@ -10,10 +11,12 @@ import { InvitationController } from './controllers/invitation.controller';
 import { InvitationHttpController } from './controllers/invitation-http.controller';
 import { ConversationController } from './controllers/conversation.controller';
 import { PersonaHttpController } from './controllers/persona-http.controller';
-import { ScenarioHttpController } from './controllers/scenario-http.controller';
+import { ScenarioController } from './controllers/scenario.controller';
 import { HintsController } from './controllers/hints.controller';
 import { TimelineController } from './controllers/timeline.controller';
 import { ChallengeController } from './controllers/challenge.controller';
+import { CalendarSessionController } from './controllers/calendar-session.controller';
+import { CalendarSessionService } from './services/calendar-session.service';
 import { SimulationPrismaService } from './prisma/simulation-prisma.service';
 import { MongoConnectionService } from './services/mongo/mongo-connection.service';
 import { LLMService } from './services/llm/llm.service';
@@ -48,11 +51,17 @@ import { ConversationToolsService } from './services/conversation-tools.service'
 import { SimulationRedisService } from './services/redis/redis.service';
 import { VideoGenerationService } from './services/video-generation.service';
 import { PersonaMediaService } from './services/persona-media.service';
+import { CoinGatingService } from './services/coin-gating.service';
+import { CoinEstimationService } from './services/coin-estimation.service';
 import { RedisModule } from '@pitch/shared-backend/redis/index';
 import { TtsModule } from './tts/tts.module';
 import { AssessmentModule } from './assessment/assessment.module';
 import { PhoneModule } from './phone/phone.module';
 import { RagModule } from './rag/rag.module';
+import {
+  getRabbitMQUrl,
+  getQueueOptions,
+} from '../../config/microservices.config';
 
 @Module({
   imports: [
@@ -64,6 +73,34 @@ import { RagModule } from './rag/rag.module';
       }),
       inject: [ConfigService],
     }),
+    ClientsModule.registerAsync([
+      {
+        name: 'CRM_SERVICE',
+        imports: [ConfigModule],
+        useFactory: (_configService: ConfigService) => ({
+          transport: Transport.RMQ,
+          options: {
+            urls: [getRabbitMQUrl()],
+            queue: 'crm_queue',
+            queueOptions: getQueueOptions(),
+          },
+        }),
+        inject: [ConfigService],
+      },
+      {
+        name: 'USER_SERVICE',
+        imports: [ConfigModule],
+        useFactory: (_configService: ConfigService) => ({
+          transport: Transport.RMQ,
+          options: {
+            urls: [getRabbitMQUrl()],
+            queue: 'user_queue',
+            queueOptions: getQueueOptions(),
+          },
+        }),
+        inject: [ConfigService],
+      },
+    ]),
     TtsModule,
     PhoneModule,
     RagModule,
@@ -80,10 +117,11 @@ import { RagModule } from './rag/rag.module';
     InvitationHttpController,
     ConversationController,
     PersonaHttpController,
-    ScenarioHttpController,
+    ScenarioController,
     HintsController,
     TimelineController,
     ChallengeController,
+    CalendarSessionController,
   ],
   providers: [
     SimulationPrismaService,
@@ -133,6 +171,9 @@ import { RagModule } from './rag/rag.module';
     StreamingConversationService,
     ConversationToolsService,
     ConversationOrchestrationService,
+    CalendarSessionService,
+    CoinGatingService,
+    CoinEstimationService,
   ],
   exports: [
     PhoneModule,

@@ -80,7 +80,27 @@ describe('SessionService cache invalidation', () => {
   const redis = {
     deleteSessionFull: jest.fn(),
     setSessionMemberIteration: jest.fn(),
+    clearConversationState: jest.fn(),
   };
+
+  const coinGating = {
+    reserveForSession: jest.fn().mockResolvedValue({ approved: true }),
+    emitAdjust: jest.fn(),
+  };
+
+  const coinEstimation = {
+    estimate: jest.fn().mockResolvedValue({
+      estimatedCoins: 5,
+      estimatedCostUsd: 0.005,
+      coinPriceUsd: 0.1,
+      markupMultiplier: 1.3,
+      model: 'gpt-4o-mini',
+      provider: 'openai',
+      durationMinutes: 15,
+    }),
+  };
+
+  const configService = { get: jest.fn().mockReturnValue(undefined) };
 
   const service = new SessionService(
     sessionRepository as never,
@@ -89,6 +109,9 @@ describe('SessionService cache invalidation', () => {
     prisma as never,
     personaMediaService as never,
     redis as never,
+    coinGating as never,
+    coinEstimation as never,
+    configService as never,
   );
 
   beforeEach(() => {
@@ -110,6 +133,66 @@ describe('SessionService cache invalidation', () => {
 
     expect(redis.deleteSessionFull).toHaveBeenCalledTimes(1);
     expect(redis.deleteSessionFull).toHaveBeenCalledWith('session-1');
+  });
+
+  it('enriches thin generated session configs before persisting them', async () => {
+    sessionRepository.create.mockResolvedValue(baseSession);
+    redis.deleteSessionFull.mockResolvedValue(undefined);
+
+    await service.create(
+      {
+        orgId: 'org-1',
+        type: 'text',
+        name: 'Morning Catch Up',
+        sessionConfig: {
+          calendarEventId: 'evt-1',
+          eventStartTime: '2026-03-21T09:00:00.000Z',
+          attendees: [{ name: 'Alex Morgan', email: 'alex@example.com' }],
+        },
+      } as never,
+      'owner-1',
+    );
+
+    expect(sessionRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionConfig: expect.objectContaining({
+          description: expect.stringContaining('Morning Catch Up'),
+          aiRole: 'Cross-functional meeting counterpart',
+          userRole: 'Account Executive',
+          counterpartProfile: expect.objectContaining({
+            name: 'Alex Morgan',
+            role: 'Cross-functional meeting counterpart',
+          }),
+          scenario: expect.objectContaining({
+            name: 'Morning Catch Up',
+            topic: 'Morning Catch Up',
+            objective: expect.stringContaining('Morning Catch Up'),
+          }),
+        }),
+      }),
+    );
+  });
+
+  it('falls back to the personal workspace and default locale when callers send blanks', async () => {
+    sessionRepository.create.mockResolvedValue(baseSession);
+    redis.deleteSessionFull.mockResolvedValue(undefined);
+
+    await service.create(
+      {
+        orgId: '',
+        type: 'text',
+        name: 'WatsonX AI Practice Session',
+        language: '',
+      } as never,
+      'owner-1',
+    );
+
+    expect(sessionRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orgId: 'owner-1',
+        language: 'en-US',
+      }),
+    );
   });
 
   it('invalidates full-session cache on update', async () => {
@@ -204,12 +287,7 @@ describe('SessionService cache invalidation', () => {
 
   it('invalidates full-session cache on end', async () => {
     sessionRepository.findById.mockResolvedValue(baseSession);
-    sessionRepository.end.mockResolvedValue({
-      ...baseSession,
-      status: 'ended',
-      endedReason: 'user_ended',
-      endedAt: now,
-    });
+    sessionRepository.update.mockResolvedValue(baseSession);
     prisma.client.iteration.findFirst.mockResolvedValue(null);
     assessmentService.requestRun.mockResolvedValue(undefined);
     redis.deleteSessionFull.mockResolvedValue(undefined);
@@ -224,10 +302,12 @@ describe('SessionService cache invalidation', () => {
 
     expect(redis.deleteSessionFull).toHaveBeenCalledTimes(1);
     expect(redis.deleteSessionFull).toHaveBeenCalledWith('session-1');
-    expect(sessionRepository.end).toHaveBeenCalledWith(
-      'session-1',
-      'user_ended',
-    );
+    expect(sessionRepository.update).toHaveBeenCalledWith('session-1', {
+      status: 'active',
+      endedReason: null,
+      endedAt: null,
+      sessionConfig: {},
+    });
   });
 
   it('invalidates full-session cache on delete', async () => {
@@ -324,6 +404,7 @@ describe('SessionService cache invalidation', () => {
         lastTurnOrder: 0,
       },
     );
+    expect(redis.clearConversationState).toHaveBeenCalledWith('session-1');
     expect(redis.deleteSessionFull).toHaveBeenCalledWith('session-1');
     expect(sessionRepository.create).not.toHaveBeenCalled();
   });

@@ -4,7 +4,7 @@ const shouldCollectCoverage =
   process.env.JEST_COLLECT_COVERAGE === 'true';
 
 const baseConfig = {
-  moduleFileExtensions: ['js', 'json', 'ts'],
+  moduleFileExtensions: ['ts', 'js', 'json'],
   rootDir: 'src',
   testRegex: '.*\\.spec\\.ts$',
   transform: {
