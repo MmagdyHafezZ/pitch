@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Inject,
   Injectable,
   Logger,
@@ -362,6 +363,7 @@ export class AdminGatewayService {
           (flag) => flag.source === 'override',
         ).length,
       },
+      observability: this.adminObservability.getRuntimeObservability(),
     };
   }
 
@@ -812,6 +814,66 @@ export class AdminGatewayService {
     return updatedMembership;
   }
 
+  async removeTeamMember(teamId: string, userId: string, actor: UserClaims) {
+    const membership = await this.userPrisma.teamMembership.findUnique({
+      where: {
+        userId_teamId: {
+          userId,
+          teamId,
+        },
+      },
+      include: {
+        team: {
+          select: {
+            id: true,
+            isActive: true,
+            deletedAt: true,
+          },
+        },
+      },
+    });
+
+    if (!membership || !membership.team) {
+      throw new NotFoundException('Team membership not found');
+    }
+
+    if (!membership.team.isActive || membership.team.deletedAt !== null) {
+      throw new NotFoundException('Team not found');
+    }
+
+    if (membership.isActive !== false && membership.role === Role.OWNER) {
+      throw new ConflictException(
+        'Transfer ownership to another member before removing the current owner.',
+      );
+    }
+
+    await this.userPrisma.teamMembership.update({
+      where: {
+        userId_teamId: {
+          userId,
+          teamId,
+        },
+      },
+      data: {
+        isActive: false,
+        acceptedAt: null,
+        invitedByUserId: null,
+      },
+    });
+
+    this.recordAudit(actor, 'admin.teams.members.remove', 'team', teamId, {
+      removedUserId: userId,
+      role: membership.role,
+      wasActive: membership.isActive !== false,
+    });
+
+    return {
+      message: `User with ID ${userId} has been removed from team with ID: ${teamId}`,
+      teamId,
+      removedUserId: userId,
+    };
+  }
+
   async getSubscriptionAudit(query: { teamId?: string; limit?: number }) {
     const limit = this.normalizeLimit(query.limit, 100, 250);
     const subscriptions = await this.userPrisma.subscription.findMany({
@@ -954,6 +1016,110 @@ export class AdminGatewayService {
       mongoAvailable: this.mongoConnection.isConnected(),
       summary,
       traces,
+    };
+  }
+
+  async removeSessionMember(
+    sessionId: string,
+    userId: string,
+    actor: UserClaims,
+  ) {
+    await this.ensureSession(sessionId);
+
+    const targetMember =
+      await this.simulationPrisma.client.sessionMember.findUnique({
+        where: {
+          sessionId_userId: {
+            sessionId,
+            userId,
+          },
+        },
+        select: {
+          id: true,
+          role: true,
+          userId: true,
+        },
+      });
+
+    if (!targetMember) {
+      throw new NotFoundException(
+        `User ${userId} is not a member of session ${sessionId}`,
+      );
+    }
+
+    const removalResult = await this.simulationPrisma.client.$transaction(
+      async (tx) => {
+        await tx.sessionMember.delete({
+          where: {
+            sessionId_userId: {
+              sessionId,
+              userId,
+            },
+          },
+        });
+
+        const remainingMembers = await tx.sessionMember.findMany({
+          where: { sessionId },
+          orderBy: { joinedAt: 'asc' },
+        });
+
+        if (remainingMembers.length === 0) {
+          await tx.session.delete({
+            where: { id: sessionId },
+          });
+          return {
+            sessionDeleted: true,
+            newOwnerId: undefined as string | undefined,
+          };
+        }
+
+        if (targetMember.role === 'owner') {
+          const nextOwner = remainingMembers[0];
+          await tx.sessionMember.update({
+            where: { id: nextOwner.id },
+            data: { role: 'owner' },
+          });
+
+          return {
+            sessionDeleted: false,
+            newOwnerId: nextOwner.userId,
+          };
+        }
+
+        return {
+          sessionDeleted: false,
+          newOwnerId: undefined as string | undefined,
+        };
+      },
+    );
+
+    await this.invalidateSessionCache(sessionId, userId);
+
+    this.recordAudit(
+      actor,
+      'admin.sessions.members.remove',
+      'session',
+      sessionId,
+      {
+        removedUserId: userId,
+        removedRole: targetMember.role,
+        newOwnerId: removalResult.newOwnerId,
+        sessionDeleted: removalResult.sessionDeleted,
+      },
+    );
+
+    const message = removalResult.sessionDeleted
+      ? `Session ${sessionId} deleted because it has no members`
+      : removalResult.newOwnerId
+        ? `Member ${userId} removed from session ${sessionId}; ownership transferred to ${removalResult.newOwnerId}`
+        : `Member ${userId} removed from session ${sessionId}`;
+
+    return {
+      message,
+      sessionId,
+      removedUserId: userId,
+      newOwnerId: removalResult.newOwnerId,
+      sessionDeleted: removalResult.sessionDeleted || undefined,
     };
   }
 
@@ -1659,9 +1825,34 @@ export class AdminGatewayService {
   }
 
   listErrors(query: LogQuery) {
+    const errors = this.adminObservability.listErrorLogs(query.limit ?? 100);
+
     return {
-      errors: this.adminObservability.listErrorLogs(query.limit ?? 100),
+      errors,
+      logs: errors,
     };
+  }
+
+  getLogLevels() {
+    return this.adminObservability.getLogLevelSettings();
+  }
+
+  updateLogLevels(body: Record<string, unknown>, actor: UserClaims) {
+    if (typeof body.debugEnabled !== 'boolean') {
+      throw new BadRequestException('debugEnabled must be a boolean');
+    }
+
+    const result = this.adminObservability.setDebugEnabled(body.debugEnabled);
+
+    this.recordAudit(
+      actor,
+      'admin.log-levels.update',
+      'observability',
+      'debug-log-capture',
+      result,
+    );
+
+    return result;
   }
 
   listRequestLogs(query: LogQuery) {

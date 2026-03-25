@@ -26,6 +26,9 @@ import {
   getRabbitMQUrl,
   MICROSERVICES_CONFIG,
 } from './config/microservices.config';
+import { provisionRabbitMqTopology } from './config/rabbitmq-topology';
+import { AdminObservabilityService } from './gateway/controllers/admin/admin-observability.service';
+import { AdminRuntimeLogger } from './gateway/logging/admin-runtime.logger';
 import { PrismaClient } from '@prisma/user-client';
 import { withAccelerate } from '@prisma/extension-accelerate';
 import { resolvePrismaRuntimeConfig } from './config/prisma-runtime.config';
@@ -96,8 +99,11 @@ async function bootstrap() {
       ? (basePrisma.$extends(withAccelerate()) as unknown as PrismaClient)
       : basePrisma;
     await runStartupHealthChecks(rabbitmqUrl, prisma);
+    await provisionRabbitMqTopology(rabbitmqUrl);
   } catch {
-    logger.error('Startup health checks failed. Exiting...');
+    logger.error(
+      'Startup checks or RabbitMQ topology provisioning failed. Exiting...',
+    );
     process.exit(1);
   }
 
@@ -105,7 +111,7 @@ async function bootstrap() {
     bufferLogs: true,
     bodyParser: false,
   });
-  app.useLogger(logger);
+  app.useLogger(new AdminRuntimeLogger(app.get(AdminObservabilityService)));
 
   // Increase body-parser limits: images can be a few MB inline; PDFs go via multipart.
   app.use(json({ limit: '5mb' }));

@@ -37,6 +37,7 @@ import type {
 } from 'express';
 import { AuthTokenResponseDto } from '../../dto/auth-response.dto';
 import { getWhitelistedRoutes } from '../../config/auth-whitelist.config';
+import { isSystemAdminEmail } from '../../utils/system-admin-access';
 
 @ApiTags('authentication')
 @Controller({ path: 'auth', version: '1' })
@@ -57,6 +58,13 @@ export class AuthGatewayController {
   );
 
   constructor(@Inject('USER_SERVICE') private userService: ClientProxy) {}
+
+  private withSystemAdminFlag<T extends { email?: string | null }>(user: T) {
+    return {
+      ...user,
+      isSystemAdmin: isSystemAdminEmail(user.email),
+    };
+  }
 
   private setRefreshCookie(res: ExpressResponse, refreshToken: string) {
     const secure =
@@ -105,7 +113,10 @@ export class AuthGatewayController {
         timeout(10000),
         map((payload: AuthResponseDto) => {
           this.setRefreshCookie(res, payload.refreshToken);
-          return { user: payload.user, accessToken: payload.token };
+          return {
+            user: this.withSystemAdminFlag(payload.user),
+            accessToken: payload.token,
+          };
         }),
         retry({
           count: 2,
@@ -151,7 +162,10 @@ export class AuthGatewayController {
       timeout(10000),
       map((payload: AuthResponseDto) => {
         this.setRefreshCookie(res, payload.refreshToken);
-        return { user: payload.user, accessToken: payload.token };
+        return {
+          user: this.withSystemAdminFlag(payload.user),
+          accessToken: payload.token,
+        };
       }),
       catchError((err: unknown) => {
         const error = normalizeError(err);
@@ -256,6 +270,7 @@ export class AuthGatewayController {
       .send(USER_SERVICE_PATTERNS.GET_USER, { userId, userClaims })
       .pipe(
         timeout(10000),
+        map((user: UserResponseDto) => this.withSystemAdminFlag(user)),
         catchError((err: unknown) => {
           const error = normalizeError(err);
           const stack = error.stack ?? JSON.stringify(err);
@@ -278,7 +293,7 @@ export class AuthGatewayController {
   @ApiResponse({ status: 401, description: 'Invalid token' })
   validateToken(@CurrentUser() user: UserResponseDto) {
     this.logger.log(`Token validation for user: ${user.id}`);
-    return user;
+    return this.withSystemAdminFlag(user);
   }
 
   @Get('oauth/providers')

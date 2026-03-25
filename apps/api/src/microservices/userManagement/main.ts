@@ -8,8 +8,16 @@ import { ValidationPipe } from '@nestjs/common';
 import { UserMicroserviceModule } from './user-microservice.module';
 import { RpcExceptionLoggingFilter } from '@pitch/shared-backend/filters/rpc-exception.filter';
 import { getRabbitMQUrl } from '../../config/microservices.config';
+import {
+  buildRabbitMqQueueTopology,
+  provisionRabbitMqTopology,
+} from '../../config/rabbitmq-topology';
 
 async function bootstrap() {
+  await provisionRabbitMqTopology(getRabbitMQUrl(), [
+    buildRabbitMqQueueTopology('user_queue'),
+  ]);
+
   const app = await NestFactory.createMicroservice<MicroserviceOptions>(
     UserMicroserviceModule,
     {

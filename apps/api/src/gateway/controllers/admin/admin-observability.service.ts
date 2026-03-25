@@ -28,6 +28,8 @@ export interface AdminErrorLogEntry {
   statusCode?: number;
   method?: string;
   path?: string;
+  level?: string;
+  context?: string;
   stack?: string;
   details?: Record<string, unknown>;
   timestamp: string;
@@ -84,6 +86,7 @@ export class AdminObservabilityService {
   private readonly webhookEvents: AdminWebhookEventEntry[] = [];
   private readonly auditLogs: AdminAuditLogEntry[] = [];
   private readonly jobRuns: AdminJobRunEntry[] = [];
+  private debugEnabled = false;
 
   recordRequest(
     input: Omit<AdminRequestLogEntry, 'id' | 'requestAt' | 'completedAt'> & {
@@ -121,6 +124,38 @@ export class AdminObservabilityService {
 
   listErrorLogs(limit = 100): AdminErrorLogEntry[] {
     return this.errorLogs.slice(0, this.normalizeLimit(limit, 100));
+  }
+
+  recordRuntimeLog(
+    input: Omit<AdminErrorLogEntry, 'id' | 'timestamp'> & {
+      timestamp?: string;
+    },
+  ): AdminErrorLogEntry | null {
+    if (!this.debugEnabled) {
+      return null;
+    }
+
+    return this.recordError(input);
+  }
+
+  getLogLevelSettings() {
+    return {
+      debugEnabled: this.debugEnabled,
+    };
+  }
+
+  setDebugEnabled(debugEnabled: boolean) {
+    this.debugEnabled = debugEnabled;
+    return this.getLogLevelSettings();
+  }
+
+  getRuntimeObservability() {
+    return {
+      debugEnabled: this.debugEnabled,
+      bufferedLogs: this.errorLogs.length,
+      bufferedRequests: this.requestLogs.length,
+      bufferedAuditLogs: this.auditLogs.length,
+    };
   }
 
   recordWebhookEvent(

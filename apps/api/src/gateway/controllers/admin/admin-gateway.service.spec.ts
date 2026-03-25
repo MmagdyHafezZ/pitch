@@ -52,14 +52,27 @@ describe('AdminGatewayService', () => {
       team: {
         findMany: jest.fn().mockResolvedValue([]),
       },
+      teamMembership: {
+        findUnique: jest.fn(),
+        update: jest.fn(),
+      },
       subscription: {
         findMany: jest.fn().mockResolvedValue([]),
       },
     };
     simulationPrisma = {
       client: {
+        $transaction: jest.fn(),
         session: {
           findFirst: jest.fn().mockResolvedValue({ id: 'session-1' }),
+          findUnique: jest.fn().mockResolvedValue({ id: 'session-1' }),
+          delete: jest.fn(),
+        },
+        sessionMember: {
+          findUnique: jest.fn(),
+          delete: jest.fn(),
+          findMany: jest.fn(),
+          update: jest.fn(),
         },
         llmRoutingConfig: {
           findMany: jest.fn().mockResolvedValue([]),
@@ -111,6 +124,14 @@ describe('AdminGatewayService', () => {
     };
     adminObservability = {
       recordAudit: jest.fn(),
+      getLogLevelSettings: jest.fn().mockReturnValue({ debugEnabled: false }),
+      getRuntimeObservability: jest.fn().mockReturnValue({
+        debugEnabled: false,
+        bufferedLogs: 0,
+        bufferedRequests: 0,
+        bufferedAuditLogs: 0,
+      }),
+      setDebugEnabled: jest.fn().mockReturnValue({ debugEnabled: true }),
       getJobRun: jest.fn(),
       listJobRuns: jest.fn().mockReturnValue([]),
       getWebhookEvent: jest.fn(),
@@ -119,6 +140,7 @@ describe('AdminGatewayService', () => {
       listAuditLogs: jest.fn().mockReturnValue([]),
       listErrorLogs: jest.fn().mockReturnValue([]),
       listRequestLogs: jest.fn().mockReturnValue([]),
+      recordRuntimeLog: jest.fn(),
       recordJobRun: jest.fn(),
       updateJobRun: jest.fn(),
     };
@@ -131,6 +153,10 @@ describe('AdminGatewayService', () => {
     simulationService = {
       send: jest.fn().mockReturnValue(of({ ok: true })),
     };
+    simulationPrisma.client.$transaction.mockImplementation(
+      async (callback: (tx: typeof simulationPrisma.client) => unknown) =>
+        callback(simulationPrisma.client),
+    );
 
     service = new AdminGatewayService(
       configService as any,
@@ -174,6 +200,68 @@ describe('AdminGatewayService', () => {
         mongo: { status: 'ok', connected: true },
       },
     });
+  });
+
+  it('returns error logs under both errors and logs keys for compatibility', () => {
+    adminObservability.listErrorLogs.mockReturnValue([
+      {
+        id: 'err-1',
+        message: 'boom',
+        timestamp: '2026-03-22T00:00:00.000Z',
+      },
+    ]);
+
+    expect(service.listErrors({ limit: 25 })).toEqual({
+      errors: [
+        {
+          id: 'err-1',
+          message: 'boom',
+          timestamp: '2026-03-22T00:00:00.000Z',
+        },
+      ],
+      logs: [
+        {
+          id: 'err-1',
+          message: 'boom',
+          timestamp: '2026-03-22T00:00:00.000Z',
+        },
+      ],
+    });
+    expect(adminObservability.listErrorLogs).toHaveBeenCalledWith(25);
+  });
+
+  it('returns runtime log capture settings from observability', () => {
+    adminObservability.getLogLevelSettings.mockReturnValue({
+      debugEnabled: true,
+    });
+
+    expect(service.getLogLevels()).toEqual({
+      debugEnabled: true,
+    });
+  });
+
+  it('updates runtime log capture settings and records an audit entry', () => {
+    adminObservability.setDebugEnabled.mockReturnValue({
+      debugEnabled: true,
+    });
+
+    expect(service.updateLogLevels({ debugEnabled: true }, actor)).toEqual({
+      debugEnabled: true,
+    });
+    expect(adminObservability.setDebugEnabled).toHaveBeenCalledWith(true);
+    expect(adminObservability.recordAudit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'admin.log-levels.update',
+        actorUserId: actor.id,
+        targetId: 'debug-log-capture',
+      }),
+    );
+  });
+
+  it('rejects invalid runtime log capture settings', () => {
+    expect(() =>
+      service.updateLogLevels({ debugEnabled: 'yes' }, actor),
+    ).toThrow('debugEnabled must be a boolean');
   });
 
   it('merges env and override feature flags', async () => {
@@ -256,6 +344,145 @@ describe('AdminGatewayService', () => {
         expiresIn: '15m',
       }),
     );
+  });
+
+  it('removes a team member and records an audit entry', async () => {
+    userPrisma.teamMembership.findUnique.mockResolvedValue({
+      teamId: 'team-1',
+      userId: 'user-2',
+      role: 'MEMBER',
+      isActive: true,
+      team: {
+        id: 'team-1',
+        isActive: true,
+        deletedAt: null,
+      },
+    });
+    userPrisma.teamMembership.update.mockResolvedValue({
+      teamId: 'team-1',
+      userId: 'user-2',
+      isActive: false,
+    });
+
+    await expect(
+      service.removeTeamMember('team-1', 'user-2', actor),
+    ).resolves.toEqual({
+      message: 'User with ID user-2 has been removed from team with ID: team-1',
+      teamId: 'team-1',
+      removedUserId: 'user-2',
+    });
+
+    expect(userPrisma.teamMembership.update).toHaveBeenCalledWith({
+      where: {
+        userId_teamId: {
+          userId: 'user-2',
+          teamId: 'team-1',
+        },
+      },
+      data: {
+        isActive: false,
+        acceptedAt: null,
+        invitedByUserId: null,
+      },
+    });
+    expect(adminObservability.recordAudit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'admin.teams.members.remove',
+        actorUserId: actor.id,
+        targetId: 'team-1',
+      }),
+    );
+  });
+
+  it('blocks removing the active team owner without a transfer', async () => {
+    userPrisma.teamMembership.findUnique.mockResolvedValue({
+      teamId: 'team-1',
+      userId: 'owner-1',
+      role: 'OWNER',
+      isActive: true,
+      team: {
+        id: 'team-1',
+        isActive: true,
+        deletedAt: null,
+      },
+    });
+
+    await expect(
+      service.removeTeamMember('team-1', 'owner-1', actor),
+    ).rejects.toThrow(
+      'Transfer ownership to another member before removing the current owner.',
+    );
+    expect(userPrisma.teamMembership.update).not.toHaveBeenCalled();
+  });
+
+  it('removes a session owner and promotes the next member', async () => {
+    simulationPrisma.client.sessionMember.findUnique.mockResolvedValue({
+      id: 'member-1',
+      role: 'owner',
+      userId: 'owner-1',
+    });
+    simulationPrisma.client.sessionMember.findMany.mockResolvedValue([
+      {
+        id: 'member-2',
+        userId: 'user-2',
+        role: 'viewer',
+        joinedAt: new Date('2026-03-20T00:00:00.000Z'),
+      },
+    ]);
+
+    await expect(
+      service.removeSessionMember('session-1', 'owner-1', actor),
+    ).resolves.toEqual({
+      message:
+        'Member owner-1 removed from session session-1; ownership transferred to user-2',
+      sessionId: 'session-1',
+      removedUserId: 'owner-1',
+      newOwnerId: 'user-2',
+      sessionDeleted: undefined,
+    });
+
+    expect(simulationPrisma.client.sessionMember.delete).toHaveBeenCalledWith({
+      where: {
+        sessionId_userId: {
+          sessionId: 'session-1',
+          userId: 'owner-1',
+        },
+      },
+    });
+    expect(simulationPrisma.client.sessionMember.update).toHaveBeenCalledWith({
+      where: { id: 'member-2' },
+      data: { role: 'owner' },
+    });
+    expect(adminObservability.recordAudit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'admin.sessions.members.remove',
+        actorUserId: actor.id,
+        targetId: 'session-1',
+      }),
+    );
+  });
+
+  it('deletes the session when the removed member was the last one left', async () => {
+    simulationPrisma.client.sessionMember.findUnique.mockResolvedValue({
+      id: 'member-1',
+      role: 'viewer',
+      userId: 'user-2',
+    });
+    simulationPrisma.client.sessionMember.findMany.mockResolvedValue([]);
+
+    await expect(
+      service.removeSessionMember('session-1', 'user-2', actor),
+    ).resolves.toEqual({
+      message: 'Session session-1 deleted because it has no members',
+      sessionId: 'session-1',
+      removedUserId: 'user-2',
+      newOwnerId: undefined,
+      sessionDeleted: true,
+    });
+
+    expect(simulationPrisma.client.session.delete).toHaveBeenCalledWith({
+      where: { id: 'session-1' },
+    });
   });
 
   it('returns known job definitions when no run exists', () => {

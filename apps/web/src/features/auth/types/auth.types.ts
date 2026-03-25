@@ -29,6 +29,7 @@ export interface User {
   email: string
   name: string
   avatar?: string | null
+  isSystemAdmin?: boolean
   phoneNumber?: string | null
   phoneVerifiedAt?: string | null
   isActive: boolean
