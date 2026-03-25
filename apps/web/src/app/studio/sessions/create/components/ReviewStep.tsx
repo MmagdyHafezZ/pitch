@@ -3,6 +3,8 @@
 import { Stack, Group, Box, Title, Text, Paper, Badge, ThemeIcon } from '@mantine/core'
 import { IconChecklist } from '@tabler/icons-react'
 import { SessionType } from '@/features/sessions'
+import type { EditableScenarioDraft, Scenario } from '@/features/scenarios/types/scenario.types'
+import { getScenarioSummary } from '@/features/scenarios/utils/scenario-editor'
 import { Persona } from '../lib/types'
 import { getVoiceProfile } from '../lib/helpers'
 import { LLMProvider } from '@/features/sessions/hooks/useLLMProviders'
@@ -27,8 +29,8 @@ interface ReviewStepProps {
   scenarioTopic: string
   scenarioObjective: string
   scenarioContext: string
-  scenarioId: string | null
-  scenarios: Array<{ id: string; name: string; description?: string }>
+  selectedScenario: Scenario | null
+  selectedDraft: EditableScenarioDraft | null
   aiRole: string
   userRole: string
   durationMinutes: number
@@ -72,8 +74,8 @@ export function ReviewStep({
   scenarioTopic,
   scenarioObjective,
   scenarioContext,
-  scenarioId,
-  scenarios,
+  selectedScenario,
+  selectedDraft,
   aiRole,
   userRole,
   durationMinutes,
@@ -91,7 +93,12 @@ export function ReviewStep({
   multiTurnEnabled,
 }: ReviewStepProps) {
   const selectedDifficulty = difficultyOptions.find((option) => option.value === difficulty)
-  const selectedScenario = scenarios.find((scenario) => scenario.id === scenarioId) ?? null
+  const scenarioSummary = getScenarioSummary(selectedDraft ?? selectedScenario)
+  const scenarioSource = selectedDraft
+    ? 'Generated option'
+    : selectedScenario
+      ? 'Saved scenario'
+      : 'Quick prompt'
   const crmSelectionCount =
     crmSelections.accounts.length +
     crmSelections.opportunities.length +
@@ -192,37 +199,54 @@ export function ReviewStep({
           </Title>
           <Stack gap="xs">
             <Group justify="apart" className={classes.reviewRow}>
-              <Text fw={600}>Topic</Text>
-              <Text c="dimmed">{scenarioTopic || 'Not set'}</Text>
-            </Group>
-            <Group justify="apart" className={classes.reviewRow}>
-              <Text fw={600}>Objective</Text>
-              <Text c="dimmed">{scenarioObjective || 'Not set'}</Text>
+              <Text fw={600}>Source</Text>
+              <Text c="dimmed">{scenarioSource}</Text>
             </Group>
             <Group justify="apart" className={classes.reviewRow}>
               <Text fw={600}>Scenario</Text>
               <Text c="dimmed">
-                {selectedScenario?.name || (scenarioId ? scenarioId : 'Not selected')}
+                {scenarioSummary?.name || scenarioTopic || 'Prompt-only setup'}
               </Text>
             </Group>
-            {scenarioContext && (
+            {(scenarioSummary?.objective || scenarioObjective) && (
+              <Group justify="apart" className={classes.reviewRow}>
+                <Text fw={600}>Objective</Text>
+                <Text c="dimmed">{scenarioSummary?.objective || scenarioObjective}</Text>
+              </Group>
+            )}
+            {(scenarioSummary?.background || scenarioContext) && (
               <Group justify="apart" className={classes.reviewRow}>
                 <Text fw={600}>Context</Text>
-                <Text c="dimmed">{scenarioContext}</Text>
+                <Text c="dimmed">{scenarioSummary?.background || scenarioContext}</Text>
+              </Group>
+            )}
+            {scenarioSummary && (
+              <Group justify="apart" className={classes.reviewRow}>
+                <Text fw={600}>Visibility</Text>
+                <Text c="dimmed">{scenarioSummary.visibility.toLowerCase()}</Text>
               </Group>
             )}
             <Group justify="apart" className={classes.reviewRow}>
               <Text fw={600}>AI role</Text>
-              <Text c="dimmed">{aiRole || 'Not set'}</Text>
+              <Text c="dimmed">{scenarioSummary?.aiRole || aiRole || 'Not set'}</Text>
             </Group>
             <Group justify="apart" className={classes.reviewRow}>
               <Text fw={600}>Your role</Text>
-              <Text c="dimmed">{userRole || 'Not set'}</Text>
+              <Text c="dimmed">{scenarioSummary?.userRole || userRole || 'Not set'}</Text>
             </Group>
             <Group justify="apart" className={classes.reviewRow}>
               <Text fw={600}>Session length</Text>
-              <Text c="dimmed">{durationMinutes} min</Text>
+              <Text c="dimmed">{scenarioSummary?.durationMinutes || durationMinutes} min</Text>
             </Group>
+            {scenarioSummary?.tags.length ? (
+              <Group gap="xs" mt="xs">
+                {scenarioSummary.tags.map((tag) => (
+                  <Badge key={tag} variant="light" color="gray">
+                    {tag}
+                  </Badge>
+                ))}
+              </Group>
+            ) : null}
           </Stack>
         </Paper>
 

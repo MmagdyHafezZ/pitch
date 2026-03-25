@@ -45,11 +45,11 @@ export class S3Repository {
   }
 
   async createPresignedUploadUrl(params: {
-    bucket: string;
+    bucket?: string;
     key: string;
     contentType?: string;
     expiresInSeconds?: number;
-  }): Promise<{ url: string }> {
+  }): Promise<{ url: string; bucket: string }> {
     const bucket = this.resolveBucket(params.bucket);
     const command = new PutObjectCommand({
       Bucket: bucket,
@@ -61,7 +61,7 @@ export class S3Repository {
       expiresIn: params.expiresInSeconds ?? this.defaultExpiresInSeconds,
     });
 
-    return { url };
+    return { url, bucket };
   }
 
   async createPresignedDownloadUrl(params: {

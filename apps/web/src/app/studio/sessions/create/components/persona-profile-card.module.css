@@ -47,6 +47,12 @@
   z-index: 1;
   width: 100%;
   height: 100%;
+  transform-style: preserve-3d;
+  transition: transform 0.55s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.cardShellFlipped {
+  transform: rotateY(180deg);
 }
 
 .card {
@@ -56,6 +62,7 @@
   overflow: hidden;
   border-radius: 30px;
   transform-style: preserve-3d;
+  backface-visibility: hidden;
   transform: rotateX(var(--pc-rotate-x)) rotateY(var(--pc-rotate-y));
   transition:
     transform 180ms ease,
@@ -63,9 +70,22 @@
     box-shadow 180ms ease;
   border: 1px solid color-mix(in srgb, var(--pc-accent) 38%, rgba(255, 255, 255, 0.08));
   background:
-    radial-gradient(circle at 18% 18%, color-mix(in srgb, var(--pc-accent) 22%, transparent), transparent 32%),
-    radial-gradient(circle at 78% 14%, color-mix(in srgb, var(--pc-accent-glow) 20%, transparent), transparent 30%),
-    linear-gradient(165deg, rgba(7, 14, 28, 0.98) 0%, rgba(10, 17, 35, 0.94) 42%, rgba(4, 7, 18, 0.98) 100%);
+    radial-gradient(
+      circle at 18% 18%,
+      color-mix(in srgb, var(--pc-accent) 22%, transparent),
+      transparent 32%
+    ),
+    radial-gradient(
+      circle at 78% 14%,
+      color-mix(in srgb, var(--pc-accent-glow) 20%, transparent),
+      transparent 30%
+    ),
+    linear-gradient(
+      165deg,
+      rgba(7, 14, 28, 0.98) 0%,
+      rgba(10, 17, 35, 0.94) 42%,
+      rgba(4, 7, 18, 0.98) 100%
+    );
   box-shadow:
     0 28px 60px color-mix(in srgb, var(--mantine-color-dark-9) 70%, transparent),
     inset 0 1px 0 rgba(255, 255, 255, 0.08);
@@ -125,12 +145,11 @@
 
 .cardGlare {
   z-index: 2;
-  background:
-    radial-gradient(
-      circle at var(--pc-pointer-x) var(--pc-pointer-y),
-      color-mix(in srgb, var(--pc-accent-glow) 26%, rgba(255, 255, 255, 0.12)),
-      transparent 34%
-    );
+  background: radial-gradient(
+    circle at var(--pc-pointer-x) var(--pc-pointer-y),
+    color-mix(in srgb, var(--pc-accent-glow) 26%, rgba(255, 255, 255, 0.12)),
+    transparent 34%
+  );
   mix-blend-mode: overlay;
   opacity: 0.7;
 }
@@ -201,7 +220,11 @@
   color: color-mix(in srgb, var(--pc-accent-glow) 78%, white 12%);
   border: 1px solid color-mix(in srgb, var(--pc-accent) 28%, rgba(255, 255, 255, 0.08));
   background:
-    radial-gradient(circle at center, color-mix(in srgb, var(--pc-accent) 20%, transparent), transparent 68%),
+    radial-gradient(
+      circle at center,
+      color-mix(in srgb, var(--pc-accent) 20%, transparent),
+      transparent 68%
+    ),
     linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02));
   backdrop-filter: blur(20px);
 }
@@ -326,23 +349,38 @@
   border: 1px solid rgba(255, 255, 255, 0.12);
 }
 
-.infoOverlay {
+.cardBack {
   position: absolute;
-  inset: 12px;
-  z-index: 10;
+  inset: 0;
+  border-radius: 30px;
+  overflow: hidden auto;
+  backface-visibility: hidden;
+  transform: rotateY(180deg);
   display: flex;
   flex-direction: column;
   gap: 14px;
   padding: 18px;
-  border-radius: 24px;
   border: 1px solid color-mix(in srgb, var(--pc-accent) 30%, rgba(255, 255, 255, 0.1));
   background:
-    radial-gradient(circle at top right, color-mix(in srgb, var(--pc-accent) 18%, transparent), transparent 28%),
-    linear-gradient(180deg, rgba(7, 15, 30, 0.94), rgba(4, 8, 18, 0.97));
-  backdrop-filter: blur(22px);
+    radial-gradient(
+      circle at top right,
+      color-mix(in srgb, var(--pc-accent) 18%, transparent),
+      transparent 28%
+    ),
+    linear-gradient(180deg, rgba(7, 15, 30, 0.97), rgba(4, 8, 18, 0.99));
   box-shadow:
-    0 20px 56px rgba(0, 0, 0, 0.44),
+    0 28px 60px color-mix(in srgb, var(--mantine-color-dark-9) 70%, transparent),
     inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.backCloseButton {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  backdrop-filter: blur(12px);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.28);
 }
 
 .overlayHeader {
@@ -492,8 +530,7 @@
     font-size: 30px;
   }
 
-  .infoOverlay {
-    inset: 10px;
+  .cardBack {
     padding: 16px;
   }
 }

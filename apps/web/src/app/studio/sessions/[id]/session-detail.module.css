@@ -1,0 +1,169 @@
+.pageRoot {
+  min-width: 0;
+}
+
+.heroCard {
+  overflow: hidden;
+}
+
+.heroTop {
+  gap: var(--mantine-spacing-sm);
+}
+
+.headerActions {
+  min-width: 0;
+}
+
+.heroTitle {
+  max-width: 920px;
+  line-height: 1.05;
+  text-wrap: balance;
+  overflow-wrap: anywhere;
+}
+
+.heroSummary {
+  max-width: 900px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+
+.heroSessionId {
+  font-family: monospace;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.signalCard {
+  min-width: 0;
+}
+
+.signalValue {
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.signalDescription {
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.surfaceCard {
+  min-width: 0;
+}
+
+.surfaceHeader {
+  gap: var(--mantine-spacing-md);
+}
+
+.surfaceHeaderMain {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.surfaceSubtitle {
+  overflow-wrap: anywhere;
+}
+
+.surfaceAside {
+  min-width: 0;
+}
+
+.detailRow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--mantine-spacing-md);
+  min-width: 0;
+}
+
+.detailLabel {
+  min-width: 132px;
+  flex-shrink: 0;
+}
+
+.detailValue {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.insightItem {
+  min-width: 0;
+}
+
+.insightText {
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.jsonViewer {
+  min-width: 0;
+}
+
+@media (max-width: 48em) {
+  .heroCard {
+    padding: var(--mantine-spacing-lg);
+  }
+
+  .heroTop {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .headerActions {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .headerActions :global(.mantine-Button-root) {
+    flex: 1 1 calc(50% - var(--mantine-spacing-xs));
+  }
+
+  .surfaceCard {
+    padding: var(--mantine-spacing-lg);
+  }
+
+  .surfaceHeader {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .surfaceAside {
+    width: 100%;
+  }
+
+  .detailRow {
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .detailLabel {
+    min-width: 0;
+  }
+}
+
+@media (max-width: 30em) {
+  .pageRoot {
+    gap: var(--mantine-spacing-lg);
+  }
+
+  .heroCard {
+    padding: var(--mantine-spacing-md);
+    border-radius: 20px;
+  }
+
+  .headerActions :global(.mantine-Button-root) {
+    flex-basis: 100%;
+  }
+
+  .heroTitle {
+    font-size: clamp(1.75rem, 8vw, 2.4rem);
+  }
+
+  .surfaceCard {
+    padding: var(--mantine-spacing-md);
+    border-radius: 20px;
+  }
+}

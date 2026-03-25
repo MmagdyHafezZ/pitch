@@ -12,8 +12,8 @@ const MAX_PRESIGNED_URL_EXPIRY_SECONDS = 604800;
 
 export class PresignUploadDto {
   @IsString()
-  @IsNotEmpty()
-  bucket: string;
+  @IsOptional()
+  bucket?: string;
 
   @IsString()
   @IsNotEmpty()

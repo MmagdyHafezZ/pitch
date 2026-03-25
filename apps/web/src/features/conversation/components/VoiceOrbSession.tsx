@@ -25,6 +25,8 @@ interface VoiceOrbSessionProps {
   isListening: boolean
   isProcessing: boolean
   isConnected: boolean
+  isConnecting?: boolean
+  connectionError?: string | null
   sessionStatus: string | null
   isSttSupported: boolean
   isSttPermissionBlocked: boolean
@@ -200,9 +202,11 @@ const CSS = `
   align-items: center;
   justify-content: center;
   gap: 5px;
-  max-width: none;
+  padding: 4px 12px;
+  width: fit-content;
+  margin-left: auto;
+  margin-right: auto;
   border-radius: 100px;
-  margin: 0 8px 2px;
   font-size: 13px;
   font-weight: 600;
   transition: background 0.4s ease, color 0.4s ease;
@@ -901,6 +905,8 @@ export default function VoiceOrbSession({
   isListening,
   isProcessing,
   isConnected,
+  isConnecting = false,
+  connectionError = null,
   sessionStatus,
   isSttSupported,
   isSttPermissionBlocked,
@@ -1085,7 +1091,9 @@ export default function VoiceOrbSession({
         ? 'Your Turn'
         : isConnected
           ? 'Ready'
-          : 'Connecting…'
+          : connectionError
+            ? 'Connection error'
+            : 'Connecting…'
 
   // In-panel status shows interrupt hint when AI is talking and user hasn't cut in yet
   const panelStatusLabel =
@@ -1283,30 +1291,24 @@ export default function VoiceOrbSession({
             {/* Resume prompt — appears as a speech bubble above the orb */}
             {resumePromptOpen && (
               <div className="vos-speech-bubble">
-                <p className="vos-bubble-heading">
-                  {isRetakePrompt ? 'Retake this session?' : 'Resume previous progress?'}
-                </p>
+                <p className="vos-bubble-heading">What would you like to do?</p>
                 <p className="vos-bubble-desc">
-                  {isRetakePrompt
-                    ? 'This session has already ended. Start a fresh iteration with the same setup when you are ready.'
-                    : 'You have an in-progress session with saved turns. Pick up where you left off, or start fresh.'}
+                  Continue this round where you left off, or start a brand-new iteration.
                 </p>
                 <div className="vos-bubble-actions">
-                  {!isRetakePrompt && (
-                    <button
-                      className="vos-bubble-btn vos-bubble-btn-secondary"
-                      onClick={onStartOver}
-                      disabled={startOverLoading}
-                    >
-                      Start Over
-                    </button>
-                  )}
+                  <button
+                    className="vos-bubble-btn vos-bubble-btn-secondary"
+                    onClick={onStartOver}
+                    disabled={startOverLoading}
+                  >
+                    {startOverLoading ? 'Starting…' : 'New Iteration'}
+                  </button>
                   <button
                     className="vos-bubble-btn vos-bubble-btn-primary"
                     onClick={isRetakePrompt ? onStartOver : onResume}
                     disabled={startOverLoading}
                   >
-                    {isRetakePrompt ? 'Retake Session' : 'Resume'}
+                    Continue
                   </button>
                 </div>
               </div>
@@ -1425,7 +1427,7 @@ export default function VoiceOrbSession({
                 </div>
               )}
 
-              {sttError && (
+              {sttError && isSttSupported && (
                 <div
                   style={{
                     padding: '2px 14px',
@@ -1496,7 +1498,9 @@ export default function VoiceOrbSession({
                   className="vos-input"
                   placeholder={
                     !isConnected
-                      ? 'Connecting…'
+                      ? connectionError
+                        ? 'Connection error — please refresh'
+                        : 'Connecting…'
                       : sessionStatus === 'ended'
                         ? 'Session ended'
                         : 'Type a message…'

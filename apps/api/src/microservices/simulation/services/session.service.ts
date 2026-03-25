@@ -36,6 +36,10 @@ import { SimulationRedisService } from './redis/redis.service';
 @Injectable()
 export class SessionService {
   private readonly logger = new Logger(SessionService.name);
+  private static readonly PITCHER_ROLE_PATTERN =
+    /\b(account executive|ae|sdr|bdr|seller|sales|rep|founder|consultant|solutions consultant)\b/i;
+  private static readonly COUNTERPART_ROLE_PATTERN =
+    /\b(buyer|prospect|customer|stakeholder|manager|director|vp|executive|cfo|cto|cio|lead|procurement|interviewer|participant|counterpart)\b/i;
 
   constructor(
     private readonly sessionRepository: SessionRepository,
@@ -193,18 +197,28 @@ export class SessionService {
     this.logger.log(`Creating new session for user: ${sessionUserId}`);
 
     try {
+      const sessionConfig = this.normalizeSessionConfig(
+        createSessionDto.name,
+        createSessionDto.type,
+        createSessionDto.sessionConfig,
+      );
+
       const session = await this.sessionRepository.create({
         ownerUserId: sessionUserId,
-        orgId: createSessionDto.orgId,
+        orgId: this.resolveOrgId(createSessionDto.orgId, sessionUserId),
         ownerSnapshot: createSessionDto.userSnapshot,
         orgSnapshot: createSessionDto.orgSnapshot,
         name: createSessionDto.name,
         type: createSessionDto.type,
         tags: createSessionDto.tags,
-        sessionConfig: createSessionDto.sessionConfig,
+        sessionConfig,
         scenarioId: createSessionDto.scenarioId,
         personaId: createSessionDto.personaId,
-        language: createSessionDto.language,
+        language: this.resolveSessionLanguage(
+          createSessionDto.language,
+          sessionConfig,
+          createSessionDto.userSnapshot,
+        ),
         crmContextId: createSessionDto.crmContextId,
       });
 
@@ -258,17 +272,34 @@ export class SessionService {
           : undefined;
       const reopenEndedSession =
         existingSession.status === 'ended' && normalizedStatus === 'active';
+      const sessionConfig =
+        updateSessionDto.sessionConfig === undefined
+          ? undefined
+          : this.normalizeSessionConfig(
+              updateSessionDto.name ?? existingSession.name ?? undefined,
+              updateSessionDto.type ?? existingSession.type,
+              updateSessionDto.sessionConfig,
+            );
 
       const session = await this.sessionRepository.update(id, {
-        orgId: updateSessionDto.orgId,
+        orgId:
+          updateSessionDto.orgId === undefined
+            ? undefined
+            : this.resolveOrgId(updateSessionDto.orgId, existingSession.orgId),
         orgSnapshot: updateSessionDto.orgSnapshot,
         name: updateSessionDto.name,
         type: updateSessionDto.type,
         tags: updateSessionDto.tags,
-        sessionConfig: updateSessionDto.sessionConfig,
+        sessionConfig,
         scenarioId: updateSessionDto.scenarioId,
         personaId: updateSessionDto.personaId,
-        language: updateSessionDto.language,
+        language:
+          updateSessionDto.language === undefined
+            ? undefined
+            : this.resolveSessionLanguage(
+                updateSessionDto.language,
+                sessionConfig,
+              ),
         crmContextId: updateSessionDto.crmContextId,
         status: normalizedStatus,
         endedReason: reopenEndedSession ? null : updateSessionDto.endedReason,
@@ -489,6 +520,7 @@ export class SessionService {
   async remove(
     id: string,
     requesterUserId?: string,
+    isAdmin = false,
   ): Promise<DeleteSessionResponseDto> {
     this.logger.log(`Deleting session: ${id}`);
 
@@ -498,7 +530,9 @@ export class SessionService {
         throw new NotFoundException(`Session with ID ${id} not found`);
       }
 
-      this.assertOwner(existingSession, requesterUserId);
+      if (!isAdmin) {
+        this.assertOwner(existingSession, requesterUserId);
+      }
 
       await this.sessionRepository.delete(id);
       await this.invalidateSessionFullCache(id);
@@ -606,6 +640,467 @@ export class SessionService {
 
   private getOwnerMember(session: SessionWithOwner): SessionMember | undefined {
     return session.members?.[0];
+  }
+
+  private normalizeSessionConfig(
+    sessionName: string | undefined,
+    sessionType: SessionType | string,
+    sessionConfig?: Record<string, any>,
+  ): Record<string, any> | undefined {
+    if (!this.isRecord(sessionConfig)) {
+      return sessionConfig;
+    }
+
+    const base: Record<string, unknown> = { ...sessionConfig };
+    const scenario = this.readRecord(base, 'scenario') ?? {};
+    const existingCounterpartProfile =
+      this.readRecord(base, 'counterpartProfile') ?? {};
+    const topic =
+      this.pickText(scenario.topic) ??
+      this.pickText(scenario.name) ??
+      this.pickText(base.topic) ??
+      this.pickText(sessionName);
+    const roles = this.alignRolePair(
+      this.pickText(base.aiRole) ??
+        this.pickText(scenario.aiRole) ??
+        this.readStringFromRecord(
+          this.readRecord(scenario, 'roles'),
+          'assistant',
+        ) ??
+        this.readStringFromRecord(this.readRecord(scenario, 'roles'), 'ai') ??
+        this.deriveCounterpartRole(topic ?? sessionName, base),
+      this.pickText(base.userRole) ??
+        this.pickText(scenario.userRole) ??
+        this.readStringFromRecord(this.readRecord(scenario, 'roles'), 'user') ??
+        this.readStringFromRecord(
+          this.readRecord(scenario, 'roles'),
+          'client',
+        ) ??
+        'Account Executive',
+    );
+    const objective =
+      this.pickText(scenario.objective) ??
+      this.pickText(base.objective) ??
+      this.buildObjective(topic);
+    const context =
+      this.pickText(scenario.context) ??
+      this.pickText(scenario.background) ??
+      this.pickText(base.context) ??
+      this.buildCalendarContext(base);
+    const summary =
+      this.pickText(base.description) ??
+      this.pickText(scenario.description) ??
+      this.buildSessionSummary(topic, roles.aiRole, objective);
+    const durationMinutes =
+      this.pickNumber(scenario.durationMinutes) ??
+      this.pickNumber(base.durationMinutes) ??
+      this.defaultDurationMinutes(sessionType);
+    const successCriteria =
+      this.toStringArray(scenario.successCriteria).length > 0
+        ? this.toStringArray(scenario.successCriteria)
+        : this.buildSuccessCriteria(topic, objective);
+    const stages =
+      Array.isArray(scenario.stages) && scenario.stages.length > 0
+        ? scenario.stages
+        : this.buildDefaultStages();
+    const counterpartName =
+      this.pickText(existingCounterpartProfile.name) ??
+      this.pickText(base.counterpartName) ??
+      this.getPrimaryAttendeeName(base) ??
+      roles.aiRole ??
+      'AI counterpart';
+    const counterpartProfile = {
+      ...existingCounterpartProfile,
+      name: counterpartName,
+      role:
+        this.pickText(existingCounterpartProfile.role) ??
+        roles.aiRole ??
+        'Counterpart',
+      background:
+        this.pickText(existingCounterpartProfile.background) ??
+        context ??
+        undefined,
+      tone:
+        this.pickText(existingCounterpartProfile.tone) ??
+        this.pickText(base.tone) ??
+        'Professional',
+      personality:
+        this.pickText(existingCounterpartProfile.personality) ??
+        this.deriveCounterpartPersonality(base),
+      objections:
+        this.toStringArray(existingCounterpartProfile.objections).length > 0
+          ? this.toStringArray(existingCounterpartProfile.objections)
+          : this.deriveLikelyObjections(roles.aiRole ?? '', topic ?? ''),
+      signatureTraits:
+        this.toStringArray(existingCounterpartProfile.signatureTraits).length >
+        0
+          ? this.toStringArray(existingCounterpartProfile.signatureTraits)
+          : ['Asks for specifics', 'Wants a clear next step'],
+    };
+    const existingRoles = this.readRecord(scenario, 'roles') ?? {};
+
+    if (summary) {
+      base.description = summary;
+    }
+    if (roles.aiRole) {
+      base.aiRole = roles.aiRole;
+    }
+    if (roles.userRole) {
+      base.userRole = roles.userRole;
+    }
+    if (base.durationMinutes === undefined && durationMinutes !== null) {
+      base.durationMinutes = durationMinutes;
+    }
+    base.counterpartProfile = counterpartProfile;
+
+    base.scenario = {
+      ...scenario,
+      ...(topic ? { name: this.pickText(scenario.name) ?? topic, topic } : {}),
+      ...(summary
+        ? { description: this.pickText(scenario.description) ?? summary }
+        : {}),
+      ...(objective ? { objective } : {}),
+      ...(context
+        ? {
+            context,
+            background: this.pickText(scenario.background) ?? context,
+          }
+        : {}),
+      roles: {
+        ...existingRoles,
+        ...(roles.aiRole
+          ? {
+              assistant: roles.aiRole,
+              ai: roles.aiRole,
+              counterpart: roles.aiRole,
+            }
+          : {}),
+        ...(roles.userRole
+          ? {
+              user: roles.userRole,
+              client: roles.userRole,
+              pitcher: roles.userRole,
+            }
+          : {}),
+      },
+      successCriteria,
+      stages,
+      ...(durationMinutes !== null && scenario.durationMinutes === undefined
+        ? { durationMinutes }
+        : {}),
+      ...(scenario.difficulty === undefined && base.difficulty !== undefined
+        ? { difficulty: base.difficulty }
+        : {}),
+      ...(this.toStringArray(scenario.likelyObjections).length > 0
+        ? {}
+        : { likelyObjections: counterpartProfile.objections }),
+    };
+
+    return base as Record<string, any>;
+  }
+
+  private buildObjective(topic?: string | null): string | undefined {
+    if (!topic) {
+      return;
+    }
+
+    return `Prepare for ${topic} and move the conversation to a clear next step.`;
+  }
+
+  private buildSessionSummary(
+    topic?: string | null,
+    counterpartRole?: string,
+    objective?: string,
+  ): string | undefined {
+    if (!topic && !counterpartRole && !objective) {
+      return;
+    }
+
+    const parts = [
+      topic ? `Practice for "${topic}"` : 'Practice session',
+      counterpartRole ? `with a realistic ${counterpartRole}` : null,
+      objective
+        ? `focused on ${objective.replace(/\.$/, '').toLowerCase()}`
+        : null,
+    ].filter((part): part is string => Boolean(part));
+
+    return `${parts.join(' ')}.`;
+  }
+
+  private buildCalendarContext(
+    config: Record<string, unknown>,
+  ): string | undefined {
+    const attendeeNames = this.getAttendeeNames(config);
+    const eventStartTime = this.pickText(config.eventStartTime);
+    const parts = [
+      'This session was generated from an upcoming calendar meeting.',
+    ];
+
+    if (eventStartTime) {
+      parts.push(`The meeting is scheduled for ${eventStartTime}.`);
+    }
+
+    if (attendeeNames.length > 0) {
+      parts.push(
+        `Expected attendees include ${attendeeNames.slice(0, 3).join(', ')}.`,
+      );
+    }
+
+    const meetingUrl = this.pickText(config.meetingUrl);
+    if (meetingUrl) {
+      parts.push('There is a live meeting link attached to the event.');
+    }
+
+    return parts.join(' ');
+  }
+
+  private buildSuccessCriteria(
+    topic?: string | null,
+    objective?: string,
+  ): string[] {
+    const topicLabel = topic ?? 'the meeting';
+
+    return [
+      objective ?? `Open ${topicLabel} with a clear agenda and purpose.`,
+      `Surface the most important priorities or risks tied to ${topicLabel}.`,
+      'Finish with a concrete next step, decision, or owner.',
+    ];
+  }
+
+  private buildDefaultStages(): Array<{ title: string; goal: string }> {
+    return [
+      { title: 'Opening', goal: 'Set the agenda and establish the stakes.' },
+      {
+        title: 'Discovery',
+        goal: 'Surface what matters most to the counterpart.',
+      },
+      {
+        title: 'Discussion',
+        goal: 'Navigate tension, objections, and tradeoffs.',
+      },
+      { title: 'Close', goal: 'Land on a clear next step or decision.' },
+    ];
+  }
+
+  private deriveCounterpartRole(
+    topic: string | undefined,
+    config: Record<string, unknown>,
+  ): string {
+    const source =
+      `${topic ?? ''} ${this.getAttendeeNames(config).join(' ')}`.toLowerCase();
+
+    if (
+      /(demo|proof of concept|poc|technical|architecture|security)/.test(source)
+    ) {
+      return 'Technical evaluator asking hard questions';
+    }
+    if (
+      /(pricing|contract|procurement|renewal|negotiation|budget|legal)/.test(
+        source,
+      )
+    ) {
+      return 'Price-sensitive procurement stakeholder';
+    }
+    if (
+      /(qbr|quarterly|board|executive|exec|review|forecast|pipeline)/.test(
+        source,
+      )
+    ) {
+      return 'Skeptical executive stakeholder';
+    }
+    if (/(discovery|intro|introduction|first call|prospecting)/.test(source)) {
+      return 'Cautious enterprise buyer';
+    }
+    if (/(escalation|complaint|support|issue|incident)/.test(source)) {
+      return 'Frustrated customer stakeholder';
+    }
+    if (/(sync|catch up|check-in|check in|standup|status)/.test(source)) {
+      return 'Cross-functional meeting counterpart';
+    }
+
+    return 'Professional counterpart';
+  }
+
+  private deriveCounterpartPersonality(
+    config: Record<string, unknown>,
+  ): string {
+    const difficulty = config.difficulty;
+    const numericDifficulty =
+      typeof difficulty === 'number' && Number.isFinite(difficulty)
+        ? difficulty
+        : null;
+    const textDifficulty = this.pickText(difficulty)?.toLowerCase();
+
+    if (
+      numericDifficulty !== null
+        ? numericDifficulty >= 7
+        : textDifficulty === 'challenging' || textDifficulty === 'elite'
+    ) {
+      return 'Direct, skeptical, and quick to probe weak spots.';
+    }
+
+    return 'Professional, realistic, and focused on the meeting outcome.';
+  }
+
+  private deriveLikelyObjections(role: string, topic: string): string[] {
+    const source = `${role} ${topic}`.toLowerCase();
+
+    if (/(procurement|pricing|budget|contract|renewal|legal)/.test(source)) {
+      return ['Budget pressure', 'Contract risk', 'Competing priorities'];
+    }
+    if (/(technical|architecture|security|integration)/.test(source)) {
+      return [
+        'Integration complexity',
+        'Security concerns',
+        'Implementation risk',
+      ];
+    }
+    if (/(executive|board|vp|c-suite|stakeholder)/.test(source)) {
+      return ['Business impact', 'Team bandwidth', 'Decision urgency'];
+    }
+    if (/(customer|support|escalation|issue)/.test(source)) {
+      return [
+        'Frustration with the current state',
+        'Urgency to resolve the issue',
+      ];
+    }
+
+    return ['Competing priorities', 'Need for a clear next step'];
+  }
+
+  private getPrimaryAttendeeName(
+    config: Record<string, unknown>,
+  ): string | undefined {
+    return this.getAttendeeNames(config)[0];
+  }
+
+  private getAttendeeNames(config: Record<string, unknown>): string[] {
+    const attendees = config.attendees;
+    if (!Array.isArray(attendees)) {
+      return [];
+    }
+
+    return attendees
+      .map((attendee) => {
+        if (!this.isRecord(attendee) || attendee.self === true) {
+          return undefined;
+        }
+
+        return this.pickText(attendee.name) ?? this.pickText(attendee.email);
+      })
+      .filter((item): item is string => Boolean(item));
+  }
+
+  private alignRolePair(
+    aiRole?: string,
+    userRole?: string,
+  ): { aiRole?: string; userRole?: string } {
+    let resolvedAiRole = this.pickText(aiRole);
+    let resolvedUserRole = this.pickText(userRole);
+
+    if (
+      resolvedAiRole &&
+      resolvedUserRole &&
+      SessionService.PITCHER_ROLE_PATTERN.test(resolvedAiRole) &&
+      SessionService.COUNTERPART_ROLE_PATTERN.test(resolvedUserRole)
+    ) {
+      const previousAiRole = resolvedAiRole;
+      resolvedAiRole = resolvedUserRole;
+      resolvedUserRole = previousAiRole;
+    }
+
+    if (
+      resolvedAiRole &&
+      resolvedUserRole &&
+      resolvedAiRole.toLowerCase() === resolvedUserRole.toLowerCase()
+    ) {
+      resolvedAiRole = undefined;
+    }
+
+    return {
+      aiRole: resolvedAiRole,
+      userRole: resolvedUserRole,
+    };
+  }
+
+  private readRecord(
+    value: Record<string, unknown>,
+    key: string,
+  ): Record<string, unknown> | undefined {
+    const field = value[key];
+    return this.isRecord(field) ? field : undefined;
+  }
+
+  private readStringFromRecord(
+    value: Record<string, unknown> | undefined,
+    key: string,
+  ): string | undefined {
+    if (!value) {
+      return;
+    }
+
+    return this.pickText(value[key]);
+  }
+
+  private pickText(value: unknown): string | undefined {
+    return typeof value === 'string' && value.trim().length > 0
+      ? value.trim()
+      : undefined;
+  }
+
+  private pickNumber(value: unknown): number | null {
+    return typeof value === 'number' && Number.isFinite(value) ? value : null;
+  }
+
+  private toStringArray(value: unknown): string[] {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+
+    return value
+      .map((item) => this.pickText(item))
+      .filter((item): item is string => Boolean(item));
+  }
+
+  private resolveOrgId(orgId: unknown, fallbackOrgId: string): string {
+    return this.pickText(orgId) ?? fallbackOrgId;
+  }
+
+  private resolveSessionLanguage(
+    language: unknown,
+    sessionConfig?: Record<string, any>,
+    userSnapshot?: Record<string, any>,
+  ): string {
+    const configLanguage =
+      sessionConfig && this.isRecord(sessionConfig)
+        ? (this.pickText(sessionConfig.language) ??
+          this.readStringFromRecord(
+            this.readRecord(sessionConfig, 'voice'),
+            'language',
+          ))
+        : undefined;
+    const snapshotLanguage =
+      userSnapshot && this.isRecord(userSnapshot)
+        ? this.readStringFromRecord(
+            this.readRecord(
+              this.readRecord(userSnapshot, 'settings') ?? {},
+              'language',
+            ),
+            'locale',
+          )
+        : undefined;
+
+    return (
+      this.pickText(language) ?? configLanguage ?? snapshotLanguage ?? 'en-US'
+    );
+  }
+
+  private defaultDurationMinutes(sessionType: SessionType | string): number {
+    return sessionType === 'text' ? 20 : 15;
+  }
+
+  private isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null && !Array.isArray(value);
   }
 
   private async invalidateSessionFullCache(sessionId: string): Promise<void> {

@@ -52,8 +52,33 @@ export const AUTH_WHITELIST_ROUTES: WhitelistRoute[] = [
     path: '/api/v1/health',
     description: 'API health check endpoint',
   },
+  {
+    method: 'GET',
+    path: '/api/v1/simulation/sessions/health',
+    description: 'Simulation sessions service liveness probe',
+  },
+  {
+    method: 'GET',
+    path: '/api/v1/simulation/invitations/health',
+    description: 'Simulation invitations service liveness probe',
+  },
+  {
+    method: 'GET',
+    path: '/api/v1/simulation/llm/health',
+    description: 'LLM service liveness probe',
+  },
 
-  // ── LTI endpoints (authenticated by LTI/OAuth, not JWT) ───────────────────
+  {
+    method: 'GET',
+    path: '/api/calendar/google/callback',
+    description: 'Google Calendar OAuth callback',
+  },
+  {
+    method: 'GET',
+    path: '/api/calendar/microsoft/callback',
+    description: 'Microsoft Calendar OAuth callback',
+  },
+
   {
     method: 'POST',
     path: '/api/v1/lti/v1.1/launch',
