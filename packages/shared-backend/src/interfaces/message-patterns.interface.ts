@@ -208,6 +208,10 @@ export const SIMULATION_SERVICE_PATTERNS = {
   CALENDAR_SESSION_SUGGESTIONS_DISMISS: 'simulation.calendar.suggestions.dismiss',
 
   COIN_SESSION_ESTIMATE: 'simulation.coin.session.estimate',
+
+  ADMIN_GET_SESSION_EVENTS: 'simulation.admin.session.events',
+  ADMIN_GET_SESSION_TRANSCRIPT: 'simulation.admin.session.transcript',
+  ADMIN_GET_SESSION_LLM_CALLS: 'simulation.admin.session.llm-calls',
 } as const
 
 export type UserServicePattern = (typeof USER_SERVICE_PATTERNS)[keyof typeof USER_SERVICE_PATTERNS]
