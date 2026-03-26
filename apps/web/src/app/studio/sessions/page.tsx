@@ -58,7 +58,8 @@ const themedCardStyle = {
     var(--pitch-card-bg, var(--pitch-surface-bg, var(--mantine-color-body))) 0%,
     color-mix(in srgb, var(--pitch-card-bg-strong, var(--pitch-card-bg, var(--pitch-surface-bg))) 84%, transparent) 100%
   )`,
-  border: '1px solid var(--pitch-card-border, var(--pitch-border, var(--mantine-color-default-border)))',
+  border:
+    '1px solid var(--pitch-card-border, var(--pitch-border, var(--mantine-color-default-border)))',
   boxShadow: `0 10px 24px color-mix(
     in srgb,
     var(--pitch-card-shadow, var(--pitch-surface-bg, #000)) 16%,
