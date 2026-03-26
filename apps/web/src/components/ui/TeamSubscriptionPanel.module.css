@@ -4,12 +4,18 @@
   background: linear-gradient(
     180deg,
     var(--pitch-card-bg, var(--pitch-surface-bg, var(--mantine-color-body))) 0%,
-    color-mix(in srgb, var(--pitch-card-bg-subtle, var(--pitch-card-bg, var(--pitch-surface-bg))) 82%, transparent) 100%
+    color-mix(
+        in srgb,
+        var(--pitch-card-bg-subtle, var(--pitch-card-bg, var(--pitch-surface-bg))) 82%,
+        transparent
+      )
+      100%
   );
   border-color: var(--pitch-card-border, var(--pitch-border, var(--mantine-color-default-border)));
   box-shadow:
     inset 0 1px 0 color-mix(in srgb, var(--pitch-surface-text) 6%, transparent),
-    0 18px 60px color-mix(in srgb, var(--pitch-card-shadow, var(--pitch-surface-bg, #000)) 22%, transparent);
+    0 18px 60px
+      color-mix(in srgb, var(--pitch-card-shadow, var(--pitch-surface-bg, #000)) 22%, transparent);
 }
 
 .panelShell::before {
@@ -32,15 +38,23 @@
   height: 26px;
   border-radius: 8px;
   color: var(--pitch-accent-strong);
-  background: var(--pitch-card-bg-subtle, var(--pitch-card-bg, var(--pitch-surface-bg, var(--mantine-color-body))));
-  border: 1px solid var(--pitch-card-border, var(--pitch-border, var(--mantine-color-default-border)));
+  background: var(
+    --pitch-card-bg-subtle,
+    var(--pitch-card-bg, var(--pitch-surface-bg, var(--mantine-color-body)))
+  );
+  border: 1px solid
+    var(--pitch-card-border, var(--pitch-border, var(--mantine-color-default-border)));
 }
 
 .intervalControl {
-  background: var(--pitch-card-bg-subtle, var(--pitch-card-bg, var(--pitch-surface-bg, var(--mantine-color-body))));
+  background: var(
+    --pitch-card-bg-subtle,
+    var(--pitch-card-bg, var(--pitch-surface-bg, var(--mantine-color-body)))
+  );
   border-radius: 10px;
   padding: 2px;
-  border: 1px solid var(--pitch-card-border, var(--pitch-border, var(--mantine-color-default-border)));
+  border: 1px solid
+    var(--pitch-card-border, var(--pitch-border, var(--mantine-color-default-border)));
 }
 
 .intervalControl [data-active='true'] {
@@ -54,7 +68,10 @@
 }
 
 .subscriptionSummary {
-  background: var(--pitch-card-bg-subtle, var(--pitch-card-bg, var(--pitch-surface-bg, var(--mantine-color-body))));
+  background: var(
+    --pitch-card-bg-subtle,
+    var(--pitch-card-bg, var(--pitch-surface-bg, var(--mantine-color-body)))
+  );
   border-color: var(--pitch-card-border, var(--pitch-border, var(--mantine-color-default-border)));
   box-shadow: inset 0 1px 0 color-mix(in srgb, var(--pitch-surface-text) 4%, transparent);
 }
@@ -66,12 +83,18 @@
   background: linear-gradient(
     180deg,
     var(--pitch-card-bg, var(--pitch-surface-bg, var(--mantine-color-body))) 0%,
-    color-mix(in srgb, var(--pitch-card-bg-subtle, var(--pitch-card-bg, var(--pitch-surface-bg))) 78%, transparent) 100%
+    color-mix(
+        in srgb,
+        var(--pitch-card-bg-subtle, var(--pitch-card-bg, var(--pitch-surface-bg))) 78%,
+        transparent
+      )
+      100%
   );
   border-color: var(--pitch-card-border, var(--pitch-border, var(--mantine-color-default-border)));
   box-shadow:
     inset 0 1px 0 color-mix(in srgb, var(--pitch-surface-text) 4%, transparent),
-    0 12px 28px color-mix(in srgb, var(--pitch-card-shadow, var(--pitch-surface-bg, #000)) 18%, transparent);
+    0 12px 28px
+      color-mix(in srgb, var(--pitch-card-shadow, var(--pitch-surface-bg, #000)) 18%, transparent);
   transition:
     transform 120ms ease,
     border-color 120ms ease,
@@ -80,7 +103,10 @@
 
 .planCard:hover {
   transform: translateY(-1px);
-  border-color: var(--pitch-card-border-strong, var(--pitch-card-border, var(--pitch-border, var(--mantine-color-default-border))));
+  border-color: var(
+    --pitch-card-border-strong,
+    var(--pitch-card-border, var(--pitch-border, var(--mantine-color-default-border)))
+  );
 }
 
 .planCard::after {
@@ -90,33 +116,62 @@
   width: 210px;
   height: 210px;
   border-radius: 999px;
-  background: radial-gradient(circle, color-mix(in srgb, var(--pitch-accent-strong) 16%, transparent) 0%, transparent 68%);
+  background: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--pitch-accent-strong) 16%, transparent) 0%,
+    transparent 68%
+  );
   pointer-events: none;
 }
 
 .planCard[data-selected='true'] {
-  border-color: var(--pitch-card-border-strong, var(--pitch-card-border, var(--pitch-border, var(--mantine-color-default-border))));
+  border-color: var(
+    --pitch-card-border-strong,
+    var(--pitch-card-border, var(--pitch-border, var(--mantine-color-default-border)))
+  );
   box-shadow:
     inset 0 1px 0 color-mix(in srgb, var(--pitch-surface-text) 6%, transparent),
-    inset 0 0 0 1px color-mix(in srgb, var(--pitch-card-border-strong, var(--pitch-accent-strong)) 28%, transparent),
-    0 20px 44px color-mix(in srgb, var(--pitch-card-shadow, var(--pitch-accent-strong)) 20%, transparent);
+    inset 0 0 0 1px
+      color-mix(
+        in srgb,
+        var(--pitch-card-border-strong, var(--pitch-accent-strong)) 28%,
+        transparent
+      ),
+    0 20px 44px
+      color-mix(in srgb, var(--pitch-card-shadow, var(--pitch-accent-strong)) 20%, transparent);
   background: linear-gradient(
     135deg,
-    color-mix(in srgb, var(--pitch-card-bg-strong, var(--pitch-card-bg, var(--pitch-surface-bg))) 92%, var(--pitch-accent-strong)),
+    color-mix(
+      in srgb,
+      var(--pitch-card-bg-strong, var(--pitch-card-bg, var(--pitch-surface-bg))) 92%,
+      var(--pitch-accent-strong)
+    ),
     var(--pitch-card-bg, var(--pitch-surface-bg, var(--mantine-color-body)))
   );
 }
 
 .planCard[data-tone='violet']::after {
-  background: radial-gradient(circle, color-mix(in srgb, var(--pitch-selected) 16%, transparent) 0%, transparent 68%);
+  background: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--pitch-selected) 16%, transparent) 0%,
+    transparent 68%
+  );
 }
 
 .planCard[data-tone='cyan']::after {
-  background: radial-gradient(circle, color-mix(in srgb, var(--pitch-info) 16%, transparent) 0%, transparent 68%);
+  background: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--pitch-info) 16%, transparent) 0%,
+    transparent 68%
+  );
 }
 
 .planCard[data-tone='gray']::after {
-  background: radial-gradient(circle, color-mix(in srgb, var(--pitch-surface-text-dim) 10%, transparent) 0%, transparent 68%);
+  background: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--pitch-surface-text-dim) 10%, transparent) 0%,
+    transparent 68%
+  );
 }
 
 .planStack {
@@ -131,17 +186,32 @@
   height: 42px;
   border-radius: 10px;
   color: var(--pitch-accent-strong);
-  background: var(--pitch-card-bg-subtle, var(--pitch-card-bg, var(--pitch-surface-bg, var(--mantine-color-body))));
-  border: 1px solid var(--pitch-card-border, var(--pitch-border, var(--mantine-color-default-border)));
+  background: var(
+    --pitch-card-bg-subtle,
+    var(--pitch-card-bg, var(--pitch-surface-bg, var(--mantine-color-body)))
+  );
+  border: 1px solid
+    var(--pitch-card-border, var(--pitch-border, var(--mantine-color-default-border)));
 }
 
 .planCard[data-selected='true'] .planAvatar {
   background: linear-gradient(
     180deg,
-    color-mix(in srgb, var(--pitch-accent-strong) 18%, var(--pitch-card-bg-subtle, var(--pitch-card-bg))),
-    color-mix(in srgb, var(--pitch-card-bg-subtle, var(--pitch-card-bg)) 88%, var(--pitch-accent-strong))
+    color-mix(
+      in srgb,
+      var(--pitch-accent-strong) 18%,
+      var(--pitch-card-bg-subtle, var(--pitch-card-bg))
+    ),
+    color-mix(
+      in srgb,
+      var(--pitch-card-bg-subtle, var(--pitch-card-bg)) 88%,
+      var(--pitch-accent-strong)
+    )
   );
-  border-color: var(--pitch-card-border-strong, var(--pitch-card-border, var(--pitch-border, var(--mantine-color-default-border))));
+  border-color: var(
+    --pitch-card-border-strong,
+    var(--pitch-card-border, var(--pitch-border, var(--mantine-color-default-border)))
+  );
   box-shadow: 0 10px 20px color-mix(in srgb, var(--pitch-accent-strong) 16%, transparent);
 }
 
@@ -152,7 +222,10 @@
 
 .planChip {
   border-color: var(--pitch-card-border, var(--pitch-border, var(--mantine-color-default-border)));
-  background: var(--pitch-card-bg-subtle, var(--pitch-card-bg, var(--pitch-surface-bg, var(--mantine-color-body))));
+  background: var(
+    --pitch-card-bg-subtle,
+    var(--pitch-card-bg, var(--pitch-surface-bg, var(--mantine-color-body)))
+  );
 }
 
 .planTag {
@@ -172,15 +245,23 @@
   min-height: 28px;
   padding: 4px 8px;
   border-radius: 8px;
-  background: var(--pitch-card-bg-subtle, var(--pitch-card-bg, var(--pitch-surface-bg, var(--mantine-color-body))));
-  border: 1px solid var(--pitch-card-border, var(--pitch-border, var(--mantine-color-default-border)));
+  background: var(
+    --pitch-card-bg-subtle,
+    var(--pitch-card-bg, var(--pitch-surface-bg, var(--mantine-color-body)))
+  );
+  border: 1px solid
+    var(--pitch-card-border, var(--pitch-border, var(--mantine-color-default-border)));
 }
 
 .metricCard {
   padding: 10px 10px 8px;
   border-radius: 10px;
-  background: var(--pitch-card-bg-subtle, var(--pitch-card-bg, var(--pitch-surface-bg, var(--mantine-color-body))));
-  border: 1px solid var(--pitch-card-border, var(--pitch-border, var(--mantine-color-default-border)));
+  background: var(
+    --pitch-card-bg-subtle,
+    var(--pitch-card-bg, var(--pitch-surface-bg, var(--mantine-color-body)))
+  );
+  border: 1px solid
+    var(--pitch-card-border, var(--pitch-border, var(--mantine-color-default-border)));
 }
 
 .metricProgress {
@@ -201,8 +282,12 @@
   font-weight: 700;
   letter-spacing: 0.03em;
   color: var(--pitch-surface-text-dim, var(--mantine-color-dimmed));
-  background: var(--pitch-card-bg-subtle, var(--pitch-card-bg, var(--pitch-surface-bg, var(--mantine-color-body))));
-  border: 1px solid var(--pitch-card-border, var(--pitch-border, var(--mantine-color-default-border)));
+  background: var(
+    --pitch-card-bg-subtle,
+    var(--pitch-card-bg, var(--pitch-surface-bg, var(--mantine-color-body)))
+  );
+  border: 1px solid
+    var(--pitch-card-border, var(--pitch-border, var(--mantine-color-default-border)));
 }
 
 .coinValue {

@@ -340,7 +340,8 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
               ? 'Calendar'
               : t('settings.language.title')
 
-  const activeSectionConfig = sections.find((section) => section.label === activeSection) ?? sections[0]
+  const activeSectionConfig =
+    sections.find((section) => section.label === activeSection) ?? sections[0]
   const ActiveSectionIcon = activeSectionConfig.icon
 
   const handleLogout = async () => {
@@ -583,7 +584,12 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
                             <ActiveSectionIcon size={18} />
                           </Box>
                           <Stack gap={0}>
-                            <Text size="xs" fw={700} c={navText} style={{ letterSpacing: '0.04em' }}>
+                            <Text
+                              size="xs"
+                              fw={700}
+                              c={navText}
+                              style={{ letterSpacing: '0.04em' }}
+                            >
                               SETTINGS
                             </Text>
                             <Text size="sm" fw={600} c={navText}>
@@ -630,7 +636,9 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
                               padding: `${rem(10)} ${rem(12)}`,
                               background: isActive ? tabsActiveBg : 'transparent',
                               border: `1px solid ${
-                                isActive ? mixColors(tabsActiveBg, tabsActiveText, 0.18) : 'transparent'
+                                isActive
+                                  ? mixColors(tabsActiveBg, tabsActiveText, 0.18)
+                                  : 'transparent'
                               }`,
                               transition: 'background 150ms ease, border-color 150ms ease',
                             }}
@@ -673,7 +681,6 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
                     </Stack>
                   </Popover.Dropdown>
                 </Popover>
-
               </Stack>
             </Box>
           ) : (
@@ -749,7 +756,9 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
               paddingTop: rem(isMobile ? 16 : 40),
               paddingRight: rem(isMobile ? 16 : 40),
               paddingLeft: rem(isMobile ? 16 : 40),
-              paddingBottom: isMobile ? `calc(${rem(96)} + env(safe-area-inset-bottom, 0px))` : rem(40),
+              paddingBottom: isMobile
+                ? `calc(${rem(96)} + env(safe-area-inset-bottom, 0px))`
+                : rem(40),
               backgroundColor: contentBackground,
               minHeight: '100%',
               color: contentText,

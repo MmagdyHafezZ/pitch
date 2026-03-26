@@ -153,6 +153,7 @@ export class MicrosoftCalendarIntegrationService {
       client_id: clientId,
       redirect_uri: redirectUri,
       scope: 'Calendars.Read User.Read offline_access',
+      prompt: 'select_account',
       response_mode: 'query',
       state: userId,
     });

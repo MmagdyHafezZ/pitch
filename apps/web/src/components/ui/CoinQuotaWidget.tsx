@@ -102,8 +102,7 @@ export function CoinQuotaWidget({ teamId }: Props) {
         )`,
         borderRadius: 12,
         border: '1px solid color-mix(in srgb, var(--pitch-nav-text-dim) 28%, transparent)',
-        boxShadow:
-          'inset 0 0 0 1px color-mix(in srgb, var(--pitch-nav-text-dim) 10%, transparent)',
+        boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--pitch-nav-text-dim) 10%, transparent)',
         overflow: 'hidden',
       }}
     >

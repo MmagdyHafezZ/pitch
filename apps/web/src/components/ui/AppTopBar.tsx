@@ -912,7 +912,8 @@ export function AppTopBar({
     },
     header: {
       background: 'transparent',
-      borderBottom: '1px solid color-mix(in srgb, var(--pitch-card-border, var(--pitch-border)) 72%, transparent)',
+      borderBottom:
+        '1px solid color-mix(in srgb, var(--pitch-card-border, var(--pitch-border)) 72%, transparent)',
       paddingBottom: rem(14),
       marginBottom: rem(4),
     },
@@ -936,7 +937,8 @@ export function AppTopBar({
     ...notificationCardStyle,
     background:
       'linear-gradient(180deg, color-mix(in srgb, var(--pitch-card-bg-subtle, var(--pitch-card-bg, var(--pitch-surface-bg))) 88%, var(--pitch-accent) 12%) 0%, color-mix(in srgb, var(--pitch-card-bg, var(--pitch-surface-bg)) 86%, var(--pitch-accent) 14%) 100%)',
-    border: '1px solid var(--pitch-card-border-strong, var(--pitch-card-border, var(--pitch-border)))',
+    border:
+      '1px solid var(--pitch-card-border-strong, var(--pitch-card-border, var(--pitch-border)))',
   } as const
   const notificationMetaStyle = {
     color: 'var(--pitch-surface-text-dim)',
@@ -945,14 +947,16 @@ export function AppTopBar({
     background:
       'var(--pitch-card-bg-subtle, var(--pitch-card-bg, var(--pitch-surface-bg, var(--mantine-color-body))))',
     color: 'var(--pitch-surface-text)',
-    border: '1px solid var(--pitch-card-border, var(--pitch-border, var(--mantine-color-default-border)))',
+    border:
+      '1px solid var(--pitch-card-border, var(--pitch-border, var(--mantine-color-default-border)))',
   } as const
   const notificationIconButtonStyles = {
     root: {
       background:
         'var(--pitch-card-bg-subtle, var(--pitch-card-bg, var(--pitch-surface-bg, var(--mantine-color-body))))',
       color: 'var(--pitch-surface-text-dim)',
-      border: '1px solid var(--pitch-card-border, var(--pitch-border, var(--mantine-color-default-border)))',
+      border:
+        '1px solid var(--pitch-card-border, var(--pitch-border, var(--mantine-color-default-border)))',
     },
   } as const
   const mobileNavButton =

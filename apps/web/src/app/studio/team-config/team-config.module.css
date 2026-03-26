@@ -26,7 +26,11 @@
 .page :global(.mantine-NumberInput-input) {
   color: var(--pitch-input-text, var(--mantine-color-text));
   background: var(--pitch-input-bg, var(--mantine-color-default));
-  border-color: color-mix(in srgb, var(--pitch-border, var(--mantine-color-default-border)) 88%, transparent);
+  border-color: color-mix(
+    in srgb,
+    var(--pitch-border, var(--mantine-color-default-border)) 88%,
+    transparent
+  );
   box-shadow: none;
   transition:
     border-color 140ms ease,
@@ -54,8 +58,13 @@
 
 .page :global(.mantine-Combobox-dropdown),
 .page :global(.mantine-Select-dropdown) {
-  background: color-mix(in srgb, var(--pitch-surface-bg, var(--mantine-color-body)) 96%, transparent);
-  border: 1px solid color-mix(in srgb, var(--pitch-border, var(--mantine-color-default-border)) 90%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--pitch-surface-bg, var(--mantine-color-body)) 96%,
+    transparent
+  );
+  border: 1px solid
+    color-mix(in srgb, var(--pitch-border, var(--mantine-color-default-border)) 90%, transparent);
   box-shadow: 0 8px 18px color-mix(in srgb, var(--pitch-surface-bg, #000) 18%, transparent);
 }
 
@@ -68,16 +77,28 @@
 
 .page :global(.mantine-Combobox-option:hover),
 .page :global(.mantine-Select-option:hover) {
-  background: color-mix(in srgb, var(--pitch-accent-strong) 14%, var(--pitch-surface-bg, transparent));
+  background: color-mix(
+    in srgb,
+    var(--pitch-accent-strong) 14%,
+    var(--pitch-surface-bg, transparent)
+  );
 }
 
 .page :global(.mantine-Combobox-option[data-combobox-selected]),
 .page :global(.mantine-Select-option[data-checked]) {
-  background: color-mix(in srgb, var(--pitch-accent-strong) 20%, var(--pitch-surface-bg, transparent));
+  background: color-mix(
+    in srgb,
+    var(--pitch-accent-strong) 20%,
+    var(--pitch-surface-bg, transparent)
+  );
 }
 
 .page :global(.mantine-NumberInput-control:hover) {
-  background: color-mix(in srgb, var(--pitch-accent-strong) 10%, var(--pitch-surface-bg, transparent));
+  background: color-mix(
+    in srgb,
+    var(--pitch-accent-strong) 10%,
+    var(--pitch-surface-bg, transparent)
+  );
 }
 
 .page :global(.mantine-Stepper-separator) {
@@ -89,11 +110,18 @@
   background: linear-gradient(
     180deg,
     var(--pitch-card-bg, var(--pitch-surface-bg, var(--mantine-color-body))) 0%,
-    color-mix(in srgb, var(--pitch-card-bg-strong, var(--pitch-card-bg, var(--pitch-surface-bg))) 84%, transparent) 100%
+    color-mix(
+        in srgb,
+        var(--pitch-card-bg-strong, var(--pitch-card-bg, var(--pitch-surface-bg))) 84%,
+        transparent
+      )
+      100%
   );
-  border: 1px solid var(--pitch-card-border, var(--pitch-border, var(--mantine-color-default-border)));
+  border: 1px solid
+    var(--pitch-card-border, var(--pitch-border, var(--mantine-color-default-border)));
   border-radius: 24px;
-  box-shadow: 0 8px 20px color-mix(in srgb, var(--pitch-card-shadow, var(--pitch-surface-bg, #000)) 16%, transparent);
+  box-shadow: 0 8px 20px
+    color-mix(in srgb, var(--pitch-card-shadow, var(--pitch-surface-bg, #000)) 16%, transparent);
   overflow: hidden;
 }
 
@@ -133,8 +161,13 @@
 
 .heroCard {
   border-radius: 20px;
-  background: color-mix(in srgb, var(--pitch-surface-bg, var(--mantine-color-body)) 98%, var(--pitch-accent) 2%);
-  border: 1px solid color-mix(in srgb, var(--pitch-accent-strong) 22%, var(--pitch-border, transparent));
+  background: color-mix(
+    in srgb,
+    var(--pitch-surface-bg, var(--mantine-color-body)) 98%,
+    var(--pitch-accent) 2%
+  );
+  border: 1px solid
+    color-mix(in srgb, var(--pitch-accent-strong) 22%, var(--pitch-border, transparent));
   box-shadow: none;
 }
 
@@ -149,16 +182,27 @@
   background: linear-gradient(
     180deg,
     var(--pitch-card-bg, var(--pitch-surface-bg, var(--mantine-color-body))) 0%,
-    color-mix(in srgb, var(--pitch-card-bg-subtle, var(--pitch-card-bg, var(--pitch-surface-bg))) 82%, transparent) 100%
+    color-mix(
+        in srgb,
+        var(--pitch-card-bg-subtle, var(--pitch-card-bg, var(--pitch-surface-bg))) 82%,
+        transparent
+      )
+      100%
   );
-  border: 1px solid var(--pitch-card-border, var(--pitch-border, var(--mantine-color-default-border)));
+  border: 1px solid
+    var(--pitch-card-border, var(--pitch-border, var(--mantine-color-default-border)));
   border-radius: 20px;
-  box-shadow: 0 4px 14px color-mix(in srgb, var(--pitch-card-shadow, var(--pitch-surface-bg, #000)) 14%, transparent);
+  box-shadow: 0 4px 14px
+    color-mix(in srgb, var(--pitch-card-shadow, var(--pitch-surface-bg, #000)) 14%, transparent);
 }
 
 .subtleCard {
-  background: var(--pitch-card-bg-subtle, var(--pitch-card-bg, var(--pitch-surface-bg, var(--mantine-color-body))));
-  border: 1px solid var(--pitch-card-border, var(--pitch-border, var(--mantine-color-default-border)));
+  background: var(
+    --pitch-card-bg-subtle,
+    var(--pitch-card-bg, var(--pitch-surface-bg, var(--mantine-color-body)))
+  );
+  border: 1px solid
+    var(--pitch-card-border, var(--pitch-border, var(--mantine-color-default-border)));
   border-radius: 16px;
 }
 
@@ -166,11 +210,18 @@
   background: linear-gradient(
     180deg,
     var(--pitch-card-bg, var(--pitch-surface-bg, var(--mantine-color-body))) 0%,
-    color-mix(in srgb, var(--pitch-card-bg-subtle, var(--pitch-card-bg, var(--pitch-surface-bg))) 82%, transparent) 100%
+    color-mix(
+        in srgb,
+        var(--pitch-card-bg-subtle, var(--pitch-card-bg, var(--pitch-surface-bg))) 82%,
+        transparent
+      )
+      100%
   );
-  border: 1px solid var(--pitch-card-border, var(--pitch-border, var(--mantine-color-default-border)));
+  border: 1px solid
+    var(--pitch-card-border, var(--pitch-border, var(--mantine-color-default-border)));
   border-radius: 18px;
-  box-shadow: 0 8px 20px color-mix(in srgb, var(--pitch-card-shadow, var(--pitch-surface-bg, #000)) 14%, transparent);
+  box-shadow: 0 8px 20px
+    color-mix(in srgb, var(--pitch-card-shadow, var(--pitch-surface-bg, #000)) 14%, transparent);
 }
 
 .stepItem {
@@ -178,8 +229,12 @@
 }
 
 .stepper :global(.mantine-Stepper-stepIcon) {
-  background: var(--pitch-card-bg-subtle, var(--pitch-card-bg, var(--pitch-surface-bg, var(--mantine-color-body))));
-  border: 1px solid var(--pitch-card-border, var(--pitch-border, var(--mantine-color-default-border)));
+  background: var(
+    --pitch-card-bg-subtle,
+    var(--pitch-card-bg, var(--pitch-surface-bg, var(--mantine-color-body)))
+  );
+  border: 1px solid
+    var(--pitch-card-border, var(--pitch-border, var(--mantine-color-default-border)));
   transition:
     background-color 180ms ease,
     border-color 180ms ease,
@@ -223,8 +278,14 @@
 .stepper :global(.mantine-Stepper-stepIcon[data-progress]) {
   background: linear-gradient(
     180deg,
-    color-mix(in srgb, var(--pitch-accent-strong) 14%, var(--pitch-card-bg-subtle, var(--pitch-card-bg))) 0%,
-    color-mix(in srgb, var(--pitch-accent-strong) 8%, var(--pitch-card-bg, var(--pitch-surface-bg))) 100%
+    color-mix(
+        in srgb,
+        var(--pitch-accent-strong) 14%,
+        var(--pitch-card-bg-subtle, var(--pitch-card-bg))
+      )
+      0%,
+    color-mix(in srgb, var(--pitch-accent-strong) 8%, var(--pitch-card-bg, var(--pitch-surface-bg)))
+      100%
   );
   border-color: color-mix(in srgb, var(--pitch-accent-strong) 52%, transparent);
   box-shadow: 0 0 0 4px color-mix(in srgb, var(--pitch-accent-strong) 14%, transparent);
@@ -234,13 +295,24 @@
 .stepCurrent :global(.mantine-Stepper-stepIcon) {
   background: linear-gradient(
     180deg,
-    color-mix(in srgb, var(--pitch-accent-strong) 18%, var(--pitch-card-bg-subtle, var(--pitch-card-bg))) 0%,
-    color-mix(in srgb, var(--pitch-accent-strong) 10%, var(--pitch-card-bg, var(--pitch-surface-bg))) 100%
+    color-mix(
+        in srgb,
+        var(--pitch-accent-strong) 18%,
+        var(--pitch-card-bg-subtle, var(--pitch-card-bg))
+      )
+      0%,
+    color-mix(
+        in srgb,
+        var(--pitch-accent-strong) 10%,
+        var(--pitch-card-bg, var(--pitch-surface-bg))
+      )
+      100%
   );
   border-color: color-mix(in srgb, var(--pitch-accent-strong) 68%, transparent);
   box-shadow:
     0 0 0 4px color-mix(in srgb, var(--pitch-accent-strong) 16%, transparent),
-    0 10px 22px color-mix(in srgb, var(--pitch-card-shadow, var(--pitch-accent-strong)) 18%, transparent);
+    0 10px 22px
+      color-mix(in srgb, var(--pitch-card-shadow, var(--pitch-accent-strong)) 18%, transparent);
   transform: translateY(-1px);
 }
 
@@ -268,7 +340,10 @@
 .stepper
   :global(.mantine-Stepper-step[data-completed]:not([data-progress]) .mantine-Stepper-stepIcon),
 .stepper :global(.mantine-Stepper-stepIcon[data-completed]:not([data-progress])) {
-  background: var(--pitch-card-bg-subtle, var(--pitch-card-bg, var(--pitch-surface-bg, var(--mantine-color-body))));
+  background: var(
+    --pitch-card-bg-subtle,
+    var(--pitch-card-bg, var(--pitch-surface-bg, var(--mantine-color-body)))
+  );
   border-color: var(--pitch-card-border, var(--pitch-border, var(--mantine-color-default-border)));
 }
 
