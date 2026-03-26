@@ -323,6 +323,7 @@ export default function ClientLayerComponent({ children }: { children: React.Rea
               mainLinks={ADMIN_MAIN_LINKS}
               secondaryLinks={ADMIN_SECONDARY_LINKS}
               onNavigate={closeMobileNav}
+              teamId={activeTeamId}
             />
           ) : (
             <Box h="100%" style={{ display: 'flex', flexDirection: 'row' }}>

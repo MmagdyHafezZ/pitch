@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { conversationService } from '../services/conversation.service'
-import { getAccessToken } from '@/lib/client'
+import { getAccessToken, refreshAccessToken } from '@/lib/client'
 import {
   ConversationStartPayload,
   WsEnvelope,
@@ -513,7 +513,10 @@ export function useConversation(options: UseConversationOptions) {
       // If this is a retry but the socket is already connected, skip.
       if (!resetAttempts && conversationService.isConnected()) return
 
-      const token = getAccessToken()
+      let token = getAccessToken()
+      if (!token) {
+        token = await refreshAccessToken()
+      }
       if (!token) {
         const errorMsg = 'No authentication token found'
         setError(errorMsg)
@@ -763,6 +766,24 @@ export function useConversation(options: UseConversationOptions) {
     setMessages([])
   }, [revokeAudioUrls])
 
+  const hydrateMessages = useCallback(
+    (
+      nextMessages: Array<
+        Pick<ConversationMessage, 'id' | 'role' | 'text' | 'timestamp' | 'usage' | 'audioUrl'>
+      >
+    ) => {
+      revokeAudioUrls()
+      setMessages(
+        nextMessages.map((message) => ({
+          ...message,
+          timestamp:
+            message.timestamp instanceof Date ? message.timestamp : new Date(message.timestamp),
+        }))
+      )
+    },
+    [revokeAudioUrls]
+  )
+
   const clearHangupRequest = useCallback(() => {
     setHangupRequest(null)
   }, [])
@@ -826,6 +847,7 @@ export function useConversation(options: UseConversationOptions) {
     sendMessage,
     startAssistantTurn,
     clearMessages,
+    hydrateMessages,
     clearHangupRequest,
     clearToolEvents,
     clearCoachingTip: () => setCoachingTip(null),

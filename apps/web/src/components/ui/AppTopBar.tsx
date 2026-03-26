@@ -20,7 +20,7 @@ import {
   Loader,
   useMantineColorScheme,
 } from '@mantine/core'
-import { IconSearch, IconBell, IconUser, IconHelp, IconMenu2, IconX } from '@tabler/icons-react'
+import { IconSearch, IconBell, IconUser, IconHelp, IconX } from '@tabler/icons-react'
 import dayjs from 'dayjs'
 import { ReactNode, useEffect, useMemo, useState } from 'react'
 import { SettingsModal } from './SettingsModal'
@@ -484,6 +484,7 @@ export function AppTopBar({
   )
   const [settingsOpened, setSettingsOpened] = useState(false)
   const [notificationsOpened, setNotificationsOpened] = useState(false)
+  const [selectedNotification, setSelectedNotification] = useState<NotificationItem | null>(null)
   const [acceptingInviteIds, setAcceptingInviteIds] = useState<string[]>([])
   const [acceptedInviteIds, setAcceptedInviteIds] = useState<string[]>([])
   const router = useRouter()
@@ -734,6 +735,158 @@ export function AppTopBar({
         return 'blue'
     }
   }
+  const closeNotificationsModal = () => {
+    setNotificationsOpened(false)
+    setSelectedNotification(null)
+  }
+  const closeNotificationDetails = () => setSelectedNotification(null)
+
+  const markNotificationAsRead = async (notificationId: string) => {
+    await markReadMutation.mutateAsync([notificationId])
+  }
+
+  const handleNotificationAction = async (notification: NotificationItem) => {
+    const teamId =
+      notification.type === 'TEAM_INVITE' && typeof notification.metadata?.teamId === 'string'
+        ? notification.metadata.teamId
+        : null
+    const decision =
+      notification.type === 'STUDIO_ACCESS_REVIEWED' &&
+      typeof notification.metadata?.decision === 'string'
+        ? notification.metadata.decision
+        : null
+
+    if (teamId) {
+      if (acceptedInviteIds.includes(notification.id)) return
+
+      setAcceptingInviteIds((previous) =>
+        previous.includes(notification.id) ? previous : [...previous, notification.id]
+      )
+
+      acceptTeamInviteMutation.mutate(
+        {
+          teamId,
+          notificationId: notification.id,
+        },
+        {
+          onSettled: () => {
+            setAcceptingInviteIds((previous) => previous.filter((id) => id !== notification.id))
+            setSelectedNotification(null)
+          },
+        }
+      )
+      return
+    }
+
+    if (!notification.readAt) {
+      await markNotificationAsRead(notification.id)
+    }
+
+    if (notification.type === 'STUDIO_ACCESS_REQUEST') {
+      closeNotificationsModal()
+      router.push('/studio/admin/access')
+      return
+    }
+
+    if (notification.type === 'STUDIO_ACCESS_REVIEWED') {
+      closeNotificationsModal()
+      router.push(decision === 'denied' ? '/access/request' : '/studio/home')
+      return
+    }
+
+    setSelectedNotification(null)
+  }
+
+  const selectedNotificationMetadata = useMemo(() => {
+    if (!selectedNotification?.metadata) return []
+
+    const metadata = selectedNotification.metadata
+    const entries: Array<{ label: string; value: string }> = []
+
+    if (typeof metadata.teamName === 'string') {
+      entries.push({ label: 'Team', value: metadata.teamName })
+    }
+    if (typeof metadata.requesterEmail === 'string') {
+      entries.push({ label: 'Requester', value: metadata.requesterEmail })
+    }
+    if (typeof metadata.reviewedByEmail === 'string') {
+      entries.push({ label: 'Reviewed by', value: metadata.reviewedByEmail })
+    }
+    if (typeof metadata.decision === 'string') {
+      entries.push({ label: 'Decision', value: metadata.decision })
+    }
+    if (typeof metadata.role === 'string') {
+      entries.push({
+        label: 'Role',
+        value: metadata.role === 'MEMBER' ? 'Regular user' : metadata.role,
+      })
+    }
+    if (typeof metadata.quota === 'number') {
+      entries.push({ label: 'Quota', value: `${metadata.quota} coins` })
+    }
+
+    return entries
+  }, [selectedNotification])
+
+  const selectedNotificationAction = useMemo(() => {
+    if (!selectedNotification) return null
+
+    const teamId =
+      selectedNotification.type === 'TEAM_INVITE' &&
+      typeof selectedNotification.metadata?.teamId === 'string'
+        ? selectedNotification.metadata.teamId
+        : null
+    const isAccepted = acceptedInviteIds.includes(selectedNotification.id)
+    const isAccepting = acceptingInviteIds.includes(selectedNotification.id)
+    const isAlreadyTeamMember =
+      !!teamId &&
+      !!currentUser?.id &&
+      !!teams
+        .find((team) => team.id === teamId)
+        ?.memberships?.some(
+          (membership) => membership.userId === currentUser.id && membership.isActive !== false
+        )
+
+    if (teamId) {
+      return {
+        label: isAccepted || isAlreadyTeamMember ? 'Accepted' : 'Accept invitation',
+        disabled: isAccepted || isAlreadyTeamMember,
+        loading: isAccepting,
+      }
+    }
+
+    if (selectedNotification.type === 'STUDIO_ACCESS_REQUEST') {
+      return {
+        label: 'Review request',
+        disabled: false,
+        loading: false,
+      }
+    }
+
+    if (selectedNotification.type === 'STUDIO_ACCESS_REVIEWED') {
+      return {
+        label:
+          selectedNotification.metadata?.decision === 'denied'
+            ? 'View access status'
+            : 'Open Studio',
+        disabled: false,
+        loading: false,
+      }
+    }
+
+    return {
+      label: selectedNotification.readAt ? 'Close' : 'Mark as read',
+      disabled: false,
+      loading: markReadMutation.isPending,
+    }
+  }, [
+    acceptedInviteIds,
+    acceptingInviteIds,
+    currentUser?.id,
+    markReadMutation.isPending,
+    selectedNotification,
+    teams,
+  ])
 
   const actionArea = rightSlot ?? (
     <ActionConfig
@@ -749,27 +902,125 @@ export function AppTopBar({
   const actionIconSize = isMobile ? 24 : isNarrow ? 26 : 28
   const showLanguageSelect = !isMobile
   const languageSelectWidth = isMobile ? 104 : isNarrow ? 92 : 140
+  const notificationModalStyles = {
+    content: {
+      background:
+        'linear-gradient(180deg, var(--pitch-card-bg, var(--pitch-surface-bg)) 0%, color-mix(in srgb, var(--pitch-card-bg-strong, var(--pitch-card-bg, var(--pitch-surface-bg))) 82%, transparent) 100%)',
+      border: '1px solid var(--pitch-card-border, var(--pitch-border))',
+      boxShadow:
+        '0 18px 40px color-mix(in srgb, var(--pitch-card-shadow, var(--pitch-surface-bg, #000)) 18%, transparent)',
+    },
+    header: {
+      background: 'transparent',
+      borderBottom:
+        '1px solid color-mix(in srgb, var(--pitch-card-border, var(--pitch-border)) 72%, transparent)',
+      paddingBottom: rem(14),
+      marginBottom: rem(4),
+    },
+    title: {
+      fontWeight: 700,
+      color: 'var(--pitch-surface-text)',
+    },
+    close: {
+      color: 'var(--pitch-surface-text-dim)',
+    },
+  } as const
+  const notificationCardStyle = {
+    cursor: 'pointer',
+    background:
+      'linear-gradient(180deg, var(--pitch-card-bg-subtle, var(--pitch-card-bg, var(--pitch-surface-bg))) 0%, color-mix(in srgb, var(--pitch-card-bg, var(--pitch-surface-bg)) 92%, transparent) 100%)',
+    border: '1px solid var(--pitch-card-border, var(--pitch-border))',
+    boxShadow:
+      '0 12px 28px color-mix(in srgb, var(--pitch-card-shadow, var(--pitch-surface-bg, #000)) 12%, transparent)',
+  } as const
+  const unreadNotificationCardStyle = {
+    ...notificationCardStyle,
+    background:
+      'linear-gradient(180deg, color-mix(in srgb, var(--pitch-card-bg-subtle, var(--pitch-card-bg, var(--pitch-surface-bg))) 88%, var(--pitch-accent) 12%) 0%, color-mix(in srgb, var(--pitch-card-bg, var(--pitch-surface-bg)) 86%, var(--pitch-accent) 14%) 100%)',
+    border:
+      '1px solid var(--pitch-card-border-strong, var(--pitch-card-border, var(--pitch-border)))',
+  } as const
+  const notificationMetaStyle = {
+    color: 'var(--pitch-surface-text-dim)',
+  } as const
+  const notificationChipStyle = {
+    background:
+      'var(--pitch-card-bg-subtle, var(--pitch-card-bg, var(--pitch-surface-bg, var(--mantine-color-body))))',
+    color: 'var(--pitch-surface-text)',
+    border:
+      '1px solid var(--pitch-card-border, var(--pitch-border, var(--mantine-color-default-border)))',
+  } as const
+  const notificationIconButtonStyles = {
+    root: {
+      background:
+        'var(--pitch-card-bg-subtle, var(--pitch-card-bg, var(--pitch-surface-bg, var(--mantine-color-body))))',
+      color: 'var(--pitch-surface-text-dim)',
+      border:
+        '1px solid var(--pitch-card-border, var(--pitch-border, var(--mantine-color-default-border)))',
+    },
+  } as const
+  const mobileNavButton =
+    onToggleMobileNav && isMobile ? (
+      <ActionIcon
+        aria-label={mobileNavOpened ? 'Close navigation menu' : 'Open navigation menu'}
+        size="auto"
+        p={0}
+        variant="transparent"
+        onClick={onToggleMobileNav}
+        styles={{
+          root: {
+            color: 'var(--pitch-nav-text)',
+            background: 'transparent',
+            boxShadow: 'none',
+            minWidth: 'unset',
+            minHeight: 'unset',
+          },
+        }}
+      >
+        {mobileNavOpened ? (
+          <IconX size={15} stroke={2.25} />
+        ) : (
+          <Box
+            aria-hidden="true"
+            style={{
+              width: 16,
+              height: 16,
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'center',
+              gap: 3,
+            }}
+          >
+            <Box
+              style={{
+                height: 2,
+                width: 14,
+                borderRadius: 999,
+                background: 'currentColor',
+              }}
+            />
+            <Box
+              style={{
+                height: 2,
+                width: 10,
+                borderRadius: 999,
+                background: 'currentColor',
+              }}
+            />
+            <Box
+              style={{
+                height: 2,
+                width: 14,
+                borderRadius: 999,
+                background: 'currentColor',
+              }}
+            />
+          </Box>
+        )}
+      </ActionIcon>
+    ) : null
   const utilityControls = (
     <Group data-tour-id="app-topbar-controls" align="center" gap={isNarrow ? 8 : 12} wrap="nowrap">
-      {onToggleMobileNav && isMobile && (
-        <ActionIcon
-          aria-label={mobileNavOpened ? 'Close navigation menu' : 'Open navigation menu'}
-          size={actionIconSize}
-          radius="md"
-          variant="default"
-          onClick={onToggleMobileNav}
-          styles={{
-            root: {
-              background: 'var(--pitch-nav-accent-soft)',
-              color: 'var(--pitch-nav-text)',
-              boxShadow: '0 0 0 1px var(--pitch-nav-text-dim)',
-            },
-          }}
-        >
-          {mobileNavOpened ? <IconX size={16} /> : <IconMenu2 size={16} />}
-        </ActionIcon>
-      )}
-
       {!isMobile && !isNarrow && (
         <Box ta="right" lh={1}>
           <Text size="xs" fw={700} c="var(--pitch-nav-text)">
@@ -886,17 +1137,15 @@ export function AppTopBar({
       <SettingsModal opened={settingsOpened} onClose={() => setSettingsOpened(false)} />
       <Modal
         opened={notificationsOpened}
-        onClose={() => setNotificationsOpened(false)}
+        onClose={closeNotificationsModal}
         title={t('topbar.notifications')}
         centered
         size="lg"
-        styles={{
-          title: { fontWeight: 700 },
-        }}
+        styles={notificationModalStyles}
       >
         <Stack gap="md">
           <Group justify="space-between" align="center">
-            <Text size="sm" c="dimmed">
+            <Text size="sm" style={notificationMetaStyle}>
               {t('topbar.unreadCount', { count: unreadCount })}
             </Text>
             <Button
@@ -915,9 +1164,16 @@ export function AppTopBar({
               <Loader size="sm" />
             </Group>
           ) : notificationItems.length === 0 ? (
-            <Text size="sm" c="dimmed">
-              {t('topbar.noNotifications')}
-            </Text>
+            <Paper withBorder radius="lg" p="lg" style={notificationCardStyle}>
+              <Stack gap={6}>
+                <Text fw={700} c="var(--pitch-surface-text)">
+                  Inbox clear
+                </Text>
+                <Text size="sm" style={notificationMetaStyle}>
+                  {t('topbar.noNotifications')}
+                </Text>
+              </Stack>
+            </Paper>
           ) : (
             <ScrollArea h={360}>
               <Stack gap="sm">
@@ -947,32 +1203,37 @@ export function AppTopBar({
                     <Paper
                       key={notification.id}
                       withBorder
-                      p="sm"
-                      radius="md"
-                      onClick={() =>
-                        isUnread ? markReadMutation.mutate([notification.id]) : undefined
-                      }
-                      style={{
-                        cursor: isUnread ? 'pointer' : 'default',
-                        background: isUnread
-                          ? 'color-mix(in srgb, var(--pitch-surface-bg) 85%, var(--pitch-accent) 15%)'
-                          : 'var(--pitch-surface-bg)',
-                      }}
+                      p="md"
+                      radius="lg"
+                      onClick={() => setSelectedNotification(notification)}
+                      style={isUnread ? unreadNotificationCardStyle : notificationCardStyle}
                     >
-                      <Group justify="space-between" align="center">
-                        <Text fw={600} size="sm">
-                          {notification.title}
-                        </Text>
-                        <Group gap={6} align="center">
-                          <Badge color={severityColor(notification.severity)} variant="light">
-                            {notification.severity}
-                          </Badge>
+                      <Group justify="space-between" align="flex-start" wrap="nowrap">
+                        <Stack gap={6} style={{ minWidth: 0, flex: 1 }}>
+                          <Group gap={8} wrap="wrap">
+                            {isUnread && (
+                              <Badge variant="light" style={notificationChipStyle}>
+                                New
+                              </Badge>
+                            )}
+                            <Badge color={severityColor(notification.severity)} variant="light">
+                              {notification.severity}
+                            </Badge>
+                          </Group>
+                          <Text fw={700} size="sm" c="var(--pitch-surface-text)">
+                            {notification.title}
+                          </Text>
+                        </Stack>
+                        <Group gap={6} align="center" wrap="nowrap">
+                          <Text size="xs" style={notificationMetaStyle}>
+                            {dayjs(notification.createdAt).format('MMM D, YYYY HH:mm')}
+                          </Text>
                           <ActionIcon
                             size="sm"
                             variant="subtle"
-                            color="gray"
                             aria-label="Clear notification"
                             disabled={isClearingNotification}
+                            styles={notificationIconButtonStyles}
                             onClick={(event) => {
                               event.stopPropagation()
                               markReadMutation.mutate([notification.id])
@@ -982,14 +1243,14 @@ export function AppTopBar({
                           </ActionIcon>
                         </Group>
                       </Group>
-                      <Text size="sm" c="dimmed" mt={4}>
+                      <Text size="sm" mt={8} style={{ ...notificationMetaStyle, lineHeight: 1.6 }}>
                         {notification.message}
                       </Text>
-                      <Text size="xs" c="gray.5" mt={6}>
-                        {dayjs(notification.createdAt).format('MMM D, YYYY HH:mm')}
-                      </Text>
                       {teamId ? (
-                        <Group mt="xs" justify="flex-end">
+                        <Group mt="md" justify="space-between" align="center" wrap="wrap">
+                          <Badge variant="light" style={notificationChipStyle}>
+                            Team invite
+                          </Badge>
                           <Button
                             size="xs"
                             variant="light"
@@ -998,24 +1259,7 @@ export function AppTopBar({
                             onClick={(event) => {
                               event.stopPropagation()
                               if (disableAcceptButton) return
-                              setAcceptingInviteIds((previous) =>
-                                previous.includes(notification.id)
-                                  ? previous
-                                  : [...previous, notification.id]
-                              )
-                              acceptTeamInviteMutation.mutate(
-                                {
-                                  teamId,
-                                  notificationId: notification.id,
-                                },
-                                {
-                                  onSettled: () => {
-                                    setAcceptingInviteIds((previous) =>
-                                      previous.filter((id) => id !== notification.id)
-                                    )
-                                  },
-                                }
-                              )
+                              void handleNotificationAction(notification)
                             }}
                           >
                             {isAccepted || isAlreadyTeamMember ? 'Accepted' : 'Accept invitation'}
@@ -1029,6 +1273,72 @@ export function AppTopBar({
             </ScrollArea>
           )}
         </Stack>
+      </Modal>
+      <Modal
+        opened={!!selectedNotification}
+        onClose={closeNotificationDetails}
+        title={selectedNotification?.title ?? 'Notification details'}
+        centered
+        size="md"
+        styles={notificationModalStyles}
+      >
+        {selectedNotification ? (
+          <Stack gap="md">
+            <Group justify="space-between" align="center" wrap="wrap">
+              <Group gap={8} wrap="wrap">
+                <Badge color={severityColor(selectedNotification.severity)} variant="light">
+                  {selectedNotification.severity}
+                </Badge>
+                {!selectedNotification.readAt && (
+                  <Badge variant="light" style={notificationChipStyle}>
+                    Unread
+                  </Badge>
+                )}
+              </Group>
+              <Text size="xs" style={notificationMetaStyle}>
+                {dayjs(selectedNotification.createdAt).format('MMM D, YYYY HH:mm')}
+              </Text>
+            </Group>
+
+            <Paper withBorder radius="lg" p="lg" style={notificationCardStyle}>
+              <Text size="sm" c="var(--pitch-surface-text)" style={{ lineHeight: 1.7 }}>
+                {selectedNotification.message}
+              </Text>
+            </Paper>
+
+            {selectedNotificationMetadata.length > 0 ? (
+              <Paper withBorder radius="lg" p="lg" style={notificationCardStyle}>
+                <Stack gap={10}>
+                  {selectedNotificationMetadata.map((item) => (
+                    <Group key={`${item.label}-${item.value}`} justify="space-between" gap="sm">
+                      <Text size="xs" tt="uppercase" fw={700} style={notificationMetaStyle}>
+                        {item.label}
+                      </Text>
+                      <Text size="sm" fw={600} c="var(--pitch-surface-text)">
+                        {item.value}
+                      </Text>
+                    </Group>
+                  ))}
+                </Stack>
+              </Paper>
+            ) : null}
+
+            <Group justify="flex-end">
+              <Button variant="subtle" color="gray" onClick={closeNotificationDetails}>
+                Close
+              </Button>
+              {selectedNotificationAction ? (
+                <Button
+                  loading={selectedNotificationAction.loading}
+                  disabled={selectedNotificationAction.disabled}
+                  onClick={() => void handleNotificationAction(selectedNotification)}
+                >
+                  {selectedNotificationAction.label}
+                </Button>
+              ) : null}
+            </Group>
+          </Stack>
+        ) : null}
       </Modal>
       <Box
         style={{
@@ -1047,9 +1357,10 @@ export function AppTopBar({
         {isMobile ? (
           <Stack gap={rem(8)} w="100%">
             <Group justify="space-between" align="center" w="100%" wrap="nowrap">
-              <Group align="center" style={{ minWidth: 0 }}>
+              <Group align="center" gap={rem(4)} style={{ minWidth: 0 }}>
+                {mobileNavButton}
                 <Text
-                  px={rem(isNarrow ? 4 : 10)}
+                  px={rem(isNarrow ? 2 : 6)}
                   size={rem(isNarrow ? 20 : 22)}
                   fw={700}
                   c="var(--pitch-accent-strong)"

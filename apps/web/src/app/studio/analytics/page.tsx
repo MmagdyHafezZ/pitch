@@ -12,6 +12,7 @@ import {
   Divider,
   Grid,
   Group,
+  Pagination,
   Progress,
   Select,
   SimpleGrid,
@@ -70,6 +71,8 @@ type MemberData = {
 
 type SortKey = 'date' | 'score' | 'name' | 'type'
 type SortDir = 'asc' | 'desc'
+
+const PAGE_SIZE = 10
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -132,6 +135,41 @@ const TYPE_COLORS: Record<string, string> = {
   phone: 'orange',
 }
 
+const themedCardStyle = {
+  background: `linear-gradient(
+    180deg,
+    var(--pitch-card-bg, var(--pitch-surface-bg, var(--mantine-color-body))) 0%,
+    color-mix(in srgb, var(--pitch-card-bg-strong, var(--pitch-card-bg, var(--pitch-surface-bg))) 84%, transparent) 100%
+  )`,
+  border:
+    '1px solid var(--pitch-card-border, var(--pitch-border, var(--mantine-color-default-border)))',
+  boxShadow: `0 10px 24px color-mix(
+    in srgb,
+    var(--pitch-card-shadow, var(--pitch-surface-bg, #000)) 16%,
+    transparent
+  )`,
+}
+
+const elevatedCardStyle = {
+  ...themedCardStyle,
+  boxShadow: `0 14px 30px color-mix(
+    in srgb,
+    var(--pitch-card-shadow, var(--pitch-accent-strong)) 18%,
+    transparent
+  )`,
+}
+
+const animatedCardStyle = (delay: string, revealed: boolean) =>
+  revealed ? { ...themedCardStyle, animationDelay: delay } : { ...themedCardStyle, opacity: 0 }
+
+const themedIconStyle = {
+  background:
+    'var(--pitch-card-bg-subtle, var(--pitch-card-bg, var(--pitch-surface-bg, var(--mantine-color-body))))',
+  color: 'var(--pitch-accent-strong)',
+  border:
+    '1px solid var(--pitch-card-border, var(--pitch-border, var(--mantine-color-default-border)))',
+}
+
 const computeSessionTypeData = (sessions: DashboardSession[]) => {
   const byType = new Map<string, number>()
   for (const s of sessions) {
@@ -177,7 +215,7 @@ function KpiSkeleton() {
   return (
     <SimpleGrid cols={{ base: 2, sm: 4 }} spacing="md">
       {[0, 1, 2, 3].map((i) => (
-        <Card key={i} radius="lg" p="lg" withBorder>
+        <Card key={i} radius="lg" p="lg" withBorder style={themedCardStyle}>
           <Skeleton height={12} width="60%" mb={12} />
           <Skeleton height={36} width="45%" mb={8} />
           <Skeleton height={8} width="80%" />
@@ -189,7 +227,7 @@ function KpiSkeleton() {
 
 function ChartSkeleton({ h = 240 }: { h?: number }) {
   return (
-    <Card radius="lg" p="lg" withBorder>
+    <Card radius="lg" p="lg" withBorder style={themedCardStyle}>
       <Skeleton height={14} width="40%" mb={16} />
       <Skeleton height={h} />
     </Card>
@@ -221,7 +259,7 @@ function SortableHeader({
         gap: 4,
         fontWeight: 600,
         fontSize: 13,
-        color: isActive ? 'var(--mantine-color-cyan-5)' : 'var(--mantine-color-dimmed)',
+        color: isActive ? 'var(--pitch-accent-strong)' : 'var(--mantine-color-dimmed)',
         whiteSpace: 'nowrap',
         userSelect: 'none',
       }}
@@ -269,6 +307,7 @@ export default function AnalyticsPage() {
   const [tableStatusFilter, setTableStatusFilter] = useState<string | null>(null)
   const [sortKey, setSortKey] = useState<SortKey>('date')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
+  const [tablePage, setTablePage] = useState(1)
 
   useEffect(() => {
     const startTourParam = searchParams.get('startTour')
@@ -469,7 +508,13 @@ export default function AnalyticsPage() {
       setSortKey(key)
       setSortDir('desc')
     }
+    setTablePage(1)
   }
+
+  // Reset to page 1 whenever filters change
+  useEffect(() => {
+    setTablePage(1)
+  }, [tableQuery, tableTypeFilter, tableStatusFilter])
 
   // ── KPI items ────────────────────────────────────────────────────────────
 
@@ -557,9 +602,9 @@ export default function AnalyticsPage() {
                   <ChartSkeleton h={220} />
                 </Stack>
               ) : sessions.length === 0 ? (
-                <Card withBorder radius="xl" p="xl">
+                <Card withBorder radius="xl" p="xl" style={elevatedCardStyle}>
                   <Stack align="center" gap="md" py="xl">
-                    <ThemeIcon size={64} radius="xl" color="blue" variant="light">
+                    <ThemeIcon size={64} radius="xl" style={themedIconStyle}>
                       <IconChartBar size={30} />
                     </ThemeIcon>
                     <Stack align="center" gap={4}>
@@ -574,6 +619,7 @@ export default function AnalyticsPage() {
                     <Button
                       variant="light"
                       size="md"
+                      color="brand"
                       onClick={() => router.push('/studio/sessions')}
                     >
                       Go to sessions
@@ -591,7 +637,7 @@ export default function AnalyticsPage() {
                         p="lg"
                         withBorder
                         className={revealed ? 'analytics-reveal' : undefined}
-                        style={revealed ? { animationDelay: `${i * 70}ms` } : { opacity: 0 }}
+                        style={animatedCardStyle(`${i * 70}ms`, revealed)}
                       >
                         <Group justify="space-between" mb={8}>
                           <Text c="dimmed" size="xs" fw={500} tt="uppercase">
@@ -622,7 +668,7 @@ export default function AnalyticsPage() {
                         withBorder
                         h="100%"
                         className={revealed ? 'analytics-reveal' : undefined}
-                        style={revealed ? { animationDelay: '280ms' } : { opacity: 0 }}
+                        style={animatedCardStyle('280ms', revealed)}
                       >
                         <Group justify="space-between" mb="md">
                           <Stack gap={2}>
@@ -676,7 +722,7 @@ export default function AnalyticsPage() {
                         withBorder
                         h="100%"
                         className={revealed ? 'analytics-reveal' : undefined}
-                        style={revealed ? { animationDelay: '350ms' } : { opacity: 0 }}
+                        style={animatedCardStyle('350ms', revealed)}
                       >
                         <Stack gap={2} mb="md">
                           <Text fw={700}>Session types</Text>
@@ -737,7 +783,7 @@ export default function AnalyticsPage() {
                       p="lg"
                       withBorder
                       className={revealed ? 'analytics-reveal' : undefined}
-                      style={revealed ? { animationDelay: '420ms' } : { opacity: 0 }}
+                      style={animatedCardStyle('420ms', revealed)}
                     >
                       <Group justify="space-between" mb="md">
                         <Stack gap={2}>
@@ -774,7 +820,7 @@ export default function AnalyticsPage() {
                     p="lg"
                     withBorder
                     className={revealed ? 'analytics-reveal' : undefined}
-                    style={revealed ? { animationDelay: '490ms' } : { opacity: 0 }}
+                    style={animatedCardStyle('490ms', revealed)}
                   >
                     {/* Header */}
                     <Group justify="space-between" mb="md" wrap="wrap" gap="sm">
@@ -782,6 +828,8 @@ export default function AnalyticsPage() {
                         <Text fw={700}>Session history</Text>
                         <Text size="xs" c="dimmed">
                           {filteredSessions.length} of {sessions.length} sessions
+                          {filteredSessions.length > PAGE_SIZE &&
+                            ` · page ${tablePage} of ${Math.ceil(filteredSessions.length / PAGE_SIZE)}`}
                         </Text>
                       </Stack>
 
@@ -886,84 +934,97 @@ export default function AnalyticsPage() {
                             </Table.Tr>
                           </Table.Thead>
                           <Table.Tbody>
-                            {filteredSessions.slice(0, 100).map((session) => {
-                              const name =
-                                session.name?.trim() || `Session ${session.id.slice(0, 8)}`
-                              const date = new Date(
-                                session.endedAt ?? session.createdAt
-                              ).toLocaleDateString('en-US', {
-                                month: 'short',
-                                day: 'numeric',
-                                year: 'numeric',
-                              })
-                              return (
-                                <Table.Tr key={session.id}>
-                                  <Table.Td>
-                                    <Text size="sm" fw={500} lineClamp={1} maw={240}>
-                                      {name}
-                                    </Text>
-                                  </Table.Td>
-                                  <Table.Td>
-                                    <Badge
-                                      size="sm"
-                                      variant="dot"
-                                      color={TYPE_COLORS[session.type] ?? 'gray'}
-                                      tt="capitalize"
-                                    >
-                                      {session.type}
-                                    </Badge>
-                                  </Table.Td>
-                                  <Table.Td>
-                                    <Text size="sm" c="dimmed" style={{ whiteSpace: 'nowrap' }}>
-                                      {date}
-                                    </Text>
-                                  </Table.Td>
-                                  <Table.Td>
-                                    <Badge
-                                      size="xs"
-                                      variant="light"
-                                      color={session.status === 'ended' ? 'green' : 'blue'}
-                                    >
-                                      {session.status}
-                                    </Badge>
-                                  </Table.Td>
-                                  <Table.Td>
-                                    {session.totalScore !== null ? (
-                                      <Text
+                            {filteredSessions
+                              .slice((tablePage - 1) * PAGE_SIZE, tablePage * PAGE_SIZE)
+                              .map((session) => {
+                                const name =
+                                  session.name?.trim() || `Session ${session.id.slice(0, 8)}`
+                                const date = new Date(
+                                  session.endedAt ?? session.createdAt
+                                ).toLocaleDateString('en-US', {
+                                  month: 'short',
+                                  day: 'numeric',
+                                  year: 'numeric',
+                                })
+                                return (
+                                  <Table.Tr key={session.id}>
+                                    <Table.Td>
+                                      <Text size="sm" fw={500} lineClamp={1} maw={240}>
+                                        {name}
+                                      </Text>
+                                    </Table.Td>
+                                    <Table.Td>
+                                      <Badge
                                         size="sm"
-                                        fw={700}
-                                        c="teal"
-                                        style={{ whiteSpace: 'nowrap' }}
+                                        variant="dot"
+                                        color={TYPE_COLORS[session.type] ?? 'gray'}
+                                        tt="capitalize"
                                       >
-                                        {session.totalScore > 0 ? '+' : ''}
-                                        {session.totalScore}
+                                        {session.type}
+                                      </Badge>
+                                    </Table.Td>
+                                    <Table.Td>
+                                      <Text size="sm" c="dimmed" style={{ whiteSpace: 'nowrap' }}>
+                                        {date}
                                       </Text>
-                                    ) : (
-                                      <Text size="sm" c="dimmed">
-                                        —
-                                      </Text>
-                                    )}
-                                  </Table.Td>
-                                  <Table.Td>
-                                    <Button
-                                      size="xs"
-                                      variant="subtle"
-                                      rightSection={<IconExternalLink size={11} />}
-                                      onClick={() => {
-                                        const q = session.runId
-                                          ? `?runId=${encodeURIComponent(session.runId)}`
-                                          : ''
-                                        router.push(`/session/${session.id}/performance${q}`)
-                                      }}
-                                    >
-                                      View
-                                    </Button>
-                                  </Table.Td>
-                                </Table.Tr>
-                              )
-                            })}
+                                    </Table.Td>
+                                    <Table.Td>
+                                      <Badge
+                                        size="xs"
+                                        variant="light"
+                                        color={session.status === 'ended' ? 'green' : 'blue'}
+                                      >
+                                        {session.status}
+                                      </Badge>
+                                    </Table.Td>
+                                    <Table.Td>
+                                      {session.totalScore !== null ? (
+                                        <Text
+                                          size="sm"
+                                          fw={700}
+                                          c="teal"
+                                          style={{ whiteSpace: 'nowrap' }}
+                                        >
+                                          {session.totalScore > 0 ? '+' : ''}
+                                          {session.totalScore}
+                                        </Text>
+                                      ) : (
+                                        <Text size="sm" c="dimmed">
+                                          —
+                                        </Text>
+                                      )}
+                                    </Table.Td>
+                                    <Table.Td>
+                                      <Button
+                                        size="xs"
+                                        variant="subtle"
+                                        rightSection={<IconExternalLink size={11} />}
+                                        onClick={() => {
+                                          const q = session.runId
+                                            ? `?runId=${encodeURIComponent(session.runId)}`
+                                            : ''
+                                          router.push(`/session/${session.id}/performance${q}`)
+                                        }}
+                                      >
+                                        View
+                                      </Button>
+                                    </Table.Td>
+                                  </Table.Tr>
+                                )
+                              })}
                           </Table.Tbody>
                         </Table>
+                        {Math.ceil(filteredSessions.length / PAGE_SIZE) > 1 && (
+                          <Group justify="center" mt="md">
+                            <Pagination
+                              total={Math.ceil(filteredSessions.length / PAGE_SIZE)}
+                              value={tablePage}
+                              onChange={setTablePage}
+                              size="sm"
+                              radius="md"
+                            />
+                          </Group>
+                        )}
                       </Box>
                     )}
                   </Card>
@@ -978,7 +1039,7 @@ export default function AnalyticsPage() {
           {activeTab === 'Team' && (
             <>
               {!isManager ? (
-                <Card withBorder radius="xl" p="xl">
+                <Card withBorder radius="xl" p="xl" style={elevatedCardStyle}>
                   <Stack align="center" gap="md" py="xl">
                     <ThemeIcon size={64} radius="xl" color="violet" variant="light">
                       <IconUsers size={30} />
@@ -1002,7 +1063,7 @@ export default function AnalyticsPage() {
                   </SimpleGrid>
                 </Stack>
               ) : teamLoaded && teamMemberData.length === 0 ? (
-                <Card withBorder radius="xl" p="xl">
+                <Card withBorder radius="xl" p="xl" style={elevatedCardStyle}>
                   <Stack align="center" gap="md" py="xl">
                     <ThemeIcon size={64} radius="xl" color="violet" variant="light">
                       <IconUsers size={30} />
@@ -1073,7 +1134,7 @@ export default function AnalyticsPage() {
                         p="lg"
                         withBorder
                         className="analytics-reveal"
-                        style={{ animationDelay: `${i * 70}ms` }}
+                        style={{ ...themedCardStyle, animationDelay: `${i * 70}ms` }}
                       >
                         <Group justify="space-between" mb={8}>
                           <Text c="dimmed" size="xs" fw={500} tt="uppercase">
@@ -1096,7 +1157,13 @@ export default function AnalyticsPage() {
 
                   {/* Team leaderboard */}
                   {teamLeaderboard.length > 0 && (
-                    <Card data-tour-id="analytics-team-leaderboard" radius="lg" p="lg" withBorder>
+                    <Card
+                      data-tour-id="analytics-team-leaderboard"
+                      radius="lg"
+                      p="lg"
+                      withBorder
+                      style={themedCardStyle}
+                    >
                       <Group justify="space-between" mb="md">
                         <Stack gap={2}>
                           <Text fw={700}>Team leaderboard</Text>
@@ -1138,7 +1205,13 @@ export default function AnalyticsPage() {
                       const memberBest = calcBestScore(member.sessions)
                       const recentSessions = member.sessions.slice(0, 3)
                       return (
-                        <Card key={member.userId} withBorder radius="lg" p="lg">
+                        <Card
+                          key={member.userId}
+                          withBorder
+                          radius="lg"
+                          p="lg"
+                          style={themedCardStyle}
+                        >
                           <Stack gap="sm">
                             <Group justify="space-between" align="flex-start">
                               <Stack gap={2}>
@@ -1147,7 +1220,12 @@ export default function AnalyticsPage() {
                                   {member.email}
                                 </Text>
                               </Stack>
-                              <ThemeIcon color="blue" variant="light" radius="xl">
+                              <ThemeIcon
+                                color="blue"
+                                variant="light"
+                                radius="xl"
+                                style={themedIconStyle}
+                              >
                                 <IconUserCheck size={16} />
                               </ThemeIcon>
                             </Group>
@@ -1220,7 +1298,7 @@ export default function AnalyticsPage() {
                                         variant="subtle"
                                         p={0}
                                         h="auto"
-                                        color="gray"
+                                        color="brand"
                                         onClick={() => {
                                           const q = s.runId
                                             ? `?runId=${encodeURIComponent(s.runId)}`

@@ -14,8 +14,9 @@ import {
   UnstyledButton,
   Loader,
   Center,
+  ThemeIcon,
 } from '@mantine/core'
-import { IconChevronDown, IconChevronUp } from '@tabler/icons-react'
+import { IconChartBar, IconChevronDown, IconChevronUp } from '@tabler/icons-react'
 import { Suspense, useState, useEffect, useMemo, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { motion, type Variants } from 'framer-motion'
@@ -49,6 +50,38 @@ const cardVariants: Variants = {
     y: 0,
     transition: { type: 'spring', stiffness: 360, damping: 28 },
   },
+}
+
+const themedCardStyle = {
+  background: `linear-gradient(
+    180deg,
+    var(--pitch-card-bg, var(--pitch-surface-bg, var(--mantine-color-body))) 0%,
+    color-mix(in srgb, var(--pitch-card-bg-strong, var(--pitch-card-bg, var(--pitch-surface-bg))) 84%, transparent) 100%
+  )`,
+  border:
+    '1px solid var(--pitch-card-border, var(--pitch-border, var(--mantine-color-default-border)))',
+  boxShadow: `0 10px 24px color-mix(
+    in srgb,
+    var(--pitch-card-shadow, var(--pitch-surface-bg, #000)) 16%,
+    transparent
+  )`,
+}
+
+const elevatedCardStyle = {
+  ...themedCardStyle,
+  boxShadow: `0 14px 30px color-mix(
+    in srgb,
+    var(--pitch-card-shadow, var(--pitch-accent-strong)) 18%,
+    transparent
+  )`,
+}
+
+const themedIconStyle = {
+  background:
+    'var(--pitch-card-bg-subtle, var(--pitch-card-bg, var(--pitch-surface-bg, var(--mantine-color-body))))',
+  color: 'var(--pitch-accent-strong)',
+  border:
+    '1px solid var(--pitch-card-border, var(--pitch-border, var(--mantine-color-default-border)))',
 }
 
 function SessionCard({ session, onClick }: { session: Session; onClick: () => void }) {
@@ -239,32 +272,30 @@ function SessionsPageInner() {
           <Loader size="lg" />
         </Center>
       ) : groupedAndFilteredSessions.length === 0 ? (
-        <Box
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            justifyContent: 'center',
-            alignItems: 'center',
-            height: '100%',
-            width: '100%',
-            paddingTop: 'clamp(2rem, 10vh, 5rem)',
-          }}
-        >
-          <Title order={3} c="dimmed" mb="md">
-            {tp('No sessions found')}
-          </Title>
-          <Text c="dimmed" mb="md">
-            {tp('Try adjusting your filters or create a new session.')}
-          </Text>
-          <Button
-            data-tour-id="sessions-create-btn"
-            variant="light"
-            color="brand"
-            onClick={() => router.push('/studio/sessions/create')}
-          >
-            {tp('Create a session')}
-          </Button>
-        </Box>
+        <Card withBorder radius="xl" p="xl" style={elevatedCardStyle}>
+          <Stack align="center" gap="md" py="xl">
+            <ThemeIcon size={64} radius="xl" style={themedIconStyle}>
+              <IconChartBar size={30} />
+            </ThemeIcon>
+            <Stack align="center" gap={4}>
+              <Text fw={700} size="xl">
+                {tp('No sessions found')}
+              </Text>
+              <Text size="sm" c="dimmed" ta="center" maw={380}>
+                {tp('Try adjusting your filters or create a new session.')}
+              </Text>
+            </Stack>
+            <Button
+              data-tour-id="sessions-create-btn"
+              variant="light"
+              color="brand"
+              size="md"
+              onClick={() => router.push('/studio/sessions/create')}
+            >
+              {tp('Create a session')}
+            </Button>
+          </Stack>
+        </Card>
       ) : (
         <Stack data-tour-id="sessions-list" gap="xl">
           {groupedAndFilteredSessions.map(({ groupName, sessions: groupSessions }) => (

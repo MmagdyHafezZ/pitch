@@ -59,12 +59,31 @@ const navLinks = [
   { href: '#github', label: 'GitHub' },
 ]
 
-const heroStats = [
+const STATIC_HERO_STATS = [
   { label: 'Active users', value: 1284, suffix: '+' },
   { label: 'Live sessions', value: 86 },
   { label: 'Team workspaces', value: 24 },
   { label: 'Rehearsals this week', value: 3127, suffix: '+' },
 ]
+
+async function fetchPlatformStats() {
+  const apiUrl =
+    process.env.INTERNAL_API_URL ??
+    process.env.NEXT_PUBLIC_API_URL ??
+    'http://localhost:8000/api/v1'
+  try {
+    const res = await fetch(`${apiUrl}/stats/public`, { next: { revalidate: 300 } })
+    if (!res.ok) return null
+    return res.json() as Promise<{
+      activeUsers: number
+      activeSessions: number
+      teamWorkspaces: number
+      rehearsalsThisWeek: number
+    }>
+  } catch {
+    return null
+  }
+}
 
 const heroSignals = [
   'Realistic buyer personas',
@@ -268,8 +287,18 @@ const readinessAreaPath = `${readinessPath} L ${lastPoint.x} ${chartHeight - cha
 
 const withDelay = (delay: string): CSSProperties => ({ '--delay': delay }) as CSSProperties
 
-export default function Home() {
+export default async function Home() {
   const year = new Date().getFullYear()
+  const liveStats = await fetchPlatformStats()
+
+  const heroStats = liveStats
+    ? [
+        { label: 'Active users', value: liveStats.activeUsers, suffix: '+' },
+        { label: 'Live sessions', value: liveStats.activeSessions },
+        { label: 'Team workspaces', value: liveStats.teamWorkspaces },
+        { label: 'Rehearsals this week', value: liveStats.rehearsalsThisWeek, suffix: '+' },
+      ]
+    : STATIC_HERO_STATS
 
   return (
     <main className={`${styles.page} ${headingFont.variable} ${bodyFont.variable}`}>
@@ -366,7 +395,6 @@ export default function Home() {
                           suffix={item.suffix}
                           fontSize={24}
                           padding={2}
-                          gap={2}
                           horizontalPadding={0}
                           fontWeight={700}
                           textColor="#f7fbff"

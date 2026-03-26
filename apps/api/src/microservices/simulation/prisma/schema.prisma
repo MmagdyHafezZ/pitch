@@ -129,6 +129,12 @@ model Session {
   status       String    @default("active") // active|ended
   endedReason  String?
 
+  // Coin gating fields (set at session creation time)
+  coinReservationId String?  // ID of the active coin reservation (from RESERVE ledger entry)
+  coinPeriodKey     String?  // Billing period key (needed for coin.adjust event)
+  estimatedCoins    Int?     // Coins reserved at session start (base cost from Plan)
+  coinPriceUsd      Float?   // Snapshot of Plan.coinPriceUsd at session creation time
+
   // Multi-user access control
   members SessionMember[]
   iterations Iteration[]

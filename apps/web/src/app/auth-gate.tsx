@@ -5,9 +5,11 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useAuthStore } from '@/features/auth/stores/auth.store'
 import { isTokenExpiringSoon } from '@/features/auth/utils/token.utils'
 import { LoadingScreen } from '@/components/ui/LoadingScreen'
+import { api } from '@/lib/client'
 
 const AUTH_PATH_PREFIX = '/auth'
 const AUTH_CALLBACK_PATH = '/auth/callback'
+const ACCESS_REQUEST_PATH = '/access/request'
 const AUTH_REDIRECT = '/auth/login'
 const AUTHENTICATED_REDIRECT = '/studio/home'
 const ONBOARDING_PATH = '/onboarding'
@@ -24,6 +26,8 @@ export function AuthGate({ children }: AuthGateProps) {
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const token = useAuthStore((state) => state.token)
+  const user = useAuthStore((state) => state.user)
+  const setUser = useAuthStore((state) => state.setUser)
   const refreshAccessToken = useAuthStore((state) => state.refreshAccessToken)
   const [checked, setChecked] = useState(false)
   const refreshInProgress = useRef(false)
@@ -34,6 +38,7 @@ export function AuthGate({ children }: AuthGateProps) {
   }, [pathname])
 
   const isCallbackRoute = pathname === AUTH_CALLBACK_PATH
+  const isAccessRequestRoute = pathname === ACCESS_REQUEST_PATH
   const isOnboardingRoute = pathname === ONBOARDING_PATH
   const isPublicRoute = useMemo(() => {
     if (!pathname) return false
@@ -71,11 +76,27 @@ export function AuthGate({ children }: AuthGateProps) {
 
       if (!isActive) return
 
-      const hasToken = Boolean(useAuthStore.getState().token)
+      const authState = useAuthStore.getState()
+      const hasToken = Boolean(authState.token)
+      let currentUser = authState.user
+
+      if (hasToken && !currentUser && !isCallbackRoute) {
+        try {
+          currentUser = await api.auth.me()
+          if (!isActive) return
+          setUser(currentUser)
+        } catch {
+          if (!isActive) return
+          router.replace(AUTH_REDIRECT)
+          return
+        }
+      }
+
+      const hasStudioAccess = Boolean(currentUser?.hasStudioAccess)
 
       if (isAuthRoute) {
         if (hasToken && !isCallbackRoute && !hasTeamInviteParams) {
-          router.replace(AUTHENTICATED_REDIRECT)
+          router.replace(hasStudioAccess ? AUTHENTICATED_REDIRECT : ACCESS_REQUEST_PATH)
           return
         }
         setChecked(true)
@@ -84,6 +105,20 @@ export function AuthGate({ children }: AuthGateProps) {
 
       if (!hasToken) {
         router.replace(AUTH_REDIRECT)
+        return
+      }
+
+      if (isAccessRequestRoute) {
+        if (hasStudioAccess) {
+          router.replace(AUTHENTICATED_REDIRECT)
+          return
+        }
+        setChecked(true)
+        return
+      }
+
+      if (!hasStudioAccess && !isOnboardingRoute) {
+        router.replace(ACCESS_REQUEST_PATH)
         return
       }
 
@@ -106,6 +141,7 @@ export function AuthGate({ children }: AuthGateProps) {
     }
   }, [
     hasTeamInviteParams,
+    isAccessRequestRoute,
     isAuthRoute,
     isCallbackRoute,
     isOnboardingRoute,
@@ -113,7 +149,9 @@ export function AuthGate({ children }: AuthGateProps) {
     pathname,
     refreshAccessToken,
     router,
+    setUser,
     token,
+    user,
   ])
 
   useEffect(() => {

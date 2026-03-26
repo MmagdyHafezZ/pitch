@@ -18,6 +18,7 @@ export const handlers = [
           email: 'test@example.com',
           name: 'Test User',
           isActive: true,
+          hasStudioAccess: true,
           createdAt: '2024-01-01T00:00:00.000Z',
           updatedAt: '2024-01-01T00:00:00.000Z',
         },
@@ -43,6 +44,7 @@ export const handlers = [
           email: body.email,
           name: body.name,
           isActive: true,
+          hasStudioAccess: true,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         },
@@ -69,6 +71,7 @@ export const handlers = [
         email: 'test@example.com',
         name: 'Test User',
         isActive: true,
+        hasStudioAccess: true,
         createdAt: '2024-01-01T00:00:00.000Z',
         updatedAt: '2024-01-01T00:00:00.000Z',
       })

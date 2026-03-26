@@ -202,8 +202,8 @@ export function LoginForm({ onSwitchToRegister }: LoginFormProps) {
         <Stack gap="md" mb="xl">
           <TextInput
             placeholder="Enter your email address"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            value={email.toLowerCase().trim()}
+            onChange={(e) => setEmail(e.target.value.toLowerCase().trim())}
             size="lg"
             leftSection={<IconMail size={18} />}
             styles={{
@@ -226,7 +226,7 @@ export function LoginForm({ onSwitchToRegister }: LoginFormProps) {
             size="lg"
             fullWidth
             loading={isCheckingEmail}
-            disabled={!email.trim() || isCheckingEmail}
+            disabled={!email.toLowerCase().trim() || isCheckingEmail}
             styles={{
               root: {
                 height: '56px',

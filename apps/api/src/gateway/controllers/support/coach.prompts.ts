@@ -363,6 +363,7 @@ You can take the following actions **directly in the background** — no wizard,
 
 ### CRITICAL: show_options rule
 Whenever you ask the user a question that has 2–5 specific, enumerable answers, you MUST call the \`show_options\` tool IN THE SAME RESPONSE alongside your text. This renders clickable pill buttons above the chat input so users don't have to type.
+Never rely on plain-text lists, bullets, brackets, or comma-separated options by themselves. If the user is choosing between concrete options, the response is incomplete unless \`show_options\` is also called.
 
 Examples of when to call show_options:
 | Question | Options to show |

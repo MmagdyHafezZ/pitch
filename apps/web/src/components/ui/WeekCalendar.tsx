@@ -56,7 +56,7 @@ export function WeekCalendar({ value, onChange }: WeekCalendarProps) {
           size="xs"
           variant="subtle"
           onClick={handlePrevWeek}
-          style={{ color: '#dee2e6' }}
+          style={{ color: 'var(--pitch-nav-text)' }}
         >
           <IconChevronLeft size={14} />
         </ActionIcon>
@@ -65,7 +65,7 @@ export function WeekCalendar({ value, onChange }: WeekCalendarProps) {
           size="xs"
           fw={600}
           style={{
-            color: '#dee2e6',
+            color: 'var(--pitch-nav-text)',
             textAlign: 'center',
             flexGrow: 1,
           }}
@@ -77,7 +77,7 @@ export function WeekCalendar({ value, onChange }: WeekCalendarProps) {
           size="xs"
           variant="subtle"
           onClick={handleNextWeek}
-          style={{ color: '#dee2e6' }}
+          style={{ color: 'var(--pitch-nav-text)' }}
         >
           <IconChevronRight size={14} />
         </ActionIcon>
@@ -94,7 +94,7 @@ export function WeekCalendar({ value, onChange }: WeekCalendarProps) {
               fw={600}
               ta="center"
               style={{ flex: 1 }}
-              c={isWeekend ? 'var(--mantine-color-red-8)' : 'dimmed'}
+              c={isWeekend ? 'var(--mantine-color-red-8)' : 'var(--pitch-nav-text-dim)'}
             >
               {label}
             </Text>
@@ -121,7 +121,7 @@ export function WeekCalendar({ value, onChange }: WeekCalendarProps) {
               color = 'var(--mantine-color-red-8)'
             }
             if (isToday) {
-              bg = 'rgba(255,255,255,0.12)'
+              bg = 'color-mix(in srgb, var(--pitch-nav-text) 12%, transparent)'
             }
             if (isPast && !isToday) {
               opacity = 0.4

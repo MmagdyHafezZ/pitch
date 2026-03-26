@@ -51,6 +51,8 @@ import { ConversationToolsService } from './services/conversation-tools.service'
 import { SimulationRedisService } from './services/redis/redis.service';
 import { VideoGenerationService } from './services/video-generation.service';
 import { PersonaMediaService } from './services/persona-media.service';
+import { CoinGatingService } from './services/coin-gating.service';
+import { CoinEstimationService } from './services/coin-estimation.service';
 import { RedisModule } from '@pitch/shared-backend/redis/index';
 import { TtsModule } from './tts/tts.module';
 import { AssessmentModule } from './assessment/assessment.module';
@@ -170,6 +172,8 @@ import {
     ConversationToolsService,
     ConversationOrchestrationService,
     CalendarSessionService,
+    CoinGatingService,
+    CoinEstimationService,
   ],
   exports: [
     PhoneModule,

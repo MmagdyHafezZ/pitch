@@ -1,6 +1,6 @@
 'use client'
 
-import { Box, Stack, NavLink, Text, rem } from '@mantine/core'
+import { Box, Stack, NavLink, Text, Divider, rem } from '@mantine/core'
 import {
   IconHome,
   IconCalendar,
@@ -12,6 +12,7 @@ import {
 import { Dispatch, SetStateAction, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { WeekCalendar } from '@/components/ui/WeekCalendar'
+import { CoinQuotaWidget } from '@/components/ui/CoinQuotaWidget'
 import { SettingsModal } from './SettingsModal'
 import classes from './AppSideBar.module.css'
 import { useI18n } from '@/features/i18n'
@@ -33,6 +34,7 @@ type Props = {
   mainLinks?: SidebarLink[]
   secondaryLinks?: SidebarLink[]
   onNavigate?: () => void
+  teamId?: string | null
 }
 
 const DEFAULT_MAIN: SidebarLink[] = [
@@ -55,6 +57,7 @@ export function AppSidebar({
   mainLinks = DEFAULT_MAIN,
   secondaryLinks = [],
   onNavigate,
+  teamId,
 }: Props) {
   const router = useRouter()
   const { t } = useI18n()
@@ -136,26 +139,84 @@ export function AppSidebar({
           }}
         >
           <Stack gap={6} mt="xs" flex={1}>
-            {resolvedMainLinks.map(renderNavLink)}
-            {(showCalendar || resolvedSecondaryLinks.length > 0) && (
-              <Stack gap={6} mt="auto" pt="lg" pb={10}>
-                {showCalendar ? (
-                  <Box
-                    mx="0"
-                    style={{
-                      width: '100%',
-                      background: 'var(--pitch-nav-bg, var(--mantine-color-nav-9))',
-                      borderRadius: 12,
-                      border: '1px solid var(--pitch-nav-text-dim)',
-                      overflow: 'hidden',
+            {resolvedMainLinks.map(({ icon: Icon, label }) => (
+              <NavLink
+                key={label}
+                active={active === label}
+                onClick={() => {
+                  setActive(label)
+                  router.push(`/studio/${label.toLowerCase().replace(/\s+/g, '-')}`)
+                  onNavigate?.()
+                }}
+                leftSection={<Icon size={18} />}
+                label={
+                  <Text size="sm" className={classes.navLabel}>
+                    {label === 'Home'
+                      ? t('nav.home')
+                      : label === 'Sessions'
+                        ? t('nav.sessions')
+                        : label === 'Analytics'
+                          ? t('nav.analytics')
+                          : label === 'Team Config'
+                            ? t('nav.teamConfig')
+                            : label === 'Challenges'
+                              ? t('nav.challenges')
+                              : label}
+                  </Text>
+                }
+                variant="subtle"
+                classNames={{
+                  root: classes.navLink,
+                  section: classes.navSection,
+                  body: classes.navBody,
+                  label: classes.navLabel,
+                }}
+              />
+            ))}
+            <Box mt="auto" pt="lg" mx="0" pb={10} style={{ width: '100%' }}>
+              {isAdmin === true && (
+                <>
+                  <Divider my="xs" color="var(--pitch-nav-text-dim)" />
+                  <NavLink
+                    onClick={() => {
+                      router.push('/admin')
+                      onNavigate?.()
                     }}
-                  >
-                    <WeekCalendar value={selectedDate} onChange={(date) => setSelectedDate(date)} />
-                  </Box>
-                ) : null}
-                {resolvedSecondaryLinks.map(renderNavLink)}
-              </Stack>
-            )}
+                    leftSection={<IconShield size={18} />}
+                    label={
+                      <Text size="sm" className={classes.navLabel}>
+                        Admin
+                      </Text>
+                    }
+                    variant="subtle"
+                    classNames={{
+                      root: classes.navLink,
+                      section: classes.navSection,
+                      body: classes.navBody,
+                      label: classes.navLabel,
+                    }}
+                  />
+                </>
+              )}
+              <Box
+                style={{
+                  background: `linear-gradient(
+                    180deg,
+                    color-mix(in srgb, var(--pitch-nav-bg, var(--mantine-color-nav-9)) 96%, transparent),
+                    color-mix(in srgb, var(--pitch-nav-bg, var(--mantine-color-nav-9)) 88%, transparent)
+                  )`,
+                  borderRadius: 12,
+                  border:
+                    '1px solid color-mix(in srgb, var(--pitch-nav-text-dim) 28%, transparent)',
+                  boxShadow:
+                    'inset 0 0 0 1px color-mix(in srgb, var(--pitch-nav-text-dim) 10%, transparent)',
+                  overflow: 'hidden',
+                }}
+              >
+                <WeekCalendar value={selectedDate} onChange={(date) => setSelectedDate(date)} />
+              </Box>
+              <CoinQuotaWidget teamId={teamId} />
+            </Box>
           </Stack>
         </Box>
       </Box>

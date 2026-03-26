@@ -77,6 +77,8 @@ import {
 } from '../microservices/simulation/schemas/mongodb/assessment-report.schema';
 import { SupportAttachmentStorageService } from './controllers/support/support-attachment-storage.service';
 import { S3GatewayController } from './controllers/s3/s3-gateway.controller';
+import { StatsGatewayController } from './controllers/stats/stats-gateway.controller';
+import { CoinsGatewayController } from './controllers/userManagement/coins-gateway.controller';
 
 @Module({
   imports: [
@@ -122,6 +124,7 @@ import { S3GatewayController } from './controllers/s3/s3-gateway.controller';
     TeamGatewayController,
     PlanGatewayController,
     SubscriptionGatewayController,
+    StudioAccessGatewayController,
     SalesforceGatewayController,
     TtsGatewayController,
     SessionGatewayController,
@@ -141,6 +144,9 @@ import { S3GatewayController } from './controllers/s3/s3-gateway.controller';
     S3GatewayController,
     SupportChatGatewayController,
     SupportAttachmentGatewayController,
+    StatsGatewayController,
+    CoinsGatewayController,
+    AdminGatewayController,
     AdminUsersController,
     AdminTeamsController,
     AdminSessionsController,

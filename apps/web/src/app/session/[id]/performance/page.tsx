@@ -453,17 +453,30 @@ export default function SessionPerformancePage() {
     }
   }, [assessment])
 
+  const assessmentMode = (assessment?.mode ?? '').toLowerCase()
+  const isWaitingForCompletedRunReport =
+    assessment?.status === 'completed' &&
+    Boolean(assessment?.runId) &&
+    reportLoadedForRunId !== assessment.runId
+  const isWaitingForFinalAssessment =
+    !runIdFromQuery && assessment?.status === 'completed' && assessmentMode === 'live'
   const showAnalyticsLoadingScreen =
     !error &&
-    (loading || !assessment || assessment.status === 'queued' || assessment.status === 'running')
+    (loading ||
+      !assessment ||
+      assessment.status === 'queued' ||
+      assessment.status === 'running' ||
+      isWaitingForCompletedRunReport ||
+      isWaitingForFinalAssessment)
 
   const loadingTitle = useMemo(() => {
     if (!assessment || loading) return 'Preparing your analytics'
     if (assessment.status === 'queued') return 'Assessment queued'
     if (assessment.status === 'running') return 'Analyzing your performance'
+    if (isWaitingForFinalAssessment) return 'Finalizing your full conversation review'
     if (assessment.status === 'completed') return 'Finalizing report details'
     return 'Preparing your analytics'
-  }, [assessment, loading])
+  }, [assessment, isWaitingForFinalAssessment, loading])
 
   const loadingDescription = useMemo(() => {
     if (!assessment || loading) {
@@ -475,11 +488,14 @@ export default function SessionPerformancePage() {
     if (assessment.status === 'running') {
       return 'Scoring conversation turns, confidence signals, and coaching insights.'
     }
+    if (isWaitingForFinalAssessment) {
+      return 'Your live snapshot is ready, but the end-of-session assessment is still finishing so the full turn history and coaching stay consistent.'
+    }
     if (assessment.status === 'completed') {
       return 'Run completed. Pulling full report artifacts from the backend.'
     }
     return 'Loading assessment data.'
-  }, [assessment, loading])
+  }, [assessment, isWaitingForFinalAssessment, loading])
 
   const signalMixData = useMemo(
     () =>

@@ -3,6 +3,7 @@ import type { UserService } from '../../user/services/user.service';
 import type { PhoneVerificationService } from '../../user/services/phone-verification.service';
 import { toRpcException } from '@pitch/shared-backend/helpers/exceptions';
 import type { OAuthProviderFactory } from '../../auth/factories/oauth-provider.factory';
+import type { UserPrismaService } from '../../prisma/user-prisma.service';
 import type {
   PhoneVerificationStatus,
   User,
@@ -47,6 +48,14 @@ describe('UserController', () => {
         getVerifiedPhoneNumber: jest.fn(),
       }) as unknown as jest.Mocked<PhoneVerificationService>;
 
+  const createPrismaMock = (): jest.Mocked<UserPrismaService> =>
+    ({
+      client: {
+        user: { count: jest.fn().mockResolvedValue(0) },
+        team: { count: jest.fn().mockResolvedValue(0) },
+      },
+    }) as unknown as jest.Mocked<UserPrismaService>;
+
   const basePayload: MessageWithUserClaims = {
     userClaims: {
       id: 'admin-1',
@@ -84,6 +93,7 @@ describe('UserController', () => {
       service,
       phoneVerificationService,
       oauthProviderFactory,
+      createPrismaMock(),
     );
 
     await expect(controller.getUsers(basePayload)).resolves.toEqual([user]);
@@ -98,6 +108,7 @@ describe('UserController', () => {
       service,
       phoneVerificationService,
       oauthProviderFactory,
+      createPrismaMock(),
     );
 
     const payload = { userId: 'user-1', ...basePayload };
@@ -115,6 +126,7 @@ describe('UserController', () => {
       service,
       phoneVerificationService,
       oauthProviderFactory,
+      createPrismaMock(),
     );
 
     const payload = {
@@ -140,6 +152,7 @@ describe('UserController', () => {
       service,
       phoneVerificationService,
       oauthProviderFactory,
+      createPrismaMock(),
     );
 
     const payload = {
@@ -164,6 +177,7 @@ describe('UserController', () => {
       service,
       phoneVerificationService,
       oauthProviderFactory,
+      createPrismaMock(),
     );
 
     const payload = {
@@ -189,6 +203,7 @@ describe('UserController', () => {
       service,
       phoneVerificationService,
       oauthProviderFactory,
+      createPrismaMock(),
     );
 
     const payload = {
@@ -210,6 +225,7 @@ describe('UserController', () => {
       service,
       phoneVerificationService,
       oauthProviderFactory,
+      createPrismaMock(),
     );
 
     const payload = {
@@ -234,6 +250,7 @@ describe('UserController', () => {
       service,
       phoneVerificationService,
       oauthProviderFactory,
+      createPrismaMock(),
     );
 
     await expect(controller.getMySettings(basePayload)).resolves.toEqual({
@@ -253,6 +270,7 @@ describe('UserController', () => {
       service,
       phoneVerificationService,
       oauthProviderFactory,
+      createPrismaMock(),
     );
 
     await expect(
@@ -278,6 +296,7 @@ describe('UserController', () => {
       service,
       phoneVerificationService,
       oauthProviderFactory,
+      createPrismaMock(),
     );
 
     await expect(
@@ -298,6 +317,7 @@ describe('UserController', () => {
       service,
       phoneVerificationService,
       oauthProviderFactory,
+      createPrismaMock(),
     );
 
     await expect(controller.getUsers(basePayload)).rejects.toThrow(rpcError);
@@ -316,6 +336,7 @@ describe('UserController', () => {
       service,
       phoneVerificationService,
       oauthProviderFactory,
+      createPrismaMock(),
     );
 
     await expect(
@@ -335,6 +356,7 @@ describe('UserController', () => {
       service,
       phoneVerificationService,
       oauthProviderFactory,
+      createPrismaMock(),
     );
 
     await expect(
@@ -358,6 +380,7 @@ describe('UserController', () => {
       service,
       phoneVerificationService,
       oauthProviderFactory,
+      createPrismaMock(),
     );
 
     await expect(
@@ -381,6 +404,7 @@ describe('UserController', () => {
       service,
       phoneVerificationService,
       oauthProviderFactory,
+      createPrismaMock(),
     );
 
     await expect(
@@ -400,6 +424,7 @@ describe('UserController', () => {
       service,
       phoneVerificationService,
       oauthProviderFactory,
+      createPrismaMock(),
     );
 
     await expect(controller.getMySettings(basePayload)).rejects.toThrow(
@@ -422,6 +447,7 @@ describe('UserController', () => {
       service,
       phoneVerificationService,
       oauthProviderFactory,
+      createPrismaMock(),
     );
 
     await expect(
@@ -443,6 +469,7 @@ describe('UserController', () => {
       service,
       phoneVerificationService,
       oauthProviderFactory,
+      createPrismaMock(),
     );
 
     await expect(
@@ -471,6 +498,7 @@ describe('UserController', () => {
       service,
       phoneVerificationService,
       oauthProviderFactory,
+      createPrismaMock(),
     );
 
     await expect(
@@ -495,6 +523,7 @@ describe('UserController', () => {
       service,
       phoneVerificationService,
       oauthProviderFactory,
+      createPrismaMock(),
     );
 
     await expect(

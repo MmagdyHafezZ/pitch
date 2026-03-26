@@ -93,6 +93,30 @@ const isMembershipInTeam = (membership?: TeamMembership | null) => {
   return membership.isActive !== false
 }
 
+const themedPanelStyle = {
+  background: `linear-gradient(
+    180deg,
+    var(--pitch-card-bg, var(--pitch-surface-bg, var(--mantine-color-body))) 0%,
+    color-mix(in srgb, var(--pitch-card-bg-subtle, var(--pitch-card-bg, var(--pitch-surface-bg))) 82%, transparent) 100%
+  )`,
+  borderColor: 'var(--pitch-card-border, var(--pitch-border, var(--mantine-color-default-border)))',
+  boxShadow: `0 8px 20px color-mix(
+    in srgb,
+    var(--pitch-card-shadow, var(--pitch-surface-bg, #000)) 14%,
+    transparent
+  )`,
+}
+
+const themedSubtleStyle = {
+  background:
+    'var(--pitch-card-bg-subtle, var(--pitch-card-bg, var(--pitch-surface-bg, var(--mantine-color-body))))',
+  borderColor: 'var(--pitch-card-border, var(--pitch-border, var(--mantine-color-default-border)))',
+}
+
+const themedIconStyle = {
+  color: 'var(--pitch-accent-strong)',
+}
+
 export function TeamMembersPanel() {
   const { currentTeam, inviteMember, sendSignupInvite, updateMember, deleteMember, loading } =
     useTeams()
@@ -387,17 +411,7 @@ export function TeamMembersPanel() {
   }
 
   return (
-    <Card
-      withBorder
-      radius="xl"
-      shadow="lg"
-      p="lg"
-      style={{
-        background:
-          'linear-gradient(160deg, color-mix(in srgb, var(--mantine-color-blue-6) 10%, var(--mantine-color-dark-8)), var(--mantine-color-dark-8))',
-        borderColor: 'color-mix(in srgb, var(--mantine-color-blue-6) 25%, transparent)',
-      }}
-    >
+    <Card withBorder radius="xl" shadow="lg" p="lg" style={themedPanelStyle}>
       {!currentTeam ? (
         <Text size="sm" c="dimmed">
           No team selected. Choose a team first.
@@ -407,7 +421,7 @@ export function TeamMembersPanel() {
           <Group justify="space-between" align="center">
             <Stack gap={2}>
               <Group gap="xs">
-                <IconUsers size={16} />
+                <IconUsers size={16} style={themedIconStyle} />
                 <Text fw={700}>Team members</Text>
               </Group>
               <Text size="sm" c="dimmed">
@@ -417,7 +431,7 @@ export function TeamMembersPanel() {
           </Group>
 
           <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="sm">
-            <Paper withBorder radius="lg" p="sm" bg="dark.7">
+            <Paper withBorder radius="lg" p="sm" style={themedSubtleStyle}>
               <Text size="xs" c="dimmed">
                 Active members
               </Text>
@@ -425,7 +439,7 @@ export function TeamMembersPanel() {
                 {memberStats.total}
               </Text>
             </Paper>
-            <Paper withBorder radius="lg" p="sm" bg="dark.7">
+            <Paper withBorder radius="lg" p="sm" style={themedSubtleStyle}>
               <Text size="xs" c="dimmed">
                 Admins / Owners
               </Text>
@@ -433,7 +447,7 @@ export function TeamMembersPanel() {
                 {memberStats.admins}
               </Text>
             </Paper>
-            <Paper withBorder radius="lg" p="sm" bg="dark.7">
+            <Paper withBorder radius="lg" p="sm" style={themedSubtleStyle}>
               <Text size="xs" c="dimmed">
                 Pending invites
               </Text>
@@ -610,9 +624,9 @@ export function TeamMembersPanel() {
                               styles={{
                                 input: {
                                   background:
-                                    'color-mix(in srgb, var(--mantine-color-dark-7) 80%, transparent)',
+                                    'var(--pitch-card-bg-subtle, var(--pitch-card-bg, var(--pitch-surface-bg, var(--mantine-color-body))))',
                                   borderColor:
-                                    'color-mix(in srgb, var(--mantine-color-blue-6) 18%, var(--mantine-color-dark-4))',
+                                    'var(--pitch-card-border, var(--pitch-border, var(--mantine-color-default-border)))',
                                   fontWeight: 600,
                                 },
                               }}
@@ -678,15 +692,7 @@ export function TeamMembersPanel() {
           )}
 
           {pendingEmailInvites.length > 0 && (
-            <Paper
-              withBorder
-              radius="lg"
-              p="sm"
-              bg="dark.7"
-              style={{
-                borderColor: 'color-mix(in srgb, var(--mantine-color-dark-4) 35%, transparent)',
-              }}
-            >
+            <Paper withBorder radius="lg" p="sm" style={themedSubtleStyle}>
               <Stack gap="xs">
                 <Text size="sm" fw={600}>
                   Pending email invites
@@ -713,15 +719,7 @@ export function TeamMembersPanel() {
             </Paper>
           )}
 
-          <Paper
-            withBorder
-            radius="lg"
-            p="sm"
-            bg="dark.7"
-            style={{
-              borderColor: 'color-mix(in srgb, var(--mantine-color-dark-4) 35%, transparent)',
-            }}
-          >
+          <Paper withBorder radius="lg" p="sm" style={themedSubtleStyle}>
             <Stack gap="xs">
               <Text size="sm" fw={600}>
                 Can&apos;t find who you&apos;re looking for?

@@ -4,10 +4,11 @@ import {
   Logger,
   BadRequestException,
   ForbiddenException,
+  HttpException,
 } from '@nestjs/common';
+import { randomUUID } from 'crypto';
 import { SessionRepository } from '../repositories/session.repository';
 import { Prisma } from '@prisma/simulation-client';
-import type { SessionMember } from '@prisma/simulation-client';
 import type { PrismaError } from '@pitch/shared-backend/interfaces/error.interface';
 import {
   CreateSessionDto,
@@ -27,6 +28,9 @@ import type { SessionWithOwner } from '../repositories/session.repository';
 import { SimulationPrismaService } from '../prisma/simulation-prisma.service';
 import { PersonaMediaService } from './persona-media.service';
 import { SimulationRedisService } from './redis/redis.service';
+import { CoinGatingService } from './coin-gating.service';
+import { CoinEstimationService } from './coin-estimation.service';
+import { ConfigService } from '@nestjs/config';
 
 /**
  * Session Service
@@ -48,6 +52,9 @@ export class SessionService {
     private readonly prisma: SimulationPrismaService,
     private readonly personaMediaService: PersonaMediaService,
     private readonly redis: SimulationRedisService,
+    private readonly coinGating: CoinGatingService,
+    private readonly coinEstimation: CoinEstimationService,
+    private readonly configService: ConfigService,
   ) {}
 
   /**
@@ -196,16 +203,63 @@ export class SessionService {
 
     this.logger.log(`Creating new session for user: ${sessionUserId}`);
 
-    try {
-      const sessionConfig = this.normalizeSessionConfig(
-        createSessionDto.name,
-        createSessionDto.type,
-        createSessionDto.sessionConfig,
-      );
+    // Normalize config first so we can read model/duration for coin estimation
+    const sessionConfig = this.normalizeSessionConfig(
+      createSessionDto.name,
+      createSessionDto.type,
+      createSessionDto.sessionConfig,
+    );
 
+    const teamId = this.resolveOrgId(createSessionDto.orgId, sessionUserId);
+
+    // Estimate coins based on model + session duration (awaits pricing cache warm-up)
+    const rawConfig = (createSessionDto.sessionConfig ?? {}) as Record<
+      string,
+      unknown
+    >;
+    const llmCfg = (rawConfig.llm ?? rawConfig.llmConfig ?? {}) as Record<
+      string,
+      unknown
+    >;
+    const estimation = await this.coinEstimation.estimate({
+      model:
+        this.pickText(llmCfg.model) ??
+        this.pickText(rawConfig.model) ??
+        'gpt-4o-mini',
+      provider: this.pickText(llmCfg.provider),
+      sessionType: createSessionDto.type,
+      durationMinutes:
+        typeof rawConfig.durationMinutes === 'number'
+          ? rawConfig.durationMinutes
+          : typeof rawConfig.duration === 'number'
+            ? rawConfig.duration
+            : undefined,
+    });
+
+    const coinRequestId = randomUUID();
+    const coinIdempotencyKey = randomUUID();
+
+    const coinResult = await this.coinGating.reserveForSession({
+      teamId,
+      userId: sessionUserId,
+      sessionType: createSessionDto.type,
+      requestId: coinRequestId,
+      idempotencyKey: coinIdempotencyKey,
+      estimatedCoins: estimation.estimatedCoins,
+      coinPriceUsd: estimation.coinPriceUsd,
+    });
+
+    if (!coinResult.approved) {
+      throw new HttpException(
+        coinResult.reason ?? 'COIN_GATE_REJECTED',
+        coinResult.reason === 'NO_ACTIVE_SUBSCRIPTION' ? 403 : 402,
+      );
+    }
+
+    try {
       const session = await this.sessionRepository.create({
         ownerUserId: sessionUserId,
-        orgId: this.resolveOrgId(createSessionDto.orgId, sessionUserId),
+        orgId: teamId,
         ownerSnapshot: createSessionDto.userSnapshot,
         orgSnapshot: createSessionDto.orgSnapshot,
         name: createSessionDto.name,
@@ -220,6 +274,10 @@ export class SessionService {
           createSessionDto.userSnapshot,
         ),
         crmContextId: createSessionDto.crmContextId,
+        coinReservationId: coinResult.reservationId,
+        coinPeriodKey: coinResult.periodKey,
+        estimatedCoins: coinResult.estimatedCoins,
+        coinPriceUsd: coinResult.coinPriceUsd,
       });
 
       await this.invalidateSessionFullCache(session.id);
@@ -349,6 +407,11 @@ export class SessionService {
         where: { sessionMemberId: ownerMember.id },
         orderBy: { iterationNumber: 'desc' },
       });
+      const turnCount = iteration
+        ? await this.prisma.client.turn.count({
+            where: { iterationId: iteration.id },
+          })
+        : 0;
 
       if (iteration && iteration.status !== 'completed') {
         await this.prisma.client.iteration.update({
@@ -361,25 +424,61 @@ export class SessionService {
         });
       }
 
-      try {
-        await this.assessmentService.requestRun({
-          iterationId: iteration?.id,
-          sessionId: existingSession.id,
-          mode: AssessmentModeDto.final,
-          requestedBy: requesterUserId,
-        });
-      } catch (error) {
-        this.logger.warn(
-          `Failed to enqueue assessment for session ${existingSession.id}: ${
-            (error as Error)?.message ?? error
-          }`,
-        );
+      if (iteration && turnCount > 0) {
+        try {
+          await this.assessmentService.requestRun({
+            iterationId: iteration.id,
+            sessionId: existingSession.id,
+            mode: AssessmentModeDto.final,
+            requestedBy: requesterUserId,
+          });
+        } catch (error) {
+          this.logger.warn(
+            `Failed to enqueue assessment for session ${existingSession.id}: ${
+              (error as Error)?.message ?? error
+            }`,
+          );
+        }
       }
 
-      const endedSession = await this.sessionRepository.end(
+      const endedSession = await this.sessionRepository.update(
         existingSession.id,
-        endSessionDto.reason,
+        {
+          status: 'active',
+          endedReason: null,
+          endedAt: null,
+          sessionConfig: this.clearPhoneRuntime(existingSession.sessionConfig),
+        },
       );
+
+      // Fire-and-forget coin adjustment — reconcile estimated vs actual usage.
+      // Fires even when turnCount === 0 so an unused reservation is always refunded.
+      if (endedSession.coinReservationId && endedSession.coinPeriodKey) {
+        try {
+          const actualCostUsd = await this.sumIterationCosts(
+            endedSession.id,
+            iteration?.id,
+          );
+          const markupMultiplier = Number(
+            this.configService.get('COIN_MARKUP_MULTIPLIER') ?? 1.3,
+          );
+          this.coinGating.emitAdjust({
+            reservationId: endedSession.coinReservationId,
+            teamId: endedSession.orgId,
+            periodKey: endedSession.coinPeriodKey,
+            estimatedCoins: endedSession.estimatedCoins ?? 0,
+            actualCostUsd,
+            coinPriceUsd: endedSession.coinPriceUsd ?? 0.1,
+            markupMultiplier,
+            sessionId: endedSession.id,
+            requestId: randomUUID(),
+          });
+        } catch (err) {
+          this.logger.warn(
+            `Failed to emit coin adjustment for session ${endedSession.id}: ${err}`,
+          );
+        }
+      }
 
       await this.invalidateSessionFullCache(existingSession.id);
       this.logger.log(`Completed iteration for session: ${existingSession.id}`);
@@ -458,6 +557,24 @@ export class SessionService {
       }
     }
 
+    const teamId = this.resolveOrgId(existingSession.orgId, ownerMember.userId);
+    const coinRequestId = randomUUID();
+    const coinIdempotencyKey = randomUUID();
+    const coinResult = await this.coinGating.reserveForSession({
+      teamId,
+      userId: ownerMember.userId,
+      sessionType: existingSession.type,
+      requestId: coinRequestId,
+      idempotencyKey: coinIdempotencyKey,
+    });
+
+    if (!coinResult.approved) {
+      throw new HttpException(
+        coinResult.reason ?? 'COIN_GATE_REJECTED',
+        coinResult.reason === 'NO_ACTIVE_SUBSCRIPTION' ? 403 : 402,
+      );
+    }
+
     const nextIteration = await this.prisma.client.iteration.create({
       data: {
         sessionId: existingSession.id,
@@ -478,6 +595,18 @@ export class SessionService {
         endedReason: null,
         endedAt: null,
         sessionConfig: this.clearPhoneRuntime(existingSession.sessionConfig),
+        ...(coinResult.reservationId
+          ? { coinReservationId: coinResult.reservationId }
+          : {}),
+        ...(coinResult.periodKey
+          ? { coinPeriodKey: coinResult.periodKey }
+          : {}),
+        ...(typeof coinResult.estimatedCoins === 'number'
+          ? { estimatedCoins: coinResult.estimatedCoins }
+          : {}),
+        ...(typeof coinResult.coinPriceUsd === 'number'
+          ? { coinPriceUsd: coinResult.coinPriceUsd }
+          : {}),
       },
     });
 
@@ -494,6 +623,16 @@ export class SessionService {
     } catch (error) {
       this.logger.warn(
         `Failed to update session-member iteration cache for ${existingSession.id}: ${
+          (error as Error)?.message ?? error
+        }`,
+      );
+    }
+
+    try {
+      await this.redis.clearConversationState(existingSession.id);
+    } catch (error) {
+      this.logger.warn(
+        `Failed to clear conversation state for ${existingSession.id}: ${
           (error as Error)?.message ?? error
         }`,
       );
@@ -580,12 +719,45 @@ export class SessionService {
   }
 
   /**
+   * Aggregate platform-wide session counts for the public landing page.
+   * Runs three lightweight COUNT queries in parallel.
+   */
+  async getPlatformStats(): Promise<{
+    activeSessions: number;
+    totalRehearsals: number;
+    rehearsalsThisWeek: number;
+  }> {
+    const weekAgo = new Date();
+    weekAgo.setDate(weekAgo.getDate() - 7);
+
+    const [activeSessions, totalRehearsals, rehearsalsThisWeek] =
+      await Promise.all([
+        this.sessionRepository.count({ status: 'active' }),
+        this.sessionRepository.count(),
+        this.sessionRepository.count({ createdAfter: weekAgo }),
+      ]);
+
+    return { activeSessions, totalRehearsals, rehearsalsThisWeek };
+  }
+
+  /**
    * Map Prisma Session model to SessionResponseDto
    */
   private mapToResponseDto = (
     session: SessionWithOwner,
   ): SessionResponseDto => {
     const ownerMember = this.getOwnerMember(session);
+    const currentIteration = ownerMember?.iterations?.[0];
+    const responseStatus =
+      currentIteration?.status === 'completed' ? 'ended' : session.status;
+    const responseEndedReason =
+      currentIteration?.status === 'completed'
+        ? currentIteration.endedReason
+        : session.endedReason;
+    const responseEndedAt =
+      currentIteration?.status === 'completed'
+        ? currentIteration.endedAt
+        : session.endedAt;
     const persona = session.persona
       ? {
           id: session.persona.id,
@@ -630,15 +802,30 @@ export class SessionService {
       persona,
       language: session.language || undefined,
       crmContextId: session.crmContextId || undefined,
-      status: session.status,
-      endedReason: session.endedReason || undefined,
+      status: responseStatus,
+      endedReason: responseEndedReason || undefined,
       createdAt: session.createdAt,
       updatedAt: session.updatedAt,
-      endedAt: session.endedAt || undefined,
+      endedAt: responseEndedAt || undefined,
+      coinReservationId: session.coinReservationId ?? undefined,
+      coinPeriodKey: session.coinPeriodKey ?? undefined,
+      estimatedCoins: session.estimatedCoins ?? undefined,
+      coinPriceUsd: session.coinPriceUsd ?? undefined,
+      currentIteration: currentIteration
+        ? {
+            id: currentIteration.id,
+            iterationNumber: currentIteration.iterationNumber,
+            status: currentIteration.status,
+            endedReason: currentIteration.endedReason || undefined,
+            endedAt: currentIteration.endedAt || undefined,
+          }
+        : undefined,
     };
   };
 
-  private getOwnerMember(session: SessionWithOwner): SessionMember | undefined {
+  private getOwnerMember(
+    session: SessionWithOwner,
+  ): SessionWithOwner['members'][number] | undefined {
     return session.members?.[0];
   }
 
@@ -1101,6 +1288,19 @@ export class SessionService {
 
   private isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === 'object' && value !== null && !Array.isArray(value);
+  }
+
+  private async sumIterationCosts(
+    sessionId: string,
+    iterationId?: string,
+  ): Promise<number> {
+    const result = await this.prisma.client.metric.aggregate({
+      where: iterationId
+        ? { iterationId, iteration: { sessionId } }
+        : { iteration: { sessionId } },
+      _sum: { costUsd: true },
+    });
+    return result._sum.costUsd ?? 0;
   }
 
   private async invalidateSessionFullCache(sessionId: string): Promise<void> {
