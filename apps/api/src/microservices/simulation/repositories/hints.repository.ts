@@ -13,6 +13,7 @@ import { HintStrategy } from '../dto/hints.dto';
  */
 export interface CreateHintData {
   sessionId: string;
+  iterationId?: string;
   turnId?: string;
   userId?: string;
   orgId?: string;
@@ -96,6 +97,19 @@ export class HintsRepository {
       .lean()) as unknown as HintDocument[];
   }
 
+  async findBySessionIdAndIteration(
+    sessionId: string,
+    iterationId: string,
+    limit: number = 10,
+  ): Promise<HintDocument[]> {
+    const model = await this.getModel();
+    return (await model
+      .find({ sessionId, iterationId })
+      .sort({ generatedAt: -1 })
+      .limit(limit)
+      .lean()) as unknown as HintDocument[];
+  }
+
   /**
    * Find hints by session ID and hint type
    */
@@ -107,6 +121,20 @@ export class HintsRepository {
     const model = await this.getModel();
     return (await model
       .find({ sessionId, 'hints.type': type })
+      .sort({ generatedAt: -1 })
+      .limit(limit)
+      .lean()) as unknown as HintDocument[];
+  }
+
+  async findBySessionIdAndIterationAndType(
+    sessionId: string,
+    iterationId: string,
+    type: string,
+    limit: number = 10,
+  ): Promise<HintDocument[]> {
+    const model = await this.getModel();
+    return (await model
+      .find({ sessionId, iterationId, 'hints.type': type })
       .sort({ generatedAt: -1 })
       .limit(limit)
       .lean()) as unknown as HintDocument[];
@@ -150,6 +178,14 @@ export class HintsRepository {
     return await model.countDocuments({ sessionId }).exec();
   }
 
+  async countBySessionIdAndIteration(
+    sessionId: string,
+    iterationId: string,
+  ): Promise<number> {
+    const model = await this.getModel();
+    return await model.countDocuments({ sessionId, iterationId }).exec();
+  }
+
   /**
    * Count hints by session ID and type
    */
@@ -159,6 +195,17 @@ export class HintsRepository {
   ): Promise<number> {
     const model = await this.getModel();
     return await model.countDocuments({ sessionId, 'hints.type': type }).exec();
+  }
+
+  async countBySessionIdAndIterationAndType(
+    sessionId: string,
+    iterationId: string,
+    type: string,
+  ): Promise<number> {
+    const model = await this.getModel();
+    return await model
+      .countDocuments({ sessionId, iterationId, 'hints.type': type })
+      .exec();
   }
 
   /**

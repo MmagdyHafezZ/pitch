@@ -52,6 +52,21 @@ export const AUTH_WHITELIST_ROUTES: WhitelistRoute[] = [
     path: '/api/v1/health',
     description: 'API health check endpoint',
   },
+  {
+    method: 'GET',
+    path: '/api/v1/simulation/sessions/health',
+    description: 'Simulation sessions service liveness probe',
+  },
+  {
+    method: 'GET',
+    path: '/api/v1/simulation/invitations/health',
+    description: 'Simulation invitations service liveness probe',
+  },
+  {
+    method: 'GET',
+    path: '/api/v1/simulation/llm/health',
+    description: 'LLM service liveness probe',
+  },
 
   {
     method: 'GET',
@@ -62,6 +77,12 @@ export const AUTH_WHITELIST_ROUTES: WhitelistRoute[] = [
     method: 'GET',
     path: '/api/calendar/microsoft/callback',
     description: 'Microsoft Calendar OAuth callback',
+  },
+
+  {
+    method: 'GET',
+    path: '/api/v1/stats/public',
+    description: 'Public landing page statistics',
   },
 
   {

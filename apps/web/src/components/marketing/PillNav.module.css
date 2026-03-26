@@ -111,8 +111,7 @@
   letter-spacing: 0.05em;
   text-transform: uppercase;
   will-change: opacity;
-  transition:
-    opacity 0.28s ease;
+  transition: opacity 0.28s ease;
 }
 
 .label {

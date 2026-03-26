@@ -7,6 +7,7 @@ import { OAuthProviderFactory } from '../../auth/factories/oauth-provider.factor
 import * as userInterface from '@pitch/shared-backend/interfaces/user.interface';
 import * as userClaimsInterface from '@pitch/shared-backend/interfaces/user-claims.interface';
 import { toRpcException } from '@pitch/shared-backend/helpers/exceptions';
+import { UserPrismaService } from '../../prisma/user-prisma.service';
 
 @Controller()
 export class UserController {
@@ -16,13 +17,19 @@ export class UserController {
     private readonly userService: UserService,
     private readonly phoneVerificationService: PhoneVerificationService,
     private readonly oauthProviderFactory: OAuthProviderFactory,
+    private readonly prisma: UserPrismaService,
   ) {}
+
+  @MessagePattern('health')
+  health() {
+    return { status: 'ok', service: 'user' };
+  }
 
   @MessagePattern(USER_SERVICE_PATTERNS.GET_USERS)
   async getUsers(@Payload() data: userClaimsInterface.MessageWithUserClaims) {
     try {
       this.logger.log(
-        `Getting users - Requested by: ${data.userClaims.email} (${data.userClaims.id})`,
+        `Getting users - Requested by: ${data.userClaims?.email ?? 'admin'} (${data.userClaims?.id ?? 'N/A'})`,
       );
       return await this.userService.findAll();
     } catch (error) {
@@ -37,9 +44,9 @@ export class UserController {
   ) {
     try {
       this.logger.log(
-        `Getting user ${data.userId} - Requested by: ${data.userClaims.email} (${data.userClaims.id})`,
+        `Getting user ${data.userId} - Requested by: ${data.userClaims?.email ?? 'admin'} (${data.userClaims?.id ?? 'N/A'})`,
       );
-      if (data.userClaims.id === data.userId) {
+      if (data.userClaims?.id === data.userId) {
         return await this.userService.touchLastSeen(data.userId);
       }
       return await this.userService.findOne(data.userId);
@@ -112,7 +119,7 @@ export class UserController {
   ) {
     try {
       this.logger.log(
-        `Updating user ${data.userId} - Requested by: ${data.userClaims.email} (${data.userClaims.id})`,
+        `Updating user ${data.userId} - Requested by: ${data.userClaims?.email ?? 'admin'} (${data.userClaims?.id ?? 'N/A'})`,
       );
       const {
         userClaims: _userClaims,
@@ -210,7 +217,7 @@ export class UserController {
   ) {
     try {
       this.logger.log(
-        `Deleting user ${data.userId} - Requested by: ${data.userClaims.email} (${data.userClaims.id})`,
+        `Deleting user ${data.userId} - Requested by: ${data.userClaims?.email ?? 'admin'} (${data.userClaims?.id ?? 'N/A'})`,
       );
       return await this.userService.remove(data.userId);
     } catch (error) {
@@ -270,6 +277,22 @@ export class UserController {
       };
     } catch (error) {
       this.logger.error('Failed to check email', error);
+      throw toRpcException(error);
+    }
+  }
+
+  @MessagePattern(USER_SERVICE_PATTERNS.GET_PLATFORM_STATS)
+  async getPlatformStats(): Promise<{
+    activeUsers: number;
+    teamWorkspaces: number;
+  }> {
+    try {
+      const [activeUsers, teamWorkspaces] = await Promise.all([
+        this.prisma.client.user.count({ where: { isActive: true } }),
+        this.prisma.client.team.count({ where: { isActive: true } }),
+      ]);
+      return { activeUsers, teamWorkspaces };
+    } catch (error) {
       throw toRpcException(error);
     }
   }

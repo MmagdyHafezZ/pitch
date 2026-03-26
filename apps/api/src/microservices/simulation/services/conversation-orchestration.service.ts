@@ -843,7 +843,11 @@ export class ConversationOrchestrationService {
         personaTraits: personaData?.traits
           ? (toRecord(personaData.traits) as Record<string, unknown>)
           : undefined,
-        difficulty: sessionConfig.difficulty as string | undefined,
+        difficulty:
+          typeof sessionConfig.difficulty === 'string' ||
+          typeof sessionConfig.difficulty === 'number'
+            ? sessionConfig.difficulty
+            : undefined,
         previousScore: previousPersuasionState?.score,
       });
 
@@ -1006,7 +1010,7 @@ export class ConversationOrchestrationService {
     userText?: string;
     historyMessages: Array<{ role: string; content: string }>;
     personaTraits?: Record<string, unknown>;
-    difficulty?: string;
+    difficulty?: string | number;
     previousScore?: number;
   }): Promise<{
     moodState: IMoodState;
@@ -1043,8 +1047,17 @@ export class ConversationOrchestrationService {
     if (resistanceLevel)
       personaLines.push(`Resistance level: ${resistanceLevel}`);
 
-    // Map difficulty to delta sensitivity guidance
-    const difficultyNorm = (params.difficulty ?? 'medium').toLowerCase();
+    // Difficulty can come through as either a text label or a numeric slider value.
+    const difficultyNorm =
+      typeof params.difficulty === 'number'
+        ? params.difficulty >= 7
+          ? 'hard'
+          : params.difficulty <= 3
+            ? 'easy'
+            : 'medium'
+        : typeof params.difficulty === 'string'
+          ? params.difficulty.trim().toLowerCase()
+          : 'medium';
     const difficultyGuide =
       difficultyNorm === 'easy'
         ? 'Easy difficulty: the persona is open-minded. Good arguments gain +5 to +15 pts. Poor arguments lose 3 to 8 pts. Offensive/rude remarks lose 10 to 20 pts.'

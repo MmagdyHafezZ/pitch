@@ -1,4 +1,5 @@
 import { SupportEmailTemplate } from '@pitch/shared-backend/interfaces/support-email.interface';
+import { studioAccessDecisionTemplate } from './studio-access-decision.template';
 import { userSignupInviteTemplate } from './user-signup-invite.template';
 import { verificationCodeTemplate } from './verification-code.template';
 import type {
@@ -11,6 +12,7 @@ import type { SupportEmailTemplateData } from '@pitch/shared-backend/interfaces/
 const TEMPLATE_RENDERERS: Record<SupportEmailTemplate, EmailTemplateRenderer> =
   {
     [SupportEmailTemplate.VERIFICATION_CODE]: verificationCodeTemplate,
+    [SupportEmailTemplate.STUDIO_ACCESS_DECISION]: studioAccessDecisionTemplate,
     [SupportEmailTemplate.USER_SIGNUP_INVITE]: userSignupInviteTemplate,
   };
 

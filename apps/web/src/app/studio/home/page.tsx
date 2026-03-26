@@ -22,6 +22,7 @@ import {
   Title,
 } from '@mantine/core'
 import { LineChart } from '@mantine/charts'
+import { useMediaQuery } from '@mantine/hooks'
 import {
   IconAlertTriangle,
   IconArrowRight,
@@ -67,6 +68,53 @@ const activityCellColor: Record<ActivityCell['level'], string> = {
   2: 'rgba(16, 185, 129, 0.45)',
   3: 'rgba(16, 185, 129, 0.65)',
   4: 'rgba(16, 185, 129, 0.9)',
+}
+
+const themedCardStyle = {
+  background: `linear-gradient(
+    180deg,
+    var(--pitch-card-bg, var(--pitch-surface-bg, var(--mantine-color-body))) 0%,
+    color-mix(in srgb, var(--pitch-card-bg-strong, var(--pitch-card-bg, var(--pitch-surface-bg))) 84%, transparent) 100%
+  )`,
+  border:
+    '1px solid var(--pitch-card-border, var(--pitch-border, var(--mantine-color-default-border)))',
+  boxShadow: `0 10px 24px color-mix(
+    in srgb,
+    var(--pitch-card-shadow, var(--pitch-surface-bg, #000)) 16%,
+    transparent
+  )`,
+}
+
+const heroCardStyle = {
+  background: `linear-gradient(
+    135deg,
+    var(--pitch-card-hero-start, var(--pitch-card-bg, var(--pitch-surface-bg, var(--mantine-color-body)))) 0%,
+    color-mix(in srgb, var(--pitch-card-bg-strong, var(--pitch-card-bg, var(--pitch-surface-bg))) 68%, var(--pitch-card-hero-start, var(--pitch-card-bg)) 32%) 52%,
+    var(--pitch-card-hero-end, var(--pitch-card-bg-strong, var(--pitch-card-bg, var(--pitch-surface-bg, var(--mantine-color-body))))) 100%
+  )`,
+  border:
+    '1px solid var(--pitch-card-border-strong, var(--pitch-card-border, var(--pitch-border, var(--mantine-color-default-border))))',
+  boxShadow: `0 14px 32px color-mix(
+    in srgb,
+    var(--pitch-card-shadow, var(--pitch-accent-strong)) 18%,
+    transparent
+  )`,
+}
+
+const themedIconStyle = {
+  background:
+    'var(--pitch-card-bg-subtle, var(--pitch-card-bg, var(--pitch-surface-bg, var(--mantine-color-body))))',
+  color: 'var(--pitch-accent-strong)',
+  border:
+    '1px solid var(--pitch-card-border, var(--pitch-border, var(--mantine-color-default-border)))',
+}
+
+const metricBadgeStyle = {
+  background:
+    'var(--pitch-card-bg-subtle, var(--pitch-card-bg, var(--pitch-surface-bg, var(--mantine-color-body))))',
+  color: 'var(--pitch-surface-text)',
+  border:
+    '1px solid var(--pitch-card-border, var(--pitch-border, var(--mantine-color-default-border)))',
 }
 
 const toDayKey = (date: Date) => {
@@ -254,6 +302,7 @@ export default function DashboardHome() {
       return () => clearTimeout(timer)
     }
   }, [searchParams, startTour])
+  const isMobile = useMediaQuery('(max-width: 768px)')
 
   const [userSessions, setUserSessions] = useState<Session[]>([])
   const [teamSessionMap, setTeamSessionMap] = useState<Record<string, Session[]>>({})
@@ -473,18 +522,12 @@ export default function DashboardHome() {
         withBorder
         radius="lg"
         p="lg"
-        style={{
-          background:
-            'linear-gradient(120deg, rgba(15, 23, 42, 0.96) 0%, rgba(30, 41, 59, 0.95) 50%, rgba(15, 118, 110, 0.92) 100%)',
-          color: 'white',
-        }}
+        style={{ ...heroCardStyle, color: 'var(--mantine-color-text)' }}
       >
-        <Group justify="space-between" align="flex-start">
+        <Group justify="space-between" align="flex-start" wrap={isMobile ? 'wrap' : 'nowrap'}>
           <Stack gap={6}>
-            <Title order={2} c="white">
-              Welcome back, {welcomeName}
-            </Title>
-            <Text size="sm" style={{ opacity: 0.85 }}>
+            <Title order={2}>Welcome back, {welcomeName}</Title>
+            <Text size="sm" c="dimmed">
               Track your momentum, streaks, and team-level session activity in one place.
             </Text>
             <Group gap="xs" mt="xs">
@@ -499,16 +542,22 @@ export default function DashboardHome() {
               </Badge>
             </Group>
           </Stack>
-          <Group>
+          <Group w={isMobile ? '100%' : undefined} justify={isMobile ? 'flex-start' : undefined}>
             <Button
-              variant="white"
-              color="dark"
+              variant="filled"
+              color="brand"
               rightSection={<IconArrowRight size={16} />}
               onClick={() => router.push('/studio/sessions/create')}
+              fullWidth={isMobile}
             >
               Start session
             </Button>
-            <Button variant="light" color="gray" onClick={() => router.push('/studio/sessions')}>
+            <Button
+              variant="light"
+              color="brand"
+              onClick={() => router.push('/studio/sessions')}
+              fullWidth={isMobile}
+            >
               View sessions
             </Button>
           </Group>
@@ -533,7 +582,13 @@ export default function DashboardHome() {
       ) : (
         <>
           <SimpleGrid data-tour-id="home-analytics" cols={{ base: 1, sm: 2, lg: 4 }} spacing="md">
-            <Card data-tour-id="home-stat-total" withBorder radius="lg" p="lg">
+            <Card
+              data-tour-id="home-stat-total"
+              withBorder
+              radius="lg"
+              p="lg"
+              style={themedCardStyle}
+            >
               <Group justify="space-between" mb={6}>
                 <Text size="sm" c="dimmed">
                   Total sessions
@@ -550,7 +605,13 @@ export default function DashboardHome() {
               </Text>
             </Card>
 
-            <Card data-tour-id="home-stat-weekly" withBorder radius="lg" p="lg">
+            <Card
+              data-tour-id="home-stat-weekly"
+              withBorder
+              radius="lg"
+              p="lg"
+              style={themedCardStyle}
+            >
               <Group justify="space-between" mb={6}>
                 <Text size="sm" c="dimmed">
                   Weekly completions
@@ -567,7 +628,13 @@ export default function DashboardHome() {
               </Text>
             </Card>
 
-            <Card data-tour-id="home-stat-completion" withBorder radius="lg" p="lg">
+            <Card
+              data-tour-id="home-stat-completion"
+              withBorder
+              radius="lg"
+              p="lg"
+              style={themedCardStyle}
+            >
               <Group justify="space-between" mb={6}>
                 <Text size="sm" c="dimmed">
                   Completion rate
@@ -582,7 +649,13 @@ export default function DashboardHome() {
               <Progress value={completionRate} color="grape" mt="sm" />
             </Card>
 
-            <Card data-tour-id="home-stat-streak" withBorder radius="lg" p="lg">
+            <Card
+              data-tour-id="home-stat-streak"
+              withBorder
+              radius="lg"
+              p="lg"
+              style={themedCardStyle}
+            >
               <Group justify="space-between" mb={6}>
                 <Text size="sm" c="dimmed">
                   Current streak
@@ -602,8 +675,15 @@ export default function DashboardHome() {
 
           <Grid gutter="md">
             <Grid.Col span={{ base: 12, lg: 8 }}>
-              <Card data-tour-id="home-activity-map" withBorder radius="lg" p="lg" h="100%">
-                <Group justify="space-between" mb="sm">
+              <Card
+                data-tour-id="home-activity-map"
+                withBorder
+                radius="lg"
+                p="lg"
+                h="100%"
+                style={themedCardStyle}
+              >
+                <Group justify="space-between" mb="sm" wrap="wrap">
                   <Stack gap={2}>
                     <Text fw={700}>Practice activity map</Text>
                     <Text size="xs" c="dimmed">
@@ -620,7 +700,7 @@ export default function DashboardHome() {
                   </Group>
                 </Group>
 
-                <Box mt="sm">
+                <Box mt="sm" style={{ overflowX: isMobile ? 'auto' : 'visible' }}>
                   <Group justify="space-between" mb={8}>
                     {monthLabels.map((label) => (
                       <Text key={`${label.label}-${label.index}`} size="xs" c="dimmed">
@@ -628,7 +708,12 @@ export default function DashboardHome() {
                       </Text>
                     ))}
                   </Group>
-                  <Group align="flex-start" wrap="nowrap" gap="xs">
+                  <Group
+                    align="flex-start"
+                    wrap="nowrap"
+                    gap="xs"
+                    style={{ minWidth: isMobile ? 360 : undefined }}
+                  >
                     <Stack gap={2} mt={6}>
                       {['Sun', '', 'Tue', '', 'Thu', '', 'Sat'].map((dayLabel, index) => (
                         <Text key={`${dayLabel}-${index}`} size="xs" c="dimmed" h={12}>
@@ -675,10 +760,17 @@ export default function DashboardHome() {
             </Grid.Col>
 
             <Grid.Col span={{ base: 12, lg: 4 }}>
-              <Card data-tour-id="home-team-snapshot" withBorder radius="lg" p="lg" h="100%">
+              <Card
+                data-tour-id="home-team-snapshot"
+                withBorder
+                radius="lg"
+                p="lg"
+                h="100%"
+                style={themedCardStyle}
+              >
                 <Group justify="space-between" mb="sm">
                   <Text fw={700}>Team snapshot</Text>
-                  <ThemeIcon color="blue" variant="light" radius="xl">
+                  <ThemeIcon radius="xl" style={themedIconStyle}>
                     <IconUsersGroup size={16} />
                   </ThemeIcon>
                 </Group>
@@ -687,7 +779,11 @@ export default function DashboardHome() {
                     <Text size="sm" c="dimmed">
                       You are not connected to any team yet.
                     </Text>
-                    <Button variant="light" onClick={() => router.push('/studio/team-config')}>
+                    <Button
+                      variant="light"
+                      color="brand"
+                      onClick={() => router.push('/studio/team-config')}
+                    >
                       Create or join a team
                     </Button>
                   </Stack>
@@ -699,7 +795,13 @@ export default function DashboardHome() {
                           .length ?? null
 
                       return (
-                        <Card key={item.team.id} withBorder radius="md" p="sm">
+                        <Card
+                          key={item.team.id}
+                          withBorder
+                          radius="md"
+                          p="sm"
+                          style={themedCardStyle}
+                        >
                           <Group justify="space-between" mb={4}>
                             <Text fw={600} size="sm">
                               {item.team.name}
@@ -709,14 +811,14 @@ export default function DashboardHome() {
                             </Badge>
                           </Group>
                           <Group gap="xs" wrap="wrap">
-                            <Badge color="gray" variant="outline">
+                            <Badge variant="light" style={metricBadgeStyle}>
                               {item.weeklySessions} this week
                             </Badge>
-                            <Badge color="gray" variant="outline">
+                            <Badge variant="light" style={metricBadgeStyle}>
                               {item.completedSessions} completed
                             </Badge>
                             {activeMembers !== null && (
-                              <Badge color="gray" variant="outline">
+                              <Badge variant="light" style={metricBadgeStyle}>
                                 {activeMembers} members
                               </Badge>
                             )}
@@ -724,7 +826,11 @@ export default function DashboardHome() {
                         </Card>
                       )
                     })}
-                    <Button variant="subtle" onClick={() => router.push('/studio/team-config')}>
+                    <Button
+                      variant="subtle"
+                      color="brand"
+                      onClick={() => router.push('/studio/team-config')}
+                    >
                       Manage teams
                     </Button>
                   </Stack>
@@ -733,7 +839,13 @@ export default function DashboardHome() {
             </Grid.Col>
 
             <Grid.Col span={{ base: 12, lg: 8 }}>
-              <Card data-tour-id="home-momentum-chart" withBorder radius="lg" p="lg">
+              <Card
+                data-tour-id="home-momentum-chart"
+                withBorder
+                radius="lg"
+                p="lg"
+                style={themedCardStyle}
+              >
                 <Group justify="space-between" mb="sm">
                   <Text fw={700}>Session momentum</Text>
                   <Badge color="cyan" variant="light">
@@ -741,7 +853,7 @@ export default function DashboardHome() {
                   </Badge>
                 </Group>
                 <LineChart
-                  h={260}
+                  h={isMobile ? 220 : 260}
                   data={weeklyTrend}
                   dataKey="week"
                   series={[
@@ -756,7 +868,13 @@ export default function DashboardHome() {
             </Grid.Col>
 
             <Grid.Col span={{ base: 12, lg: 4 }}>
-              <Card data-tour-id="home-sessions" withBorder radius="lg" p="lg">
+              <Card
+                data-tour-id="home-sessions"
+                withBorder
+                radius="lg"
+                p="lg"
+                style={themedCardStyle}
+              >
                 <Group justify="space-between" mb="sm">
                   <Text fw={700}>Recent sessions</Text>
                   <ThemeIcon color="grape" variant="light" radius="xl">
@@ -776,7 +894,7 @@ export default function DashboardHome() {
                         withBorder
                         radius="md"
                         p="sm"
-                        style={{ cursor: 'pointer' }}
+                        style={{ ...themedCardStyle, cursor: 'pointer' }}
                         onClick={() => router.push(`/session/${session.id}/performance`)}
                       >
                         <Group justify="space-between">

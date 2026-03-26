@@ -1,6 +1,7 @@
 import { Controller, ValidationPipe, UsePipes, Logger } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
 import { SessionService } from '../services/session.service';
+import { CoinEstimationService } from '../services/coin-estimation.service';
 import { SIMULATION_SERVICE_PATTERNS } from '@pitch/shared-backend/interfaces/message-patterns.interface';
 import { toRpcException } from '@pitch/shared-backend/helpers/exceptions';
 import {
@@ -21,7 +22,36 @@ import * as userClaimsInterface from '@pitch/shared-backend/interfaces/user-clai
 export class SessionController {
   private readonly logger = new Logger(SessionController.name);
 
-  constructor(private readonly sessionService: SessionService) {}
+  constructor(
+    private readonly sessionService: SessionService,
+    private readonly coinEstimation: CoinEstimationService,
+  ) {}
+
+  /**
+   * Estimate the coin cost for a session before it starts.
+   * Called by the gateway `GET /v1/coins/session-estimate`.
+   */
+  @MessagePattern(SIMULATION_SERVICE_PATTERNS.COIN_SESSION_ESTIMATE)
+  async estimateSessionCoins(
+    @Payload()
+    data: {
+      model?: string;
+      provider?: string;
+      sessionType: string;
+      durationMinutes?: number;
+    },
+  ) {
+    try {
+      return await this.coinEstimation.estimate({
+        model: data.model ?? 'gpt-4o-mini',
+        provider: data.provider,
+        sessionType: data.sessionType ?? 'text',
+        durationMinutes: data.durationMinutes,
+      });
+    } catch (err) {
+      throw toRpcException(err);
+    }
+  }
 
   /**
    * Create a new session
@@ -178,13 +208,20 @@ export class SessionController {
   @MessagePattern(SIMULATION_SERVICE_PATTERNS.DELETE_SESSION)
   async deleteSession(
     @Payload()
-    data: { id: string } & userClaimsInterface.MessageWithUserClaims,
+    data: {
+      id: string;
+      isAdmin?: boolean;
+    } & userClaimsInterface.MessageWithUserClaims,
   ) {
     try {
       this.logger.log(
         `Deleting session ${data.id} - Requested by: ${data.userClaims?.email || 'unknown'}`,
       );
-      return await this.sessionService.remove(data.id, data.userClaims?.id);
+      return await this.sessionService.remove(
+        data.id,
+        data.userClaims?.id,
+        data.isAdmin === true,
+      );
     } catch (error) {
       this.logger.error(`Failed to delete session ${data.id}`, error);
       throw toRpcException(error);

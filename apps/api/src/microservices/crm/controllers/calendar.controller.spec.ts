@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
+/* eslint-disable */
 import { BadRequestException, HttpStatus } from '@nestjs/common';
 import { RpcException } from '@nestjs/microservices';
 import { CalendarController } from './calendar.controller';

@@ -1,8 +1,9 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { PlanLevel } from '@prisma/user-client';
 import {
   IsBoolean,
   IsEnum,
+  IsInt,
   IsNumber,
   IsOptional,
   IsString,
@@ -32,6 +33,24 @@ export class CreatePlanRequestDTO {
   @IsNumber()
   @Min(0)
   maxCoins!: number;
+
+  @ApiPropertyOptional({
+    description: 'Base coins reserved per simulation session; 0 = unlimited',
+    example: 10,
+  })
+  @IsInt()
+  @Min(0)
+  @IsOptional()
+  coinCostPerSession?: number;
+
+  @ApiPropertyOptional({
+    description: 'Monetary value per coin in USD',
+    example: 0.1,
+  })
+  @IsNumber()
+  @Min(0)
+  @IsOptional()
+  coinPriceUsd?: number;
 
   @ApiProperty({ description: 'Is the plan active?', example: true })
   @IsBoolean()
@@ -64,6 +83,24 @@ export class UpdatePlanRequestDTO {
   @Min(0)
   @IsOptional()
   maxCoins?: number;
+
+  @ApiPropertyOptional({
+    description: 'Base coins reserved per simulation session; 0 = unlimited',
+    example: 10,
+  })
+  @IsInt()
+  @Min(0)
+  @IsOptional()
+  coinCostPerSession?: number;
+
+  @ApiPropertyOptional({
+    description: 'Monetary value per coin in USD',
+    example: 0.1,
+  })
+  @IsNumber()
+  @Min(0)
+  @IsOptional()
+  coinPriceUsd?: number;
 
   @ApiProperty({ description: 'Is the plan active?', example: true })
   @IsBoolean()
