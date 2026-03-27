@@ -66,13 +66,6 @@ export class AuthGatewayController {
     };
   }
 
-  private getSuperAdminEmails(): string[] {
-    return (process.env.SUPER_ADMIN_EMAILS ?? '')
-      .split(',')
-      .map((email) => email.trim().toLowerCase())
-      .filter(Boolean);
-  }
-
   private getStudioAccessEmails(): string[] {
     return (process.env.STUDIO_ACCESS_EMAILS ?? '')
       .split(',')
@@ -105,7 +98,7 @@ export class AuthGatewayController {
     hasStudioAccess: boolean;
   } {
     const normalizedEmail = (user.email ?? '').trim().toLowerCase();
-    const isSystemAdmin = this.getSuperAdminEmails().includes(normalizedEmail);
+    const isSystemAdmin = isSystemAdminEmail(user.email);
     const hasStudioAccess =
       isSystemAdmin ||
       this.getStudioAccessEmails().includes(normalizedEmail) ||

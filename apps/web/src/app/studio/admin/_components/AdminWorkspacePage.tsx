@@ -49,6 +49,7 @@ import {
 } from '@tabler/icons-react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import classes from '../admin-console.module.css'
+import { useAuthStore } from '@/features/auth'
 import { useAdminAccess } from '@/features/admin/hooks/useAdminAccess'
 import { requestJsonPath } from '@/features/admin/services/admin.service'
 
@@ -939,8 +940,10 @@ function useConsoleJsonQuery<T = unknown>(
   enabled: boolean,
   refetchInterval: number | false = false
 ) {
+  const adminScopeKey = useAuthStore((state) => state.user?.id ?? 'anonymous')
+
   return useQuery({
-    queryKey: ['admin-console', key, path],
+    queryKey: ['admin-console', adminScopeKey, key, path],
     queryFn: () => requestJsonPath<T>(path),
     enabled,
     retry: false,
