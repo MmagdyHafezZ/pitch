@@ -43,7 +43,6 @@ const DEFAULT_MAIN: SidebarLink[] = [
   { icon: IconChartBar, label: 'Analytics', href: '/studio/analytics' },
   { icon: IconTrophy, label: 'Challenges', href: '/studio/challenges' },
   { icon: IconUserCog, label: 'Team Config', href: '/studio/team-config' },
-  { icon: IconShieldLock, label: 'Admin', href: '/studio/admin' },
 ]
 
 export function AppSidebar({
@@ -155,7 +154,7 @@ export function AppSidebar({
                     leftSection={<IconShieldLock size={18} />}
                     label={
                       <Text size="sm" className={classes.navLabel}>
-                        Admin
+                        {t('nav.admin')}
                       </Text>
                     }
                     variant="subtle"
