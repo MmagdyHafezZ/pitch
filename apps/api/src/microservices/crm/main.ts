@@ -7,9 +7,20 @@ import { MicroserviceOptions, Transport } from '@nestjs/microservices';
 import { ValidationPipe } from '@nestjs/common';
 import { CrmModule } from './crm.module';
 import { RpcExceptionLoggingFilter } from '@pitch/shared-backend/filters/rpc-exception.filter';
-import { getRabbitMQUrl } from '../../config/microservices.config';
+import {
+  getQueueOptions,
+  getRabbitMQUrl,
+} from '../../config/microservices.config';
+import {
+  buildRabbitMqQueueTopology,
+  provisionRabbitMqTopology,
+} from '../../config/rabbitmq-topology';
 
 async function bootstrap() {
+  await provisionRabbitMqTopology(getRabbitMQUrl(), [
+    buildRabbitMqQueueTopology('crm_queue'),
+  ]);
+
   const app = await NestFactory.createMicroservice<MicroserviceOptions>(
     CrmModule,
     {
@@ -17,9 +28,7 @@ async function bootstrap() {
       options: {
         urls: [getRabbitMQUrl()],
         queue: 'crm_queue',
-        queueOptions: {
-          durable: true,
-        },
+        queueOptions: getQueueOptions(),
         noAck: true,
         prefetchCount: 10,
       },

@@ -33,6 +33,7 @@ import { LLMRequestDto } from '../dto/llm.dto';
 import { HttpErrorResponseDto } from '../dto/http-error.dto';
 import { LLMProvidersResponseDto } from '../dto/llm-providers.dto';
 import { ProviderError } from '../providers/llm/llm-provider.interface';
+import { SystemAdminOnly } from '../../../gateway/decorators/system-admin.decorator';
 
 /**
  * LLM Test Controller
@@ -61,6 +62,7 @@ export class LLMTestController {
    * GET /simulation/llm/health
    */
   @Get('health')
+  @SystemAdminOnly()
   @ApiOperation({ summary: 'Health check' })
   @ApiOkResponse({
     schema: {
@@ -96,6 +98,7 @@ export class LLMTestController {
    */
   @Post('test')
   @HttpCode(200)
+  @SystemAdminOnly()
   @ApiOperation({ summary: 'Simple LLM completion test' })
   @ApiOkResponse({ type: LLMTestResponseDto })
   @ApiBadRequestResponse({
@@ -202,6 +205,7 @@ export class LLMTestController {
    */
   @Post('complete')
   @HttpCode(200)
+  @SystemAdminOnly()
   @ApiOperation({ summary: 'Model-specific LLM completion test' })
   @ApiOkResponse({ type: LLMTestResponseDto })
   @ApiBadRequestResponse({

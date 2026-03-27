@@ -1,6 +1,6 @@
 'use client'
 import { AppLayout } from '@/components/layout/AppLayout'
-import { AppSidebar } from '@/components/ui/AppSideBar'
+import { AppSidebar, type SidebarLink } from '@/components/ui/AppSideBar'
 import { AppTopBar } from '@/components/ui/AppTopBar'
 import { TeamSideBar } from '@/components/ui/TeamSideBar'
 import { CoachChatWidget } from '@/components/ui/CoachChatWidget'
@@ -10,13 +10,61 @@ import { useAuthStore } from '@/features/auth/stores/auth.store'
 import { Box } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
 import { modals } from '@mantine/modals'
+import {
+  IconActivityHeartbeat,
+  IconArrowLeft,
+  IconCreditCard,
+  IconLayoutDashboard,
+  IconServer,
+  IconUser,
+  IconUsersGroup,
+} from '@tabler/icons-react'
 import { useState, useEffect, useMemo, Suspense } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 
+const ADMIN_MAIN_LINKS: SidebarLink[] = [
+  {
+    icon: IconLayoutDashboard,
+    label: 'Dashboard',
+    href: '/studio/admin',
+  },
+  {
+    icon: IconServer,
+    label: 'System',
+    href: '/studio/admin/system',
+  },
+  {
+    icon: IconUser,
+    label: 'Users',
+    href: '/studio/admin/users',
+  },
+  {
+    icon: IconUsersGroup,
+    label: 'Teams',
+    href: '/studio/admin/teams',
+  },
+  {
+    icon: IconCreditCard,
+    label: 'Plans',
+    href: '/studio/admin/plans',
+  },
+  {
+    icon: IconActivityHeartbeat,
+    label: 'Sessions',
+    href: '/studio/admin/sessions',
+  },
+]
+
+const ADMIN_SECONDARY_LINKS: SidebarLink[] = [
+  {
+    icon: IconArrowLeft,
+    label: 'Back to Workspace',
+    href: '/studio/home',
+  },
+]
+
 export default function ClientLayerComponent({ children }: { children: React.ReactNode }) {
-  const [active, setActive] = useState<
-    'Home' | 'Sessions' | 'Teams' | 'Analytics' | 'Settings' | 'Team Config' | 'Challenges'
-  >('Home')
+  const [active, setActive] = useState<string>('Home')
   const [selectedDate, setSelectedDate] = useState<Date | null>(new Date())
   const {
     teams,
@@ -29,6 +77,7 @@ export default function ClientLayerComponent({ children }: { children: React.Rea
   const pathname = usePathname()
   const router = useRouter()
   const searchParams = useSearchParams()
+  const isAdminRoute = Boolean(pathname?.startsWith('/studio/admin'))
   const isCreatingTeam = searchParams.get('mode') === 'create'
   const user = useAuthStore((state) => state.user)
 
@@ -39,7 +88,10 @@ export default function ClientLayerComponent({ children }: { children: React.Rea
   }, [user, router])
 
   const [tabsByPage, setTabsByPage] = useState<
-    Record<'Home' | 'Sessions' | 'Teams' | 'Analytics' | 'Challenges' | 'Settings', string>
+    Record<
+      'Home' | 'Sessions' | 'Teams' | 'Analytics' | 'Challenges' | 'Settings' | 'Admin',
+      string
+    >
   >({
     Home: 'All',
     Sessions: 'All',
@@ -47,10 +99,11 @@ export default function ClientLayerComponent({ children }: { children: React.Rea
     Analytics: 'Overview',
     Challenges: '',
     Settings: '',
+    Admin: '',
   })
 
   const handleTabChange = (
-    page: 'Home' | 'Sessions' | 'Teams' | 'Analytics' | 'Challenges' | 'Settings'
+    page: 'Home' | 'Sessions' | 'Teams' | 'Analytics' | 'Challenges' | 'Settings' | 'Admin'
   ) => {
     return (tab: string) => {
       setTabsByPage((prev) => ({ ...prev, [page]: tab }))
@@ -99,7 +152,32 @@ export default function ClientLayerComponent({ children }: { children: React.Rea
     if (pathname.startsWith('/studio/challenges')) {
       return { page: 'Challenges' as const, nav: 'Challenges' as const }
     }
+    if (pathname.startsWith('/studio/admin')) {
+      return { page: 'Admin' as const, nav: 'Admin' as const }
+    }
     return { page: 'Home' as const, nav: 'Home' as const }
+  }, [pathname])
+
+  const adminSidebarLabel = useMemo(() => {
+    if (!pathname || pathname === '/studio/admin') {
+      return 'Dashboard'
+    }
+    if (pathname.startsWith('/studio/admin/system')) {
+      return 'System'
+    }
+    if (pathname.startsWith('/studio/admin/users')) {
+      return 'Users'
+    }
+    if (pathname.startsWith('/studio/admin/teams')) {
+      return 'Teams'
+    }
+    if (pathname.startsWith('/studio/admin/plans')) {
+      return 'Plans'
+    }
+    if (pathname.startsWith('/studio/admin/sessions')) {
+      return 'Sessions'
+    }
+    return 'Dashboard'
   }, [pathname])
 
   const sessionFilter = searchParams.get('filter') ?? 'All'
@@ -223,26 +301,42 @@ export default function ClientLayerComponent({ children }: { children: React.Rea
             />
           </Suspense>
         )}
-        navbar={({ closeMobileNav }) => (
-          <Box h="100%" style={{ display: 'flex', flexDirection: 'row' }}>
-            <TeamSideBar
-              teams={teamsForSidebar}
-              activeTeamId={activeTeamId}
-              onSelectTeam={handleSelectTeam}
-              onLeaveTeam={handleLeaveTeam}
-              onNavigate={closeMobileNav}
-            />
+        navbar={({ closeMobileNav }) =>
+          isAdminRoute ? (
             <AppSidebar
-              active={active}
+              active={adminSidebarLabel}
               setActive={setActive}
               selectedDate={selectedDate}
               setSelectedDate={setSelectedDate}
-              showTeamConfig={canAccessTeamConfig}
+              showTeamConfig={false}
+              showAdmin={false}
+              showCalendar={false}
+              mainLinks={ADMIN_MAIN_LINKS}
+              secondaryLinks={ADMIN_SECONDARY_LINKS}
               onNavigate={closeMobileNav}
               teamId={activeTeamId}
             />
-          </Box>
-        )}
+          ) : (
+            <Box h="100%" style={{ display: 'flex', flexDirection: 'row' }}>
+              <TeamSideBar
+                teams={teamsForSidebar}
+                activeTeamId={activeTeamId}
+                onSelectTeam={handleSelectTeam}
+                onLeaveTeam={handleLeaveTeam}
+                onNavigate={closeMobileNav}
+              />
+              <AppSidebar
+                active={active}
+                setActive={setActive}
+                selectedDate={selectedDate}
+                setSelectedDate={setSelectedDate}
+                showTeamConfig={canAccessTeamConfig}
+                showAdmin={user?.isSystemAdmin === true}
+                onNavigate={closeMobileNav}
+              />
+            </Box>
+          )
+        }
       >
         {children}
       </AppLayout>

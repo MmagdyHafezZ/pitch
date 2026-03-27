@@ -56,14 +56,14 @@ export type HeaderProps = {
   searchPlaceholder?: string
   rightSlot?: ReactNode
   teamName?: string
-  currentPage?: 'Home' | 'Sessions' | 'Teams' | 'Analytics' | 'Challenges' | 'Settings'
+  currentPage?: 'Home' | 'Sessions' | 'Teams' | 'Analytics' | 'Challenges' | 'Settings' | 'Admin'
   selectedTab?: string
   onTabChange?: (tab: string) => void
   onToggleMobileNav?: () => void
   mobileNavOpened?: boolean
 }
 
-type PageKey = 'Home' | 'Sessions' | 'Teams' | 'Analytics' | 'Challenges' | 'Settings'
+type PageKey = 'Home' | 'Sessions' | 'Teams' | 'Analytics' | 'Challenges' | 'Settings' | 'Admin'
 type ActionBarProps = {
   actionButtons?: ReactNode
   leadingAction?: ReactNode
@@ -523,7 +523,8 @@ export function AppTopBar({
   const isNarrow = useMediaQuery('(max-width: 520px)')
   const queryClient = useQueryClient()
   const currentUser = useAuthStore((state) => state.user)
-  const teams = useTeamsStore((state) => state.teams) ?? []
+  const storedTeams = useTeamsStore((state) => state.teams)
+  const teams = useMemo(() => storedTeams ?? [], [storedTeams])
   const refreshUserTeams = useTeamsStore((state) => state.fetchUserTeams)
   const sessionQuery = useMemo(() => searchParams.get('q') ?? '', [searchParams])
   const handleSessionSearch = (next: string) => {
