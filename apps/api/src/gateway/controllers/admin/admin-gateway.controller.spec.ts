@@ -27,13 +27,9 @@ type AdminServiceMock = {
   transferTeamOwner: jest.Mock;
   getUserSessions: jest.Mock;
   listAssessmentRuns: jest.Mock;
-  listWebhooks: jest.Mock;
   retryDeadLetters: jest.Mock;
   removeTeamMember: jest.Mock;
   removeSessionMember: jest.Mock;
-  listErrors: jest.Mock;
-  getLogLevels: jest.Mock;
-  updateLogLevels: jest.Mock;
 };
 
 describe('AdminGatewayController', () => {
@@ -59,13 +55,9 @@ describe('AdminGatewayController', () => {
       transferTeamOwner: jest.fn(),
       getUserSessions: jest.fn(),
       listAssessmentRuns: jest.fn(),
-      listWebhooks: jest.fn(),
       retryDeadLetters: jest.fn(),
       removeTeamMember: jest.fn(),
       removeSessionMember: jest.fn(),
-      listErrors: jest.fn(),
-      getLogLevels: jest.fn(),
-      updateLogLevels: jest.fn(),
     };
 
     const module = await Test.createTestingModule({
@@ -709,43 +701,6 @@ describe('AdminGatewayController', () => {
     ]);
   });
 
-  it('delegates logs alias to the error log service', () => {
-    adminService.listErrors = jest.fn().mockReturnValue({
-      logs: [],
-    } as never);
-
-    const result = controller.listLogs({ limit: '25' });
-
-    expect(result).toEqual({ logs: [] });
-    expect(adminService.listErrors.mock.calls).toEqual([[{ limit: 25 }]]);
-  });
-
-  it('delegates runtime log level reads to the admin service', () => {
-    adminService.getLogLevels = jest.fn().mockReturnValue({
-      debugEnabled: true,
-    } as never);
-
-    expect(controller.getLogLevels()).toEqual({
-      debugEnabled: true,
-    });
-    expect(adminService.getLogLevels.mock.calls).toEqual([[]]);
-  });
-
-  it('delegates runtime log level updates to the admin service', () => {
-    adminService.updateLogLevels = jest.fn().mockReturnValue({
-      debugEnabled: false,
-    } as never);
-
-    expect(
-      controller.updateLogLevels({ debugEnabled: false }, userClaims),
-    ).toEqual({
-      debugEnabled: false,
-    });
-    expect(adminService.updateLogLevels.mock.calls).toEqual([
-      [{ debugEnabled: false }, userClaims],
-    ]);
-  });
-
   it('delegates feature flag updates to the admin service', async () => {
     adminService.updateFeatureFlag = jest.fn().mockResolvedValue({
       key: 'admin-ui',
@@ -816,16 +771,6 @@ describe('AdminGatewayController', () => {
         },
       ],
     ]);
-  });
-
-  it('parses webhook list limits before delegating to the admin service', () => {
-    adminService.listWebhooks = jest.fn().mockReturnValue({
-      providers: [],
-    } as never);
-
-    controller.listWebhooks({ limit: '15' });
-
-    expect(adminService.listWebhooks.mock.calls).toEqual([[{ limit: 15 }]]);
   });
 
   it('delegates queue retries to the admin service', async () => {

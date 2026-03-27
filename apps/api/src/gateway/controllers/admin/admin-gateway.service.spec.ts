@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-member-access */
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { NotFoundException } from '@nestjs/common';
 import { of } from 'rxjs';
 import type { UserClaims } from '@pitch/shared-backend/interfaces/user-claims.interface';
 import { AdminGatewayService } from './admin-gateway.service';
@@ -17,8 +17,6 @@ describe('AdminGatewayService', () => {
   let assessmentService: any;
   let phoneCallService: any;
   let rabbitMqAdmin: any;
-  let adminObservability: any;
-  let phoneWebhookService: any;
   let simulationService: any;
   let flagOverrides: Record<string, unknown>;
 
@@ -122,34 +120,6 @@ describe('AdminGatewayService', () => {
         retried: 0,
       }),
     };
-    adminObservability = {
-      recordAudit: jest.fn(),
-      getLogLevelSettings: jest.fn().mockReturnValue({ debugEnabled: false }),
-      getRuntimeObservability: jest.fn().mockReturnValue({
-        debugEnabled: false,
-        bufferedLogs: 0,
-        bufferedRequests: 0,
-        bufferedAuditLogs: 0,
-      }),
-      setDebugEnabled: jest.fn().mockReturnValue({ debugEnabled: true }),
-      getJobRun: jest.fn(),
-      listJobRuns: jest.fn().mockReturnValue([]),
-      getWebhookEvent: jest.fn(),
-      listWebhookProviders: jest.fn().mockReturnValue([]),
-      listWebhookEvents: jest.fn().mockReturnValue([]),
-      listAuditLogs: jest.fn().mockReturnValue([]),
-      listErrorLogs: jest.fn().mockReturnValue([]),
-      listRequestLogs: jest.fn().mockReturnValue([]),
-      recordRuntimeLog: jest.fn(),
-      recordJobRun: jest.fn(),
-      updateJobRun: jest.fn(),
-    };
-    phoneWebhookService = {
-      processTwilioWebhook: jest.fn().mockResolvedValue({
-        status: 'processed',
-        provider: 'twilio',
-      }),
-    };
     simulationService = {
       send: jest.fn().mockReturnValue(of({ ok: true })),
     };
@@ -170,8 +140,6 @@ describe('AdminGatewayService', () => {
       assessmentService,
       phoneCallService,
       rabbitMqAdmin,
-      adminObservability,
-      phoneWebhookService,
       simulationService,
     );
   });
@@ -202,66 +170,20 @@ describe('AdminGatewayService', () => {
     });
   });
 
-  it('returns error logs under both errors and logs keys for compatibility', () => {
-    adminObservability.listErrorLogs.mockReturnValue([
-      {
-        id: 'err-1',
-        message: 'boom',
-        timestamp: '2026-03-22T00:00:00.000Z',
+  it('reads version metadata from the workspace root', async () => {
+    await expect(service.getVersion()).resolves.toMatchObject({
+      api: {
+        version: expect.any(String),
       },
-    ]);
-
-    expect(service.listErrors({ limit: 25 })).toEqual({
-      errors: [
-        {
-          id: 'err-1',
-          message: 'boom',
-          timestamp: '2026-03-22T00:00:00.000Z',
-        },
-      ],
-      logs: [
-        {
-          id: 'err-1',
-          message: 'boom',
-          timestamp: '2026-03-22T00:00:00.000Z',
-        },
-      ],
+      workspace: {
+        version: expect.any(String),
+      },
+      build: {
+        branch: expect.any(String),
+        branchUrl: expect.any(String),
+        repositoryUrl: expect.stringContaining('github.com'),
+      },
     });
-    expect(adminObservability.listErrorLogs).toHaveBeenCalledWith(25);
-  });
-
-  it('returns runtime log capture settings from observability', () => {
-    adminObservability.getLogLevelSettings.mockReturnValue({
-      debugEnabled: true,
-    });
-
-    expect(service.getLogLevels()).toEqual({
-      debugEnabled: true,
-    });
-  });
-
-  it('updates runtime log capture settings and records an audit entry', () => {
-    adminObservability.setDebugEnabled.mockReturnValue({
-      debugEnabled: true,
-    });
-
-    expect(service.updateLogLevels({ debugEnabled: true }, actor)).toEqual({
-      debugEnabled: true,
-    });
-    expect(adminObservability.setDebugEnabled).toHaveBeenCalledWith(true);
-    expect(adminObservability.recordAudit).toHaveBeenCalledWith(
-      expect.objectContaining({
-        action: 'admin.log-levels.update',
-        actorUserId: actor.id,
-        targetId: 'debug-log-capture',
-      }),
-    );
-  });
-
-  it('rejects invalid runtime log capture settings', () => {
-    expect(() =>
-      service.updateLogLevels({ debugEnabled: 'yes' }, actor),
-    ).toThrow('debugEnabled must be a boolean');
   });
 
   it('merges env and override feature flags', async () => {
@@ -287,7 +209,7 @@ describe('AdminGatewayService', () => {
     });
   });
 
-  it('stores feature flag overrides and records an audit log', async () => {
+  it('stores feature flag overrides', async () => {
     await expect(
       service.updateFeatureFlag(
         'admin-ui',
@@ -309,13 +231,6 @@ describe('AdminGatewayService', () => {
         enabled: true,
         reason: 'ship it',
         updatedByUserId: actor.id,
-      }),
-    );
-    expect(adminObservability.recordAudit).toHaveBeenCalledWith(
-      expect.objectContaining({
-        action: 'admin.feature-flags.update',
-        actorUserId: actor.id,
-        targetId: 'admin-ui',
       }),
     );
   });
@@ -385,13 +300,6 @@ describe('AdminGatewayService', () => {
         invitedByUserId: null,
       },
     });
-    expect(adminObservability.recordAudit).toHaveBeenCalledWith(
-      expect.objectContaining({
-        action: 'admin.teams.members.remove',
-        actorUserId: actor.id,
-        targetId: 'team-1',
-      }),
-    );
   });
 
   it('blocks removing the active team owner without a transfer', async () => {
@@ -453,13 +361,6 @@ describe('AdminGatewayService', () => {
       where: { id: 'member-2' },
       data: { role: 'owner' },
     });
-    expect(adminObservability.recordAudit).toHaveBeenCalledWith(
-      expect.objectContaining({
-        action: 'admin.sessions.members.remove',
-        actorUserId: actor.id,
-        targetId: 'session-1',
-      }),
-    );
   });
 
   it('deletes the session when the removed member was the last one left', async () => {
@@ -491,49 +392,7 @@ describe('AdminGatewayService', () => {
       description: 'Generate the daily public challenge set.',
       schedule: '0 0 * * *',
       period: 'DAILY',
-      recentRuns: [],
     });
-  });
-
-  it('replays stored Twilio webhook events', async () => {
-    adminObservability.getWebhookEvent.mockReturnValue({
-      id: 'evt-1',
-      provider: 'twilio',
-      payload: { CallSid: 'CA123' },
-      query: { sessionId: 'session-1', userId: 'user-1' },
-    });
-
-    await expect(
-      service.replayWebhookEvent('twilio', 'evt-1'),
-    ).resolves.toEqual({
-      replayedEventId: 'evt-1',
-      result: {
-        status: 'processed',
-        provider: 'twilio',
-      },
-    });
-
-    expect(phoneWebhookService.processTwilioWebhook).toHaveBeenCalledWith(
-      { CallSid: 'CA123' },
-      { sessionId: 'session-1', userId: 'user-1' },
-      {
-        source: 'replay',
-        replayedFromId: 'evt-1',
-      },
-    );
-  });
-
-  it('rejects unsupported webhook replays', async () => {
-    adminObservability.getWebhookEvent.mockReturnValue({
-      id: 'evt-2',
-      provider: 'stripe',
-      payload: {},
-      query: {},
-    });
-
-    await expect(service.replayWebhookEvent('stripe', 'evt-2')).rejects.toThrow(
-      BadRequestException,
-    );
   });
 
   it('invalidates cache patterns and LLM routing cache', async () => {

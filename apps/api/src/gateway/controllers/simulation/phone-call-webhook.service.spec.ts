@@ -7,7 +7,6 @@ describe('PhoneCallWebhookService', () => {
   let service: PhoneCallWebhookService;
   let simulationService: jest.Mocked<Pick<ClientProxy, 'send'>>;
   let configService: { get: jest.Mock };
-  let adminObservability: { recordWebhookEvent: jest.Mock };
 
   beforeEach(() => {
     simulationService = {
@@ -20,14 +19,9 @@ describe('PhoneCallWebhookService', () => {
           'https://api.pitch.com/api/v1/simulation/phone-calls/twilio',
         ),
     };
-    adminObservability = {
-      recordWebhookEvent: jest.fn(),
-    };
-
     service = new PhoneCallWebhookService(
       simulationService as unknown as ClientProxy,
       configService as any,
-      adminObservability as any,
     );
   });
 
@@ -40,12 +34,6 @@ describe('PhoneCallWebhookService', () => {
     });
     expect(result.twiml).toContain('Missing session context');
     expect(simulationService.send).not.toHaveBeenCalled();
-    expect(adminObservability.recordWebhookEvent).toHaveBeenCalledWith(
-      expect.objectContaining({
-        provider: 'twilio',
-        status: 'failed',
-      }),
-    );
   });
 
   it('processes a Twilio webhook, trims speech, and builds the next action URL', async () => {
@@ -98,12 +86,6 @@ describe('PhoneCallWebhookService', () => {
         }),
       ],
     ]);
-    expect(adminObservability.recordWebhookEvent).toHaveBeenCalledWith(
-      expect.objectContaining({
-        status: 'processed',
-        externalId: 'CA123',
-      }),
-    );
   });
 
   it('falls back to the assistant opener when no speech text is present', async () => {

@@ -158,64 +158,9 @@ type SessionMemberCreateFormState = {
   role: string
 }
 
-export type AdminWorkspaceView =
-  | 'dashboard'
-  | 'system'
-  | 'users'
-  | 'teams'
-  | 'plans'
-  | 'sessions'
-  | 'logs'
+export type AdminWorkspaceView = 'dashboard' | 'system' | 'users' | 'teams' | 'plans' | 'sessions'
 
 type AdminEntityView = 'users' | 'teams' | 'sessions'
-
-type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
-
-type ObservedLogEntry = {
-  id: string
-  source: 'request' | 'error' | 'audit' | 'runtime'
-  timestamp: string
-  title: string
-  subtitle: string
-  summary: string
-  badges?: ReactNode
-  level: 'success' | 'info' | 'warning' | 'error'
-  detail: unknown
-}
-
-type LogSearchDocument = {
-  text: string
-  fields: Record<string, string>
-  numericFields: Record<string, number>
-}
-
-type LogSearchOperator = ':' | '=' | '!=' | '>' | '>=' | '<' | '<='
-
-type LogSearchToken = {
-  type: 'word' | 'string' | 'operator' | 'paren'
-  value: string
-}
-
-type LogSearchNode =
-  | {
-      type: 'term'
-      value: string
-    }
-  | {
-      type: 'comparison'
-      field: string
-      operator: LogSearchOperator
-      value: string
-    }
-  | {
-      type: 'not'
-      node: LogSearchNode
-    }
-  | {
-      type: 'and' | 'or'
-      left: LogSearchNode
-      right: LogSearchNode
-    }
 
 const STATUS_COLORS: Record<string, string> = {
   ok: 'success',
@@ -424,428 +369,6 @@ const truncateMiddle = (value: string | null, max = 68) => {
   const head = Math.ceil((max - 1) / 2)
   const tail = Math.floor((max - 1) / 2)
   return `${value.slice(0, head)}…${value.slice(-tail)}`
-}
-
-const buildObservedErrorTitle = (entry: JsonRecord) => {
-  const statusCode = readNumber(entry.statusCode)
-  const method = readString(entry.method)?.toUpperCase()
-  const path = readString(entry.path)
-  const httpLine = [statusCode, method, path].filter(Boolean).join(' ')
-
-  return httpLine
-    ? `[HTTP] ${httpLine}`
-    : (readString(entry.name, entry.message) ?? 'Observed error')
-}
-
-const buildObservedRuntimeTitle = (entry: JsonRecord) =>
-  readString(entry.message, entry.context, entry.name) ?? 'Captured runtime log'
-
-const toObservedLogLevel = (value: unknown): ObservedLogEntry['level'] => {
-  const normalized = readString(value)?.toLowerCase()
-
-  if (normalized === 'error') return 'error'
-  if (normalized === 'warn' || normalized === 'warning') return 'warning'
-  if (normalized === 'success') return 'success'
-  return 'info'
-}
-
-const getObservedLogToneClassName = (level: ObservedLogEntry['level']) => {
-  if (level === 'error') return classes.logSourceError
-  if (level === 'warning') return classes.logSourceWarning
-  if (level === 'info') return classes.logSourceInfo
-  return classes.logSourceSuccess
-}
-
-const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-
-const getObservedLogFilterText = (entry: ObservedLogEntry) => {
-  const detail = isRecord(entry.detail) ? entry.detail : {}
-  const statusCode = readNumber(detail.statusCode)
-  const durationMs = readNumber(detail.durationMs)
-  const userEmail = readString(detail.userEmail, detail.actorEmail)
-
-  return [
-    entry.source,
-    entry.level,
-    entry.title,
-    readString(detail.message, entry.title, entry.summary),
-    readString(detail.context),
-    readString(detail.method),
-    readString(detail.path),
-    readString(detail.url),
-    statusCode !== null ? String(statusCode) : null,
-    durationMs !== null ? String(durationMs) : null,
-    userEmail,
-    readString(detail.action),
-    readString(detail.targetType),
-    readString(detail.name),
-  ]
-    .filter((value): value is string => typeof value === 'string' && value.length > 0)
-    .join(' ')
-    .toLowerCase()
-}
-
-const tokenizeLogSearchExpression = (value: string): LogSearchToken[] => {
-  const tokens: LogSearchToken[] = []
-  let index = 0
-
-  while (index < value.length) {
-    const current = value[index]
-
-    if (/\s/.test(current)) {
-      index += 1
-      continue
-    }
-
-    if (current === '"') {
-      let nextIndex = index + 1
-      let buffer = ''
-
-      while (nextIndex < value.length) {
-        if (value[nextIndex] === '"' && value[nextIndex - 1] !== '\\') {
-          break
-        }
-
-        buffer += value[nextIndex]
-        nextIndex += 1
-      }
-
-      tokens.push({ type: 'string', value: buffer.replace(/\\"/g, '"').toLowerCase() })
-      index = nextIndex < value.length ? nextIndex + 1 : nextIndex
-      continue
-    }
-
-    if (current === '(' || current === ')') {
-      tokens.push({ type: 'paren', value: current })
-      index += 1
-      continue
-    }
-
-    const twoCharacterOperator = value.slice(index, index + 2)
-    if (
-      twoCharacterOperator === '>=' ||
-      twoCharacterOperator === '<=' ||
-      twoCharacterOperator === '!='
-    ) {
-      tokens.push({ type: 'operator', value: twoCharacterOperator })
-      index += 2
-      continue
-    }
-
-    if (current === ':' || current === '=' || current === '>' || current === '<') {
-      tokens.push({ type: 'operator', value: current })
-      index += 1
-      continue
-    }
-
-    let nextIndex = index
-    while (nextIndex < value.length) {
-      const nextCharacter = value[nextIndex]
-      const nextTwoCharacters = value.slice(nextIndex, nextIndex + 2)
-
-      if (
-        /\s/.test(nextCharacter) ||
-        nextCharacter === '(' ||
-        nextCharacter === ')' ||
-        nextCharacter === ':' ||
-        nextCharacter === '=' ||
-        nextCharacter === '>' ||
-        nextCharacter === '<' ||
-        nextTwoCharacters === '>=' ||
-        nextTwoCharacters === '<=' ||
-        nextTwoCharacters === '!='
-      ) {
-        break
-      }
-
-      nextIndex += 1
-    }
-
-    const rawToken = value.slice(index, nextIndex).trim().toLowerCase()
-    if (rawToken) {
-      tokens.push({ type: 'word', value: rawToken })
-    }
-    index = nextIndex
-  }
-
-  return tokens
-}
-
-const isLogSearchKeyword = (token: LogSearchToken | undefined, keyword: string) =>
-  token?.type === 'word' && token.value === keyword
-
-const isLogSearchPrimaryStart = (token: LogSearchToken | undefined) => {
-  if (!token) return false
-  if (token.type === 'string') return true
-  if (token.type === 'paren') return token.value === '('
-  if (token.type !== 'word') return false
-  return token.value !== 'or' && token.value !== 'and'
-}
-
-const parseLogSearchExpression = (value: string): LogSearchNode | null => {
-  const tokens = tokenizeLogSearchExpression(value)
-  if (tokens.length === 0) return null
-
-  let index = 0
-
-  const peek = () => tokens[index]
-  const consume = () => {
-    const next = tokens[index]
-    index += 1
-    return next
-  }
-
-  const parseCondition = (): LogSearchNode | null => {
-    const buildNodeFromToken = (
-      token: LogSearchToken,
-      fieldOverride?: string
-    ): LogSearchNode | null => {
-      if (token.type !== 'word' && token.type !== 'string') {
-        return null
-      }
-
-      const field = fieldOverride ?? token.value
-      const operator = peek()
-      if ((token.type === 'word' || fieldOverride) && operator?.type === 'operator') {
-        consume()
-        const valueToken = consume()
-        if (!valueToken || (valueToken.type !== 'word' && valueToken.type !== 'string')) {
-          return { type: 'term', value: field }
-        }
-
-        return {
-          type: 'comparison',
-          field,
-          operator: operator.value as LogSearchOperator,
-          value: valueToken.value,
-        }
-      }
-
-      return { type: 'term', value: field }
-    }
-
-    const token = consume()
-    if (!token) {
-      return null
-    }
-
-    return buildNodeFromToken(token)
-  }
-
-  const parsePrimary = (): LogSearchNode | null => {
-    const token = peek()
-    if (!token) return null
-
-    if (token.type === 'paren' && token.value === '(') {
-      consume()
-      const node = parseOr()
-      if (peek()?.type === 'paren' && peek()?.value === ')') {
-        consume()
-      }
-      return node
-    }
-
-    return parseCondition()
-  }
-
-  const parseUnary = (): LogSearchNode | null => {
-    const token = peek()
-    if (isLogSearchKeyword(token, 'not')) {
-      consume()
-      const node = parseUnary()
-      return node ? { type: 'not', node } : null
-    }
-
-    if (token?.type === 'word' && token.value.startsWith('-') && token.value.length > 1) {
-      const negatedToken = consume()
-      const field = negatedToken.value.slice(1)
-      const operator = peek()
-      if (operator?.type === 'operator') {
-        consume()
-        const valueToken = consume()
-        if (valueToken && (valueToken.type === 'word' || valueToken.type === 'string')) {
-          return {
-            type: 'not',
-            node: {
-              type: 'comparison',
-              field,
-              operator: operator.value as LogSearchOperator,
-              value: valueToken.value,
-            },
-          }
-        }
-      }
-
-      return {
-        type: 'not',
-        node: { type: 'term', value: field },
-      }
-    }
-
-    return parsePrimary()
-  }
-
-  const parseAnd = (): LogSearchNode | null => {
-    let left = parseUnary()
-    if (!left) return null
-
-    while (true) {
-      if (isLogSearchKeyword(peek(), 'and')) {
-        consume()
-        const right = parseUnary()
-        if (!right) return left
-        left = { type: 'and', left, right }
-        continue
-      }
-
-      if (isLogSearchPrimaryStart(peek())) {
-        const right = parseUnary()
-        if (!right) return left
-        left = { type: 'and', left, right }
-        continue
-      }
-
-      break
-    }
-
-    return left
-  }
-
-  const parseOr = (): LogSearchNode | null => {
-    let left = parseAnd()
-    if (!left) return null
-
-    while (isLogSearchKeyword(peek(), 'or')) {
-      consume()
-      const right = parseAnd()
-      if (!right) return left
-      left = { type: 'or', left, right }
-    }
-
-    return left
-  }
-
-  return parseOr()
-}
-
-const matchesLogSearchPattern = (haystack: string, needle: string, exact = false) => {
-  if (!needle) return true
-
-  if (needle.includes('*')) {
-    const pattern = needle
-      .split('*')
-      .map((part) => escapeRegExp(part))
-      .join('.*')
-    const expression = exact ? `^${pattern}$` : pattern
-    return new RegExp(expression, 'i').test(haystack)
-  }
-
-  return exact ? haystack === needle : haystack.includes(needle)
-}
-
-const buildObservedLogSearchDocument = (entry: ObservedLogEntry): LogSearchDocument => {
-  const detail = isRecord(entry.detail) ? entry.detail : {}
-  const statusCode = readNumber(detail.statusCode)
-  const durationMs = readNumber(detail.durationMs)
-  const userEmail = readString(detail.userEmail, detail.actorEmail)
-  const userId = readString(detail.userId, detail.actorUserId)
-
-  const fields = {
-    source: entry.source,
-    level: entry.level,
-    title: entry.title,
-    subtitle: entry.subtitle,
-    summary: entry.summary,
-    timestamp: String(entry.timestamp),
-    message: readString(detail.message, entry.title, entry.summary) ?? '',
-    context: readString(detail.context) ?? '',
-    method: readString(detail.method) ?? '',
-    path: readString(detail.path) ?? '',
-    url: readString(detail.url) ?? '',
-    status: statusCode !== null ? String(statusCode) : '',
-    statuscode: statusCode !== null ? String(statusCode) : '',
-    duration: durationMs !== null ? String(durationMs) : '',
-    durationms: durationMs !== null ? String(durationMs) : '',
-    user: userEmail ?? '',
-    email: userEmail ?? '',
-    action: readString(detail.action) ?? '',
-    targettype: readString(detail.targetType) ?? '',
-    name: readString(detail.name) ?? '',
-  }
-
-  return {
-    text: getObservedLogFilterText(entry),
-    fields: Object.fromEntries(
-      Object.entries(fields).map(([key, fieldValue]) => [key, fieldValue.toLowerCase()])
-    ),
-    numericFields: {
-      ...(statusCode !== null ? { status: statusCode, statuscode: statusCode } : {}),
-      ...(durationMs !== null ? { duration: durationMs, durationms: durationMs } : {}),
-    },
-  }
-}
-
-const evaluateLogSearchNode = (node: LogSearchNode, document: LogSearchDocument): boolean => {
-  switch (node.type) {
-    case 'term':
-      return matchesLogSearchPattern(document.text, node.value)
-    case 'comparison': {
-      const field = node.field.toLowerCase()
-      const stringValue = document.fields[field]
-      const numericValue = document.numericFields[field]
-      const parsedNumber = Number(node.value)
-      const hasNumericValue = Number.isFinite(parsedNumber)
-
-      if (
-        node.operator === '>' ||
-        node.operator === '>=' ||
-        node.operator === '<' ||
-        node.operator === '<='
-      ) {
-        if (numericValue == null || !hasNumericValue) {
-          return false
-        }
-
-        if (node.operator === '>') return numericValue > parsedNumber
-        if (node.operator === '>=') return numericValue >= parsedNumber
-        if (node.operator === '<') return numericValue < parsedNumber
-        return numericValue <= parsedNumber
-      }
-
-      if (numericValue != null && hasNumericValue && !node.value.includes('*')) {
-        if (node.operator === '=') return numericValue === parsedNumber
-        if (node.operator === '!=') return numericValue !== parsedNumber
-      }
-
-      if (!stringValue) {
-        return false
-      }
-
-      if (node.operator === ':') {
-        return matchesLogSearchPattern(stringValue, node.value)
-      }
-
-      if (node.operator === '=') {
-        return matchesLogSearchPattern(stringValue, node.value, true)
-      }
-
-      if (node.operator === '!=') {
-        return !matchesLogSearchPattern(stringValue, node.value, true)
-      }
-
-      return false
-    }
-    case 'not':
-      return !evaluateLogSearchNode(node.node, document)
-    case 'and':
-      return (
-        evaluateLogSearchNode(node.left, document) && evaluateLogSearchNode(node.right, document)
-      )
-    case 'or':
-      return (
-        evaluateLogSearchNode(node.left, document) || evaluateLogSearchNode(node.right, document)
-      )
-  }
 }
 
 const extractArray = (value: unknown): JsonRecord[] => {
@@ -2620,25 +2143,6 @@ function HealthRow({
   )
 }
 
-function MethodBadge({ method }: { method: HttpMethod }) {
-  const color =
-    method === 'GET'
-      ? 'success'
-      : method === 'DELETE'
-        ? 'brand'
-        : method === 'PATCH'
-          ? 'selected'
-          : method === 'PUT'
-            ? 'info'
-            : 'brand'
-
-  return (
-    <Badge color={color} variant="light" tt="uppercase">
-      {method}
-    </Badge>
-  )
-}
-
 export function AdminWorkspacePage({ view }: { view: AdminWorkspaceView }) {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -2649,7 +2153,6 @@ export function AdminWorkspacePage({ view }: { view: AdminWorkspaceView }) {
   const [teamFilter, setTeamFilter] = useState('')
   const [planFilter, setPlanFilter] = useState('')
   const [sessionFilter, setSessionFilter] = useState('')
-  const [observedLogFilter, setObservedLogFilter] = useState('')
   const [isCreatingUser, setIsCreatingUser] = useState(false)
   const [isInvitingUser, setIsInvitingUser] = useState(false)
   const [createUserForm, setCreateUserForm] = useState<UserCreateFormState>(EMPTY_USER_CREATE_FORM)
@@ -2691,7 +2194,6 @@ export function AdminWorkspacePage({ view }: { view: AdminWorkspaceView }) {
   const [selectedSessionActivityKey, setSelectedSessionActivityKey] = useState<string | null>(null)
   const [selectedTranscriptKey, setSelectedTranscriptKey] = useState<string | null>(null)
   const [selectedTraceKey, setSelectedTraceKey] = useState<string | null>(null)
-  const [selectedObservedLogId, setSelectedObservedLogId] = useState<string | null>(null)
 
   const requestedUserId = searchParams.get('userId')?.trim() || null
   const requestedTeamId = searchParams.get('teamId')?.trim() || null
@@ -2914,54 +2416,6 @@ export function AdminWorkspacePage({ view }: { view: AdminWorkspaceView }) {
     isSystemAdmin,
     liveRefetch
   )
-  const errorLogsQuery = useConsoleJsonQuery(
-    'error-logs',
-    '/api/v1/admin/logs?limit=100',
-    isSystemAdmin && view === 'logs',
-    liveRefetch
-  )
-  const requestLogsQuery = useConsoleJsonQuery(
-    'request-logs',
-    '/api/v1/admin/request-logs?limit=100',
-    isSystemAdmin && view === 'logs',
-    liveRefetch
-  )
-  const auditLogsQuery = useConsoleJsonQuery(
-    'audit-logs',
-    '/api/v1/admin/audit-logs?limit=100',
-    isSystemAdmin && view === 'logs',
-    liveRefetch
-  )
-  const logLevelSettingsQuery = useConsoleJsonQuery(
-    'log-levels',
-    '/api/v1/admin/log-levels',
-    isSystemAdmin && view === 'logs',
-    liveRefetch
-  )
-  const logLevelMutation = useMutation({
-    mutationFn: (debugEnabled: boolean) =>
-      requestJsonPath('/api/v1/admin/log-levels', {
-        method: 'PATCH',
-        body: JSON.stringify({ debugEnabled }),
-      }),
-    onSuccess: (_, debugEnabled) => {
-      notifications.show({
-        title: debugEnabled ? 'Debug log capture enabled' : 'Debug log capture disabled',
-        message: debugEnabled
-          ? 'New Nest debug and verbose logs will be buffered in RAM and shown here.'
-          : 'New Nest debug and verbose logs will stop being buffered in RAM.',
-        color: 'success',
-      })
-      queryClient.invalidateQueries({ queryKey: ['admin-console'] })
-    },
-    onError: (error) => {
-      notifications.show({
-        title: 'Debug log capture update failed',
-        message: error instanceof Error ? error.message : 'Please try again.',
-        color: 'brand',
-      })
-    },
-  })
 
   const parseOptionalJsonObject = (value: string, label: string) => {
     if (!value) return undefined
@@ -4173,12 +3627,11 @@ export function AdminWorkspacePage({ view }: { view: AdminWorkspaceView }) {
   const runtimeApp = isRecord(runtimeConfig.app) ? runtimeConfig.app : {}
   const runtimeAuth = isRecord(runtimeConfig.auth) ? runtimeConfig.auth : {}
   const runtimeIntegrations = isRecord(runtimeConfig.integrations) ? runtimeConfig.integrations : {}
-  const runtimeObservability = isRecord(runtimeConfig.observability)
-    ? runtimeConfig.observability
-    : {}
   const versionData = isRecord(versionQuery.data) ? versionQuery.data : {}
   const versionApi = isRecord(versionData.api) ? versionData.api : {}
   const versionBuild = isRecord(versionData.build) ? versionData.build : {}
+  const buildBranch = readString(versionBuild.branch)
+  const buildBranchUrl = readString(versionBuild.branchUrl)
   const dependenciesData = isRecord(dependenciesQuery.data) ? dependenciesQuery.data : {}
   const overviewTotals = isRecord(overviewData.totals) ? overviewData.totals : {}
   const dependencies = isRecord(dependenciesData.dependencies) ? dependenciesData.dependencies : {}
@@ -4500,11 +3953,6 @@ export function AdminWorkspacePage({ view }: { view: AdminWorkspaceView }) {
       })
     )
   )
-  const bufferedLogCount = readNumber(runtimeObservability.bufferedLogs) ?? 0
-  const bufferedRequestCount = readNumber(runtimeObservability.bufferedRequests) ?? 0
-  const bufferedAuditCount = readNumber(runtimeObservability.bufferedAuditLogs) ?? 0
-  const totalBufferedObservabilityEvents =
-    bufferedLogCount + bufferedRequestCount + bufferedAuditCount
   const dashboardHealthRows = [
     {
       key: 'overall-platform',
@@ -4625,18 +4073,6 @@ export function AdminWorkspacePage({ view }: { view: AdminWorkspaceView }) {
       }))
       .filter((entry) => isAttentionStatus(entry.status)),
   ]
-  const errorLogsPayload = isRecord(errorLogsQuery.data) ? errorLogsQuery.data : {}
-  const requestLogsPayload = isRecord(requestLogsQuery.data) ? requestLogsQuery.data : {}
-  const auditLogsPayload = isRecord(auditLogsQuery.data) ? auditLogsQuery.data : {}
-  const logLevelSettings = isRecord(logLevelSettingsQuery.data) ? logLevelSettingsQuery.data : {}
-  const errorLogs = extractArray(errorLogsPayload)
-  const requestLogs = extractArray(requestLogsPayload)
-  const auditLogs = extractArray(auditLogsPayload)
-  const debugLogCaptureEnabled = readBoolean(logLevelSettings.debugEnabled) ?? false
-  const bufferedDebugLogs = errorLogs.filter((entry) => {
-    const level = readString(entry.level)?.toLowerCase()
-    return level === 'debug' || level === 'verbose'
-  }).length
   const userDetail = isRecord(userDetailQuery.data) ? userDetailQuery.data : {}
   const userActivity = isRecord(userActivityQuery.data) ? userActivityQuery.data : {}
   const userActivityUser = isRecord(userActivity.user) ? userActivity.user : {}
@@ -4775,120 +4211,6 @@ export function AdminWorkspacePage({ view }: { view: AdminWorkspaceView }) {
   const sessionLlm = isRecord(sessionLlmCallsQuery.data) ? sessionLlmCallsQuery.data : {}
   const sessionLlmSummary = isRecord(sessionLlm.summary) ? sessionLlm.summary : {}
   const sessionLlmTraces = extractArray(sessionLlm.traces)
-  const observedLogEntries = useMemo<ObservedLogEntry[]>(() => {
-    const requestEntries = requestLogs.map((entry) => {
-      const statusCode = readNumber(entry.statusCode)
-      const method = readString(entry.method) ?? 'GET'
-      const path = readString(entry.path, entry.url) ?? 'Unknown path'
-      const level: ObservedLogEntry['level'] =
-        statusCode && statusCode >= 500
-          ? 'error'
-          : statusCode && statusCode >= 400
-            ? 'warning'
-            : 'info'
-
-      return {
-        id: `request-${readString(entry.id) ?? path}`,
-        source: 'request' as const,
-        timestamp: readString(entry.completedAt, entry.requestAt) ?? new Date().toISOString(),
-        title: `${method} ${path}`,
-        subtitle: truncateMiddle(readString(entry.url, entry.path), 90),
-        summary: `${statusCode ?? 'n/a'} • ${readNumber(entry.durationMs) ?? 0}ms`,
-        badges: (
-          <>
-            <MethodBadge method={method as HttpMethod} />
-            {statusCode ? (
-              <Badge
-                color={statusCode >= 500 ? 'brand' : statusCode >= 400 ? 'selected' : 'info'}
-                variant="light"
-              >
-                {statusCode}
-              </Badge>
-            ) : null}
-          </>
-        ),
-        level,
-        detail: entry,
-      }
-    })
-
-    const errorEntries = errorLogs.map((entry) => {
-      const method = readString(entry.method)
-      const path = readString(entry.path)
-      const source = method || path ? ('error' as const) : ('runtime' as const)
-      const runtimeLevel = readString(entry.level)?.toLowerCase() ?? 'error'
-
-      return {
-        id: `error-${readString(entry.id, entry.timestamp) ?? Math.random().toString(36)}`,
-        source,
-        timestamp: readString(entry.timestamp) ?? new Date().toISOString(),
-        title:
-          source === 'error' ? buildObservedErrorTitle(entry) : buildObservedRuntimeTitle(entry),
-        subtitle:
-          source === 'error'
-            ? truncateMiddle(readString(entry.userEmail, entry.userId, entry.name), 90)
-            : truncateMiddle(readString(entry.context, entry.userEmail, entry.userId), 90),
-        summary:
-          source === 'error'
-            ? truncate(readString(entry.message) ?? 'Captured by admin observability', 140)
-            : truncate(
-                `${runtimeLevel}${readString(entry.context) ? ` • ${readString(entry.context)}` : ''}`,
-                140
-              ),
-        badges: (
-          <>
-            <Badge color={source === 'error' ? 'brand' : 'gray'} variant="light">
-              {source === 'error' ? 'error' : runtimeLevel}
-            </Badge>
-            {source === 'error' && readNumber(entry.statusCode) ? (
-              <Badge color="brand" variant="outline">
-                {readNumber(entry.statusCode)}
-              </Badge>
-            ) : null}
-            {source === 'runtime' && readString(entry.context) ? (
-              <Badge color="info" variant="outline">
-                {truncate(readString(entry.context), 28)}
-              </Badge>
-            ) : null}
-          </>
-        ),
-        level: source === 'error' ? ('error' as const) : toObservedLogLevel(entry.level),
-        detail: entry,
-      }
-    })
-
-    const auditEntries = auditLogs.map((entry) => ({
-      id: `audit-${readString(entry.id, entry.createdAt) ?? Math.random().toString(36)}`,
-      source: 'audit' as const,
-      timestamp: readString(entry.createdAt) ?? new Date().toISOString(),
-      title: readString(entry.action) ?? 'Audit entry',
-      subtitle: truncateMiddle(readString(entry.actorEmail, entry.targetType, entry.targetId), 90),
-      summary: readString(entry.targetType, entry.targetId) ?? 'Admin action recorded',
-      badges: (
-        <Badge color="selected" variant="light">
-          audit
-        </Badge>
-      ),
-      level: 'info' as const,
-      detail: entry,
-    }))
-
-    return [...errorEntries, ...requestEntries, ...auditEntries].sort((left, right) =>
-      right.timestamp.localeCompare(left.timestamp)
-    )
-  }, [auditLogs, errorLogs, requestLogs])
-  const filteredObservedLogEntries = useMemo(() => {
-    if (!observedLogFilter.trim()) return observedLogEntries
-
-    const expression = parseLogSearchExpression(observedLogFilter)
-    if (!expression) return observedLogEntries
-
-    return observedLogEntries.filter((entry) =>
-      evaluateLogSearchNode(expression, buildObservedLogSearchDocument(entry))
-    )
-  }, [observedLogEntries, observedLogFilter])
-  const selectedObservedLog =
-    filteredObservedLogEntries.find((entry) => entry.id === selectedObservedLogId) ?? null
   const sessionActivityItems = useMemo(
     () =>
       [...sessionEvents, ...sessionTimeline].map((item, index) => ({
@@ -5284,15 +4606,6 @@ export function AdminWorkspacePage({ view }: { view: AdminWorkspaceView }) {
     }
   }, [selectedTraceKey, sessionTraceItems])
 
-  useEffect(() => {
-    if (
-      selectedObservedLogId &&
-      !filteredObservedLogEntries.some((entry) => entry.id === selectedObservedLogId)
-    ) {
-      setSelectedObservedLogId(null)
-    }
-  }, [filteredObservedLogEntries, selectedObservedLogId])
-
   const heroStats = [
     {
       label: 'System Status',
@@ -5321,11 +4634,6 @@ export function AdminWorkspacePage({ view }: { view: AdminWorkspaceView }) {
       label: 'Active Sessions',
       value: formatNumber(readNumber(overviewTotals.activeSessions) ?? 0),
       note: `${formatNumber(readNumber(overviewTotals.sessions) ?? getCollectionCount(sessionsQuery.data))} total tracked`,
-    },
-    {
-      label: 'Buffered Events',
-      value: formatNumber(totalBufferedObservabilityEvents),
-      note: `${formatNumber(bufferedLogCount)} logs • ${formatNumber(bufferedRequestCount)} requests • ${formatNumber(bufferedAuditCount)} audit`,
     },
   ]
 
@@ -5429,7 +4737,18 @@ export function AdminWorkspacePage({ view }: { view: AdminWorkspaceView }) {
                       Build branch
                     </Text>
                     <Text size="sm" fw={700} className={classes.consoleText}>
-                      {truncate(readString(versionBuild.branch), 24)}
+                      {buildBranch && buildBranchUrl ? (
+                        <a
+                          href={buildBranchUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className={`${classes.consoleText} ${classes.consoleLink}`}
+                        >
+                          {truncate(buildBranch, 24)}
+                        </a>
+                      ) : (
+                        truncate(buildBranch, 24)
+                      )}
                     </Text>
                   </div>
                 </Stack>
@@ -5490,7 +4809,19 @@ export function AdminWorkspacePage({ view }: { view: AdminWorkspaceView }) {
                     {readString(versionApi.version) ?? 'unknown'}
                   </Text>
                   <Text size="xs" c="dimmed">
-                    Branch {truncate(readString(versionBuild.branch), 28)}
+                    Branch{' '}
+                    {buildBranch && buildBranchUrl ? (
+                      <a
+                        href={buildBranchUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className={classes.consoleLink}
+                      >
+                        {truncate(buildBranch, 28)}
+                      </a>
+                    ) : (
+                      truncate(buildBranch, 28)
+                    )}
                   </Text>
                 </div>
                 <div className={classes.miniCard}>
@@ -5524,18 +4855,6 @@ export function AdminWorkspacePage({ view }: { view: AdminWorkspaceView }) {
                   </Text>
                   <Text size="xs" c="dimmed">
                     DEV bypass {readBoolean(runtimeAuth.devBypassEnabled) ? 'enabled' : 'disabled'}
-                  </Text>
-                </div>
-                <div className={classes.miniCard}>
-                  <Text size="xs" tt="uppercase" fw={700} className={classes.metaLabel}>
-                    Buffered Logs
-                  </Text>
-                  <Text mt={6} fw={700}>
-                    {formatNumber(readNumber(runtimeObservability.bufferedLogs) ?? 0)}
-                  </Text>
-                  <Text size="xs" c="dimmed">
-                    Debug capture{' '}
-                    {readBoolean(runtimeObservability.debugEnabled) ? 'enabled' : 'disabled'}
                   </Text>
                 </div>
               </div>
@@ -5791,30 +5110,6 @@ export function AdminWorkspacePage({ view }: { view: AdminWorkspaceView }) {
                     <Text size="xs" c="dimmed">
                       {formatNumber(readNumber(queueMetrics.assessmentQueueDepth) ?? 0)} queued
                       assessments
-                    </Text>
-                  </div>
-                  <div className={classes.miniCard}>
-                    <Text size="xs" tt="uppercase" fw={700} className={classes.metaLabel}>
-                      Buffered Logs
-                    </Text>
-                    <Text mt={6} fw={800} size="lg">
-                      {formatNumber(bufferedLogCount)}
-                    </Text>
-                    <Text size="xs" c="dimmed">
-                      Debug capture{' '}
-                      {readBoolean(runtimeObservability.debugEnabled) ? 'enabled' : 'disabled'}
-                    </Text>
-                  </div>
-                  <div className={classes.miniCard}>
-                    <Text size="xs" tt="uppercase" fw={700} className={classes.metaLabel}>
-                      Requests + Audit
-                    </Text>
-                    <Text mt={6} fw={800} size="lg">
-                      {formatNumber(bufferedRequestCount + bufferedAuditCount)}
-                    </Text>
-                    <Text size="xs" c="dimmed">
-                      {formatNumber(bufferedRequestCount)} requests •{' '}
-                      {formatNumber(bufferedAuditCount)} audit
                     </Text>
                   </div>
                 </div>
@@ -10227,280 +9522,6 @@ export function AdminWorkspacePage({ view }: { view: AdminWorkspaceView }) {
                         </DetailSection>
                       </Stack>
                     )}
-                  </div>
-                ) : null}
-              </div>
-            </div>
-          </section>
-        ) : null}
-
-        {view === 'logs' ? (
-          <section className={classes.panel}>
-            <Group justify="space-between" mb="md">
-              <Box>
-                <Group gap="xs" mb={4}>
-                  <ThemeIcon color="brand" variant="light">
-                    <IconAlertTriangle size={16} />
-                  </ThemeIcon>
-                  <Title order={3}>Observed Logs</Title>
-                </Group>
-                <Text size="sm" className={classes.mutedText}>
-                  These rows come from the backend admin observability service, including captured
-                  runtime logs, request logs, and audit entries.
-                </Text>
-              </Box>
-              <Badge color="brand" variant="light">
-                {observedLogFilter.trim()
-                  ? `${filteredObservedLogEntries.length} of ${observedLogEntries.length} events`
-                  : `${observedLogEntries.length} events`}
-              </Badge>
-            </Group>
-
-            <div className={classes.logArea}>
-              <div className={classes.logSummaryGrid}>
-                <div className={classes.logSummaryCard}>
-                  <Text size="xs" tt="uppercase" fw={700} className={classes.metaLabel}>
-                    Logs
-                  </Text>
-                  <Text fw={800} size="lg">
-                    {formatNumber(errorLogs.length)}
-                  </Text>
-                </div>
-                <div className={classes.logSummaryCard}>
-                  <Text size="xs" tt="uppercase" fw={700} className={classes.metaLabel}>
-                    Requests
-                  </Text>
-                  <Text fw={800} size="lg">
-                    {formatNumber(requestLogs.length)}
-                  </Text>
-                </div>
-                <div className={classes.logSummaryCard}>
-                  <Text size="xs" tt="uppercase" fw={700} className={classes.metaLabel}>
-                    Audit
-                  </Text>
-                  <Text fw={800} size="lg">
-                    {formatNumber(auditLogs.length)}
-                  </Text>
-                </div>
-                <div className={classes.logSummaryCard}>
-                  <Text size="xs" tt="uppercase" fw={700} className={classes.metaLabel}>
-                    Debug Capture
-                  </Text>
-                  <Text fw={800} size="lg">
-                    {debugLogCaptureEnabled ? 'on' : 'off'}
-                  </Text>
-                  <Text size="xs" className={classes.logSummaryText}>
-                    {formatNumber(bufferedDebugLogs)} buffered
-                  </Text>
-                </div>
-              </div>
-
-              <div className={classes.logToolbar}>
-                <TextInput
-                  value={observedLogFilter}
-                  onChange={(event) => setObservedLogFilter(event.currentTarget.value)}
-                  placeholder="Filter by path, status, method, source, user, message, or expressions"
-                  leftSection={<IconSearch size={16} />}
-                />
-                <Stack gap={4}>
-                  <Group gap="sm" justify="space-between" wrap="wrap">
-                    <Group gap="sm" wrap="nowrap">
-                      <Switch
-                        checked={debugLogCaptureEnabled}
-                        disabled={logLevelSettingsQuery.isLoading || logLevelMutation.isPending}
-                        onChange={(event) => logLevelMutation.mutate(event.currentTarget.checked)}
-                      />
-                      <Box>
-                        <Text fw={600} size="sm">
-                          Capture debug logs
-                        </Text>
-                      </Box>
-                    </Group>
-                  </Group>
-                </Stack>
-              </div>
-
-              <div
-                className={`${classes.logLayout} ${
-                  selectedObservedLog ? classes.logLayoutSplit : classes.logLayoutSingle
-                }`}
-              >
-                <div className={classes.logTable}>
-                  {filteredObservedLogEntries.length === 0 ? (
-                    <div className={classes.logEmptyState}>
-                      <Text fw={700}>
-                        {observedLogEntries.length === 0
-                          ? 'No observed logs yet'
-                          : 'No logs matched this filter'}
-                      </Text>
-                      <Text size="sm" className={classes.mutedText}>
-                        {observedLogEntries.length === 0
-                          ? 'This view reads real backend request and error logs. If it is empty, the admin observability buffer has not captured anything recent.'
-                          : 'Try expressions like status:40*, source:error AND status>=400, or NOT source:audit.'}
-                      </Text>
-                    </div>
-                  ) : (
-                    <ScrollArea h={560}>
-                      <div className={classes.logTableBody}>
-                        <div className={classes.logTableHeader}>
-                          <Text size="xs" tt="uppercase" fw={700} className={classes.metaLabel}>
-                            Time
-                          </Text>
-                          <Text size="xs" tt="uppercase" fw={700} className={classes.metaLabel}>
-                            Source
-                          </Text>
-                          <Text size="xs" tt="uppercase" fw={700} className={classes.metaLabel}>
-                            Event
-                          </Text>
-                          <Text size="xs" tt="uppercase" fw={700} className={classes.metaLabel}>
-                            Summary
-                          </Text>
-                          <Text size="xs" tt="uppercase" fw={700} className={classes.metaLabel}>
-                            Tags
-                          </Text>
-                        </div>
-
-                        {filteredObservedLogEntries.map((entry) => (
-                          <button
-                            key={entry.id}
-                            type="button"
-                            className={`${classes.logTableRow} ${
-                              selectedObservedLog?.id === entry.id ? classes.logTableRowActive : ''
-                            }`}
-                            onClick={() =>
-                              setSelectedObservedLogId((current) =>
-                                current === entry.id ? null : entry.id
-                              )
-                            }
-                          >
-                            <div className={`${classes.logTableCell} ${classes.logTableTime}`}>
-                              <Text size="xs" fw={700}>
-                                {formatCompactDate(entry.timestamp) ?? 'now'}
-                              </Text>
-                              <Text size="xs" className={classes.mutedText}>
-                                {entry.level}
-                              </Text>
-                            </div>
-                            <div className={`${classes.logTableCell} ${classes.logTableSource}`}>
-                              <Group gap="xs" wrap="nowrap">
-                                <span
-                                  className={`${classes.logDot} ${
-                                    entry.level === 'success'
-                                      ? classes.logDotSuccess
-                                      : entry.level === 'warning'
-                                        ? classes.logDotWarning
-                                        : entry.level === 'info'
-                                          ? classes.logDotInfo
-                                          : classes.logDotError
-                                  }`}
-                                />
-                                <Box style={{ minWidth: 0 }}>
-                                  <Text
-                                    fw={700}
-                                    size="sm"
-                                    className={getObservedLogToneClassName(entry.level)}
-                                  >
-                                    {entry.source}
-                                  </Text>
-                                  <Text
-                                    size="xs"
-                                    className={`${classes.logSourceMeta} ${getObservedLogToneClassName(entry.level)}`}
-                                  >
-                                    {entry.level}
-                                  </Text>
-                                </Box>
-                              </Group>
-                            </div>
-                            <div className={`${classes.logTableCell} ${classes.logTableEvent}`}>
-                              <Text fw={700} size="sm" className={classes.logTableTitle}>
-                                {entry.title}
-                              </Text>
-                              <Text
-                                size="xs"
-                                className={`${classes.consoleText} ${classes.mutedText} ${classes.logTableSubtitle}`}
-                              >
-                                {entry.subtitle}
-                              </Text>
-                            </div>
-                            <div className={`${classes.logTableCell} ${classes.logTableSummary}`}>
-                              <Text size="sm" className={classes.logSummaryText}>
-                                {entry.summary}
-                              </Text>
-                            </div>
-                            <div className={`${classes.logTableCell} ${classes.logTableBadges}`}>
-                              <Group gap="xs" wrap="wrap">
-                                {entry.badges}
-                              </Group>
-                            </div>
-                          </button>
-                        ))}
-                      </div>
-                    </ScrollArea>
-                  )}
-                </div>
-
-                {selectedObservedLog ? (
-                  <div className={`${classes.logDetailPane} ${classes.logDetailSection}`}>
-                    <Stack gap="md">
-                      <div className={classes.logDetailHeader}>
-                        <Group justify="space-between" align="flex-start" wrap="nowrap">
-                          <Box style={{ minWidth: 0, flex: 1 }}>
-                            <Group gap="xs" mb={6} wrap="wrap">
-                              {selectedObservedLog.badges}
-                            </Group>
-                            <Text fw={700}>{selectedObservedLog.title}</Text>
-                            <Text
-                              size="sm"
-                              className={`${classes.consoleText} ${classes.mutedText}`}
-                            >
-                              {selectedObservedLog.subtitle}
-                            </Text>
-                          </Box>
-                          <ActionIcon
-                            variant="subtle"
-                            color="gray"
-                            aria-label="Close log details"
-                            onClick={() => setSelectedObservedLogId(null)}
-                          >
-                            <IconX size={16} />
-                          </ActionIcon>
-                        </Group>
-                      </div>
-
-                      <div className={classes.logMetaGrid}>
-                        <div className={classes.logMetaCard}>
-                          <Text size="xs" tt="uppercase" fw={700} className={classes.metaLabel}>
-                            Source
-                          </Text>
-                          <Text fw={700}>{selectedObservedLog.source}</Text>
-                        </div>
-                        <div className={classes.logMetaCard}>
-                          <Text size="xs" tt="uppercase" fw={700} className={classes.metaLabel}>
-                            Timestamp
-                          </Text>
-                          <Text fw={700}>{formatDateTime(selectedObservedLog.timestamp)}</Text>
-                        </div>
-                        <div className={classes.logMetaCard}>
-                          <Text size="xs" tt="uppercase" fw={700} className={classes.metaLabel}>
-                            Level
-                          </Text>
-                          <Text fw={700}>{selectedObservedLog.level}</Text>
-                        </div>
-                        <div className={classes.logMetaCard}>
-                          <Text size="xs" tt="uppercase" fw={700} className={classes.metaLabel}>
-                            Summary
-                          </Text>
-                          <Text fw={700}>{selectedObservedLog.summary}</Text>
-                        </div>
-                      </div>
-
-                      <Box>
-                        <Text fw={700} mb="xs">
-                          Raw log payload
-                        </Text>
-                        <JsonBlock value={selectedObservedLog.detail} />
-                      </Box>
-                    </Stack>
                   </div>
                 ) : null}
               </div>

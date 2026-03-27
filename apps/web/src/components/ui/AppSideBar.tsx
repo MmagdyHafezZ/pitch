@@ -139,50 +139,20 @@ export function AppSidebar({
           }}
         >
           <Stack gap={6} mt="xs" flex={1}>
-            {resolvedMainLinks.map(({ icon: Icon, label }) => (
-              <NavLink
-                key={label}
-                active={active === label}
-                onClick={() => {
-                  setActive(label)
-                  router.push(`/studio/${label.toLowerCase().replace(/\s+/g, '-')}`)
-                  onNavigate?.()
-                }}
-                leftSection={<Icon size={18} />}
-                label={
-                  <Text size="sm" className={classes.navLabel}>
-                    {label === 'Home'
-                      ? t('nav.home')
-                      : label === 'Sessions'
-                        ? t('nav.sessions')
-                        : label === 'Analytics'
-                          ? t('nav.analytics')
-                          : label === 'Team Config'
-                            ? t('nav.teamConfig')
-                            : label === 'Challenges'
-                              ? t('nav.challenges')
-                              : label}
-                  </Text>
-                }
-                variant="subtle"
-                classNames={{
-                  root: classes.navLink,
-                  section: classes.navSection,
-                  body: classes.navBody,
-                  label: classes.navLabel,
-                }}
-              />
-            ))}
+            {resolvedMainLinks.map(renderNavLink)}
+            {resolvedSecondaryLinks.length > 0 ? (
+              <Box pt="xs">{resolvedSecondaryLinks.map(renderNavLink)}</Box>
+            ) : null}
             <Box mt="auto" pt="lg" mx="0" pb={10} style={{ width: '100%' }}>
-              {isAdmin === true && (
+              {showAdmin === true && (
                 <>
                   <Divider my="xs" color="var(--pitch-nav-text-dim)" />
                   <NavLink
                     onClick={() => {
-                      router.push('/admin')
+                      router.push('/studio/admin')
                       onNavigate?.()
                     }}
-                    leftSection={<IconShield size={18} />}
+                    leftSection={<IconShieldLock size={18} />}
                     label={
                       <Text size="sm" className={classes.navLabel}>
                         Admin

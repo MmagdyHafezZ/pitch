@@ -34,9 +34,7 @@ import { SimulationRedisService } from '../../../microservices/simulation/servic
 import { AssessmentService } from '../../../microservices/simulation/assessment/assessment.service';
 import { AssessmentModeDto } from '../../../microservices/simulation/assessment/dto/assessment.dto';
 import { PhoneCallService } from '../../../microservices/simulation/phone/phone-call.service';
-import { AdminObservabilityService } from './admin-observability.service';
 import { RabbitMqAdminService } from './rabbitmq-admin.service';
-import { PhoneCallWebhookService } from '../simulation/phone-call-webhook.service';
 
 type SessionListQuery = {
   limit?: number;
@@ -147,6 +145,13 @@ type PackageVersionInfo = {
   apiVersion?: string;
 };
 
+type BuildMetadataInfo = {
+  branch: string | null;
+  branchUrl: string | null;
+  commitSha: string | null;
+  repositoryUrl: string | null;
+};
+
 type DataFixName =
   | 'normalize-llm-routing-configs'
   | 'backfill-ended-session-timestamps'
@@ -155,6 +160,12 @@ type DataFixName =
 const FEATURE_FLAG_KEY = 'admin:feature-flags';
 const PACKAGE_JSON_CACHE: {
   value?: Promise<PackageVersionInfo>;
+} = {};
+const BUILD_METADATA_CACHE: {
+  value?: Promise<BuildMetadataInfo>;
+} = {};
+const WORKSPACE_ROOT_CACHE: {
+  value?: Promise<string>;
 } = {};
 
 const KNOWN_JOBS = [
@@ -194,8 +205,6 @@ export class AdminGatewayService {
     private readonly assessmentService: AssessmentService,
     private readonly phoneCallService: PhoneCallService,
     private readonly rabbitMqAdmin: RabbitMqAdminService,
-    private readonly adminObservability: AdminObservabilityService,
-    private readonly phoneWebhookService: PhoneCallWebhookService,
     @Inject('SIMULATION_SERVICE')
     private readonly simulationService: ClientProxy,
   ) {}
@@ -273,7 +282,11 @@ export class AdminGatewayService {
   }
 
   async getVersion() {
-    const versions = await this.readPackageVersions();
+    const [versions, buildMetadata] = await Promise.all([
+      this.readPackageVersions(),
+      this.readBuildMetadata(),
+    ]);
+
     return {
       api: {
         version: versions.apiVersion ?? 'unknown',
@@ -285,13 +298,10 @@ export class AdminGatewayService {
         version: versions.workspaceVersion ?? 'unknown',
       },
       build: {
-        commitSha:
-          process.env.VERCEL_GIT_COMMIT_SHA ||
-          process.env.GIT_COMMIT_SHA ||
-          process.env.COMMIT_SHA ||
-          null,
-        branch:
-          process.env.VERCEL_GIT_COMMIT_REF || process.env.GIT_BRANCH || null,
+        commitSha: buildMetadata.commitSha,
+        branch: buildMetadata.branch,
+        branchUrl: buildMetadata.branchUrl,
+        repositoryUrl: buildMetadata.repositoryUrl,
         deploymentId:
           process.env.VERCEL_DEPLOYMENT_ID || process.env.BUILD_ID || null,
       },
@@ -362,7 +372,6 @@ export class AdminGatewayService {
           (flag) => flag.source === 'override',
         ).length,
       },
-      observability: this.adminObservability.getRuntimeObservability(),
     };
   }
 
@@ -1611,26 +1620,18 @@ export class AdminGatewayService {
   async getPhoneCallEvents(callId: string, limit?: number) {
     const call = await this.getPhoneCall(callId);
     const take = this.normalizeLimit(limit, 100, 250);
-    const [events, webhookEvents] = await Promise.all([
-      this.simulationPrisma.client.event.findMany({
-        where: {
-          iterationId: call.iterationId,
-        },
-        take,
-        orderBy: { createdAt: 'desc' },
-      }),
-      Promise.resolve(
-        this.adminObservability
-          .listWebhookEvents('twilio', take)
-          .filter((event) => event.sessionId === call.iteration.sessionId),
-      ),
-    ]);
+    const events = await this.simulationPrisma.client.event.findMany({
+      where: {
+        iterationId: call.iterationId,
+      },
+      take,
+      orderBy: { createdAt: 'desc' },
+    });
 
     return {
       callId,
       iterationId: call.iterationId,
       events,
-      webhookEvents,
     };
   }
 
@@ -1654,36 +1655,21 @@ export class AdminGatewayService {
     };
   }
 
-  async listJobs(query: LogQuery) {
+  async listJobs(_query: LogQuery) {
     const queueStats = await this.rabbitMqAdmin.getQueueStats();
     return {
-      jobs: KNOWN_JOBS.map((job) => ({
-        ...job,
-        recentRuns: this.adminObservability
-          .listJobRuns(query.limit ?? 50)
-          .filter((run) => run.jobName === job.id),
-      })),
+      jobs: KNOWN_JOBS.map((job) => ({ ...job })),
       queues: queueStats,
     };
   }
 
   getJob(jobId: string) {
-    const run = this.adminObservability.getJobRun(jobId);
-    if (run) {
-      return run;
-    }
-
     const definition = KNOWN_JOBS.find((job) => job.id === jobId);
     if (!definition) {
       throw new NotFoundException('Job not found');
     }
 
-    return {
-      ...definition,
-      recentRuns: this.adminObservability
-        .listJobRuns(50)
-        .filter((entry) => entry.jobName === definition.id),
-    };
+    return definition;
   }
 
   async runJob(jobName: string, actor: UserClaims) {
@@ -1691,16 +1677,6 @@ export class AdminGatewayService {
     if (!definition) {
       throw new NotFoundException('Job not found');
     }
-
-    const run = this.adminObservability.recordJobRun({
-      jobName: definition.id,
-      status: 'queued',
-      triggeredByUserId: actor.id,
-      triggeredByEmail: actor.email,
-      input: {
-        period: definition.period,
-      },
-    });
 
     try {
       const result: unknown = await lastValueFrom(
@@ -1712,28 +1688,11 @@ export class AdminGatewayService {
           .pipe(timeout(60000)),
       );
 
-      this.adminObservability.updateJobRun(run.id, {
-        status: 'completed',
-        completedAt: new Date().toISOString(),
-        result: this.isRecord(result) ? result : { ok: true },
-      });
-
-      this.recordAudit(actor, 'admin.jobs.run', 'job', definition.id, {
-        period: definition.period,
-        jobRunId: run.id,
-      });
-
       return {
-        jobRunId: run.id,
         jobName: definition.id,
         result,
       };
     } catch (error) {
-      this.adminObservability.updateJobRun(run.id, {
-        status: 'failed',
-        completedAt: new Date().toISOString(),
-        error: (error as Error)?.message ?? 'Job failed',
-      });
       throw error;
     }
   }
@@ -1755,108 +1714,13 @@ export class AdminGatewayService {
   async retryDeadLetters(
     queueName: string,
     body: QueueRetryBody,
-    actor: UserClaims,
+    _actor: UserClaims,
   ) {
     const result = await this.rabbitMqAdmin.retryDeadLetters(
       queueName,
       this.normalizeLimit(body.maxMessages, 100, 1000),
     );
-
-    this.recordAudit(
-      actor,
-      'admin.queues.retry-dead-letters',
-      'queue',
-      queueName,
-      result,
-    );
     return result;
-  }
-
-  listWebhooks(query: LogQuery) {
-    return {
-      providers: this.adminObservability.listWebhookProviders(
-        query.limit ?? 100,
-      ),
-    };
-  }
-
-  getWebhookEvents(provider: string, query: LogQuery) {
-    return {
-      events: this.adminObservability.listWebhookEvents(
-        provider,
-        query.limit ?? 100,
-      ),
-    };
-  }
-
-  async replayWebhookEvent(provider: string, id: string) {
-    const event = this.adminObservability.getWebhookEvent(id);
-    if (!event || event.provider.toLowerCase() !== provider.toLowerCase()) {
-      throw new NotFoundException('Webhook event not found');
-    }
-
-    if (provider.toLowerCase() !== 'twilio') {
-      throw new BadRequestException(
-        'Webhook replay is only supported for Twilio',
-      );
-    }
-
-    const result = await this.phoneWebhookService.processTwilioWebhook(
-      event.payload,
-      event.query,
-      {
-        source: 'replay',
-        replayedFromId: event.id,
-      },
-    );
-
-    return {
-      replayedEventId: event.id,
-      result,
-    };
-  }
-
-  listAuditLogs(query: LogQuery) {
-    return {
-      logs: this.adminObservability.listAuditLogs(query.limit ?? 100),
-    };
-  }
-
-  listErrors(query: LogQuery) {
-    const errors = this.adminObservability.listErrorLogs(query.limit ?? 100);
-
-    return {
-      errors,
-      logs: errors,
-    };
-  }
-
-  getLogLevels() {
-    return this.adminObservability.getLogLevelSettings();
-  }
-
-  updateLogLevels(body: Record<string, unknown>, actor: UserClaims) {
-    if (typeof body.debugEnabled !== 'boolean') {
-      throw new BadRequestException('debugEnabled must be a boolean');
-    }
-
-    const result = this.adminObservability.setDebugEnabled(body.debugEnabled);
-
-    this.recordAudit(
-      actor,
-      'admin.log-levels.update',
-      'observability',
-      'debug-log-capture',
-      result,
-    );
-
-    return result;
-  }
-
-  listRequestLogs(query: LogQuery) {
-    return {
-      requests: this.adminObservability.listRequestLogs(query.limit ?? 100),
-    };
   }
 
   async invalidateCache(body: CacheInvalidateBody, actor: UserClaims) {
@@ -2254,21 +2118,12 @@ export class AdminGatewayService {
   }
 
   private recordAudit(
-    actor: UserClaims,
-    action: string,
-    targetType: string,
-    targetId: string,
-    details?: Record<string, unknown>,
-  ) {
-    this.adminObservability.recordAudit({
-      action,
-      actorUserId: actor.id,
-      actorEmail: actor.email,
-      targetType,
-      targetId,
-      details,
-    });
-  }
+    _actor: UserClaims,
+    _action: string,
+    _targetType: string,
+    _targetId: string,
+    _details?: Record<string, unknown>,
+  ) {}
 
   private normalizeRoutingConfig(value: unknown): Record<string, unknown> {
     return this.llmRoutingConfig.normalizeForAdmin(value);
@@ -2305,11 +2160,9 @@ export class AdminGatewayService {
   private async readPackageVersions(): Promise<PackageVersionInfo> {
     if (!PACKAGE_JSON_CACHE.value) {
       PACKAGE_JSON_CACHE.value = (async () => {
-        const rootPackagePath = path.resolve(process.cwd(), 'package.json');
-        const apiPackagePath = path.resolve(
-          process.cwd(),
-          'apps/api/package.json',
-        );
+        const workspaceRoot = await this.resolveWorkspaceRoot();
+        const rootPackagePath = path.join(workspaceRoot, 'package.json');
+        const apiPackagePath = await this.resolveApiPackagePath(workspaceRoot);
         const [workspaceRaw, apiRaw] = await Promise.all([
           fs.readFile(rootPackagePath, 'utf8').catch(() => '{}'),
           fs.readFile(apiPackagePath, 'utf8').catch(() => '{}'),
@@ -2325,6 +2178,257 @@ export class AdminGatewayService {
     }
 
     return PACKAGE_JSON_CACHE.value;
+  }
+
+  private async readBuildMetadata(): Promise<BuildMetadataInfo> {
+    if (!BUILD_METADATA_CACHE.value) {
+      BUILD_METADATA_CACHE.value = (async () => {
+        const gitMetadata = await this.readGitMetadata();
+        const branch =
+          process.env.VERCEL_GIT_COMMIT_REF ||
+          process.env.GIT_BRANCH ||
+          gitMetadata.branch ||
+          null;
+        const commitSha =
+          process.env.VERCEL_GIT_COMMIT_SHA ||
+          process.env.GIT_COMMIT_SHA ||
+          process.env.COMMIT_SHA ||
+          gitMetadata.commitSha ||
+          null;
+        const repositoryUrl =
+          this.readRepositoryUrlFromEnv() || gitMetadata.repositoryUrl || null;
+
+        return {
+          branch,
+          branchUrl: this.buildBranchUrl(repositoryUrl, branch),
+          commitSha,
+          repositoryUrl,
+        };
+      })();
+    }
+
+    return BUILD_METADATA_CACHE.value;
+  }
+
+  private async readGitMetadata(): Promise<{
+    branch: string | null;
+    commitSha: string | null;
+    repositoryUrl: string | null;
+  }> {
+    const gitDir = await this.resolveGitDirectory();
+    if (!gitDir) {
+      return {
+        branch: null,
+        commitSha: null,
+        repositoryUrl: null,
+      };
+    }
+
+    const [headRaw, configRaw, packedRefsRaw] = await Promise.all([
+      fs.readFile(path.join(gitDir, 'HEAD'), 'utf8').catch(() => null),
+      fs.readFile(path.join(gitDir, 'config'), 'utf8').catch(() => null),
+      fs.readFile(path.join(gitDir, 'packed-refs'), 'utf8').catch(() => null),
+    ]);
+
+    let branch: string | null = null;
+    let commitSha: string | null = null;
+    const head = headRaw?.trim() ?? '';
+    if (head.startsWith('ref:')) {
+      const ref = head.replace(/^ref:\s*/, '').trim();
+      branch = ref.replace(/^refs\/heads\//, '');
+      commitSha = await this.readGitRef(gitDir, ref, packedRefsRaw);
+    } else if (head) {
+      commitSha = head;
+    }
+
+    return {
+      branch,
+      commitSha,
+      repositoryUrl: this.normalizeRepositoryUrl(
+        this.readOriginRemoteUrl(configRaw),
+      ),
+    };
+  }
+
+  private async resolveGitDirectory(): Promise<string | null> {
+    const workspaceRoot = await this.resolveWorkspaceRoot();
+    const dotGitPath = path.join(workspaceRoot, '.git');
+    const gitStat = await fs.stat(dotGitPath).catch(() => null);
+    if (!gitStat) {
+      return null;
+    }
+
+    if (gitStat.isDirectory()) {
+      return dotGitPath;
+    }
+
+    const dotGitRaw = await fs.readFile(dotGitPath, 'utf8').catch(() => null);
+    const gitDirMatch = dotGitRaw?.match(/^gitdir:\s*(.+)$/m);
+    if (!gitDirMatch) {
+      return null;
+    }
+
+    return path.resolve(workspaceRoot, gitDirMatch[1].trim());
+  }
+
+  private async readGitRef(
+    gitDir: string,
+    ref: string,
+    packedRefsRaw: string | null,
+  ): Promise<string | null> {
+    const looseRef = await fs
+      .readFile(path.join(gitDir, ref), 'utf8')
+      .catch(() => null);
+    if (looseRef?.trim()) {
+      return looseRef.trim();
+    }
+
+    if (!packedRefsRaw) {
+      return null;
+    }
+
+    const packedLine = packedRefsRaw
+      .split('\n')
+      .map((line) => line.trim())
+      .find((line) => line.endsWith(` ${ref}`));
+    if (!packedLine) {
+      return null;
+    }
+
+    const [sha] = packedLine.split(' ');
+    return sha?.trim() || null;
+  }
+
+  private readOriginRemoteUrl(configRaw: string | null): string | null {
+    if (!configRaw) {
+      return null;
+    }
+
+    const remoteSection = configRaw.match(
+      /\[remote "origin"\]([\s\S]*?)(?:\n\[|$)/,
+    );
+    const urlMatch = remoteSection?.[1]?.match(/^\s*url\s*=\s*(.+)\s*$/m);
+    return urlMatch?.[1]?.trim() || null;
+  }
+
+  private readRepositoryUrlFromEnv(): string | null {
+    const owner = process.env.VERCEL_GIT_REPO_OWNER?.trim();
+    const repo = process.env.VERCEL_GIT_REPO_SLUG?.trim();
+    if (owner && repo) {
+      return `https://github.com/${owner}/${repo}`;
+    }
+
+    const githubRepository = process.env.GITHUB_REPOSITORY?.trim();
+    if (githubRepository) {
+      return `https://github.com/${githubRepository}`;
+    }
+
+    return null;
+  }
+
+  private async resolveWorkspaceRoot(): Promise<string> {
+    if (!WORKSPACE_ROOT_CACHE.value) {
+      WORKSPACE_ROOT_CACHE.value = (async () => {
+        const startingDir = process.cwd();
+        let currentDir = startingDir;
+
+        while (true) {
+          const [gitStat, workspaceStat, packageRaw] = await Promise.all([
+            fs.stat(path.join(currentDir, '.git')).catch(() => null),
+            fs
+              .stat(path.join(currentDir, 'pnpm-workspace.yaml'))
+              .catch(() => null),
+            fs
+              .readFile(path.join(currentDir, 'package.json'), 'utf8')
+              .catch(() => null),
+          ]);
+
+          if (gitStat || workspaceStat) {
+            return currentDir;
+          }
+
+          if (packageRaw) {
+            try {
+              const packageJson = JSON.parse(packageRaw) as {
+                workspaces?: unknown;
+              };
+              if (packageJson.workspaces) {
+                return currentDir;
+              }
+            } catch {
+              // Ignore malformed package metadata and continue walking upward.
+            }
+          }
+
+          const parentDir = path.dirname(currentDir);
+          if (parentDir === currentDir) {
+            return startingDir;
+          }
+
+          currentDir = parentDir;
+        }
+      })();
+    }
+
+    return WORKSPACE_ROOT_CACHE.value;
+  }
+
+  private async resolveApiPackagePath(workspaceRoot: string): Promise<string> {
+    const candidates = [
+      path.join(workspaceRoot, 'apps', 'api', 'package.json'),
+      path.join(workspaceRoot, 'package.json'),
+    ];
+
+    for (const candidate of candidates) {
+      const stat = await fs.stat(candidate).catch(() => null);
+      if (stat?.isFile()) {
+        return candidate;
+      }
+    }
+
+    return candidates[0];
+  }
+
+  private normalizeRepositoryUrl(remoteUrl: string | null): string | null {
+    if (!remoteUrl) {
+      return null;
+    }
+
+    const sshRemote = remoteUrl.match(/^git@([^:]+):(.+?)(?:\.git)?$/);
+    if (sshRemote) {
+      return `https://${sshRemote[1]}/${sshRemote[2]}`;
+    }
+
+    const sshProtocolRemote = remoteUrl.match(
+      /^ssh:\/\/git@([^/]+)\/(.+?)(?:\.git)?$/,
+    );
+    if (sshProtocolRemote) {
+      return `https://${sshProtocolRemote[1]}/${sshProtocolRemote[2]}`;
+    }
+
+    try {
+      const url = new URL(remoteUrl);
+      url.username = '';
+      url.password = '';
+      url.search = '';
+      url.hash = '';
+      url.pathname = url.pathname.replace(/\.git$/, '');
+      return url.toString().replace(/\/$/, '');
+    } catch {
+      return null;
+    }
+  }
+
+  private buildBranchUrl(
+    repositoryUrl: string | null,
+    branch: string | null,
+  ): string | null {
+    if (!repositoryUrl || !branch) {
+      return null;
+    }
+
+    const treePath = repositoryUrl.includes('gitlab') ? '/-/tree/' : '/tree/';
+    return `${repositoryUrl}${treePath}${encodeURIComponent(branch)}`;
   }
 
   private parseCsv(value?: string): string[] {

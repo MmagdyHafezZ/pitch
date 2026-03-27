@@ -13,7 +13,6 @@ import { modals } from '@mantine/modals'
 import {
   IconActivityHeartbeat,
   IconArrowLeft,
-  IconClipboardList,
   IconCreditCard,
   IconLayoutDashboard,
   IconServer,
@@ -53,11 +52,6 @@ const ADMIN_MAIN_LINKS: SidebarLink[] = [
     icon: IconActivityHeartbeat,
     label: 'Sessions',
     href: '/studio/admin/sessions',
-  },
-  {
-    icon: IconClipboardList,
-    label: 'Logs',
-    href: '/studio/admin/logs',
   },
 ]
 
@@ -182,9 +176,6 @@ export default function ClientLayerComponent({ children }: { children: React.Rea
     }
     if (pathname.startsWith('/studio/admin/sessions')) {
       return 'Sessions'
-    }
-    if (pathname.startsWith('/studio/admin/logs')) {
-      return 'Logs'
     }
     return 'Dashboard'
   }, [pathname])

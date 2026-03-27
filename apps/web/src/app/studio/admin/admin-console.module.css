@@ -298,6 +298,17 @@
     monospace;
 }
 
+.consoleLink {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--pitch-accent-strong) 65%, transparent);
+  text-underline-offset: 0.18em;
+}
+
+.consoleLink:hover {
+  text-decoration-color: currentColor;
+}
+
 .statusRow {
   display: flex;
   align-items: center;

@@ -10,7 +10,6 @@ import {
   WsMessageType,
   type ConversationStartPayload,
 } from '@microservices/simulation/dto/websocket.dto';
-import { AdminObservabilityService } from '../admin/admin-observability.service';
 
 interface ConversationProcessResponse {
   text?: string;
@@ -37,7 +36,6 @@ export interface PhoneWebhookResult {
   twiml: string;
   externalId?: string;
   error?: string;
-  replayedFromId?: string;
 }
 
 @Injectable()
@@ -48,7 +46,6 @@ export class PhoneCallWebhookService {
     @Inject('SIMULATION_SERVICE')
     private readonly simulationService: ClientProxy,
     private readonly configService: ConfigService,
-    private readonly adminObservability: AdminObservabilityService,
   ) {}
 
   async processTwilioWebhook(
@@ -56,8 +53,6 @@ export class PhoneCallWebhookService {
     query: Record<string, unknown>,
     context: {
       request?: PhoneWebhookRequestContext;
-      source?: 'live' | 'replay';
-      replayedFromId?: string;
     } = {},
   ): Promise<PhoneWebhookResult> {
     const sessionId =
@@ -66,7 +61,6 @@ export class PhoneCallWebhookService {
       this.readString(query.userId) || this.readString(body.userId);
     const externalId =
       this.readString(body.CallSid) || this.readString(body.callSid);
-    const source = context.source ?? 'live';
 
     if (!sessionId || !userId) {
       const result: PhoneWebhookResult = {
@@ -77,9 +71,7 @@ export class PhoneCallWebhookService {
         twiml: this.buildErrorTwiML('Missing session context'),
         error: 'Missing session context',
         externalId,
-        replayedFromId: context.replayedFromId,
       };
-      this.recordWebhookEvent(body, query, result, source);
       return result;
     }
 
@@ -128,9 +120,7 @@ export class PhoneCallWebhookService {
         actionUrl,
         twiml: this.buildConversationTwiML(replyText, actionUrl),
         externalId,
-        replayedFromId: context.replayedFromId,
       };
-      this.recordWebhookEvent(body, query, result, source);
       return result;
     } catch (error) {
       this.logger.error('Twilio webhook processing failed', error);
@@ -146,37 +136,9 @@ export class PhoneCallWebhookService {
         ),
         externalId,
         error: (error as Error)?.message ?? 'Webhook processing failed',
-        replayedFromId: context.replayedFromId,
       };
-      this.recordWebhookEvent(body, query, result, source);
       return result;
     }
-  }
-
-  private recordWebhookEvent(
-    body: Record<string, unknown>,
-    query: Record<string, unknown>,
-    result: PhoneWebhookResult,
-    source: 'live' | 'replay',
-  ) {
-    this.adminObservability.recordWebhookEvent({
-      provider: 'twilio',
-      eventType: 'voice',
-      path: '/api/v1/simulation/phone-calls/twilio',
-      source,
-      status: result.status,
-      payload: body,
-      query,
-      response: {
-        replyText: result.replyText,
-        actionUrl: result.actionUrl,
-      },
-      error: result.error,
-      sessionId: result.sessionId,
-      userId: result.userId,
-      externalId: result.externalId,
-      replayedFromId: result.replayedFromId,
-    });
   }
 
   private buildActionUrl(

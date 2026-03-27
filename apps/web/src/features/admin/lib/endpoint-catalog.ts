@@ -151,8 +151,6 @@ GET    /api/v1/admin/overview
 GET    /api/v1/admin/health/dependencies
 GET    /api/v1/admin/version
 GET    /api/v1/admin/runtime-config
-GET    /api/v1/admin/log-levels
-PATCH  /api/v1/admin/log-levels
 GET    /api/v1/admin/users/:userId/activity
 GET    /api/v1/admin/users/:userId/sessions
 POST   /api/v1/admin/users/:userId/impersonate
@@ -184,12 +182,6 @@ GET    /api/v1/admin/jobs/:jobId
 POST   /api/v1/admin/jobs/:jobName/run
 GET    /api/v1/admin/queues
 POST   /api/v1/admin/queues/:queueName/retry-dead-letters
-GET    /api/v1/admin/webhooks
-GET    /api/v1/admin/webhooks/:provider/events
-POST   /api/v1/admin/webhooks/:provider/events/:id/replay
-GET    /api/v1/admin/audit-logs
-GET    /api/v1/admin/logs
-GET    /api/v1/admin/request-logs
 POST   /api/v1/admin/cache/invalidate
 POST   /api/v1/admin/data-fixes/:name/preview
 POST   /api/v1/admin/data-fixes/:name/apply
