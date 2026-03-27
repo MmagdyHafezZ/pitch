@@ -171,19 +171,13 @@ describe('AdminGatewayService', () => {
   });
 
   it('reads version metadata from the workspace root', async () => {
-    await expect(service.getVersion()).resolves.toMatchObject({
-      api: {
-        version: expect.any(String),
-      },
-      workspace: {
-        version: expect.any(String),
-      },
-      build: {
-        branch: expect.any(String),
-        branchUrl: expect.any(String),
-        repositoryUrl: expect.stringContaining('github.com'),
-      },
-    });
+    const result = await service.getVersion();
+
+    expect(typeof result.api.version).toBe('string');
+    expect(typeof result.workspace.version).toBe('string');
+    expect(typeof result.build.branch).toBe('string');
+    expect(typeof result.build.branchUrl).toBe('string');
+    expect(result.build.repositoryUrl).toContain('github.com');
   });
 
   it('merges env and override feature flags', async () => {

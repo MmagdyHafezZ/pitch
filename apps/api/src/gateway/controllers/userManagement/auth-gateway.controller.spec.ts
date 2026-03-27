@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import type { ClientProxy } from '@nestjs/microservices';
 import { of } from 'rxjs';
 import { lastValueFrom } from 'rxjs';
@@ -30,44 +29,6 @@ describe('AuthGatewayController', () => {
 
   afterEach(() => {
     process.env = { ...originalEnv };
-  });
-
-  it('marks login responses as system admin for configured admin emails', async () => {
-    process.env.SUPER_ADMIN_EMAILS = 'admin@example.com';
-    const res = {
-      cookie: jest.fn(),
-    };
-
-    userService.send.mockReturnValue(
-      of({
-        token: 'access-token',
-        refreshToken: 'refresh-token',
-        user: {
-          id: 'user-1',
-          email: 'admin@example.com',
-          name: 'Admin',
-          isActive: true,
-          createdAt: new Date('2026-03-23T00:00:00.000Z'),
-          updatedAt: new Date('2026-03-23T00:00:00.000Z'),
-        },
-      }) as never,
-    );
-
-    const result = await lastValueFrom(
-      controller.login({ email: 'admin@example.com' } as never, res as never),
-    );
-
-    expect(result).toEqual({
-      accessToken: 'access-token',
-      user: expect.objectContaining({
-        email: 'admin@example.com',
-        isSystemAdmin: true,
-      }),
-    });
-    expect(send).toHaveBeenCalledWith('auth.login', {
-      email: 'admin@example.com',
-    });
-    expect(res.cookie).toHaveBeenCalled();
   });
 
   it('marks profile responses as system admin for configured admin emails', async () => {

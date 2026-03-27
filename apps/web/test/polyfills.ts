@@ -1,9 +1,30 @@
 import { TextDecoder, TextEncoder } from 'util'
 import { ReadableStream, TransformStream, WritableStream } from 'stream/web'
-import * as undici from 'undici'
 import { BroadcastChannel as WorkerBroadcastChannel } from 'worker_threads'
 
+type UndiciLike = {
+  fetch: typeof fetch
+  Headers: typeof Headers
+  Request: typeof Request
+  Response: typeof Response
+  FormData?: typeof FormData
+  File?: typeof File
+}
+
+if (!globalThis.TextEncoder) {
+  globalThis.TextEncoder = TextEncoder
+}
+
+if (!globalThis.TextDecoder) {
+  // @ts-expect-error - assigning Node TextDecoder to global scope for Jest
+  globalThis.TextDecoder = TextDecoder
+}
+
 if (typeof globalThis.Response === 'undefined') {
+  // Import undici only after TextEncoder/TextDecoder are available globally.
+  // Undici reads them during module initialization in the Jest runtime.
+  const undici = require('undici') as UndiciLike
+
   // Defer to undici when running inside a Node-based Jest environment
   globalThis.fetch = globalThis.fetch ?? undici.fetch
   globalThis.Headers = globalThis.Headers ?? undici.Headers
@@ -27,16 +48,6 @@ if (typeof globalThis.BroadcastChannel === 'undefined') {
   } catch (error) {
     // Skip when BroadcastChannel is unavailable (older Node releases)
   }
-}
-
-if (!globalThis.TextEncoder) {
-  // @ts-expect-error - assigning Node TextEncoder to global scope for Jest
-  globalThis.TextEncoder = TextEncoder
-}
-
-if (!globalThis.TextDecoder) {
-  // @ts-expect-error - assigning Node TextDecoder to global scope for Jest
-  globalThis.TextDecoder = TextDecoder
 }
 
 if (!globalThis.TransformStream) {

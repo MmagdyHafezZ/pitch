@@ -1655,7 +1655,8 @@ export class AdminGatewayService {
     };
   }
 
-  async listJobs(_query: LogQuery) {
+  async listJobs(query: LogQuery) {
+    void query;
     const queueStats = await this.rabbitMqAdmin.getQueueStats();
     return {
       jobs: KNOWN_JOBS.map((job) => ({ ...job })),
@@ -1678,23 +1679,19 @@ export class AdminGatewayService {
       throw new NotFoundException('Job not found');
     }
 
-    try {
-      const result: unknown = await lastValueFrom(
-        this.simulationService
-          .send(SIMULATION_SERVICE_PATTERNS.CHALLENGE_TRIGGER_GENERATE, {
-            period: definition.period,
-            userClaims: actor,
-          })
-          .pipe(timeout(60000)),
-      );
+    const result: unknown = await lastValueFrom(
+      this.simulationService
+        .send(SIMULATION_SERVICE_PATTERNS.CHALLENGE_TRIGGER_GENERATE, {
+          period: definition.period,
+          userClaims: actor,
+        })
+        .pipe(timeout(60000)),
+    );
 
-      return {
-        jobName: definition.id,
-        result,
-      };
-    } catch (error) {
-      throw error;
-    }
+    return {
+      jobName: definition.id,
+      result,
+    };
   }
 
   async listQueues() {
@@ -1714,8 +1711,9 @@ export class AdminGatewayService {
   async retryDeadLetters(
     queueName: string,
     body: QueueRetryBody,
-    _actor: UserClaims,
+    actor: UserClaims,
   ) {
+    void actor;
     const result = await this.rabbitMqAdmin.retryDeadLetters(
       queueName,
       this.normalizeLimit(body.maxMessages, 100, 1000),
@@ -2118,12 +2116,18 @@ export class AdminGatewayService {
   }
 
   private recordAudit(
-    _actor: UserClaims,
-    _action: string,
-    _targetType: string,
-    _targetId: string,
-    _details?: Record<string, unknown>,
-  ) {}
+    actor: UserClaims,
+    action: string,
+    targetType: string,
+    targetId: string,
+    details?: Record<string, unknown>,
+  ) {
+    void actor;
+    void action;
+    void targetType;
+    void targetId;
+    void details;
+  }
 
   private normalizeRoutingConfig(value: unknown): Record<string, unknown> {
     return this.llmRoutingConfig.normalizeForAdmin(value);

@@ -195,6 +195,41 @@ export class AuthGatewayController {
       );
   }
 
+  @Post('login')
+  @Public()
+  @ApiOperation({ summary: 'Login an existing user' })
+  @ApiResponse({
+    status: 200,
+    description: 'User logged in successfully',
+    type: AuthTokenResponseDto,
+  })
+  @ApiResponse({ status: 401, description: 'Invalid credentials' })
+  login(
+    @Body() loginDto: LoginDto,
+    @Res({ passthrough: true }) res: ExpressResponse,
+  ) {
+    this.logger.log(`Login attempt for: ${loginDto.email}`);
+
+    return this.userService.send(USER_SERVICE_PATTERNS.LOGIN, loginDto).pipe(
+      timeout(10000),
+      map((payload: AuthResponseDto) => {
+        this.setRefreshCookie(res, payload.refreshToken);
+        return {
+          user: this.decorateUser(payload.user),
+          accessToken: payload.token,
+        };
+      }),
+      catchError((err: unknown) => {
+        const error = normalizeError(err);
+        const status = error.status ?? HttpStatus.UNAUTHORIZED;
+        const message = error.message ?? 'Login failed';
+        const stack = error.stack ?? JSON.stringify(err);
+        this.logger.error(`Login failed for ${loginDto.email}`, stack);
+        return throwError(() => new HttpException(message, status));
+      }),
+    );
+  }
+
   @Post('refresh')
   @Public()
   @ApiOperation({ summary: 'Refresh access token' })
