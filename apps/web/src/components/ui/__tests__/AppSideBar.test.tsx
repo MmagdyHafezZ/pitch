@@ -98,4 +98,17 @@ describe('AppSideBar', () => {
 
     expect(mockPush).toHaveBeenCalledWith('/studio/admin')
   })
+
+  it('shows a single admin entry when admin access is enabled', () => {
+    render(
+      <AppSidebar
+        {...baseProps}
+        mainLinks={[{ icon: () => null, label: 'Home', href: '/studio/home' }]}
+        showAdmin
+        showTeamConfig={false}
+      />
+    )
+
+    expect(screen.getAllByText('Admin')).toHaveLength(1)
+  })
 })
