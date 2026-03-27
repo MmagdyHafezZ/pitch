@@ -29,6 +29,7 @@ export class ChallengeService {
   ) {}
 
   async list(query: ListChallengesDto, userId?: string) {
+    void userId;
     const { challenges, total } = await this.challengeRepo.findMany({
       period: query.period as ChallengePeriod | undefined,
       difficulty: query.difficulty as ChallengeDifficulty | undefined,

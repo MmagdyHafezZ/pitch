@@ -64,6 +64,7 @@ export type HeaderProps = {
     | 'Challenges'
     | 'Settings'
     | 'Subscription'
+    | 'Admin'
   selectedTab?: string
   onTabChange?: (tab: string) => void
   onToggleMobileNav?: () => void
@@ -78,6 +79,7 @@ type PageKey =
   | 'Challenges'
   | 'Settings'
   | 'Subscription'
+  | 'Admin'
 type ActionBarProps = {
   actionButtons?: ReactNode
   leadingAction?: ReactNode
@@ -547,7 +549,8 @@ export function AppTopBar({
   const isNarrow = useMediaQuery('(max-width: 520px)')
   const queryClient = useQueryClient()
   const currentUser = useAuthStore((state) => state.user)
-  const teams = useTeamsStore((state) => state.teams) ?? []
+  const storedTeams = useTeamsStore((state) => state.teams)
+  const teams = useMemo(() => storedTeams ?? [], [storedTeams])
   const refreshUserTeams = useTeamsStore((state) => state.fetchUserTeams)
   const sessionQuery = useMemo(() => searchParams.get('q') ?? '', [searchParams])
   const handleSessionSearch = (next: string) => {

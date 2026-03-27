@@ -57,6 +57,8 @@ export default function CalendarPage() {
   const [lookAheadDays, setLookAheadDays] = useState('7')
 
   const store = useCalendarStore()
+  const fetchStatuses = useCalendarStore((state) => state.fetchStatuses)
+  const fetchSuggestions = useCalendarStore((state) => state.fetchSuggestions)
   const {
     data: events,
     isLoading: eventsLoading,
@@ -64,9 +66,9 @@ export default function CalendarPage() {
   } = useCalendarEvents(parseInt(lookAheadDays))
 
   useEffect(() => {
-    void store.fetchStatuses()
-    void store.fetchSuggestions()
-  }, [])
+    void fetchStatuses()
+    void fetchSuggestions()
+  }, [fetchStatuses, fetchSuggestions])
 
   useEffect(() => {
     if (connectedParam) {
