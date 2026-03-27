@@ -27,7 +27,7 @@ import { UserClaims } from '../../decorators/user-claims.decorator';
 import type { UserClaims as UserClaimsType } from '@pitch/shared-backend/interfaces/user-claims.interface';
 import { normalizeError } from '@pitch/shared-backend/helpers/exceptions';
 import { CoachStreamService } from './coach-stream.service';
-import type { Attachment } from './coach-stream.service';
+import type { StreamItem, Attachment } from './coach-stream.service';
 
 interface CoachChatRequest {
   messages: Array<{

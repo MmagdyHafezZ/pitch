@@ -21,8 +21,6 @@ export const useLoginMutation = () => {
   return useMutation<AuthResponse, Error, LoginCredentials>({
     mutationFn: (credentials) => api.auth.login(credentials),
     onSuccess: async (data) => {
-      queryClient.removeQueries({ queryKey: ['admin-access'] })
-      queryClient.removeQueries({ queryKey: ['admin-console'] })
       queryClient.setQueryData(authKeys.me(), data.user)
       await queryClient.invalidateQueries({ queryKey: authKeys.me() })
       await queryClient.invalidateQueries({ queryKey: oauthKeys.linked() })
@@ -37,8 +35,6 @@ export const useRegisterMutation = () => {
   return useMutation<AuthResponse, Error, RegisterCredentials>({
     mutationFn: (credentials) => api.auth.register(credentials),
     onSuccess: async (data) => {
-      queryClient.removeQueries({ queryKey: ['admin-access'] })
-      queryClient.removeQueries({ queryKey: ['admin-console'] })
       queryClient.setQueryData(authKeys.me(), data.user)
       await queryClient.invalidateQueries({ queryKey: authKeys.me() })
       await queryClient.invalidateQueries({ queryKey: oauthKeys.linked() })
@@ -55,8 +51,6 @@ export const useLogoutMutation = () => {
     onSuccess: () => {
       queryClient.removeQueries({ queryKey: authKeys.all })
       queryClient.removeQueries({ queryKey: oauthKeys.all })
-      queryClient.removeQueries({ queryKey: ['admin-access'] })
-      queryClient.removeQueries({ queryKey: ['admin-console'] })
     },
   })
 }

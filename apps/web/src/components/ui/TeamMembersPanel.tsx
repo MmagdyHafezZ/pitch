@@ -411,7 +411,13 @@ export function TeamMembersPanel() {
   }
 
   return (
-    <Card withBorder radius="xl" shadow="lg" p="lg" style={themedPanelStyle}>
+    <Card
+      withBorder
+      radius="xl"
+      shadow="lg"
+      p="lg"
+      style={themedPanelStyle}
+    >
       {!currentTeam ? (
         <Text size="sm" c="dimmed">
           No team selected. Choose a team first.
@@ -692,7 +698,12 @@ export function TeamMembersPanel() {
           )}
 
           {pendingEmailInvites.length > 0 && (
-            <Paper withBorder radius="lg" p="sm" style={themedSubtleStyle}>
+            <Paper
+              withBorder
+              radius="lg"
+              p="sm"
+              style={themedSubtleStyle}
+            >
               <Stack gap="xs">
                 <Text size="sm" fw={600}>
                   Pending email invites
@@ -719,7 +730,12 @@ export function TeamMembersPanel() {
             </Paper>
           )}
 
-          <Paper withBorder radius="lg" p="sm" style={themedSubtleStyle}>
+          <Paper
+            withBorder
+            radius="lg"
+            p="sm"
+            style={themedSubtleStyle}
+          >
             <Stack gap="xs">
               <Text size="sm" fw={600}>
                 Can&apos;t find who you&apos;re looking for?

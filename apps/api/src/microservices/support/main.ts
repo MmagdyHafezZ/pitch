@@ -14,21 +14,11 @@ import { MicroserviceExceptionFilter } from '@pitch/shared-backend/filters/micro
 import { PrismaClientExceptionFilter } from '@pitch/shared-backend/filters/prisma-exception.filter';
 import { RpcExceptionLoggingFilter } from '@pitch/shared-backend/filters/rpc-exception.filter';
 import { getRabbitMQUrl } from './config/rabbitmq.config';
-import { getQueueOptions } from '../../config/microservices.config';
-import {
-  buildRabbitMqQueueTopology,
-  provisionRabbitMqTopology,
-} from '../../config/rabbitmq-topology';
 
 async function bootstrap() {
   const logger = new Logger('SupportMicroservice');
-  const rabbitmqUrl = getRabbitMQUrl();
-  const queueName = process.env.SUPPORT_RMQ_QUEUE || 'support_queue';
-  const httpPort = process.env.SUPPORT_HTTP_PORT || 3006;
 
-  await provisionRabbitMqTopology(rabbitmqUrl, [
-    buildRabbitMqQueueTopology(queueName),
-  ]);
+  const httpPort = process.env.SUPPORT_HTTP_PORT || 3006;
 
   const app = await NestFactory.create(SupportModule);
 
@@ -40,9 +30,11 @@ async function bootstrap() {
   const microservice = app.connectMicroservice<MicroserviceOptions>({
     transport: Transport.RMQ,
     options: {
-      urls: [rabbitmqUrl],
-      queue: queueName,
-      queueOptions: getQueueOptions(),
+      urls: [getRabbitMQUrl()],
+      queue: process.env.SUPPORT_RMQ_QUEUE || 'support_queue',
+      queueOptions: {
+        durable: true,
+      },
       noAck: true,
       prefetchCount: 10,
     },
@@ -102,7 +94,9 @@ async function bootstrap() {
   });
 
   await app.startAllMicroservices();
-  logger.log(`RabbitMQ microservice is listening on ${queueName}`);
+  logger.log(
+    `RabbitMQ microservice is listening on ${process.env.SUPPORT_RMQ_QUEUE || 'support_queue'}`,
+  );
 
   await app.listen(httpPort);
   logger.log(`HTTP server is listening on port ${httpPort}`);

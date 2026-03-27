@@ -1,17 +1,17 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { Alert, Badge, Button, Card, Group, Loader, Stack, Text, Title } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
-import { IconChartPie } from '@tabler/icons-react'
-import { AdminWorkspacePage } from '../_components/AdminWorkspacePage'
+import { IconChartPie, IconShieldLock } from '@tabler/icons-react'
 import { api } from '@/lib/client'
 import { useAuthStore } from '@/features/auth/stores/auth.store'
 
 type PendingPlanChange = {
-  id: string
+  id: string // subscription id
   teamId: string
-  planId: string
+  planId: string // current plan id
   currentPeriodEnd: string
   plan?: { name: string; planLevel: string }
   metadata?: {
@@ -24,12 +24,19 @@ type PendingPlanChange = {
   }
 }
 
-function PendingPlanChangesSection() {
+export default function AdminPlansPage() {
+  const router = useRouter()
   const user = useAuthStore((state) => state.user)
   const [requests, setRequests] = useState<PendingPlanChange[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [reviewingId, setReviewingId] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (user && !user.isSystemAdmin) {
+      router.replace('/studio/home')
+    }
+  }, [router, user])
 
   useEffect(() => {
     if (!user?.isSystemAdmin) return
@@ -42,28 +49,26 @@ function PendingPlanChangesSection() {
         const result = await api.admin.subscriptions.listPlanChanges()
         if (active) setRequests(Array.isArray(result) ? result : [])
       } catch (err) {
-        if (active) {
+        if (active)
           setError(err instanceof Error ? err.message : 'Failed to load pending plan changes.')
-        }
       } finally {
         if (active) setLoading(false)
       }
     }
-
     void load()
     return () => {
       active = false
     }
   }, [user?.isSystemAdmin])
 
-  const handleApprove = async (request: PendingPlanChange) => {
-    setReviewingId(request.id)
+  const handleApprove = async (req: PendingPlanChange) => {
+    setReviewingId(req.id)
     try {
-      await api.admin.subscriptions.approvePlanChange(request.id)
-      setRequests((prev) => prev.filter((item) => item.id !== request.id))
+      await api.admin.subscriptions.approvePlanChange(req.id)
+      setRequests((prev) => prev.filter((r) => r.id !== req.id))
       notifications.show({
         title: 'Plan change approved',
-        message: `Subscription ${request.id} has been upgraded.`,
+        message: `Subscription ${req.id} has been upgraded.`,
         color: 'teal',
       })
     } catch (err) {
@@ -77,11 +82,11 @@ function PendingPlanChangesSection() {
     }
   }
 
-  const handleReject = async (request: PendingPlanChange) => {
-    setReviewingId(request.id)
+  const handleReject = async (req: PendingPlanChange) => {
+    setReviewingId(req.id)
     try {
-      await api.admin.subscriptions.rejectPlanChange(request.id)
-      setRequests((prev) => prev.filter((item) => item.id !== request.id))
+      await api.admin.subscriptions.rejectPlanChange(req.id)
+      setRequests((prev) => prev.filter((r) => r.id !== req.id))
       notifications.show({
         title: 'Plan change rejected',
         message: 'The request has been cancelled.',
@@ -99,26 +104,33 @@ function PendingPlanChangesSection() {
   }
 
   if (!user?.isSystemAdmin) {
-    return null
+    return (
+      <Stack gap="md">
+        <Title order={2}>Plan change requests</Title>
+        <Alert color="red" variant="light" icon={<IconShieldLock size={18} />}>
+          Super admin access is required.
+        </Alert>
+      </Stack>
+    )
   }
 
   return (
-    <Stack gap="md">
+    <Stack gap="lg">
       <Stack gap={4}>
         <Group gap="sm">
           <IconChartPie size={20} />
-          <Title order={3}>Plan change requests</Title>
+          <Title order={2}>Plan change requests</Title>
         </Group>
         <Text c="dimmed">
           Review pending subscription plan change requests and approve or reject each one.
         </Text>
       </Stack>
 
-      {error ? (
+      {error && (
         <Alert color="red" variant="light">
           {error}
         </Alert>
-      ) : null}
+      )}
 
       {loading ? (
         <Loader size="lg" />
@@ -128,23 +140,23 @@ function PendingPlanChangesSection() {
         </Alert>
       ) : (
         <Stack gap="md">
-          {requests.map((request) => {
-            const pending = request.metadata?.pendingPlanChange
+          {requests.map((req) => {
+            const pending = req.metadata?.pendingPlanChange
             return (
-              <Card key={request.id} withBorder radius="lg" p="lg">
+              <Card key={req.id} withBorder radius="lg" p="lg">
                 <Stack gap="md">
                   <Group justify="space-between" align="flex-start">
                     <Stack gap={4}>
                       <Text fw={700} size="sm">
-                        Team: {request.teamId}
+                        Team: {req.teamId}
                       </Text>
                       <Text size="sm" c="dimmed">
                         Current plan:{' '}
                         <Text span fw={600} c="inherit">
-                          {request.plan?.name ?? request.planId}
+                          {req.plan?.name ?? req.planId}
                         </Text>
                       </Text>
-                      {pending ? (
+                      {pending && (
                         <Text size="sm" c="dimmed">
                           Requesting:{' '}
                           <Text span fw={600} c="blue">
@@ -152,32 +164,29 @@ function PendingPlanChangesSection() {
                           </Text>{' '}
                           · {pending.requestedInterval}
                         </Text>
-                      ) : null}
+                      )}
                     </Stack>
                     <Badge variant="light" color="yellow">
                       Pending
                     </Badge>
                   </Group>
 
-                  {pending ? (
+                  {pending && (
                     <Text size="xs" c="dimmed">
                       Requested on {new Date(pending.requestedAt).toLocaleString()}
                     </Text>
-                  ) : null}
+                  )}
 
                   <Group>
                     <Button
                       variant="light"
                       color="yellow"
-                      loading={reviewingId === request.id}
-                      onClick={() => handleReject(request)}
+                      loading={reviewingId === req.id}
+                      onClick={() => handleReject(req)}
                     >
                       Reject
                     </Button>
-                    <Button
-                      loading={reviewingId === request.id}
-                      onClick={() => handleApprove(request)}
-                    >
+                    <Button loading={reviewingId === req.id} onClick={() => handleApprove(req)}>
                       Approve
                     </Button>
                   </Group>
@@ -187,15 +196,6 @@ function PendingPlanChangesSection() {
           })}
         </Stack>
       )}
-    </Stack>
-  )
-}
-
-export default function AdminPlansPage() {
-  return (
-    <Stack gap="lg">
-      <PendingPlanChangesSection />
-      <AdminWorkspacePage view="plans" />
     </Stack>
   )
 }

@@ -276,7 +276,7 @@ describe('LTI 1.3 Launch — integration', () => {
   // ── Security error paths ─────────────────────────────────────────────────────
 
   describe('security rejections', () => {
-    function arrangeForClaims() {
+    function arrangeForClaims(claims: object) {
       mockOidcService.consumeState.mockResolvedValue({
         platformId: PLATFORM.id,
         nonce: 'nonce-integration',
@@ -286,7 +286,7 @@ describe('LTI 1.3 Launch — integration', () => {
     }
 
     it('rejects a JWT signed with a different private key (signature mismatch)', async () => {
-      arrangeForClaims();
+      arrangeForClaims({});
       const wrongPair = crypto.generateKeyPairSync('rsa', {
         modulusLength: 2048,
         publicKeyEncoding: { type: 'spki', format: 'pem' },
@@ -303,7 +303,7 @@ describe('LTI 1.3 Launch — integration', () => {
     });
 
     it('rejects an expired JWT', async () => {
-      arrangeForClaims();
+      arrangeForClaims({});
       const claims = validClaims({
         exp: nowSec() - 3600,
         iat: nowSec() - 7200,
@@ -316,7 +316,7 @@ describe('LTI 1.3 Launch — integration', () => {
     });
 
     it('rejects when issuer does not match the registered platform', async () => {
-      arrangeForClaims();
+      arrangeForClaims({});
       const claims = validClaims({ iss: 'https://attacker.example.com' });
       const idToken = buildJwt(claims, privateKey);
 
@@ -344,7 +344,7 @@ describe('LTI 1.3 Launch — integration', () => {
     });
 
     it('rejects an unsupported LTI version claim', async () => {
-      arrangeForClaims();
+      arrangeForClaims({});
       const claims = validClaims({
         'https://purl.imsglobal.org/spec/lti/claim/version': '1.1.0',
       });

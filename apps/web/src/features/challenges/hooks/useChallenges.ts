@@ -6,7 +6,6 @@ import type { ChallengePeriod, ChallengeDifficulty } from '../types/challenges.t
 
 export function useChallenges() {
   const store = useChallengesStore()
-  const fetchChallenges = useChallengesStore((state) => state.fetchChallenges)
 
   const filteredChallenges = useMemo(() => {
     return store.challenges.filter((c) => {
@@ -28,9 +27,9 @@ export function useChallenges() {
 
   const fetch = useCallback(
     (period?: ChallengePeriod, difficulty?: ChallengeDifficulty) => {
-      return fetchChallenges({ period, difficulty })
+      return store.fetchChallenges({ period, difficulty })
     },
-    [fetchChallenges]
+    [store.fetchChallenges]
   )
 
   return {

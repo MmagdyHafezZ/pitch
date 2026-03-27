@@ -5,8 +5,6 @@ export interface MicroserviceConfig {
   queue: string;
 }
 
-export const RABBITMQ_DEAD_LETTER_EXCHANGE = 'pitch.services.dlx';
-
 export const MICROSERVICES_CONFIG: MicroserviceConfig[] = [
   { name: 'USER_SERVICE', queue: 'user_queue' },
   { name: 'SIMULATION_SERVICE', queue: 'simulation_queue' },
@@ -41,7 +39,9 @@ export function createMicroserviceOptions(queue: string): MicroserviceOptions {
       queue,
       noAck: true,
       prefetchCount: 10,
-      queueOptions: getQueueOptions(url),
+      queueOptions: {
+        durable: true,
+      },
       socketOptions: {
         heartbeatIntervalInSeconds: 60,
       },
@@ -74,34 +74,8 @@ export function getRabbitMQUrl(): string {
   return url;
 }
 
-export function usesRabbitMqPolicyDeadLettering(
-  rabbitmqUrl = getRabbitMQUrl(),
-): boolean {
-  try {
-    const parsed = new URL(rabbitmqUrl);
-    const vhost = decodeURIComponent(parsed.pathname.replace(/^\/+/, ''));
-
-    return vhost === 'pitch_local';
-  } catch {
-    return false;
-  }
-}
-
-export function getQueueOptions(rabbitmqUrl = getRabbitMQUrl()) {
-  if (usesRabbitMqPolicyDeadLettering(rabbitmqUrl)) {
-    return {
-      durable: true,
-    };
-  }
-
-  return getDeadLetterQueueOptions();
-}
-
-export function getDeadLetterQueueOptions() {
+export function getQueueOptions() {
   return {
     durable: true,
-    arguments: {
-      'x-dead-letter-exchange': RABBITMQ_DEAD_LETTER_EXCHANGE,
-    },
   };
 }

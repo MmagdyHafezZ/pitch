@@ -3,7 +3,6 @@ import type { VapiContextService } from '@microservices/simulation/phone/vapi-co
 import type { PhoneCallService } from '@microservices/simulation/phone/phone-call.service';
 import type { SessionService } from '@microservices/simulation/services/session.service';
 import type { ConversationOrchestrationService } from '@microservices/simulation/services/conversation-orchestration.service';
-import type { ConversationStreamEvent } from '@microservices/simulation/dto/conversation-stream.types';
 import { of } from 'rxjs';
 
 type MockJsonResponse = {
@@ -26,8 +25,6 @@ type MockSseResponse = {
 };
 
 describe('PhoneCallWebhookController', () => {
-  const streamOf = (...events: ConversationStreamEvent[]) => of(...events);
-
   let controller: PhoneCallWebhookController;
   let vapiContext: jest.Mocked<VapiContextService>;
   let sessionService: jest.Mocked<SessionService>;
@@ -159,7 +156,7 @@ describe('PhoneCallWebhookController', () => {
 
   it('returns OpenAI-compatible chat completions from the PITCH conversation engine', async () => {
     conversationStream.mockReturnValue(
-      streamOf(
+      of(
         { type: 'delta', data: { delta: 'Hello there.' } },
         {
           type: 'completed',
@@ -172,7 +169,7 @@ describe('PhoneCallWebhookController', () => {
           type: 'hangup_requested',
           data: { reason: 'Verification complete' },
         },
-      ),
+      ) as any,
     );
 
     const res: MockJsonResponse = {
@@ -240,13 +237,13 @@ describe('PhoneCallWebhookController', () => {
 
   it('forwards a model-authored starter prompt when Vapi asks the assistant to speak first', async () => {
     conversationStream.mockReturnValue(
-      streamOf({
+      of({
         type: 'completed',
         data: {
           fullText: 'Hello, this is your verification call.',
           totalSentences: 1,
         },
-      }),
+      }) as any,
     );
 
     const res: MockJsonResponse = {
@@ -297,7 +294,7 @@ describe('PhoneCallWebhookController', () => {
 
   it('streams OpenAI-compatible SSE chunks and ends the phone call when the model asks to hang up', async () => {
     conversationStream.mockReturnValue(
-      streamOf(
+      of(
         { type: 'delta', data: { delta: 'Hello' } },
         { type: 'delta', data: { delta: ' there.' } },
         {
@@ -311,7 +308,7 @@ describe('PhoneCallWebhookController', () => {
             totalSentences: 1,
           },
         },
-      ),
+      ) as any,
     );
 
     const res: MockSseResponse = {

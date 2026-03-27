@@ -1,9 +1,7 @@
+/* eslint-disable */
 import { BadRequestException, HttpStatus } from '@nestjs/common';
 import { RpcException } from '@nestjs/microservices';
 import { CalendarController } from './calendar.controller';
-import type { CalendarQueryService } from '../services/calendar-query.service';
-import type { GoogleCalendarIntegrationService } from '../services/google-calendar-integration.service';
-import type { MicrosoftCalendarIntegrationService } from '../services/microsoft-calendar-integration.service';
 
 describe('CalendarController', () => {
   const createController = () => {
@@ -27,9 +25,9 @@ describe('CalendarController', () => {
     };
 
     const controller = new CalendarController(
-      googleCalendar as unknown as GoogleCalendarIntegrationService,
-      microsoftCalendar as unknown as MicrosoftCalendarIntegrationService,
-      calendarQuery as unknown as CalendarQueryService,
+      googleCalendar as any,
+      microsoftCalendar as any,
+      calendarQuery as any,
     );
 
     return { controller, googleCalendar, microsoftCalendar, calendarQuery };

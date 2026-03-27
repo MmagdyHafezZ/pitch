@@ -26,7 +26,6 @@ import { SIMULATION_SERVICE_PATTERNS } from '@pitch/shared-backend/interfaces/me
 import { GlobalJwtAuthGuard } from '../../guards/global-jwt-auth.guard';
 import { UserClaimsInterceptor } from '../../interceptors/user-claims.interceptor';
 import { UserClaims } from '../../decorators/user-claims.decorator';
-import { SystemAdminOnly } from '../../decorators/system-admin.decorator';
 import type { UserClaims as UserClaimsType } from '@pitch/shared-backend/interfaces/user-claims.interface';
 import { normalizeError } from '@pitch/shared-backend/helpers/exceptions';
 
@@ -45,7 +44,6 @@ export class ChallengesGatewayController {
    * Manually trigger challenge generation for a period (dev/admin use)
    */
   @Post('admin/generate')
-  @SystemAdminOnly()
   @ApiOperation({ summary: 'Trigger challenge generation (admin/dev)' })
   @ApiResponse({ status: 201, description: 'Generation triggered' })
   triggerGenerate(

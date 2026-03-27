@@ -112,11 +112,9 @@ const N_POINTS = 14 // control vertices on the blob
 export default function GlobeVisualizer({ state, analyserRef, size = 320 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const animRef = useRef<number>(0)
-  const analyserInputRef = useRef(analyserRef)
   const stateRef = useRef(state)
   const targetColRef = useRef({ ...COLORS[state] })
 
-  analyserInputRef.current = analyserRef
   stateRef.current = state
   targetColRef.current = COLORS[state]
 
@@ -174,7 +172,7 @@ export default function GlobeVisualizer({ state, analyserRef, size = 320 }: Prop
     }
 
     // Lerp the color object each frame
-    const curCol: StateColors = { ...targetColRef.current }
+    const curCol: StateColors = { ...COLORS[state] }
 
     function draw() {
       ctx.clearRect(0, 0, size, size)
@@ -188,7 +186,7 @@ export default function GlobeVisualizer({ state, analyserRef, size = 320 }: Prop
       }
 
       // Read audio level from LLM analyser
-      const analyser = analyserInputRef.current?.current
+      const analyser = analyserRef?.current
       let rmsRaw = 0
       if (analyser) {
         const bins = analyser.frequencyBinCount

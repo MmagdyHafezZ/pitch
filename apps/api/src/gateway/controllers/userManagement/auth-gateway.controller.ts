@@ -37,7 +37,6 @@ import type {
 } from 'express';
 import { AuthTokenResponseDto } from '../../dto/auth-response.dto';
 import { getWhitelistedRoutes } from '../../config/auth-whitelist.config';
-import { isSystemAdminEmail } from '../../utils/system-admin-access';
 
 @ApiTags('authentication')
 @Controller({ path: 'auth', version: '1' })
@@ -59,11 +58,11 @@ export class AuthGatewayController {
 
   constructor(@Inject('USER_SERVICE') private userService: ClientProxy) {}
 
-  private withSystemAdminFlag<T extends { email?: string | null }>(user: T) {
-    return {
-      ...user,
-      isSystemAdmin: isSystemAdminEmail(user.email),
-    };
+  private getSuperAdminEmails(): string[] {
+    return (process.env.SUPER_ADMIN_EMAILS ?? '')
+      .split(',')
+      .map((email) => email.trim().toLowerCase())
+      .filter(Boolean);
   }
 
   private getStudioAccessEmails(): string[] {
@@ -98,7 +97,7 @@ export class AuthGatewayController {
     hasStudioAccess: boolean;
   } {
     const normalizedEmail = (user.email ?? '').trim().toLowerCase();
-    const isSystemAdmin = isSystemAdminEmail(user.email);
+    const isSystemAdmin = this.getSuperAdminEmails().includes(normalizedEmail);
     const hasStudioAccess =
       isSystemAdmin ||
       this.getStudioAccessEmails().includes(normalizedEmail) ||
@@ -187,42 +186,6 @@ export class AuthGatewayController {
         }),
       );
   }
-
-  @Post('login')
-  @Public()
-  @ApiOperation({ summary: 'Login an existing user' })
-  @ApiResponse({
-    status: 200,
-    description: 'User logged in successfully',
-    type: AuthTokenResponseDto,
-  })
-  @ApiResponse({ status: 401, description: 'Invalid credentials' })
-  login(
-    @Body() loginDto: LoginDto,
-    @Res({ passthrough: true }) res: ExpressResponse,
-  ) {
-    this.logger.log(`Login attempt for: ${loginDto.email}`);
-
-    return this.userService.send(USER_SERVICE_PATTERNS.LOGIN, loginDto).pipe(
-      timeout(10000),
-      map((payload: AuthResponseDto) => {
-        this.setRefreshCookie(res, payload.refreshToken);
-        return {
-          user: this.decorateUser(payload.user),
-          accessToken: payload.token,
-        };
-      }),
-      catchError((err: unknown) => {
-        const error = normalizeError(err);
-        const status = error.status ?? HttpStatus.UNAUTHORIZED;
-        const message = error.message ?? 'Login failed';
-        const stack = error.stack ?? JSON.stringify(err);
-        this.logger.error(`Login failed for ${loginDto.email}`, stack);
-        return throwError(() => new HttpException(message, status));
-      }),
-    );
-  }
-
   @Post('refresh')
   @Public()
   @ApiOperation({ summary: 'Refresh access token' })
@@ -319,7 +282,6 @@ export class AuthGatewayController {
       .pipe(
         map((payload: UserResponseDto) => this.decorateUser(payload)),
         timeout(10000),
-        map((user: UserResponseDto) => this.withSystemAdminFlag(user)),
         catchError((err: unknown) => {
           const error = normalizeError(err);
           const stack = error.stack ?? JSON.stringify(err);
@@ -342,7 +304,7 @@ export class AuthGatewayController {
   @ApiResponse({ status: 401, description: 'Invalid token' })
   validateToken(@CurrentUser() user: UserResponseDto) {
     this.logger.log(`Token validation for user: ${user.id}`);
-    return this.withSystemAdminFlag(user);
+    return user;
   }
 
   @Get('oauth/providers')

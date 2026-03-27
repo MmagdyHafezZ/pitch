@@ -15,14 +15,12 @@ import {
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { GlobalJwtAuthGuard } from '../../../gateway/guards/global-jwt-auth.guard';
 import { UserClaimsInterceptor } from '../../../gateway/interceptors/user-claims.interceptor';
-import { SystemAdminOnly } from '../../../gateway/decorators/system-admin.decorator';
 import { RagService } from './rag.service';
 import { RagIndexerService } from './rag-indexer.service';
 import { IndexDocumentDto } from './dto/index-document.dto';
 import { RetrieveDto } from './dto/retrieve.dto';
 
 @ApiTags('rag')
-@SystemAdminOnly()
 @Controller({ path: 'rag', version: '1' })
 @UseGuards(GlobalJwtAuthGuard)
 @UseInterceptors(UserClaimsInterceptor)

@@ -2,7 +2,6 @@ import { create } from 'zustand'
 import { AuthState, AuthActions, User } from '../types/auth.types'
 import {
   api,
-  queryClient,
   setAccessToken,
   setAccessTokenListener,
   refreshAccessToken as refreshAccessTokenRequest,
@@ -36,17 +35,6 @@ const resolveAuthError = (error: unknown, fallback: string) => {
   return { message, throwValue: shouldWrap ? new Error(message) : error }
 }
 
-const clearAdminQueries = () => {
-  queryClient.removeQueries({ queryKey: ['admin-access'] })
-  queryClient.removeQueries({ queryKey: ['admin-console'] })
-}
-
-const clearSessionQueries = () => {
-  queryClient.removeQueries({ queryKey: ['auth'] })
-  queryClient.removeQueries({ queryKey: ['oauth'] })
-  clearAdminQueries()
-}
-
 export const useAuthStore = create<AuthStore>()((set, get) => ({
   user: null,
   token: null,
@@ -61,7 +49,6 @@ export const useAuthStore = create<AuthStore>()((set, get) => ({
       const response = await api.auth.login({ email, password })
       const user = applyAvatarCacheToUser(response.user)
       useTeamsStore.getState().resetStore()
-      clearAdminQueries()
 
       set({
         user,
@@ -91,7 +78,6 @@ export const useAuthStore = create<AuthStore>()((set, get) => ({
       const response = await api.auth.register({ email, password, name })
       const user = applyAvatarCacheToUser(response.user)
       useTeamsStore.getState().resetStore()
-      clearAdminQueries()
 
       set({
         user,
@@ -125,7 +111,6 @@ export const useAuthStore = create<AuthStore>()((set, get) => ({
 
     api.auth.logout().catch(() => {})
     setAccessToken(null)
-    clearSessionQueries()
     useTeamsStore.getState().resetStore()
     if (typeof window !== 'undefined' && process.env.NODE_ENV !== 'test') {
       window.location.href = '/auth/login'
@@ -152,7 +137,6 @@ export const useAuthStore = create<AuthStore>()((set, get) => ({
         error: null,
       })
       setAccessToken(null)
-      clearSessionQueries()
       useTeamsStore.getState().resetStore()
 
       api.auth.logout().catch(() => {})
@@ -191,9 +175,7 @@ export const useAuthStore = create<AuthStore>()((set, get) => ({
     } catch {
       if (!currentToken || isTokenExpired(currentToken)) {
         setAccessToken(null)
-        clearSessionQueries()
-        useTeamsStore.getState().resetStore()
-        set({ token: null, user: null, isAuthenticated: false })
+        set({ token: null, isAuthenticated: false })
       }
       return false
     }
@@ -231,7 +213,6 @@ export const useAuthStore = create<AuthStore>()((set, get) => ({
       })
       .catch(() => {
         setAccessToken(null)
-        clearSessionQueries()
         set({ token: null, user: null, isAuthenticated: false })
         useTeamsStore.getState().resetStore()
       })

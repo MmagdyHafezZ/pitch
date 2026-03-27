@@ -1043,6 +1043,12 @@ export const api = {
       apiRequest<any>(`/challenges/${challengeId}/leaderboard${limit ? `?limit=${limit}` : ''}`),
     globalLeaderboard: (limit?: number) =>
       apiRequest<any>(`/challenges/leaderboard${limit ? `?limit=${limit}` : ''}`),
+    adminGenerate: (period: 'DAILY' | 'WEEKLY' | 'MONTHLY') =>
+      apiRequest<any>('/challenges/admin/generate', {
+        method: 'POST',
+        body: JSON.stringify({ period }),
+        timeoutMs: 60000,
+      }),
   },
 
   support: {
@@ -1112,6 +1118,7 @@ export const api = {
         }>
       }>('/simulation/llm/providers'),
   },
+
   admin: {
     check: () => apiRequest<{ isAdmin: true }>('/admin/check'),
     healthServices: () =>

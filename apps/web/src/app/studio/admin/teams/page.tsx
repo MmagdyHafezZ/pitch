@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import {
   Alert,
   Badge,
@@ -14,8 +15,7 @@ import {
   Title,
 } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
-import { IconBuildingCommunity } from '@tabler/icons-react'
-import { AdminWorkspacePage } from '../_components/AdminWorkspacePage'
+import { IconBuildingCommunity, IconShieldLock } from '@tabler/icons-react'
 import { api } from '@/lib/client'
 import { useAuthStore } from '@/features/auth/stores/auth.store'
 
@@ -30,13 +30,20 @@ type PendingTeam = {
   }>
 }
 
-function PendingTeamRequestsSection() {
+export default function AdminTeamsPage() {
+  const router = useRouter()
   const user = useAuthStore((state) => state.user)
   const [teams, setTeams] = useState<PendingTeam[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [notes, setNotes] = useState<Record<string, string>>({})
   const [reviewingId, setReviewingId] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (user && !user.isSystemAdmin) {
+      router.replace('/studio/home')
+    }
+  }, [router, user])
 
   useEffect(() => {
     if (!user?.isSystemAdmin) return
@@ -49,14 +56,11 @@ function PendingTeamRequestsSection() {
         const result = await api.admin.teams.listPending()
         if (active) setTeams(Array.isArray(result) ? result : [])
       } catch (err) {
-        if (active) {
-          setError(err instanceof Error ? err.message : 'Failed to load pending teams.')
-        }
+        if (active) setError(err instanceof Error ? err.message : 'Failed to load pending teams.')
       } finally {
         if (active) setLoading(false)
       }
     }
-
     void load()
     return () => {
       active = false
@@ -67,7 +71,7 @@ function PendingTeamRequestsSection() {
     setReviewingId(team.id)
     try {
       await api.admin.teams.approve(team.id)
-      setTeams((prev) => prev.filter((item) => item.id !== team.id))
+      setTeams((prev) => prev.filter((t) => t.id !== team.id))
       notifications.show({
         title: 'Team approved',
         message: `"${team.name}" is now active.`,
@@ -88,7 +92,7 @@ function PendingTeamRequestsSection() {
     setReviewingId(team.id)
     try {
       await api.admin.teams.reject(team.id, notes[team.id])
-      setTeams((prev) => prev.filter((item) => item.id !== team.id))
+      setTeams((prev) => prev.filter((t) => t.id !== team.id))
       notifications.show({
         title: 'Team rejected',
         message: `"${team.name}" request was denied.`,
@@ -106,26 +110,33 @@ function PendingTeamRequestsSection() {
   }
 
   if (!user?.isSystemAdmin) {
-    return null
+    return (
+      <Stack gap="md">
+        <Title order={2}>Team approval requests</Title>
+        <Alert color="red" variant="light" icon={<IconShieldLock size={18} />}>
+          Super admin access is required.
+        </Alert>
+      </Stack>
+    )
   }
 
   return (
-    <Stack gap="md">
+    <Stack gap="lg">
       <Stack gap={4}>
         <Group gap="sm">
           <IconBuildingCommunity size={20} />
-          <Title order={3}>Team approval requests</Title>
+          <Title order={2}>Team approval requests</Title>
         </Group>
         <Text c="dimmed">
           Review pending team creation requests and approve or reject each one.
         </Text>
       </Stack>
 
-      {error ? (
+      {error && (
         <Alert color="red" variant="light">
           {error}
         </Alert>
-      ) : null}
+      )}
 
       {loading ? (
         <Loader size="lg" />
@@ -136,7 +147,7 @@ function PendingTeamRequestsSection() {
       ) : (
         <Stack gap="md">
           {teams.map((team) => {
-            const owner = team.memberships?.find((membership) => membership.role === 'OWNER')
+            const owner = team.memberships?.find((m) => m.role === 'OWNER')
             return (
               <Card key={team.id} withBorder radius="lg" p="lg">
                 <Stack gap="md">
@@ -146,11 +157,11 @@ function PendingTeamRequestsSection() {
                       <Text size="sm" c="dimmed">
                         slug: {team.slug}
                       </Text>
-                      {owner ? (
+                      {owner && (
                         <Text size="sm" c="dimmed">
                           Requested by {owner.user.name} ({owner.user.email})
                         </Text>
-                      ) : null}
+                      )}
                     </Stack>
                     <Badge variant="light" color="yellow">
                       Pending
@@ -164,8 +175,8 @@ function PendingTeamRequestsSection() {
                   <Textarea
                     placeholder="Rejection note (optional)"
                     value={notes[team.id] ?? ''}
-                    onChange={(event) =>
-                      setNotes((prev) => ({ ...prev, [team.id]: event.currentTarget.value }))
+                    onChange={(e) =>
+                      setNotes((prev) => ({ ...prev, [team.id]: e.currentTarget.value }))
                     }
                     autosize
                     minRows={2}
@@ -190,15 +201,6 @@ function PendingTeamRequestsSection() {
           })}
         </Stack>
       )}
-    </Stack>
-  )
-}
-
-export default function AdminTeamsPage() {
-  return (
-    <Stack gap="lg">
-      <PendingTeamRequestsSection />
-      <AdminWorkspacePage view="teams" />
     </Stack>
   )
 }
