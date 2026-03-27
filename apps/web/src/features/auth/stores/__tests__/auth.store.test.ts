@@ -3,15 +3,17 @@ import { server } from '../../../../__tests__/mocks/server'
 import { resetStores } from '../../../../__tests__/utils/store-utils'
 import { useAuthStore } from '../auth.store'
 import { useTeamsStore } from '@/features/teams/stores/teams.store'
-import { api } from '@/lib/client'
+import { api, queryClient } from '@/lib/client'
 import { http, HttpResponse } from 'msw'
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1'
+const EXPIRED_TOKEN = 'eyJhbGciOiJub25lIn0.eyJleHAiOjF9.'
 
 const flushPromises = () => new Promise((resolve) => setTimeout(resolve, 0))
 
 describe('AuthStore', () => {
   beforeEach(() => {
+    queryClient.clear()
     resetStores()
     act(() => {
       useTeamsStore.getState().resetStore()
@@ -220,6 +222,100 @@ describe('AuthStore', () => {
       expect(teamsState.teams).toEqual([])
       expect(teamsState.activeTeamId).toBeNull()
       expect(teamsState.currentTeam).toBeNull()
+    })
+
+    it('clears admin queries on logout', async () => {
+      queryClient.setQueryData(['admin-access', 'me', 'admin-1'], {
+        id: 'admin-1',
+        isSystemAdmin: true,
+      })
+      queryClient.setQueryData(['admin-console', 'admin-1', 'overview', '/api/v1/admin/overview'], {
+        status: 'ok',
+      })
+
+      act(() => {
+        useAuthStore.setState({
+          user: {
+            id: 'admin-1',
+            email: 'admin@example.com',
+            name: 'Admin User',
+            isSystemAdmin: true,
+            hasStudioAccess: true,
+            isActive: true,
+            createdAt: '2024-01-01T00:00:00.000Z',
+            updatedAt: '2024-01-01T00:00:00.000Z',
+          },
+          token: 'admin-token',
+          isAuthenticated: true,
+          isLoading: false,
+          error: null,
+        })
+      })
+
+      const logoutSpy = jest
+        .spyOn(api.auth, 'logout')
+        .mockRejectedValueOnce(new Error('network error'))
+
+      act(() => {
+        useAuthStore.getState().logout()
+      })
+
+      logoutSpy.mockRestore()
+
+      expect(queryClient.getQueryData(['admin-access', 'me', 'admin-1'])).toBeUndefined()
+      expect(
+        queryClient.getQueryData(['admin-console', 'admin-1', 'overview', '/api/v1/admin/overview'])
+      ).toBeUndefined()
+    })
+  })
+
+  describe('Refresh Access Token', () => {
+    it('clears the stale user when refresh fails for an expired session', async () => {
+      server.use(
+        http.post(`${API_BASE_URL}/auth/refresh`, () => {
+          return new HttpResponse(JSON.stringify({ message: 'Unauthorized' }), {
+            status: 401,
+            headers: { 'Content-Type': 'application/json' },
+          })
+        })
+      )
+
+      act(() => {
+        useTeamsStore.setState({
+          teams: [{ id: 'team-admin', name: 'Admin Team' } as any],
+          activeTeamId: 'team-admin',
+          currentTeam: { id: 'team-admin', name: 'Admin Team' } as any,
+          loading: false,
+          error: null,
+        })
+        useAuthStore.setState({
+          user: {
+            id: 'admin-1',
+            email: 'admin@example.com',
+            name: 'Admin User',
+            isSystemAdmin: true,
+            hasStudioAccess: true,
+            isActive: true,
+            createdAt: '2024-01-01T00:00:00.000Z',
+            updatedAt: '2024-01-01T00:00:00.000Z',
+          },
+          token: EXPIRED_TOKEN,
+          isAuthenticated: true,
+          isLoading: false,
+          error: null,
+        })
+      })
+
+      await act(async () => {
+        const refreshed = await useAuthStore.getState().refreshAccessToken()
+        expect(refreshed).toBe(false)
+      })
+
+      expect(useAuthStore.getState().token).toBeNull()
+      expect(useAuthStore.getState().user).toBeNull()
+      expect(useAuthStore.getState().isAuthenticated).toBe(false)
+      expect(useTeamsStore.getState().teams).toEqual([])
+      expect(useTeamsStore.getState().activeTeamId).toBeNull()
     })
   })
 

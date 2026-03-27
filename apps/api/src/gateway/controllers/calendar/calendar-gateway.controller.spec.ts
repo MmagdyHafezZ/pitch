@@ -5,6 +5,9 @@ import { lastValueFrom, of, throwError } from 'rxjs';
 import { CalendarGatewayController } from './calendar-gateway.controller';
 
 describe('CalendarGatewayController', () => {
+  const responseOf = <T>(value: T) => of(value);
+  const errorOf = (value: unknown) => throwError(() => value);
+
   const createClientProxyMock = (): jest.Mocked<ClientProxy> =>
     ({
       send: jest.fn(),
@@ -22,7 +25,7 @@ describe('CalendarGatewayController', () => {
 
   it('proxies google connect requests', async () => {
     crmService.send.mockReturnValueOnce(
-      of({ authUrl: 'https://accounts.google.com' }) as any,
+      responseOf({ authUrl: 'https://accounts.google.com' }),
     );
 
     const result: unknown = await lastValueFrom(
@@ -40,10 +43,10 @@ describe('CalendarGatewayController', () => {
 
   it('maps google connect errors with numeric statusCode payloads', async () => {
     crmService.send.mockReturnValueOnce(
-      throwError(() => ({
+      errorOf({
         statusCode: HttpStatus.BAD_REQUEST,
         message: 'Google Calendar client ID not configured',
-      })) as any,
+      }),
     );
 
     let thrown: unknown;
@@ -63,10 +66,10 @@ describe('CalendarGatewayController', () => {
 
   it('falls back to 500 when rpc error status is not numeric', async () => {
     crmService.send.mockReturnValueOnce(
-      throwError(() => ({
+      errorOf({
         status: 'error',
         message: 'Internal server error',
-      })) as any,
+      }),
     );
 
     let thrown: unknown;
@@ -86,10 +89,10 @@ describe('CalendarGatewayController', () => {
 
   it('returns HttpException instances for malformed rpc payloads', async () => {
     crmService.send.mockReturnValueOnce(
-      throwError(() => ({
+      errorOf({
         status: 'error',
         message: 'Internal server error',
-      })) as any,
+      }),
     );
 
     await expect(
@@ -98,7 +101,7 @@ describe('CalendarGatewayController', () => {
   });
 
   it('redirects google callback to the frontend calendar page', async () => {
-    crmService.send.mockReturnValueOnce(of({ success: true }) as any);
+    crmService.send.mockReturnValueOnce(responseOf({ success: true }));
     const redirect = jest.fn();
     const res = {
       redirect,

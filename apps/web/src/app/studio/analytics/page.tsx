@@ -141,7 +141,8 @@ const themedCardStyle = {
     var(--pitch-card-bg, var(--pitch-surface-bg, var(--mantine-color-body))) 0%,
     color-mix(in srgb, var(--pitch-card-bg-strong, var(--pitch-card-bg, var(--pitch-surface-bg))) 84%, transparent) 100%
   )`,
-  border: '1px solid var(--pitch-card-border, var(--pitch-border, var(--mantine-color-default-border)))',
+  border:
+    '1px solid var(--pitch-card-border, var(--pitch-border, var(--mantine-color-default-border)))',
   boxShadow: `0 10px 24px color-mix(
     in srgb,
     var(--pitch-card-shadow, var(--pitch-surface-bg, #000)) 16%,
@@ -615,12 +616,12 @@ export default function AnalyticsPage() {
                         detailed analytics.
                       </Text>
                     </Stack>
-                      <Button
-                        variant="light"
-                        size="md"
-                        color="brand"
-                        onClick={() => router.push('/studio/sessions')}
-                      >
+                    <Button
+                      variant="light"
+                      size="md"
+                      color="brand"
+                      onClick={() => router.push('/studio/sessions')}
+                    >
                       Go to sessions
                     </Button>
                   </Stack>
@@ -1204,7 +1205,13 @@ export default function AnalyticsPage() {
                       const memberBest = calcBestScore(member.sessions)
                       const recentSessions = member.sessions.slice(0, 3)
                       return (
-                        <Card key={member.userId} withBorder radius="lg" p="lg" style={themedCardStyle}>
+                        <Card
+                          key={member.userId}
+                          withBorder
+                          radius="lg"
+                          p="lg"
+                          style={themedCardStyle}
+                        >
                           <Stack gap="sm">
                             <Group justify="space-between" align="flex-start">
                               <Stack gap={2}>
@@ -1213,7 +1220,12 @@ export default function AnalyticsPage() {
                                   {member.email}
                                 </Text>
                               </Stack>
-                              <ThemeIcon color="blue" variant="light" radius="xl" style={themedIconStyle}>
+                              <ThemeIcon
+                                color="blue"
+                                variant="light"
+                                radius="xl"
+                                style={themedIconStyle}
+                              >
                                 <IconUserCheck size={16} />
                               </ThemeIcon>
                             </Group>

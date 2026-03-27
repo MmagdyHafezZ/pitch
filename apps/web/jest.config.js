@@ -25,6 +25,7 @@ const customJestConfig = {
     // Handle CSS imports (with CSS modules)
     '\\.(css|less|scss|sss|styl)$': 'identity-obj-proxy',
   },
+  modulePathIgnorePatterns: ['<rootDir>/.next/'],
   collectCoverageFrom: ['src/features/auth/stores/**/*.{ts,tsx}'],
   collectCoverage: shouldCollectCoverage,
   coverageDirectory: '<rootDir>/coverage',

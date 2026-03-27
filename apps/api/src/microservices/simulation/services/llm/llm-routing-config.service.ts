@@ -157,6 +157,10 @@ export class LLMRoutingConfigService {
     return config;
   }
 
+  normalizeForAdmin(raw: unknown): LLMRoutingConfig {
+    return this.normalizeConfig(raw);
+  }
+
   private async findByScope(
     scope: RoutingScope,
     orgId?: string,
