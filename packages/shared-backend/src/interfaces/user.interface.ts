@@ -1,6 +1,19 @@
 /* ---------- ENUMS ---------- */
 
 export type Role = 'OWNER' | 'ADMIN' | 'MEMBER'
+
+export type CoinRefillStatus = 'pending' | 'approved' | 'denied'
+
+export interface CoinRefillRequest {
+  requestedCoins: number
+  requestedAt: string
+  status: CoinRefillStatus
+  reviewedAt?: string
+  reviewedBy?: string
+  approvedCoins?: number
+  teamId: string
+  periodKey?: string
+}
 export type PlanLevel = 'FREE' | 'PRO' | 'TEAM' | 'ENTERPRISE'
 export type BillingInterval = 'MONTH' | 'QUARTER' | 'SEMIANNUAL' | 'ANNUAL'
 
@@ -109,6 +122,7 @@ export interface UserSettings {
     }
   }
   studioAccess?: StudioAccessSettings
+  coinRefillRequest?: CoinRefillRequest
 }
 
 export interface StudioAccessRequestSummary {
@@ -141,6 +155,7 @@ export interface Team {
   name: string
   slug: string
   isActive: boolean
+  approvalStatus: string // 'PENDING' | 'APPROVED' | 'REJECTED'
   billingEmail?: string | null
   billingAddress?: unknown
   metadata?: TeamMetadata | null
@@ -256,6 +271,12 @@ export interface SubscriptionMetadata {
     seats?: number
   }
   notes?: string
+  pendingPlanChange?: {
+    requestedPlanId: string
+    requestedInterval: string
+    requestedAt: string
+    requestedByUserId: string
+  }
 }
 
 /* ---------- Write MODELS ---------- */
@@ -299,6 +320,7 @@ export interface CreateTeamDto {
   name: string
   slug?: string
   isActive?: boolean
+  approvalStatus?: string
   billingEmail?: string | null
   billingAddress?: unknown
   metadata?: TeamMetadata | null

@@ -122,6 +122,7 @@ model Team {
   name            String
   slug            String        @unique // URL-safe unique handle for a team
   isActive        Boolean       @default(true)
+  approvalStatus  String        @default("APPROVED") // PENDING | APPROVED | REJECTED
   availableTokens Int           @default(0) // total tokens available to team in current period
   usedTokens      Int           @default(0) // total tokens used by team in current period
   billingEmail    String?

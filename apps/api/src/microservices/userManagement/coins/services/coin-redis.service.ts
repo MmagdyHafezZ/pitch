@@ -73,6 +73,23 @@ export class CoinRedisService {
   }
 
   /**
+   * Unconditional SET — used only for admin-approved refills.
+   * Overwrites any existing remaining value.
+   */
+  async setRemaining(
+    teamId: string,
+    periodKey: string,
+    newValue: number,
+    ttlSeconds: number,
+  ): Promise<void> {
+    const key = this.keyRemaining(teamId, periodKey);
+    await this.redis.set(key, String(newValue), 'EX', ttlSeconds);
+    this.logger.log(
+      `setRemaining: HARD-SET key=${key} value=${newValue} ttl=${ttlSeconds}s`,
+    );
+  }
+
+  /**
    * Atomic reserve:
    * - if idempotencyKey already seen => returns existing remaining (no double charge)
    * - if remaining >= estimate => decrement and set idemp key

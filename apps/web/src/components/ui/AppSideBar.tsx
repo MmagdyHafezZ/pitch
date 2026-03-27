@@ -20,16 +20,30 @@ import { useAdminStore } from '@/app/admin/stores/admin.store'
 
 export type SidebarLink = {
   icon: React.ComponentType<{ size?: number }>
-  label: 'Home' | 'Sessions' | 'Teams' | 'Analytics' | 'Settings' | 'Team Config' | 'Challenges'
+  label:
+    | 'Home'
+    | 'Sessions'
+    | 'Teams'
+    | 'Analytics'
+    | 'Settings'
+    | 'Team Config'
+    | 'Challenges'
+    | 'Subscription'
 }
 
+type PageKey =
+  | 'Home'
+  | 'Sessions'
+  | 'Teams'
+  | 'Analytics'
+  | 'Settings'
+  | 'Team Config'
+  | 'Challenges'
+  | 'Subscription'
+
 type Props = {
-  active: 'Home' | 'Sessions' | 'Teams' | 'Analytics' | 'Settings' | 'Team Config' | 'Challenges'
-  setActive: Dispatch<
-    SetStateAction<
-      'Home' | 'Sessions' | 'Teams' | 'Analytics' | 'Settings' | 'Team Config' | 'Challenges'
-    >
-  >
+  active: PageKey
+  setActive: Dispatch<SetStateAction<PageKey>>
   selectedDate: Date | null
   setSelectedDate: Dispatch<SetStateAction<Date | null>>
   showTeamConfig?: boolean
@@ -122,7 +136,9 @@ export function AppSidebar({
                             ? t('nav.teamConfig')
                             : label === 'Challenges'
                               ? t('nav.challenges')
-                              : label}
+                              : label === 'Subscription'
+                                ? 'Subscription'
+                                : label}
                   </Text>
                 }
                 variant="subtle"

@@ -2,6 +2,7 @@ import { Controller, UsePipes, ValidationPipe } from '@nestjs/common';
 import { EventPattern, MessagePattern, Payload } from '@nestjs/microservices';
 import { CoinAccountingService } from '../services/coin-accounting.service';
 import { CoinSessionService } from '../services/coin-session.service';
+import { CoinRefillService } from '../services/coin-refill.service';
 import { CoinAdjustEventDto } from '../dto/coin-adjust.event';
 import {
   ReserveCoinsRequestDto,
@@ -14,6 +15,7 @@ export class CoinsConsumer {
   constructor(
     private readonly coins: CoinAccountingService,
     private readonly coinSession: CoinSessionService,
+    private readonly coinRefill: CoinRefillService,
   ) {}
 
   @MessagePattern('coin.reserve')
@@ -57,5 +59,51 @@ export class CoinsConsumer {
   @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
   async onAdjust(@Payload() event: CoinAdjustEventDto) {
     await this.coins.applyAdjustment(event);
+  }
+
+  @MessagePattern('coin.refill.request')
+  async onRefillRequest(
+    @Payload() dto: { userId: string; teamId: string; requestedCoins: number },
+  ) {
+    return this.coinRefill.requestRefill(dto);
+  }
+
+  @MessagePattern('coin.refill.my-request')
+  async onMyRefillRequest(@Payload() { userId }: { userId: string }) {
+    return this.coinRefill.getMyRefillRequest(userId);
+  }
+
+  @MessagePattern('coin.refill.list')
+  async onRefillList() {
+    return this.coinRefill.listPendingRefills();
+  }
+
+  @MessagePattern('coin.refill.approve')
+  async onRefillApprove(
+    @Payload()
+    dto: {
+      userId: string;
+      approvedCoins: number;
+      reviewer: string;
+    },
+  ) {
+    return this.coinRefill.approveRefill(dto);
+  }
+
+  @MessagePattern('coin.refill.deny')
+  async onRefillDeny(@Payload() dto: { userId: string; reviewer: string }) {
+    return this.coinRefill.denyRefill(dto);
+  }
+
+  @MessagePattern('coin.usage.admin')
+  async onAdminUsage() {
+    return this.coins.getAdminUsageSummary();
+  }
+
+  @MessagePattern('coin.ledger.history')
+  async onLedgerHistory(
+    @Payload() { teamId, periodKey }: { teamId: string; periodKey?: string },
+  ) {
+    return this.coins.getLedgerHistory(teamId, periodKey);
   }
 }

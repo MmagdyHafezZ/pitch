@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { CoinAccountingService } from './coin-accounting.service';
 import { SubscriptionRepository } from '../../subscription/repositories/subscription.repository';
+import { TeamRepository } from '../../team/repositories/team.repository';
 import { CoinSessionReserveResponseDto } from '../dto/coin-session.dto';
 
 @Injectable()
@@ -12,6 +13,7 @@ export class CoinSessionService {
     private readonly config: ConfigService,
     private readonly coins: CoinAccountingService,
     private readonly subscriptionRepo: SubscriptionRepository,
+    private readonly teamRepo: TeamRepository,
   ) {}
 
   /**
@@ -37,6 +39,23 @@ export class CoinSessionService {
     coinPriceUsd?: number;
     sessionId?: string;
   }): Promise<CoinSessionReserveResponseDto> {
+    // When orgId === userId the session is personal — no team membership to check.
+    // When orgId is a real teamId, verify the user is an active member before
+    // allowing them to draw from that team's credit pool.
+    const isTeamSession = dto.teamId !== dto.userId;
+    if (isTeamSession) {
+      const membership = await this.teamRepo.findMembership(
+        dto.teamId,
+        dto.userId,
+      );
+      if (!membership || !membership.isActive) {
+        this.logger.warn(
+          `[GUARD] userId=${dto.userId} is not an active member of teamId=${dto.teamId}. Rejecting coin reservation.`,
+        );
+        return { approved: false, reason: 'INVALID_REQUEST' };
+      }
+    }
+
     const sub = await this.subscriptionRepo.findActiveWithPlanByTeamId(
       dto.teamId,
     );

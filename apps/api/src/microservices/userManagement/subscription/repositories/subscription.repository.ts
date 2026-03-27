@@ -99,6 +99,17 @@ export class SubscriptionRepository {
     });
   }
 
+  async findAllWithPendingPlanChange(): Promise<SubscriptionWithPlan[]> {
+    const all = await this.prisma.subscription.findMany({
+      where: { isActive: true },
+      include: { plan: true },
+    });
+    return all.filter((sub) => {
+      const meta = sub.metadata as Record<string, unknown> | null;
+      return meta?.pendingPlanChange != null;
+    });
+  }
+
   async findDueForRollover(currentDate: Date): Promise<SubscriptionWithPlan[]> {
     this.logger.debug('Finding subscriptions due for rollover');
     return this.prisma.subscription.findMany({

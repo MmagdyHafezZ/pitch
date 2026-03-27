@@ -170,6 +170,7 @@ export const useTeamConfigStore = create<TeamConfigStore>()((set, get) => ({
         })
       } else {
         nextSubscription = await api.subscriptions.upgrade(current.id, {
+          teamId,
           planId: input.planId,
           interval: input.interval,
         })

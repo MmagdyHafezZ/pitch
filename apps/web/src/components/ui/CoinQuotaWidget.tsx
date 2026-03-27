@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { Box, Text, Progress, Stack, rem, Skeleton } from '@mantine/core'
 import { IconCoin } from '@tabler/icons-react'
 import { useCoinsBalance, usePersonalCoinsBalance } from '@/features/coins/hooks/useCoinsBalance'
@@ -90,11 +91,16 @@ export function CoinQuotaWidget({ teamId }: Props) {
 
   return (
     <Box
+      component={Link}
+      href="/studio/subscription"
       mt="sm"
       mx={0}
       px={12}
       py={10}
       style={{
+        display: 'block',
+        cursor: 'pointer',
+        textDecoration: 'none',
         background: `linear-gradient(
           180deg,
           color-mix(in srgb, var(--pitch-nav-bg, var(--mantine-color-nav-9)) 96%, transparent),
@@ -102,9 +108,16 @@ export function CoinQuotaWidget({ teamId }: Props) {
         )`,
         borderRadius: 12,
         border: '1px solid color-mix(in srgb, var(--pitch-nav-text-dim) 28%, transparent)',
-        boxShadow:
-          'inset 0 0 0 1px color-mix(in srgb, var(--pitch-nav-text-dim) 10%, transparent)',
+        boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--pitch-nav-text-dim) 10%, transparent)',
         overflow: 'hidden',
+        opacity: 1,
+        transition: 'opacity 0.15s',
+      }}
+      onMouseEnter={(e) => {
+        ;(e.currentTarget as HTMLElement).style.opacity = '0.85'
+      }}
+      onMouseLeave={(e) => {
+        ;(e.currentTarget as HTMLElement).style.opacity = '1'
       }}
     >
       <Stack gap={8}>

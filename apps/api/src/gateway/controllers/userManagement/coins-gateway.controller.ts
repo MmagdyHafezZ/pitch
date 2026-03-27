@@ -1,7 +1,10 @@
 import {
+  Body,
   Controller,
   Get,
   Inject,
+  Param,
+  Post,
   Query,
   UseGuards,
   UseInterceptors,
@@ -21,6 +24,7 @@ import {
   SIMULATION_SERVICE_PATTERNS,
 } from '@pitch/shared-backend/interfaces/message-patterns.interface';
 import { GlobalJwtAuthGuard } from '../../guards/global-jwt-auth.guard';
+import { CheckSystemAdmin } from '../../guards/check-system-admin.guard';
 import { UserClaimsInterceptor } from '../../interceptors/user-claims.interceptor';
 import { UserClaims } from '../../decorators/user-claims.decorator';
 import type { UserClaims as UserClaimsType } from '@pitch/shared-backend/interfaces/user-claims.interface';
@@ -87,6 +91,134 @@ export class CoinsGatewayController {
         })
         .pipe(
           timeout(5000),
+          catchError((err) => throwError(() => normalizeError(err))),
+        ),
+    );
+  }
+
+  // ─── Refill request endpoints ──────────────────────────────────────────
+
+  @Post('refill/request')
+  @ApiOperation({ summary: 'Submit a credit refill request' })
+  async requestRefill(
+    @UserClaims() claims: UserClaimsType,
+    @Body() body: { requestedCoins: number; teamId: string },
+  ) {
+    return lastValueFrom(
+      this.userService
+        .send(USER_SERVICE_COIN_PATTERNS.COIN_REFILL_REQUEST, {
+          userId: claims.id,
+          teamId: body.teamId,
+          requestedCoins: body.requestedCoins,
+        })
+        .pipe(
+          timeout(5000),
+          catchError((err) => throwError(() => normalizeError(err))),
+        ),
+    );
+  }
+
+  @Get('refill/my-request')
+  @ApiOperation({ summary: 'Get own pending refill request' })
+  async getMyRefillRequest(@UserClaims() claims: UserClaimsType) {
+    return lastValueFrom(
+      this.userService
+        .send(USER_SERVICE_COIN_PATTERNS.COIN_REFILL_MY_REQUEST, {
+          userId: claims.id,
+        })
+        .pipe(
+          timeout(5000),
+          catchError((err) => throwError(() => normalizeError(err))),
+        ),
+    );
+  }
+
+  @Get('refill/requests')
+  @UseGuards(CheckSystemAdmin)
+  @ApiOperation({ summary: '[Admin] List all pending refill requests' })
+  async listRefillRequests() {
+    return lastValueFrom(
+      this.userService
+        .send(USER_SERVICE_COIN_PATTERNS.COIN_REFILL_REQUEST_LIST, {})
+        .pipe(
+          timeout(10000),
+          catchError((err) => throwError(() => normalizeError(err))),
+        ),
+    );
+  }
+
+  @Post('refill/requests/:userId/approve')
+  @UseGuards(CheckSystemAdmin)
+  @ApiOperation({ summary: '[Admin] Approve a refill request' })
+  async approveRefillRequest(
+    @Param('userId') userId: string,
+    @Body() body: { approvedCoins: number },
+    @UserClaims() claims: UserClaimsType,
+  ) {
+    return lastValueFrom(
+      this.userService
+        .send(USER_SERVICE_COIN_PATTERNS.COIN_REFILL_REQUEST_APPROVE, {
+          userId,
+          approvedCoins: body.approvedCoins,
+          reviewer: claims.email,
+        })
+        .pipe(
+          timeout(10000),
+          catchError((err) => throwError(() => normalizeError(err))),
+        ),
+    );
+  }
+
+  @Post('refill/requests/:userId/deny')
+  @UseGuards(CheckSystemAdmin)
+  @ApiOperation({ summary: '[Admin] Deny a refill request' })
+  async denyRefillRequest(
+    @Param('userId') userId: string,
+    @UserClaims() claims: UserClaimsType,
+  ) {
+    return lastValueFrom(
+      this.userService
+        .send(USER_SERVICE_COIN_PATTERNS.COIN_REFILL_REQUEST_DENY, {
+          userId,
+          reviewer: claims.email,
+        })
+        .pipe(
+          timeout(5000),
+          catchError((err) => throwError(() => normalizeError(err))),
+        ),
+    );
+  }
+
+  @Get('usage/admin')
+  @UseGuards(CheckSystemAdmin)
+  @ApiOperation({ summary: '[Admin] Get all-teams coin usage summary' })
+  async getAdminUsage() {
+    return lastValueFrom(
+      this.userService
+        .send(USER_SERVICE_COIN_PATTERNS.COIN_USAGE_ADMIN, {})
+        .pipe(
+          timeout(15000),
+          catchError((err) => throwError(() => normalizeError(err))),
+        ),
+    );
+  }
+
+  @Get('ledger/history')
+  @ApiOperation({ summary: 'Get coin ledger history for a team' })
+  @ApiQuery({ name: 'teamId', required: true })
+  @ApiQuery({ name: 'periodKey', required: false })
+  async getLedgerHistory(
+    @Query('teamId') teamId: string,
+    @Query('periodKey') periodKey?: string,
+  ) {
+    return lastValueFrom(
+      this.userService
+        .send(USER_SERVICE_COIN_PATTERNS.COIN_LEDGER_HISTORY, {
+          teamId,
+          periodKey,
+        })
+        .pipe(
+          timeout(8000),
           catchError((err) => throwError(() => normalizeError(err))),
         ),
     );

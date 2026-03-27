@@ -109,10 +109,10 @@ export class SubscriptionGatewayController {
   }
 
   @Put(':id/upgrade')
-  @ApiOperation({ summary: 'Upgrade subscription' })
+  @ApiOperation({ summary: 'Request a plan change (pending admin approval)' })
   @ApiResponse({
     status: 200,
-    description: 'Subscription upgraded successfully',
+    description: 'Plan change request submitted successfully',
   })
   @ApiResponse({ status: 404, description: 'Subscription not found' })
   upgradeSubscription(
@@ -121,16 +121,17 @@ export class SubscriptionGatewayController {
     @UserClaims() userClaims: UserClaimsType,
   ) {
     return this.userService
-      .send(USER_SERVICE_PATTERNS.UPGRADE_SUBSCRIPTION, {
+      .send(USER_SERVICE_PATTERNS.REQUEST_PLAN_CHANGE, {
         id,
-        ...upgradeSubscriptionDto,
+        planId: upgradeSubscriptionDto.planId,
+        interval: upgradeSubscriptionDto.interval,
         userClaims,
       })
       .pipe(
         timeout(5000),
         catchError((err: unknown) => {
           const error = normalizeError(err);
-          const message = error.message ?? 'Failed to upgrade subscription';
+          const message = error.message ?? 'Failed to request plan change';
           const status = error.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
           return throwError(() => new HttpException(message, status));
         }),

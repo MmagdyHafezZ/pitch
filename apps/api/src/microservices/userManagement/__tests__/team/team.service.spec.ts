@@ -66,6 +66,7 @@ describe('TeamService', () => {
     name: 'Engineering',
     slug: 'engineering',
     isActive: true,
+    approvalStatus: 'APPROVED',
     billingEmail: 'billing@example.com',
     billingAddress: null,
     metadata: null,
@@ -95,7 +96,8 @@ describe('TeamService', () => {
       expect.objectContaining({
         ...dto,
         slug: 'my-team',
-        isActive: true,
+        isActive: false,
+        approvalStatus: 'PENDING',
         metadata: expect.objectContaining({
           audit: expect.objectContaining({
             ownerUserId: 'user-1',

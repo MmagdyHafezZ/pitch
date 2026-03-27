@@ -110,6 +110,10 @@ export class CoinBalanceRepository {
     );
   }
 
+  async findAll(): Promise<CoinBalance[]> {
+    return this.model.find().lean<CoinBalance[]>().exec();
+  }
+
   upsertRefill(args: {
     teamId: string;
     subscriptionId: string;

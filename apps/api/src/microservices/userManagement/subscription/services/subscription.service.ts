@@ -390,6 +390,99 @@ export class SubscriptionService {
     return this.subscriptionRepository.findDueForRollover(new Date(now));
   }
 
+  async requestPlanChange(
+    subscriptionId: string,
+    dto: { planId: string; interval?: string },
+    requesterId: string,
+  ): Promise<SubscriptionWithPlan> {
+    const existing = await this.subscriptionRepository.findById(subscriptionId);
+    if (!existing) {
+      throw new NotFoundException(
+        `Subscription with ID ${subscriptionId} not found`,
+      );
+    }
+    const newPlan = await this.planRepository.findById(dto.planId);
+    if (!newPlan) {
+      throw new NotFoundException(`Plan with ID ${dto.planId} not found`);
+    }
+
+    const existingMeta = this.toMetadataObject(existing.metadata);
+    const updatedMeta: Prisma.InputJsonValue = {
+      ...existingMeta,
+      pendingPlanChange: {
+        requestedPlanId: dto.planId,
+        requestedInterval: dto.interval ?? existing.interval,
+        requestedAt: new Date().toISOString(),
+        requestedByUserId: requesterId,
+      },
+    };
+    return this.subscriptionRepository.update(subscriptionId, {
+      metadata: updatedMeta,
+    });
+  }
+
+  async listPendingPlanChanges(): Promise<SubscriptionWithPlan[]> {
+    return this.subscriptionRepository.findAllWithPendingPlanChange();
+  }
+
+  async approvePlanChange(
+    subscriptionId: string,
+    requesterId: string,
+  ): Promise<SubscriptionWithPlan> {
+    const existing = await this.subscriptionRepository.findById(subscriptionId);
+    if (!existing) {
+      throw new NotFoundException(
+        `Subscription with ID ${subscriptionId} not found`,
+      );
+    }
+    const meta = this.toMetadataObject(existing.metadata);
+    const pending = meta.pendingPlanChange;
+    if (!pending) {
+      throw new NotFoundException(
+        `No pending plan change for subscription ${subscriptionId}`,
+      );
+    }
+
+    // Apply the actual plan change
+    const upgraded = await this.upgradeSubscription(
+      subscriptionId,
+      {
+        planId: pending.requestedPlanId,
+        interval:
+          pending.requestedInterval as import('@prisma/user-client').BillingInterval,
+      },
+      requesterId,
+    );
+
+    // Clear the pending flag
+    const cleanedMeta = this.toMetadataObject(upgraded.metadata);
+    delete cleanedMeta.pendingPlanChange;
+    return this.subscriptionRepository.update(subscriptionId, {
+      metadata: cleanedMeta as Prisma.InputJsonValue,
+    });
+  }
+
+  async rejectPlanChange(
+    subscriptionId: string,
+  ): Promise<SubscriptionWithPlan> {
+    const existing = await this.subscriptionRepository.findById(subscriptionId);
+    if (!existing) {
+      throw new NotFoundException(
+        `Subscription with ID ${subscriptionId} not found`,
+      );
+    }
+    const meta = this.toMetadataObject(existing.metadata);
+    if (!meta.pendingPlanChange) {
+      throw new NotFoundException(
+        `No pending plan change for subscription ${subscriptionId}`,
+      );
+    }
+    delete meta.pendingPlanChange;
+    return this.subscriptionRepository.update(subscriptionId, {
+      metadata: meta as Prisma.InputJsonValue,
+    });
+  }
+
   public addInterval(d: Date, interval: BillingInterval): Date {
     const date = new Date(d);
     switch (interval) {

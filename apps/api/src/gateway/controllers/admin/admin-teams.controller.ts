@@ -281,4 +281,72 @@ export class AdminTeamsController {
         }),
       );
   }
+
+  @Get('pending')
+  listPendingTeams(@UserClaims() userClaims?: UserClaimsType) {
+    return this.userService
+      .send(USER_SERVICE_PATTERNS.LIST_PENDING_TEAMS, { userClaims })
+      .pipe(
+        timeout(10000),
+        catchError((err: unknown) => {
+          const error = normalizeError(err);
+          return throwError(
+            () =>
+              new HttpException(
+                error.message ?? 'Failed to list pending teams',
+                error.status ?? HttpStatus.INTERNAL_SERVER_ERROR,
+              ),
+          );
+        }),
+      );
+  }
+
+  @Post(':id/approve')
+  approveTeam(
+    @Param('id') id: string,
+    @UserClaims() userClaims: UserClaimsType,
+  ) {
+    return this.userService
+      .send(USER_SERVICE_PATTERNS.APPROVE_TEAM, { teamId: id, userClaims })
+      .pipe(
+        timeout(5000),
+        catchError((err: unknown) => {
+          const error = normalizeError(err);
+          return throwError(
+            () =>
+              new HttpException(
+                error.message ?? 'Failed to approve team',
+                error.status ?? HttpStatus.INTERNAL_SERVER_ERROR,
+              ),
+          );
+        }),
+      );
+  }
+
+  @Post(':id/reject')
+  rejectTeam(
+    @Param('id') id: string,
+    @Body() body: { note?: string },
+    @UserClaims() userClaims: UserClaimsType,
+  ) {
+    return this.userService
+      .send(USER_SERVICE_PATTERNS.REJECT_TEAM, {
+        teamId: id,
+        note: body.note,
+        userClaims,
+      })
+      .pipe(
+        timeout(5000),
+        catchError((err: unknown) => {
+          const error = normalizeError(err);
+          return throwError(
+            () =>
+              new HttpException(
+                error.message ?? 'Failed to reject team',
+                error.status ?? HttpStatus.INTERNAL_SERVER_ERROR,
+              ),
+          );
+        }),
+      );
+  }
 }

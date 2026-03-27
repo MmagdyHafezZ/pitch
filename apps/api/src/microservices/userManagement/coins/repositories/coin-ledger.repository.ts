@@ -36,6 +36,21 @@ export class CoinLedgerRepository {
     return this.model.find({ reservationId }).lean<CoinLedger[]>().exec();
   }
 
+  async findByTeamId(
+    teamId: string,
+    periodKey?: string,
+    limit = 100,
+  ): Promise<CoinLedger[]> {
+    const filter: Record<string, unknown> = { teamId };
+    if (periodKey) filter['periodKey'] = periodKey;
+    return this.model
+      .find(filter)
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .lean<CoinLedger[]>()
+      .exec();
+  }
+
   async createRefillIfNotExists(args: {
     userId: string;
     eventId: string;

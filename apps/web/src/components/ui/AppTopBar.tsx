@@ -56,14 +56,28 @@ export type HeaderProps = {
   searchPlaceholder?: string
   rightSlot?: ReactNode
   teamName?: string
-  currentPage?: 'Home' | 'Sessions' | 'Teams' | 'Analytics' | 'Challenges' | 'Settings'
+  currentPage?:
+    | 'Home'
+    | 'Sessions'
+    | 'Teams'
+    | 'Analytics'
+    | 'Challenges'
+    | 'Settings'
+    | 'Subscription'
   selectedTab?: string
   onTabChange?: (tab: string) => void
   onToggleMobileNav?: () => void
   mobileNavOpened?: boolean
 }
 
-type PageKey = 'Home' | 'Sessions' | 'Teams' | 'Analytics' | 'Challenges' | 'Settings'
+type PageKey =
+  | 'Home'
+  | 'Sessions'
+  | 'Teams'
+  | 'Analytics'
+  | 'Challenges'
+  | 'Settings'
+  | 'Subscription'
 type ActionBarProps = {
   actionButtons?: ReactNode
   leadingAction?: ReactNode
@@ -348,6 +362,7 @@ function ActionConfig({
   onTabChange?: (tab: string) => void
 }) {
   const router = useRouter()
+  const pathname = usePathname()
   const { t } = useI18n()
 
   const tabLabels: Record<string, string> = {
@@ -376,7 +391,13 @@ function ActionConfig({
           translateTab={(tab) => tabLabels[tab] ?? tab}
         />
       )
-    case 'Sessions':
+    case 'Sessions': {
+      // On individual session pages (/studio/sessions/[id] or /studio/scenarios/...)
+      // the list header controls are irrelevant — hide them.
+      const isSessionDetail =
+        /^\/studio\/sessions\/[^/]+/.test(pathname ?? '') ||
+        /^\/studio\/scenarios\/[^/]+/.test(pathname ?? '')
+      if (isSessionDetail) return null
       return (
         <ActionBar
           enableSearch={true}
@@ -407,7 +428,10 @@ function ActionConfig({
           }
         />
       )
+    }
     case 'Teams':
+      // On /studio/team-config the stepper/tabs live in the page itself — no top bar controls needed.
+      if (pathname?.startsWith('/studio/team-config')) return null
       return (
         <ActionBar
           enableSearch={true}
@@ -912,7 +936,8 @@ export function AppTopBar({
     },
     header: {
       background: 'transparent',
-      borderBottom: '1px solid color-mix(in srgb, var(--pitch-card-border, var(--pitch-border)) 72%, transparent)',
+      borderBottom:
+        '1px solid color-mix(in srgb, var(--pitch-card-border, var(--pitch-border)) 72%, transparent)',
       paddingBottom: rem(14),
       marginBottom: rem(4),
     },
@@ -936,7 +961,8 @@ export function AppTopBar({
     ...notificationCardStyle,
     background:
       'linear-gradient(180deg, color-mix(in srgb, var(--pitch-card-bg-subtle, var(--pitch-card-bg, var(--pitch-surface-bg))) 88%, var(--pitch-accent) 12%) 0%, color-mix(in srgb, var(--pitch-card-bg, var(--pitch-surface-bg)) 86%, var(--pitch-accent) 14%) 100%)',
-    border: '1px solid var(--pitch-card-border-strong, var(--pitch-card-border, var(--pitch-border)))',
+    border:
+      '1px solid var(--pitch-card-border-strong, var(--pitch-card-border, var(--pitch-border)))',
   } as const
   const notificationMetaStyle = {
     color: 'var(--pitch-surface-text-dim)',
@@ -945,14 +971,16 @@ export function AppTopBar({
     background:
       'var(--pitch-card-bg-subtle, var(--pitch-card-bg, var(--pitch-surface-bg, var(--mantine-color-body))))',
     color: 'var(--pitch-surface-text)',
-    border: '1px solid var(--pitch-card-border, var(--pitch-border, var(--mantine-color-default-border)))',
+    border:
+      '1px solid var(--pitch-card-border, var(--pitch-border, var(--mantine-color-default-border)))',
   } as const
   const notificationIconButtonStyles = {
     root: {
       background:
         'var(--pitch-card-bg-subtle, var(--pitch-card-bg, var(--pitch-surface-bg, var(--mantine-color-body))))',
       color: 'var(--pitch-surface-text-dim)',
-      border: '1px solid var(--pitch-card-border, var(--pitch-border, var(--mantine-color-default-border)))',
+      border:
+        '1px solid var(--pitch-card-border, var(--pitch-border, var(--mantine-color-default-border)))',
     },
   } as const
   const mobileNavButton =
@@ -1089,6 +1117,7 @@ export function AppTopBar({
         size={16}
         color="red"
         offset={6}
+        inline
       >
         <ActionIcon
           aria-label={t('topbar.notifications')}

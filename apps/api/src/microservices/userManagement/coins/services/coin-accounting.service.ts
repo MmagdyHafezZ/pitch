@@ -310,6 +310,58 @@ export class CoinAccountingService {
     });
   }
 
+  async getAdminUsageSummary(): Promise<
+    Array<{
+      teamId: string;
+      periodKey: string;
+      subscriptionId: string;
+      allowance: number;
+      usedActual: number;
+      remaining: number;
+    }>
+  > {
+    const balances = await this.coinBalanceRepo.findAll();
+    // Exclude personal "user:xxx" quota entries
+    return balances
+      .filter((b) => !b.teamId.startsWith('user:'))
+      .map((b) => ({
+        teamId: b.teamId,
+        subscriptionId: b.subscriptionId,
+        periodKey: b.periodKey,
+        allowance: b.allowance,
+        usedActual: b.usedActual,
+        remaining: b.remaining,
+      }));
+  }
+
+  async getLedgerHistory(
+    teamId: string,
+    periodKey?: string,
+  ): Promise<
+    Array<{
+      type: string;
+      createdAt?: Date;
+      estimatedCoins?: number;
+      deltaCoins?: number;
+      sessionId?: string;
+      model?: string;
+      allowance?: number;
+      remainingAfter?: number;
+    }>
+  > {
+    const entries = await this.coinLedgerRepo.findByTeamId(teamId, periodKey);
+    return entries.map((e) => ({
+      type: e.type,
+      createdAt: (e as any).createdAt,
+      estimatedCoins: e.estimatedCoins,
+      deltaCoins: e.deltaCoins,
+      sessionId: e.sessionId,
+      model: e.model,
+      allowance: e.allowance,
+      remainingAfter: e.remainingAfter,
+    }));
+  }
+
   private async guardReservationLifecycle(reservationId: string) {
     const entries =
       await this.coinLedgerRepo.findAllByReservationId(reservationId);

@@ -33,6 +33,7 @@ export class TeamRepository {
         name: data.name,
         slug,
         isActive: data.isActive ?? true,
+        approvalStatus: data.approvalStatus ?? 'APPROVED',
         availableTokens: 0,
         usedTokens: 0,
         billingEmail: data.billingEmail ?? null,
@@ -453,6 +454,55 @@ export class TeamRepository {
       throw new ForbiddenException('Insufficient role');
 
     return m.role;
+  }
+
+  async findPendingTeams(): Promise<Team[]> {
+    return this.prisma.team.findMany({
+      where: { approvalStatus: 'PENDING', deletedAt: null },
+      include: {
+        memberships: {
+          where: { role: Role.OWNER },
+          include: {
+            user: {
+              select: {
+                id: true,
+                email: true,
+                name: true,
+                avatar: true,
+                isActive: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: { createdAt: 'asc' },
+    }) as unknown as Promise<Team[]>;
+  }
+
+  async approveTeam(teamId: string): Promise<Team> {
+    return this.prisma.team.update({
+      where: { id: teamId },
+      data: { approvalStatus: 'APPROVED', isActive: true },
+    }) as unknown as Promise<Team>;
+  }
+
+  async rejectTeam(teamId: string, note?: string): Promise<Team> {
+    const existing = await this.prisma.team.findUnique({
+      where: { id: teamId },
+    });
+    const currentMeta = (existing?.metadata as Record<string, unknown>) ?? {};
+    return this.prisma.team.update({
+      where: { id: teamId },
+      data: {
+        approvalStatus: 'REJECTED',
+        isActive: false,
+        metadata: {
+          ...currentMeta,
+          rejectionNote: note ?? null,
+          rejectedAt: new Date().toISOString(),
+        },
+      },
+    }) as unknown as Promise<Team>;
   }
 
   async ensureUniqueSlug(base: string): Promise<string> {

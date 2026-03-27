@@ -44,6 +44,7 @@ import { CoachStreamService } from './controllers/support/coach-stream.service';
 import { AdminGatewayController } from './controllers/admin/admin-gateway.controller';
 import { AdminUsersController } from './controllers/admin/admin-users.controller';
 import { AdminTeamsController } from './controllers/admin/admin-teams.controller';
+import { AdminSubscriptionsController } from './controllers/admin/admin-subscriptions.controller';
 import { AdminSessionsController } from './controllers/admin/admin-sessions.controller';
 import { AdminMonitoringController } from './controllers/admin/admin-monitoring.controller';
 import { AdminFeatureFlagsService } from './services/admin/admin-feature-flags.service';
@@ -143,6 +144,7 @@ import { CoinsGatewayController } from './controllers/userManagement/coins-gatew
     AdminGatewayController,
     AdminUsersController,
     AdminTeamsController,
+    AdminSubscriptionsController,
     AdminSessionsController,
     AdminMonitoringController,
   ],

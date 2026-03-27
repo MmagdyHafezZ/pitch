@@ -29,6 +29,7 @@ export interface Team {
   name: string
   slug: string
   isActive: boolean
+  approvalStatus?: string // 'PENDING' | 'APPROVED' | 'REJECTED'
   billingEmail?: string | null
   billingAddress?: Address | undefined
   metadata?: TeamMetadata | null

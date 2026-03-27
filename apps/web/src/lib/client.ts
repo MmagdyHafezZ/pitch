@@ -894,6 +894,28 @@ export const api = {
         durationMinutes: number
       }>(`/coins/session-estimate?${qs.toString()}`)
     },
+    refillRequest: (data: { requestedCoins: number; teamId: string }) =>
+      apiRequest<any>('/coins/refill/request', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    myRefillRequest: () => apiRequest<any>('/coins/refill/my-request'),
+    listRefillRequests: () => apiRequest<any[]>('/coins/refill/requests'),
+    approveRefillRequest: (userId: string, data: { approvedCoins: number }) =>
+      apiRequest<any>(`/coins/refill/requests/${userId}/approve`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    denyRefillRequest: (userId: string) =>
+      apiRequest<any>(`/coins/refill/requests/${userId}/deny`, {
+        method: 'POST',
+      }),
+    adminUsage: () => apiRequest<any[]>('/coins/usage/admin'),
+    ledgerHistory: (teamId: string, periodKey?: string) => {
+      const qs = new URLSearchParams({ teamId })
+      if (periodKey) qs.set('periodKey', periodKey)
+      return apiRequest<any[]>(`/coins/ledger/history?${qs.toString()}`)
+    },
   },
 
   invitations: {
@@ -1205,6 +1227,20 @@ export const api = {
         }),
       removeMember: (id: string, userId: string) =>
         apiRequest<any>(`/admin/teams/${id}/members/${userId}`, { method: 'DELETE' }),
+      listPending: () => apiRequest<any[]>('/admin/teams/pending'),
+      approve: (id: string) => apiRequest<any>(`/admin/teams/${id}/approve`, { method: 'POST' }),
+      reject: (id: string, note?: string) =>
+        apiRequest<any>(`/admin/teams/${id}/reject`, {
+          method: 'POST',
+          body: JSON.stringify({ note }),
+        }),
+    },
+    subscriptions: {
+      listPlanChanges: () => apiRequest<any[]>('/admin/subscriptions/plan-changes'),
+      approvePlanChange: (id: string) =>
+        apiRequest<any>(`/admin/subscriptions/${id}/approve-plan-change`, { method: 'POST' }),
+      rejectPlanChange: (id: string) =>
+        apiRequest<any>(`/admin/subscriptions/${id}/reject-plan-change`, { method: 'POST' }),
     },
     sessions: {
       list: (params?: {

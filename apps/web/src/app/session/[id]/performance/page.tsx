@@ -15,18 +15,22 @@ import {
   Paper,
   Progress,
   RingProgress,
+  Select,
   SimpleGrid,
   Stack,
   Tabs,
   Text,
   ThemeIcon,
   Title,
+  Tooltip,
 } from '@mantine/core'
 import { BarChart } from '@mantine/charts'
 import {
   IconAlertTriangle,
   IconArrowLeft,
+  IconArrowsExchange,
   IconBrain,
+  IconChartBar,
   IconCircleCheck,
   IconHistory,
   IconRefresh,
@@ -301,8 +305,16 @@ export default function SessionPerformancePage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [hasRequestedLiveRun, setHasRequestedLiveRun] = useState(false)
-  const [recalculating, setRecalculating] = useState(false)
   const [retaking, setRetaking] = useState(false)
+
+  // Session comparison
+  const [compareSessionId, setCompareSessionId] = useState<string | null>(null)
+  const [compareScore, setCompareScore] = useState<number | null>(null)
+  const [compareLabel, setCompareLabel] = useState<string | null>(null)
+  const [compareSessions, setCompareSessions] = useState<Array<{ value: string; label: string }>>(
+    []
+  )
+  const [loadingCompare, setLoadingCompare] = useState(false)
 
   const rawScore = assessment?.summary?.totalScore ?? report?.totalScore ?? assessment?.totalScore
   const score = typeof rawScore === 'number' ? rawScore : null
@@ -547,37 +559,27 @@ export default function SessionPerformancePage() {
     }
   }, [])
 
-  const handleRecalculate = useCallback(async () => {
-    setRecalculating(true)
-    setLoading(true)
-    setReport(null)
-    setReportLoadedForRunId(null)
-    setAssessment(null)
-    setError(null)
+  const handleCompareSelect = useCallback(async (id: string | null, label: string | null) => {
+    setCompareSessionId(id)
+    setCompareScore(null)
+    setCompareLabel(label)
+    if (!id) return
+    setLoadingCompare(true)
     try {
-      const run = await api.assessments.run({
-        sessionId,
-        mode: 'final',
-        forceRecalculate: true,
-      })
+      const run = (await api.assessments.getLatestForSession(id)) as AssessmentRun | null
       if (run?.runId) {
-        const newRunId = run.runId as string
-        setActiveRunId(newRunId)
-        setHasRequestedLiveRun(false)
-        // Persist the new runId in the URL so a page refresh lands on the same run
-        window.history.replaceState(
-          null,
-          '',
-          `/session/${sessionId}/performance?runId=${encodeURIComponent(newRunId)}`
-        )
+        const reportRes = (await api.assessments.getReport(run.runId)) as {
+          report?: { totalScore?: number }
+        } | null
+        const s = run?.summary?.totalScore ?? reportRes?.report?.totalScore ?? run?.totalScore
+        setCompareScore(typeof s === 'number' ? s : null)
       }
     } catch {
-      setError('Failed to start a new assessment run.')
-      setLoading(false)
+      /* ignore */
     } finally {
-      setRecalculating(false)
+      setLoadingCompare(false)
     }
-  }, [sessionId])
+  }, [])
 
   const handleRetake = useCallback(async () => {
     setRetaking(true)
@@ -698,6 +700,35 @@ export default function SessionPerformancePage() {
     }
   }, [pollAssessment])
 
+  // Load completed sessions for comparison selector
+  useEffect(() => {
+    void (async () => {
+      try {
+        const result = await api.sessions.getAll({ status: 'completed', limit: 30 })
+        const rows = (Array.isArray(result) ? result : ((result as any)?.data ?? [])) as Array<{
+          id: string
+          sessionConfig?: { title?: string }
+          createdAt?: string
+        }>
+        setCompareSessions(
+          rows
+            .filter((s) => s.id !== sessionId)
+            .slice(0, 20)
+            .map((s) => ({
+              value: s.id,
+              label:
+                s.sessionConfig?.title ??
+                (s.createdAt
+                  ? `Session — ${new Date(s.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+                  : `Session ${s.id.slice(0, 8)}`),
+            }))
+        )
+      } catch {
+        /* ignore */
+      }
+    })()
+  }, [sessionId])
+
   return (
     <Box
       p={{ base: 'md', sm: 'xl' }}
@@ -725,6 +756,24 @@ export default function SessionPerformancePage() {
             </Title>
           </Group>
           <Group wrap="wrap" gap="xs">
+            {compareSessions.length > 0 && (
+              <Tooltip label="Compare scores with a previous session" withArrow>
+                <Select
+                  placeholder="Compare with…"
+                  leftSection={<IconArrowsExchange size={14} />}
+                  data={compareSessions}
+                  value={compareSessionId}
+                  onChange={(id) => {
+                    const item = compareSessions.find((s) => s.value === id)
+                    void handleCompareSelect(id, item?.label ?? null)
+                  }}
+                  clearable
+                  size="sm"
+                  w={{ base: '100%', sm: 200 }}
+                  styles={{ input: { background: 'transparent' } }}
+                />
+              </Tooltip>
+            )}
             <Button
               variant="default"
               leftSection={<IconHistory size={16} />}
@@ -741,14 +790,6 @@ export default function SessionPerformancePage() {
               onClick={() => void handleRetake()}
             >
               Retake session
-            </Button>
-            <Button
-              variant="light"
-              leftSection={<IconRefresh size={16} />}
-              loading={recalculating}
-              onClick={() => void handleRecalculate()}
-            >
-              Recalculate
             </Button>
           </Group>
         </Group>
@@ -955,201 +996,305 @@ export default function SessionPerformancePage() {
               </Grid.Col>
             </Grid>
 
-            <Grid gutter="md">
-              <Grid.Col span={{ base: 12, md: 8 }}>
-                <Card radius="lg" p="lg" withBorder h="100%">
-                  <Group justify="space-between" mb="sm">
-                    <Text fw={700}>Score impact by competency</Text>
-                    <Badge color={totalDelta >= 0 ? 'teal' : 'red'} variant="light">
-                      Net {formatSigned(totalDelta)}
-                    </Badge>
+            {/* ── Comparison card ─────────────────────────────────────── */}
+            {compareSessionId && (
+              <Card radius="lg" p="lg" withBorder style={{ borderStyle: 'dashed' }}>
+                <Group justify="space-between" align="center" wrap="wrap" gap="md">
+                  <Group gap="sm">
+                    <ThemeIcon color="violet" variant="light" radius="xl">
+                      <IconArrowsExchange size={16} />
+                    </ThemeIcon>
+                    <Stack gap={2}>
+                      <Text
+                        size="xs"
+                        c="dimmed"
+                        tt="uppercase"
+                        fw={700}
+                        style={{ letterSpacing: '0.06em' }}
+                      >
+                        Comparing with
+                      </Text>
+                      <Text size="sm" fw={600}>
+                        {compareLabel ?? 'Previous session'}
+                      </Text>
+                    </Stack>
                   </Group>
-                  {breakdownChartData.length > 0 ? (
-                    <BarChart
-                      h={270}
-                      data={breakdownChartData}
-                      dataKey="label"
-                      series={[{ name: 'impact', color: 'blue' }]}
-                      valueFormatter={(value) => formatSigned(Number(value))}
-                      withLegend={false}
-                      tickLine="none"
-                      gridAxis="y"
-                    />
-                  ) : (
-                    <Text size="sm" c="dimmed">
-                      No score breakdown available for this run.
-                    </Text>
-                  )}
-                </Card>
-              </Grid.Col>
 
-              <Grid.Col span={{ base: 12, md: 4 }}>
-                <Card radius="lg" p="lg" withBorder h="100%">
-                  <Group justify="space-between" mb="sm">
-                    <Text fw={700}>Move grades</Text>
-                    <Badge color="gray" variant="light">
-                      {evaluatedTurnCount} turns
-                    </Badge>
-                  </Group>
-                  {signalMixData.length > 0 ? (
-                    <Box style={{ width: '100%', height: 220 }}>
-                      <ResponsiveContainer>
-                        <PieChart>
-                          <Pie
-                            data={signalMixData}
-                            dataKey="value"
-                            nameKey="name"
-                            innerRadius={48}
-                            outerRadius={80}
-                            paddingAngle={4}
-                          >
-                            {signalMixData.map((entry) => (
-                              <Cell key={entry.name} fill={entry.color} />
-                            ))}
-                          </Pie>
-                          <RechartsTooltip
-                            formatter={(value: number) => [`${value} turns`, 'Count']}
-                            contentStyle={{
-                              borderRadius: 10,
-                              border: `1px solid ${CHART_COLORS.slateGrid}`,
-                              backgroundColor: '#0f172a',
-                            }}
-                            labelStyle={{ color: '#e2e8f0' }}
-                          />
-                        </PieChart>
-                      </ResponsiveContainer>
-                    </Box>
+                  {loadingCompare ? (
+                    <Loader size="sm" />
                   ) : (
-                    <Text size="sm" c="dimmed">
-                      Turn-level signal mix is not available yet.
-                    </Text>
+                    <SimpleGrid cols={{ base: 2, sm: 3 }} spacing="xl">
+                      <Stack gap={2} align="center">
+                        <Text size="xs" c="dimmed">
+                          This session
+                        </Text>
+                        <Text fw={900} size="xl" c="white">
+                          {score ?? '—'}
+                        </Text>
+                        {grade && (
+                          <Badge color={grade.color} variant="light">
+                            {grade.letter}
+                          </Badge>
+                        )}
+                      </Stack>
+                      <Stack gap={2} align="center">
+                        <Text size="xs" c="dimmed">
+                          Previous
+                        </Text>
+                        <Text fw={900} size="xl" c="dimmed">
+                          {compareScore ?? '—'}
+                        </Text>
+                        {compareScore !== null && score !== null && (
+                          <Badge
+                            color={
+                              score > compareScore ? 'teal' : score < compareScore ? 'red' : 'gray'
+                            }
+                            variant="light"
+                          >
+                            {score > compareScore
+                              ? `+${(score - compareScore).toFixed(1)}`
+                              : `${(score - compareScore).toFixed(1)}`}
+                          </Badge>
+                        )}
+                      </Stack>
+                      <Stack gap={2} align="center" visibleFrom="sm">
+                        <Text size="xs" c="dimmed">
+                          Turns
+                        </Text>
+                        <Text fw={900} size="xl" c="white">
+                          {evaluatedTurnCount}
+                        </Text>
+                      </Stack>
+                    </SimpleGrid>
                   )}
-                  <Divider my="sm" />
-                  <Stack gap={8}>
-                    {moveGradeSummaryData.map((item) => (
-                      <Group key={item.name} justify="space-between">
-                        <Text size="sm">{item.name}</Text>
-                        <Badge color={item.color} variant="light">
-                          {item.value}
+                </Group>
+              </Card>
+            )}
+
+            <Tabs defaultValue="overview" variant="pills" radius="md">
+              <Tabs.List mb="md">
+                <Tabs.Tab value="overview" leftSection={<IconChartBar size={14} />}>
+                  Score Overview
+                </Tabs.Tab>
+                <Tabs.Tab value="trends" leftSection={<IconTrendingUp size={14} />}>
+                  Turn Trends
+                </Tabs.Tab>
+              </Tabs.List>
+
+              <Tabs.Panel value="overview">
+                <Grid gutter="md">
+                  <Grid.Col span={{ base: 12, md: 8 }}>
+                    <Card radius="lg" p="lg" withBorder h="100%">
+                      <Group justify="space-between" mb="sm">
+                        <Text fw={700}>Score impact by competency</Text>
+                        <Badge color={totalDelta >= 0 ? 'teal' : 'red'} variant="light">
+                          Net {formatSigned(totalDelta)}
                         </Badge>
                       </Group>
-                    ))}
-                  </Stack>
-                </Card>
-              </Grid.Col>
-            </Grid>
+                      {breakdownChartData.length > 0 ? (
+                        <BarChart
+                          h={270}
+                          data={breakdownChartData}
+                          dataKey="label"
+                          series={[{ name: 'impact', color: 'blue' }]}
+                          valueFormatter={(value) => formatSigned(Number(value))}
+                          withLegend={false}
+                          tickLine="none"
+                          gridAxis="y"
+                        />
+                      ) : (
+                        <Text size="sm" c="dimmed">
+                          No score breakdown available for this run.
+                        </Text>
+                      )}
+                    </Card>
+                  </Grid.Col>
 
-            <Grid gutter="md">
-              <Grid.Col span={{ base: 12, md: 6 }}>
-                <Card radius="lg" p="lg" withBorder>
-                  <Group justify="space-between" mb="sm">
-                    <Text fw={700}>Score per turn</Text>
-                    <ThemeIcon color="blue" variant="light" radius="xl">
-                      <IconTargetArrow size={16} />
-                    </ThemeIcon>
-                  </Group>
-                  {turnScoreData.length > 0 ? (
-                    <Box style={{ width: '100%', height: 280 }}>
-                      <ResponsiveContainer>
-                        <RechartsBarChart data={turnScoreData} barCategoryGap="28%">
-                          <CartesianGrid strokeDasharray="3 3" stroke={CHART_COLORS.slateGrid} />
-                          <XAxis
-                            dataKey="turn"
-                            tick={{ fill: CHART_COLORS.slateAxis, fontSize: 12 }}
-                          />
-                          <YAxis tick={{ fill: CHART_COLORS.slateAxis, fontSize: 12 }} />
-                          <RechartsTooltip
-                            formatter={(value: number, _name, item) => [
-                              `${formatSigned(value)} pts`,
-                              (item?.payload as { moveLabel?: string; label?: string })
-                                ?.moveLabel ??
-                                (item?.payload as { label?: string })?.label ??
-                                '',
-                            ]}
-                            contentStyle={{
-                              borderRadius: 10,
-                              border: `1px solid ${CHART_COLORS.slateGrid}`,
-                              backgroundColor: '#0f172a',
-                            }}
-                            labelStyle={{ color: '#e2e8f0' }}
-                          />
-                          <Bar dataKey="delta" radius={[4, 4, 0, 0]}>
-                            {turnScoreData.map((entry, index) => (
-                              <Cell key={`cell-${index}`} fill={entry.fill} />
-                            ))}
-                          </Bar>
-                        </RechartsBarChart>
-                      </ResponsiveContainer>
-                    </Box>
-                  ) : (
-                    <Text size="sm" c="dimmed">
-                      Turn scores appear once annotations are available.
-                    </Text>
-                  )}
-                </Card>
-              </Grid.Col>
-              <Grid.Col span={{ base: 12, md: 6 }}>
-                <Card radius="lg" p="lg" withBorder>
-                  <Group justify="space-between" mb="sm">
-                    <Text fw={700}>Turn momentum</Text>
-                    <ThemeIcon color="teal" variant="light" radius="xl">
-                      <IconTrendingUp size={16} />
-                    </ThemeIcon>
-                  </Group>
-                  {momentumData.length > 0 ? (
-                    <Box style={{ width: '100%', height: 280 }}>
-                      <ResponsiveContainer>
-                        <AreaChart data={momentumData}>
-                          <defs>
-                            <linearGradient id="confidenceGradient" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="5%" stopColor={CHART_COLORS.cyan} stopOpacity={0.45} />
-                              <stop offset="95%" stopColor={CHART_COLORS.cyan} stopOpacity={0.05} />
-                            </linearGradient>
-                          </defs>
-                          <CartesianGrid strokeDasharray="3 3" stroke={CHART_COLORS.slateGrid} />
-                          <XAxis
-                            dataKey="turn"
-                            tick={{ fill: CHART_COLORS.slateAxis, fontSize: 12 }}
-                          />
-                          <YAxis tick={{ fill: CHART_COLORS.slateAxis, fontSize: 12 }} />
-                          <RechartsTooltip
-                            contentStyle={{
-                              borderRadius: 10,
-                              border: `1px solid ${CHART_COLORS.slateGrid}`,
-                              backgroundColor: '#0f172a',
-                            }}
-                            labelStyle={{ color: '#e2e8f0' }}
-                          />
-                          <Area
-                            type="monotone"
-                            dataKey="confidence"
-                            stroke={CHART_COLORS.cyan}
-                            fill="url(#confidenceGradient)"
-                            strokeWidth={2}
-                            name="Confidence %"
-                          />
-                          <Area
-                            type="monotone"
-                            dataKey="cumulative"
-                            stroke={CHART_COLORS.teal}
-                            fillOpacity={0}
-                            strokeWidth={2}
-                            name="Cumulative score"
-                          />
-                        </AreaChart>
-                      </ResponsiveContainer>
-                    </Box>
-                  ) : (
-                    <Text size="sm" c="dimmed">
-                      Momentum analytics appear once turn-level annotations are available.
-                    </Text>
-                  )}
-                </Card>
-              </Grid.Col>
-            </Grid>
+                  <Grid.Col span={{ base: 12, md: 4 }}>
+                    <Card radius="lg" p="lg" withBorder h="100%">
+                      <Group justify="space-between" mb="sm">
+                        <Text fw={700}>Move grades</Text>
+                        <Badge color="gray" variant="light">
+                          {evaluatedTurnCount} turns
+                        </Badge>
+                      </Group>
+                      {signalMixData.length > 0 ? (
+                        <Box style={{ width: '100%', height: 220 }}>
+                          <ResponsiveContainer>
+                            <PieChart>
+                              <Pie
+                                data={signalMixData}
+                                dataKey="value"
+                                nameKey="name"
+                                innerRadius={48}
+                                outerRadius={80}
+                                paddingAngle={4}
+                              >
+                                {signalMixData.map((entry) => (
+                                  <Cell key={entry.name} fill={entry.color} />
+                                ))}
+                              </Pie>
+                              <RechartsTooltip
+                                formatter={(value: number) => [`${value} turns`, 'Count']}
+                                contentStyle={{
+                                  borderRadius: 10,
+                                  border: `1px solid ${CHART_COLORS.slateGrid}`,
+                                  backgroundColor: '#0f172a',
+                                }}
+                                labelStyle={{ color: '#e2e8f0' }}
+                              />
+                            </PieChart>
+                          </ResponsiveContainer>
+                        </Box>
+                      ) : (
+                        <Text size="sm" c="dimmed">
+                          Turn-level signal mix is not available yet.
+                        </Text>
+                      )}
+                      <Divider my="sm" />
+                      <Stack gap={8}>
+                        {moveGradeSummaryData.map((item) => (
+                          <Group key={item.name} justify="space-between">
+                            <Text size="sm">{item.name}</Text>
+                            <Badge color={item.color} variant="light">
+                              {item.value}
+                            </Badge>
+                          </Group>
+                        ))}
+                      </Stack>
+                    </Card>
+                  </Grid.Col>
+                </Grid>
+              </Tabs.Panel>
 
-            <Tabs defaultValue="conversation" variant="pills" radius="md">
-              <Tabs.List>
+              <Tabs.Panel value="trends">
+                <Grid gutter="md">
+                  <Grid.Col span={{ base: 12, md: 6 }}>
+                    <Card radius="lg" p="lg" withBorder>
+                      <Group justify="space-between" mb="sm">
+                        <Text fw={700}>Score per turn</Text>
+                        <ThemeIcon color="blue" variant="light" radius="xl">
+                          <IconTargetArrow size={16} />
+                        </ThemeIcon>
+                      </Group>
+                      {turnScoreData.length > 0 ? (
+                        <Box style={{ width: '100%', height: 280 }}>
+                          <ResponsiveContainer>
+                            <RechartsBarChart data={turnScoreData} barCategoryGap="28%">
+                              <CartesianGrid
+                                strokeDasharray="3 3"
+                                stroke={CHART_COLORS.slateGrid}
+                              />
+                              <XAxis
+                                dataKey="turn"
+                                tick={{ fill: CHART_COLORS.slateAxis, fontSize: 12 }}
+                              />
+                              <YAxis tick={{ fill: CHART_COLORS.slateAxis, fontSize: 12 }} />
+                              <RechartsTooltip
+                                formatter={(value: number, _name, item) => [
+                                  `${formatSigned(value)} pts`,
+                                  (item?.payload as { moveLabel?: string; label?: string })
+                                    ?.moveLabel ??
+                                    (item?.payload as { label?: string })?.label ??
+                                    '',
+                                ]}
+                                contentStyle={{
+                                  borderRadius: 10,
+                                  border: `1px solid ${CHART_COLORS.slateGrid}`,
+                                  backgroundColor: '#0f172a',
+                                }}
+                                labelStyle={{ color: '#e2e8f0' }}
+                              />
+                              <Bar dataKey="delta" radius={[4, 4, 0, 0]}>
+                                {turnScoreData.map((entry, index) => (
+                                  <Cell key={`cell-${index}`} fill={entry.fill} />
+                                ))}
+                              </Bar>
+                            </RechartsBarChart>
+                          </ResponsiveContainer>
+                        </Box>
+                      ) : (
+                        <Text size="sm" c="dimmed">
+                          Turn scores appear once annotations are available.
+                        </Text>
+                      )}
+                    </Card>
+                  </Grid.Col>
+                  <Grid.Col span={{ base: 12, md: 6 }}>
+                    <Card radius="lg" p="lg" withBorder>
+                      <Group justify="space-between" mb="sm">
+                        <Text fw={700}>Turn momentum</Text>
+                        <ThemeIcon color="teal" variant="light" radius="xl">
+                          <IconTrendingUp size={16} />
+                        </ThemeIcon>
+                      </Group>
+                      {momentumData.length > 0 ? (
+                        <Box style={{ width: '100%', height: 280 }}>
+                          <ResponsiveContainer>
+                            <AreaChart data={momentumData}>
+                              <defs>
+                                <linearGradient id="confidenceGradient" x1="0" y1="0" x2="0" y2="1">
+                                  <stop
+                                    offset="5%"
+                                    stopColor={CHART_COLORS.cyan}
+                                    stopOpacity={0.45}
+                                  />
+                                  <stop
+                                    offset="95%"
+                                    stopColor={CHART_COLORS.cyan}
+                                    stopOpacity={0.05}
+                                  />
+                                </linearGradient>
+                              </defs>
+                              <CartesianGrid
+                                strokeDasharray="3 3"
+                                stroke={CHART_COLORS.slateGrid}
+                              />
+                              <XAxis
+                                dataKey="turn"
+                                tick={{ fill: CHART_COLORS.slateAxis, fontSize: 12 }}
+                              />
+                              <YAxis tick={{ fill: CHART_COLORS.slateAxis, fontSize: 12 }} />
+                              <RechartsTooltip
+                                contentStyle={{
+                                  borderRadius: 10,
+                                  border: `1px solid ${CHART_COLORS.slateGrid}`,
+                                  backgroundColor: '#0f172a',
+                                }}
+                                labelStyle={{ color: '#e2e8f0' }}
+                              />
+                              <Area
+                                type="monotone"
+                                dataKey="confidence"
+                                stroke={CHART_COLORS.cyan}
+                                fill="url(#confidenceGradient)"
+                                strokeWidth={2}
+                                name="Confidence %"
+                              />
+                              <Area
+                                type="monotone"
+                                dataKey="cumulative"
+                                stroke={CHART_COLORS.teal}
+                                fillOpacity={0}
+                                strokeWidth={2}
+                                name="Cumulative score"
+                              />
+                            </AreaChart>
+                          </ResponsiveContainer>
+                        </Box>
+                      ) : (
+                        <Text size="sm" c="dimmed">
+                          Momentum analytics appear once turn-level annotations are available.
+                        </Text>
+                      )}
+                    </Card>
+                  </Grid.Col>
+                </Grid>
+              </Tabs.Panel>
+            </Tabs>
+
+            <Tabs defaultValue="conversation" variant="outline" radius="md">
+              <Tabs.List mb="md">
                 <Tabs.Tab value="conversation" leftSection={<IconHistory size={14} />}>
                   Conversation
                 </Tabs.Tab>
@@ -1161,7 +1306,7 @@ export default function SessionPerformancePage() {
                 </Tabs.Tab>
               </Tabs.List>
 
-              <Tabs.Panel value="strengths" pt="md">
+              <Tabs.Panel value="strengths">
                 <Card radius="lg" p="lg" withBorder>
                   {highlights.length > 0 ? (
                     <Stack gap="sm">
@@ -1214,7 +1359,7 @@ export default function SessionPerformancePage() {
                 </Card>
               </Tabs.Panel>
 
-              <Tabs.Panel value="plan" pt="md">
+              <Tabs.Panel value="plan">
                 <Card radius="lg" p="lg" withBorder>
                   {improvements.length > 0 ? (
                     <Stack gap="sm">
@@ -1265,7 +1410,7 @@ export default function SessionPerformancePage() {
                 </Card>
               </Tabs.Panel>
 
-              <Tabs.Panel value="conversation" pt="md">
+              <Tabs.Panel value="conversation">
                 <Card radius="lg" p="lg" withBorder>
                   <Group justify="space-between" mb="sm">
                     <Text fw={700}>Conversation history</Text>

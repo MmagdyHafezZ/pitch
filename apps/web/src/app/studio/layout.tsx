@@ -15,7 +15,14 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 
 export default function ClientLayerComponent({ children }: { children: React.ReactNode }) {
   const [active, setActive] = useState<
-    'Home' | 'Sessions' | 'Teams' | 'Analytics' | 'Settings' | 'Team Config' | 'Challenges'
+    | 'Home'
+    | 'Sessions'
+    | 'Teams'
+    | 'Analytics'
+    | 'Settings'
+    | 'Team Config'
+    | 'Challenges'
+    | 'Subscription'
   >('Home')
   const [selectedDate, setSelectedDate] = useState<Date | null>(new Date())
   const {
@@ -39,7 +46,10 @@ export default function ClientLayerComponent({ children }: { children: React.Rea
   }, [user, router])
 
   const [tabsByPage, setTabsByPage] = useState<
-    Record<'Home' | 'Sessions' | 'Teams' | 'Analytics' | 'Challenges' | 'Settings', string>
+    Record<
+      'Home' | 'Sessions' | 'Teams' | 'Analytics' | 'Challenges' | 'Settings' | 'Subscription',
+      string
+    >
   >({
     Home: 'All',
     Sessions: 'All',
@@ -47,10 +57,11 @@ export default function ClientLayerComponent({ children }: { children: React.Rea
     Analytics: 'Overview',
     Challenges: '',
     Settings: '',
+    Subscription: '',
   })
 
   const handleTabChange = (
-    page: 'Home' | 'Sessions' | 'Teams' | 'Analytics' | 'Challenges' | 'Settings'
+    page: 'Home' | 'Sessions' | 'Teams' | 'Analytics' | 'Challenges' | 'Settings' | 'Subscription'
   ) => {
     return (tab: string) => {
       setTabsByPage((prev) => ({ ...prev, [page]: tab }))
@@ -98,6 +109,9 @@ export default function ClientLayerComponent({ children }: { children: React.Rea
     }
     if (pathname.startsWith('/studio/challenges')) {
       return { page: 'Challenges' as const, nav: 'Challenges' as const }
+    }
+    if (pathname.startsWith('/studio/subscription')) {
+      return { page: 'Subscription' as const, nav: 'Subscription' as const }
     }
     return { page: 'Home' as const, nav: 'Home' as const }
   }, [pathname])

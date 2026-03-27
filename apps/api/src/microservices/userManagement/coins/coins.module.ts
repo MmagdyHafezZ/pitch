@@ -7,11 +7,18 @@ import { CoinLedgerRepository } from './repositories/coin-ledger.repository';
 import { CoinBalanceRepository } from './repositories/coin-balance.repository';
 import { SubscriptionModule } from '../subscription/subscription.module';
 import { PlansModule } from '../plans/plans.module';
+import { UserModule } from '../user/user.module';
+import { TeamModule } from '../team/team.module';
 import { CoinRefillCron } from './services/coin-refill-cron.service';
 import { CoinRefillService } from './services/coin-refill.service';
 
 @Module({
-  imports: [forwardRef(() => SubscriptionModule), PlansModule],
+  imports: [
+    forwardRef(() => SubscriptionModule),
+    PlansModule,
+    forwardRef(() => UserModule),
+    TeamModule,
+  ],
   controllers: [CoinsConsumer],
   providers: [
     CoinRedisService,

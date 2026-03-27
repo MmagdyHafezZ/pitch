@@ -352,4 +352,48 @@ export class TeamController {
       throw toRpcException(error);
     }
   }
+
+  @MessagePattern(USER_SERVICE_PATTERNS.LIST_PENDING_TEAMS)
+  async listPendingTeams(
+    @Payload() _data: userClaimsInterface.MessageWithUserClaims,
+  ) {
+    try {
+      return await this.teamService.listPendingTeams();
+    } catch (error) {
+      throw toRpcException(error);
+    }
+  }
+
+  @MessagePattern(USER_SERVICE_PATTERNS.APPROVE_TEAM)
+  async approveTeam(
+    @Payload()
+    data: userClaimsInterface.MessageWithUserClaims & { teamId: string },
+  ) {
+    try {
+      this.logger.log(
+        `Approving team ${data.teamId} - By: ${data.userClaims?.email ?? 'admin'}`,
+      );
+      return await this.teamService.approveTeam(data.teamId);
+    } catch (error) {
+      throw toRpcException(error);
+    }
+  }
+
+  @MessagePattern(USER_SERVICE_PATTERNS.REJECT_TEAM)
+  async rejectTeam(
+    @Payload()
+    data: userClaimsInterface.MessageWithUserClaims & {
+      teamId: string;
+      note?: string;
+    },
+  ) {
+    try {
+      this.logger.log(
+        `Rejecting team ${data.teamId} - By: ${data.userClaims?.email ?? 'admin'}`,
+      );
+      return await this.teamService.rejectTeam(data.teamId, data.note);
+    } catch (error) {
+      throw toRpcException(error);
+    }
+  }
 }
