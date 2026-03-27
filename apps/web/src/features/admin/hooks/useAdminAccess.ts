@@ -13,7 +13,10 @@ export function useAdminAccess() {
     queryFn: () => adminApi.getMe(),
     enabled: Boolean(token && userId),
     retry: false,
-    staleTime: 1000 * 60 * 5,
+    staleTime: 0,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
+    refetchInterval: token && userId ? 30_000 : false,
   })
 
   return {

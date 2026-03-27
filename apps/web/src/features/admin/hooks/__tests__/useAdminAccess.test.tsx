@@ -55,6 +55,10 @@ describe('useAdminAccess', () => {
       expect.objectContaining({
         queryKey: ['admin-access', 'me', 'admin-1'],
         enabled: true,
+        staleTime: 0,
+        refetchOnMount: 'always',
+        refetchOnWindowFocus: true,
+        refetchInterval: 30_000,
       })
     )
     expect(result.current.isSystemAdmin).toBe(true)
@@ -80,6 +84,7 @@ describe('useAdminAccess', () => {
       expect.objectContaining({
         queryKey: ['admin-access', 'me', null],
         enabled: false,
+        refetchInterval: false,
       })
     )
     expect(result.current.isCheckingAccess).toBe(true)

@@ -192,7 +192,8 @@ export const useAuthStore = create<AuthStore>()((set, get) => ({
       if (!currentToken || isTokenExpired(currentToken)) {
         setAccessToken(null)
         clearSessionQueries()
-        set({ token: null, isAuthenticated: false })
+        useTeamsStore.getState().resetStore()
+        set({ token: null, user: null, isAuthenticated: false })
       }
       return false
     }
