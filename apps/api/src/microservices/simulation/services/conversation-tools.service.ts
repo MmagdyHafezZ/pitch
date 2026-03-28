@@ -279,17 +279,15 @@ export class ConversationToolsService {
 
   private executeEndCall(
     args: Record<string, unknown>,
-    context: ToolContext,
+    _context: ToolContext,
   ): void {
-    void context;
     this.logger.log(`end_call triggered: ${String(args.reason)}`);
   }
 
   private executeRaiseObjection(
     args: Record<string, unknown>,
-    context: ToolContext,
+    _context: ToolContext,
   ): void {
-    void context;
     this.logger.log(
       `raise_objection [${String(args.type)}]: ${String(args.text)}`,
     );
@@ -297,9 +295,8 @@ export class ConversationToolsService {
 
   private executeFlagMoment(
     args: Record<string, unknown>,
-    context: ToolContext,
+    _context: ToolContext,
   ): void {
-    void context;
     this.logger.log(
       `flag_moment [${String(args.moment_type)}]: ${String(args.description)}`,
     );
@@ -307,9 +304,8 @@ export class ConversationToolsService {
 
   private executeProposeNextStep(
     args: Record<string, unknown>,
-    context: ToolContext,
+    _context: ToolContext,
   ): void {
-    void context;
     this.logger.log(
       `propose_next_step: ${String(args.action)} by ${String(args.timeframe)}`,
     );
@@ -317,9 +313,8 @@ export class ConversationToolsService {
 
   private executeRequestClarification(
     args: Record<string, unknown>,
-    context: ToolContext,
+    _context: ToolContext,
   ): void {
-    void context;
     this.logger.log(
       `request_clarification [${String(args.topic)}]: ${String(args.question)}`,
     );

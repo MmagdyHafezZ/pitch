@@ -4,6 +4,13 @@ export const USER_SERVICE_COIN_PATTERNS = {
   COIN_ADJUST: 'coin.adjust',
   COIN_BALANCE_GET: 'coin.balance.get',
   COIN_USER_BALANCE_GET: 'coin.user.balance.get',
+  COIN_REFILL_REQUEST: 'coin.refill.request',
+  COIN_REFILL_REQUEST_LIST: 'coin.refill.list',
+  COIN_REFILL_REQUEST_APPROVE: 'coin.refill.approve',
+  COIN_REFILL_REQUEST_DENY: 'coin.refill.deny',
+  COIN_USAGE_ADMIN: 'coin.usage.admin',
+  COIN_LEDGER_HISTORY: 'coin.ledger.history',
+  COIN_REFILL_MY_REQUEST: 'coin.refill.my-request',
 } as const
 
 export const USER_SERVICE_PATTERNS = {
@@ -56,6 +63,13 @@ export const USER_SERVICE_PATTERNS = {
   GET_PLAN: 'get_plan',
   AUTH_LTI_LOGIN: 'auth.lti.login',
   GET_PLATFORM_STATS: 'user.platform.stats',
+  LIST_PENDING_TEAMS: 'team.approval.list_pending',
+  APPROVE_TEAM: 'team.approval.approve',
+  REJECT_TEAM: 'team.approval.reject',
+  REQUEST_PLAN_CHANGE: 'subscription.plan_change.request',
+  LIST_PENDING_PLAN_CHANGES: 'subscription.plan_change.list_pending',
+  APPROVE_PLAN_CHANGE: 'subscription.plan_change.approve',
+  REJECT_PLAN_CHANGE: 'subscription.plan_change.reject',
 } as const
 
 export const S3_SERVICE_PATTERNS = {

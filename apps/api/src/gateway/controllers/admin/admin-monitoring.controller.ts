@@ -10,6 +10,7 @@ import {
   ILLMTrace,
   LLMTraceModel,
 } from '../../../microservices/simulation/schemas/mongodb/llm-trace.schema';
+import { AdminRequestLogService } from '../../services/admin/admin-request-log.service';
 
 @Controller({ path: 'admin/monitoring', version: '1' })
 @UseGuards(CheckSystemAdmin)
@@ -19,6 +20,7 @@ export class AdminMonitoringController {
     private readonly assessmentModel: Model<IAssessmentReport>,
     @InjectModel(LLMTraceModel, 'gateway')
     private readonly llmTraceModel: Model<ILLMTrace>,
+    private readonly requestLogService: AdminRequestLogService,
   ) {}
 
   @Get('assessments')
@@ -103,5 +105,16 @@ export class AdminMonitoringController {
         { name: 'session-cleanup', schedule: '0 * * * *', lastRun: null },
       ],
     };
+  }
+
+  @Get('request-logs')
+  async getRequestLogs(
+    @Query('limit') limit?: string,
+    @Query('offset') offset?: string,
+  ) {
+    return this.requestLogService.findAll(
+      limit ? parseInt(limit, 10) : 50,
+      offset ? parseInt(offset, 10) : 0,
+    );
   }
 }

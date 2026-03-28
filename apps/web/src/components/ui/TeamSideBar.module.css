@@ -6,12 +6,11 @@
   padding: 8px 4px;
   border-top-right-radius: 24px;
   border-bottom-right-radius: 24px;
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--pitch-nav-bg, var(--mantine-color-nav-9)) 96%, transparent),
-      color-mix(in srgb, var(--pitch-nav-bg, var(--mantine-color-nav-9)) 88%, transparent)
-    );
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--pitch-nav-bg, var(--mantine-color-nav-9)) 96%, transparent),
+    color-mix(in srgb, var(--pitch-nav-bg, var(--mantine-color-nav-9)) 88%, transparent)
+  );
   box-shadow:
     inset -1px 0 0 color-mix(in srgb, var(--pitch-nav-text-dim) 20%, transparent),
     inset 0 0 0 1px color-mix(in srgb, var(--pitch-nav-text-dim) 14%, transparent),

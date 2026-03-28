@@ -17,6 +17,7 @@ import {
   Loader,
   Badge,
   Modal,
+  Collapse,
 } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
 import {
@@ -34,6 +35,8 @@ import {
   IconDownload,
   IconCheck,
   IconDatabase,
+  IconChevronDown,
+  IconChevronUp,
 } from '@tabler/icons-react'
 import { useRouter } from 'next/navigation'
 import ReactMarkdown from 'react-markdown'
@@ -48,6 +51,11 @@ interface CoachChatWidgetProps {
     sessionId?: string
     recentTurns?: Array<{ role: string; text: string }>
     sessionName?: string
+  }
+  starter?: {
+    key: string
+    message: string
+    open?: boolean
   }
 }
 
@@ -240,7 +248,33 @@ const compactPersistedState = (state: PersistedCoachChatState): PersistedCoachCh
 const extractInlineQuickReplies = (
   content: string
 ): { content: string; quickReplies?: string[] } => {
-  const normalized = content.trimEnd()
+  // ── Strip [show_options] / [show_options: opt1, opt2] artifacts ─────────────
+  // The model sometimes writes these markers as literal text instead of calling
+  // the tool. Strip the tag (and any trailing backslashes the model adds) so it
+  // never pollutes the chat bubble. If the marker contained inline options, use
+  // them as quick-reply buttons immediately.
+  const showOptRe = /\[show_options(?::\s*([^\]]*))?\]\s*\\?\s*/gi
+  let inlineShowOptions: string[] = []
+  const withoutShowOptions = content.replace(showOptRe, (_match, opts?: string) => {
+    if (opts && inlineShowOptions.length === 0) {
+      // Prefer | as separator (handles options that contain commas);
+      // fall back to , when | is absent.
+      const sep = opts.includes('|') ? /\s*\|\s*/ : /\s*,\s*/
+      const parsed = opts
+        .split(sep)
+        .map((s) => s.trim())
+        .filter(Boolean)
+      if (parsed.length >= 2 && parsed.length <= 5) inlineShowOptions = parsed
+    }
+    return ''
+  })
+
+  if (inlineShowOptions.length > 0) {
+    return { content: withoutShowOptions.trimEnd(), quickReplies: inlineShowOptions }
+  }
+
+  // Use the stripped content for the rest of detection
+  const normalized = withoutShowOptions.trimEnd()
   const lines = normalized.split('\n')
   const lastLine = lines[lines.length - 1]?.trim() ?? ''
   const bulletLines = lines.filter((line) => /^[-*•]\s+/.test(line.trim()))
@@ -269,12 +303,12 @@ const extractInlineQuickReplies = (
   }
 
   if (!lastLine.startsWith('[') || !lastLine.endsWith(']')) {
-    return { content }
+    return { content: normalized }
   }
 
   const inner = lastLine.slice(1, -1).trim()
   if (!inner) {
-    return { content }
+    return { content: normalized }
   }
 
   const options = inner
@@ -283,7 +317,7 @@ const extractInlineQuickReplies = (
     .filter(Boolean)
 
   if (options.length < 2 || options.length > 5) {
-    return { content }
+    return { content: normalized }
   }
 
   const nextContent = lines.slice(0, -1).join('\n').trimEnd()
@@ -295,7 +329,7 @@ const extractInlineQuickReplies = (
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
-export function CoachChatWidget({ context }: CoachChatWidgetProps) {
+export function CoachChatWidget({ context, starter }: CoachChatWidgetProps) {
   const userId = useAuthStore((state) => state.user?.id)
   const [open, setOpen] = useState(false)
   const [isFullscreen, setIsFullscreen] = useState(false)
@@ -313,9 +347,12 @@ export function CoachChatWidget({ context }: CoachChatWidgetProps) {
   )
   /** Live status text shown while a sequence step is executing (e.g. "Clicking Create Session button…") */
   const [executionStatus, setExecutionStatus] = useState<string | null>(null)
+  /** Message indices whose wizard step list is expanded */
+  const [expandedStepMsgs, setExpandedStepMsgs] = useState<Set<number>>(new Set())
   const router = useRouter()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const restoredPersistenceKeyRef = useRef<string | null>(null)
+  const processedStarterKeysRef = useRef<Set<string>>(new Set())
   const contextScope =
     context?.sessionId != null
       ? `session:${context.page ?? 'unknown'}:${context.sessionId}`
@@ -461,6 +498,43 @@ export function CoachChatWidget({ context }: CoachChatWidgetProps) {
           observer.disconnect()
           resolve(null)
         }, timeout)
+      }),
+    []
+  )
+
+  /**
+   * Waits until NO element matches `selector` (i.e. an element disappears or
+   * loses an attribute). Used to detect when a loading state ends, e.g.
+   * `[data-tour-id="create-session-generate"][data-loading="true"]`.
+   *
+   * Gives React 400 ms to apply the loading attribute before starting to watch,
+   * then resolves as soon as the selector stops matching (or after `timeout`).
+   */
+  const waitForElementGone = useCallback(
+    (selector: string, timeout = 30000): Promise<void> =>
+      new Promise((resolve) => {
+        setTimeout(() => {
+          if (!document.querySelector(selector)) {
+            resolve()
+            return
+          }
+          const observer = new MutationObserver(() => {
+            if (!document.querySelector(selector)) {
+              observer.disconnect()
+              clearTimeout(timer)
+              resolve()
+            }
+          })
+          observer.observe(document.body, {
+            childList: true,
+            subtree: true,
+            attributes: true,
+          })
+          const timer = setTimeout(() => {
+            observer.disconnect()
+            resolve()
+          }, timeout)
+        }, 400)
       }),
     []
   )
@@ -646,10 +720,23 @@ export function CoachChatWidget({ context }: CoachChatWidgetProps) {
             fillElement(fillEl as HTMLInputElement | HTMLTextAreaElement, step.value ?? '')
             markDone(stepIdx)
           } else if (step.type === 'click') {
-            el.scrollIntoView({ behavior: 'smooth', block: 'center' })
-            await new Promise((r) => setTimeout(r, 350))
-            el.click()
+            highlightElement(el)
+            await new Promise((r) => setTimeout(r, 400))
+            // Use dispatchEvent with a full MouseEvent so React's synthetic
+            // event system reliably fires onClick on non-button elements
+            // (e.g. Mantine Paper divs) in React 18 concurrent mode.
+            el.dispatchEvent(
+              new MouseEvent('click', { bubbles: true, cancelable: true, view: window })
+            )
             await new Promise((r) => setTimeout(r, 600))
+            // For async generator steps, wait until the loading state clears
+            // before the next step tries to find newly-appeared elements.
+            if (step.target === 'create-session-generate') {
+              await waitForElementGone(
+                '[data-tour-id="create-session-generate"][data-loading="true"]',
+                30000
+              )
+            }
             justNavigated = true
             markDone(stepIdx)
           } else {
@@ -664,7 +751,7 @@ export function CoachChatWidget({ context }: CoachChatWidgetProps) {
       }
       setExecutionStatus(null)
     },
-    [router, waitForElement, fillElement, executeAction]
+    [router, waitForElement, waitForElementGone, fillElement, executeAction, highlightElement]
   )
 
   const permitAction = useCallback(
@@ -678,10 +765,21 @@ export function CoachChatWidget({ context }: CoachChatWidgetProps) {
         updated[msgIndex] = { ...msg, actionState: 'permitted' }
         return updated
       })
+      // Auto-expand the step list when the user permits the action
+      setExpandedStepMsgs((prev) => new Set([...prev, msgIndex]))
       setTimeout(() => {
         if (!actionToRun) return
         if (actionToRun.steps?.length) {
-          void executeSteps(actionToRun.steps, msgIndex)
+          void executeSteps(actionToRun.steps, msgIndex).then(() => {
+            setMessages((prev) => [
+              ...prev,
+              {
+                role: 'assistant',
+                content:
+                  "All done! I've filled everything in for you. Review the session details on screen and click **Create Session** when you're happy with it.",
+              },
+            ])
+          })
         } else {
           executeAction(actionToRun)
         }
@@ -1107,149 +1205,199 @@ export function CoachChatWidget({ context }: CoachChatWidgetProps) {
     attachments.some((attachment) => attachment.uploading) ||
     savedContextAttachments.some((attachment) => attachment.uploading)
 
-  const send = async (overrideText?: string) => {
-    const text = (overrideText ?? input).trim()
-    const readyAttachments = attachments.filter((attachment) => !attachment.uploading)
-    if ((!text && readyAttachments.length === 0) || streaming || hasUploading) return
+  const send = useCallback(
+    async (overrideText?: string) => {
+      const text = (overrideText ?? input).trim()
+      const readyAttachments = attachments.filter((attachment) => !attachment.uploading)
+      if ((!text && readyAttachments.length === 0) || streaming || hasUploading) return
 
-    const nextSavedContextAttachments = mergeSavedContextAttachments(
-      savedContextAttachments.filter((attachment) => !attachment.uploading),
-      readyAttachments
-    )
+      const nextSavedContextAttachments = mergeSavedContextAttachments(
+        savedContextAttachments.filter((attachment) => !attachment.uploading),
+        readyAttachments
+      )
 
-    const userMsg: Message = {
-      role: 'user',
-      content: text,
-      attachments: readyAttachments.length > 0 ? [...readyAttachments] : undefined,
-    }
-    const nextMessages = [
-      ...messages.map((message) => ({ ...message, quickReplies: undefined })),
-      userMsg,
-    ]
-    const nextContext = {
-      ...context,
-      recentTurns: includeRecentTurns ? context?.recentTurns : undefined,
-      savedAttachments:
-        nextSavedContextAttachments.length > 0
-          ? serializeContextAttachments(nextSavedContextAttachments)
-          : undefined,
-    }
+      const userMsg: Message = {
+        role: 'user',
+        content: text,
+        attachments: readyAttachments.length > 0 ? [...readyAttachments] : undefined,
+      }
+      const nextMessages = [
+        ...messages.map((message) => ({ ...message, quickReplies: undefined })),
+        userMsg,
+      ]
+      const nextContext = {
+        ...context,
+        recentTurns: includeRecentTurns ? context?.recentTurns : undefined,
+        savedAttachments:
+          nextSavedContextAttachments.length > 0
+            ? serializeContextAttachments(nextSavedContextAttachments)
+            : undefined,
+      }
 
-    setSavedContextAttachments(nextSavedContextAttachments)
-    setMessages([...nextMessages, { role: 'assistant', content: '' }])
-    setInput('')
-    setAttachments([])
-    setStreaming(true)
+      setSavedContextAttachments(nextSavedContextAttachments)
+      setMessages([...nextMessages, { role: 'assistant', content: '' }])
+      setInput('')
+      setAttachments([])
+      setStreaming(true)
 
-    const abort = new AbortController()
-    abortRef.current = abort
+      const abort = new AbortController()
+      abortRef.current = abort
 
-    try {
-      const response = await fetch(`${API_CONFIG.baseURL}/support/chat/stream`, {
-        method: 'POST',
-        signal: abort.signal,
-        headers: {
-          'Content-Type': 'application/json',
-          ...(getAccessToken() ? { Authorization: `Bearer ${getAccessToken()}` } : {}),
-        },
-        credentials: 'include',
-        body: JSON.stringify({ messages: nextMessages, context: nextContext }),
-      })
+      try {
+        const response = await fetch(`${API_CONFIG.baseURL}/support/chat/stream`, {
+          method: 'POST',
+          signal: abort.signal,
+          headers: {
+            'Content-Type': 'application/json',
+            ...(getAccessToken() ? { Authorization: `Bearer ${getAccessToken()}` } : {}),
+          },
+          credentials: 'include',
+          body: JSON.stringify({ messages: nextMessages, context: nextContext }),
+        })
 
-      if (!response.ok || !response.body) throw new Error(`HTTP ${response.status}`)
+        if (!response.ok || !response.body) throw new Error(`HTTP ${response.status}`)
 
-      const reader = response.body.getReader()
-      const decoder = new TextDecoder()
-      let buffer = ''
-      let content = ''
-      let hasAction = false
+        const reader = response.body.getReader()
+        const decoder = new TextDecoder()
+        let buffer = ''
+        let content = ''
+        let hasAction = false
 
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        buffer += decoder.decode(value, { stream: true })
-        const parts = buffer.split('\n\n')
-        buffer = parts.pop() ?? ''
-        for (const part of parts) {
-          for (const line of part.split('\n')) {
-            if (!line.startsWith('data: ')) continue
-            const data = line.slice(6).trim()
-            if (data === '[DONE]') continue
-            try {
-              const parsed = JSON.parse(data) as {
-                delta?: string
-                action?: UIAction
-                suggestions?: string[]
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          buffer += decoder.decode(value, { stream: true })
+          const parts = buffer.split('\n\n')
+          buffer = parts.pop() ?? ''
+          for (const part of parts) {
+            for (const line of part.split('\n')) {
+              if (!line.startsWith('data: ')) continue
+              const data = line.slice(6).trim()
+              if (data === '[DONE]') continue
+              try {
+                const parsed = JSON.parse(data) as {
+                  delta?: string
+                  action?: UIAction
+                  suggestions?: string[]
+                }
+                if (parsed.suggestions?.length) {
+                  hasAction = true
+                  setMessages((prev) => {
+                    const updated = [...prev]
+                    const last = updated[updated.length - 1]
+                    updated[updated.length - 1] = {
+                      ...last,
+                      quickReplies: parsed.suggestions,
+                    }
+                    return updated
+                  })
+                }
+                if (parsed.delta) {
+                  content += parsed.delta
+                  setMessages((prev) => {
+                    const updated = [...prev]
+                    const last = updated[updated.length - 1]
+                    updated[updated.length - 1] = {
+                      ...last,
+                      role: 'assistant',
+                      content,
+                    }
+                    return updated
+                  })
+                }
+                if (parsed.action) {
+                  hasAction = true
+                  setMessages((prev) => {
+                    const updated = [...prev]
+                    const last = updated[updated.length - 1]
+                    updated[updated.length - 1] = {
+                      ...last,
+                      action: parsed.action,
+                      actionState: parsed.action?.selector ? 'pending' : undefined,
+                    }
+                    return updated
+                  })
+                }
+              } catch {
+                /* malformed chunk — skip */
               }
-              if (parsed.suggestions?.length) {
-                setMessages((prev) => {
-                  const updated = [...prev]
-                  const last = updated[updated.length - 1]
-                  updated[updated.length - 1] = {
-                    ...last,
-                    quickReplies: parsed.suggestions,
-                  }
-                  return updated
-                })
-              }
-              if (parsed.delta) {
-                content += parsed.delta
-                setMessages((prev) => {
-                  const updated = [...prev]
-                  const last = updated[updated.length - 1]
-                  updated[updated.length - 1] = {
-                    ...last,
-                    role: 'assistant',
-                    content,
-                  }
-                  return updated
-                })
-              }
-              if (parsed.action) {
-                hasAction = true
-                setMessages((prev) => {
-                  const updated = [...prev]
-                  const last = updated[updated.length - 1]
-                  updated[updated.length - 1] = {
-                    ...last,
-                    action: parsed.action,
-                    actionState: parsed.action?.selector ? 'pending' : undefined,
-                  }
-                  return updated
-                })
-              }
-            } catch {
-              /* malformed chunk — skip */
             }
           }
         }
-      }
 
-      if (!content && !hasAction) {
+        if (!content && !hasAction) {
+          setMessages((prev) => {
+            const u = [...prev]
+            u[u.length - 1] = {
+              role: 'assistant',
+              content: 'Sorry, I could not generate a response.',
+            }
+            return u
+          })
+        }
+      } catch (err: unknown) {
+        if (err instanceof Error && err.name === 'AbortError') return
         setMessages((prev) => {
           const u = [...prev]
           u[u.length - 1] = {
             role: 'assistant',
-            content: 'Sorry, I could not generate a response.',
+            content: 'Sorry, something went wrong. Please try again.',
           }
           return u
         })
+      } finally {
+        setStreaming(false)
+        abortRef.current = null
       }
-    } catch (err: unknown) {
-      if (err instanceof Error && err.name === 'AbortError') return
-      setMessages((prev) => {
-        const u = [...prev]
-        u[u.length - 1] = {
-          role: 'assistant',
-          content: 'Sorry, something went wrong. Please try again.',
-        }
-        return u
-      })
-    } finally {
-      setStreaming(false)
-      abortRef.current = null
+    },
+    [
+      attachments,
+      context,
+      hasUploading,
+      includeRecentTurns,
+      input,
+      mergeSavedContextAttachments,
+      messages,
+      savedContextAttachments,
+      serializeContextAttachments,
+      streaming,
+    ]
+  )
+
+  useEffect(() => {
+    if (
+      typeof window === 'undefined' ||
+      !starter?.key ||
+      !starter.message.trim() ||
+      !hasRestoredPersistedState ||
+      restoredPersistenceKeyRef.current !== persistenceKey ||
+      streaming ||
+      messages.some((message) => message.role === 'user')
+    ) {
+      return
     }
-  }
+
+    const starterStorageKey = `${persistenceKey}:starter:${starter.key}`
+    if (processedStarterKeysRef.current.has(starterStorageKey)) {
+      return
+    }
+
+    try {
+      if (window.sessionStorage.getItem(starterStorageKey) === '1') {
+        processedStarterKeysRef.current.add(starterStorageKey)
+        return
+      }
+      window.sessionStorage.setItem(starterStorageKey, '1')
+    } catch {
+      /* ignore storage issues and fall back to in-memory guard */
+    }
+
+    processedStarterKeysRef.current.add(starterStorageKey)
+    if (starter.open !== false) {
+      setOpen(true)
+    }
+    void send(starter.message)
+  }, [hasRestoredPersistedState, messages, persistenceKey, send, starter, streaming])
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -1718,7 +1866,14 @@ export function CoachChatWidget({ context }: CoachChatWidgetProps) {
                   const parsedAssistantMessage =
                     msg.role === 'assistant' && !msg.quickReplies
                       ? extractInlineQuickReplies(msg.content)
-                      : { content: msg.content, quickReplies: msg.quickReplies }
+                      : {
+                          // quickReplies already set by SSE — still strip any
+                          // [show_options ...] marker the model wrote as text
+                          content: msg.content
+                            .replace(/\[show_options(?::[^\]]*)?]\s*\\?\s*/gi, '')
+                            .trimEnd(),
+                          quickReplies: msg.quickReplies,
+                        }
                   const thisIsStreaming = isLastStreaming && i === messages.length - 1
                   const visibleContent = parsedAssistantMessage.content
                   const visibleQuickReplies = parsedAssistantMessage.quickReplies
@@ -1897,44 +2052,78 @@ export function CoachChatWidget({ context }: CoachChatWidgetProps) {
                             </Paper>
                           ) : (
                             <>
-                              {/* Step list preview for sequences */}
+                              {/* Step list preview for sequences — collapsible */}
                               {msg.action.steps && msg.action.steps.length > 0 && (
                                 <Stack gap={2} mb={6}>
-                                  {msg.action.steps.map((step, si) => {
-                                    const done = msg.completedStepIndices?.includes(si) ?? false
-                                    return (
-                                      <Group key={si} gap={6} align="center">
-                                        {done ? (
-                                          <IconCheck
-                                            size={10}
-                                            color="var(--mantine-color-teal-5)"
-                                            style={{ flexShrink: 0 }}
-                                          />
-                                        ) : (
-                                          <Text
-                                            size="xs"
-                                            c="dimmed"
-                                            w={14}
-                                            ta="right"
-                                            style={{ flexShrink: 0 }}
-                                          >
-                                            {si + 1}.
-                                          </Text>
-                                        )}
-                                        <Text
-                                          size="xs"
-                                          c={done ? 'dimmed' : 'gray.4'}
-                                          style={
-                                            done
-                                              ? { textDecoration: 'line-through', opacity: 0.5 }
-                                              : undefined
-                                          }
-                                        >
-                                          {step.label}
-                                        </Text>
-                                      </Group>
-                                    )
-                                  })}
+                                  <Group
+                                    gap={4}
+                                    align="center"
+                                    style={{ cursor: 'pointer', userSelect: 'none' }}
+                                    onClick={() =>
+                                      setExpandedStepMsgs((prev) => {
+                                        const next = new Set(prev)
+                                        if (next.has(i)) next.delete(i)
+                                        else next.add(i)
+                                        return next
+                                      })
+                                    }
+                                  >
+                                    {expandedStepMsgs.has(i) ? (
+                                      <IconChevronUp
+                                        size={11}
+                                        color="var(--mantine-color-dimmed)"
+                                      />
+                                    ) : (
+                                      <IconChevronDown
+                                        size={11}
+                                        color="var(--mantine-color-dimmed)"
+                                      />
+                                    )}
+                                    <Text size="xs" c="dimmed">
+                                      Wizard sequence — {msg.action.steps.length} steps
+                                      {(msg.completedStepIndices?.length ?? 0) > 0 &&
+                                        ` (${msg.completedStepIndices!.length} done)`}
+                                    </Text>
+                                  </Group>
+                                  <Collapse in={expandedStepMsgs.has(i)}>
+                                    <Stack gap={2} pt={4}>
+                                      {msg.action.steps.map((step, si) => {
+                                        const done = msg.completedStepIndices?.includes(si) ?? false
+                                        return (
+                                          <Group key={si} gap={6} align="center">
+                                            {done ? (
+                                              <IconCheck
+                                                size={10}
+                                                color="var(--mantine-color-teal-5)"
+                                                style={{ flexShrink: 0 }}
+                                              />
+                                            ) : (
+                                              <Text
+                                                size="xs"
+                                                c="dimmed"
+                                                w={14}
+                                                ta="right"
+                                                style={{ flexShrink: 0 }}
+                                              >
+                                                {si + 1}.
+                                              </Text>
+                                            )}
+                                            <Text
+                                              size="xs"
+                                              c={done ? 'dimmed' : 'gray.4'}
+                                              style={
+                                                done
+                                                  ? { textDecoration: 'line-through', opacity: 0.5 }
+                                                  : undefined
+                                              }
+                                            >
+                                              {step.label}
+                                            </Text>
+                                          </Group>
+                                        )
+                                      })}
+                                    </Stack>
+                                  </Collapse>
                                 </Stack>
                               )}
 

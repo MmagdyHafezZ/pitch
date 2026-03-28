@@ -39,6 +39,7 @@ export class TeamService {
   async createTeam(
     createTeamDto: CreateTeamDto,
     requesterId: string,
+    options?: { systemProvisioned?: boolean },
   ): Promise<Team> {
     const slug = await this.createSlug({
       name: createTeamDto.name,
@@ -53,7 +54,8 @@ export class TeamService {
       {
         ...createTeamDto,
         slug,
-        isActive: createTeamDto.isActive ?? true,
+        isActive: options?.systemProvisioned ? true : false, // inactive until admin approves
+        approvalStatus: options?.systemProvisioned ? 'APPROVED' : 'PENDING',
         metadata,
       },
       requesterId,
@@ -743,5 +745,27 @@ export class TeamService {
 
   async confirmAuthorityOrThrow(userId: string, teamId: string): Promise<Role> {
     return this.teamRepository.confirmAuthorityOrThrow(userId, teamId);
+  }
+
+  async listPendingTeams(): Promise<Team[]> {
+    return this.teamRepository.findPendingTeams();
+  }
+
+  async approveTeam(teamId: string): Promise<Team> {
+    const team = await this.teamRepository.findById(teamId);
+    if (!team) throw new NotFoundException(`Team with ID ${teamId} not found`);
+    if (team.approvalStatus !== 'PENDING') {
+      throw new BadRequestException(`Team is not in PENDING state`);
+    }
+    return this.teamRepository.approveTeam(teamId);
+  }
+
+  async rejectTeam(teamId: string, note?: string): Promise<Team> {
+    const team = await this.teamRepository.findById(teamId);
+    if (!team) throw new NotFoundException(`Team with ID ${teamId} not found`);
+    if (team.approvalStatus !== 'PENDING') {
+      throw new BadRequestException(`Team is not in PENDING state`);
+    }
+    return this.teamRepository.rejectTeam(teamId, note);
   }
 }

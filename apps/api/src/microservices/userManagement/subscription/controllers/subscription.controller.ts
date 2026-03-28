@@ -21,7 +21,7 @@ import {
   SubscriptionMetadata,
 } from '@pitch/shared-backend/interfaces/user.interface';
 import { SubscriptionService } from '../services/subscription.service';
-import { ElevatedAccessGuard } from '../../guards/elevated-access.guard';
+import { SubscriptionAccessGuard } from '../../guards/subscription-access.guard';
 
 @Controller()
 export class SubscriptionController {
@@ -29,7 +29,7 @@ export class SubscriptionController {
 
   constructor(private readonly subscriptionService: SubscriptionService) {}
 
-  @UseGuards(ElevatedAccessGuard)
+  @UseGuards(SubscriptionAccessGuard)
   @MessagePattern(USER_SERVICE_PATTERNS.CREATE_SUBSCRIPTION)
   @UsePipes(new ValidationPipe({ transform: true }))
   async createSubscription(
@@ -65,7 +65,7 @@ export class SubscriptionController {
     }
   }
 
-  @UseGuards(ElevatedAccessGuard)
+  @UseGuards(SubscriptionAccessGuard)
   @MessagePattern(USER_SERVICE_PATTERNS.UPDATE_SUBSCRIPTION)
   @UsePipes(
     new ValidationPipe({ transform: true, skipMissingProperties: true }),
@@ -101,7 +101,7 @@ export class SubscriptionController {
     }
   }
 
-  @UseGuards(ElevatedAccessGuard)
+  @UseGuards(SubscriptionAccessGuard)
   @MessagePattern(USER_SERVICE_PATTERNS.UPGRADE_SUBSCRIPTION)
   @UsePipes(
     new ValidationPipe({ transform: true, skipMissingProperties: true }),
@@ -165,7 +165,7 @@ export class SubscriptionController {
     }
   }
 
-  @UseGuards(ElevatedAccessGuard)
+  @UseGuards(SubscriptionAccessGuard)
   @MessagePattern(USER_SERVICE_PATTERNS.GET_TEAM_SUBSCRIPTION)
   async getTeamSubscription(
     @Payload()
@@ -190,6 +190,74 @@ export class SubscriptionController {
         `Getting subscriptions - Requested by: ${data.userClaims.email} (${data.userClaims.id})`,
       );
       return await this.subscriptionService.findAll();
+    } catch (error) {
+      throw toRpcException(error);
+    }
+  }
+
+  @UseGuards(SubscriptionAccessGuard)
+  @MessagePattern(USER_SERVICE_PATTERNS.REQUEST_PLAN_CHANGE)
+  async requestPlanChange(
+    @Payload()
+    data: {
+      id: string;
+      planId: string;
+      interval?: string;
+    } & userClaimsInterface.MessageWithUserClaims,
+  ) {
+    try {
+      this.logger.log(
+        `Plan change requested for ${data.id} → planId=${data.planId} by ${data.userClaims.email}`,
+      );
+      return await this.subscriptionService.requestPlanChange(
+        data.id,
+        { planId: data.planId, interval: data.interval },
+        data.userClaims.id,
+      );
+    } catch (error) {
+      throw toRpcException(error);
+    }
+  }
+
+  @MessagePattern(USER_SERVICE_PATTERNS.LIST_PENDING_PLAN_CHANGES)
+  async listPendingPlanChanges(
+    @Payload() _data: userClaimsInterface.MessageWithUserClaims,
+  ) {
+    try {
+      return await this.subscriptionService.listPendingPlanChanges();
+    } catch (error) {
+      throw toRpcException(error);
+    }
+  }
+
+  @MessagePattern(USER_SERVICE_PATTERNS.APPROVE_PLAN_CHANGE)
+  async approvePlanChange(
+    @Payload()
+    data: { id: string } & userClaimsInterface.MessageWithUserClaims,
+  ) {
+    try {
+      this.logger.log(
+        `Approving plan change for ${data.id} by ${data.userClaims?.email ?? 'admin'}`,
+      );
+      return await this.subscriptionService.approvePlanChange(
+        data.id,
+        data.userClaims?.id ?? 'admin',
+      );
+    } catch (error) {
+      throw toRpcException(error);
+    }
+  }
+
+  @MessagePattern(USER_SERVICE_PATTERNS.REJECT_PLAN_CHANGE)
+  async rejectPlanChange(
+    @Payload()
+    data: { id: string } & userClaimsInterface.MessageWithUserClaims,
+  ) {
+    try {
+      this.logger.log(
+        `Rejecting plan change for ${data.id} by ${data.userClaims?.email ?? 'admin'}`,
+      );
+      return await this.subscriptionService.rejectPlanChange(data.id);
     } catch (error) {
       throw toRpcException(error);
     }

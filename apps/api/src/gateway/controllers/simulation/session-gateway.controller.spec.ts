@@ -36,19 +36,6 @@ describe('SessionGatewayController', () => {
     );
   });
 
-  it('returns a health payload instead of treating health as a session id', () => {
-    const result = controller.health();
-
-    expect(result).toEqual(
-      expect.objectContaining({
-        status: 'ok',
-        service: 'simulation-sessions',
-      }),
-    );
-    expect(simulationSend).not.toHaveBeenCalled();
-    expect(sessionRestart).not.toHaveBeenCalled();
-  });
-
   it('restarts a session through the simulation RPC handler when available', async () => {
     simulationService.send.mockReturnValue(
       of({

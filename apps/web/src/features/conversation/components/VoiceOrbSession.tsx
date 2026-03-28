@@ -11,6 +11,7 @@ import {
   IconVideo,
   IconVideoOff,
 } from '@tabler/icons-react'
+import type { VisualState } from '@/features/conversation/types/visual-state.types'
 
 interface Message {
   id: string
@@ -62,14 +63,15 @@ interface VoiceOrbSessionProps {
   cameraEnabled?: boolean
   onToggleCamera?: () => void
   userVideoRef?: React.RefObject<HTMLVideoElement | null>
+  personaAvatarImageUrl?: string | null
   // page-level props forwarded but not consumed here
   globeState?: unknown
   onTextInputKeyPress?: unknown
   isVideoSession?: unknown
   avatarVideoJobId?: unknown
   avatarVideoProvider?: unknown
-  visualState?: unknown
-  poseIsReady?: unknown
+  visualState?: VisualState | null
+  poseIsReady?: boolean
 }
 
 // ── CSS ───────────────────────────────────────────────────────────────────────
@@ -840,6 +842,45 @@ html.dark .vos-bubble-btn-secondary { background: rgba(255,255,255,.08); color: 
 .vos-zoom-btn.danger { background: #dc2626; color: #fff; min-width: 80px; }
 .vos-zoom-btn.danger:hover { background: #ef4444; }
 
+/* Static persona image (when no video URL is available) */
+.vos-persona-img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.vos-persona-img-overlay {
+  position: absolute; inset: 0;
+  background: linear-gradient(180deg, rgba(0,0,0,.15) 0%, transparent 35%, transparent 65%, rgba(0,0,0,.5) 100%);
+}
+
+/* Body detection cue overlay on user PiP */
+.vos-pip-cues {
+  position: absolute; inset: 0; pointer-events: none;
+  display: flex; flex-direction: column; justify-content: space-between;
+  padding: 6px;
+}
+.vos-pip-cue-row { display: flex; gap: 4px; flex-wrap: wrap; }
+.vos-pip-cue {
+  font-size: 9px; font-weight: 700; letter-spacing: .03em;
+  padding: 2px 6px; border-radius: 10px;
+  background: rgba(0,0,0,.6); backdrop-filter: blur(6px);
+  border: 1px solid rgba(255,255,255,.12);
+  color: rgba(255,255,255,.7);
+}
+.vos-pip-cue.green  { color: #4ade80; border-color: rgba(74,222,128,.3); }
+.vos-pip-cue.yellow { color: #facc15; border-color: rgba(250,204,21,.3); }
+.vos-pip-cue.red    { color: #f87171; border-color: rgba(248,113,113,.3); }
+.vos-pip-cue.blue   { color: #60a5fa; border-color: rgba(96,165,250,.3); }
+.vos-pip-cue.muted  { color: rgba(255,255,255,.35); border-color: rgba(255,255,255,.08); }
+.vos-pip-cue-bottom { display: flex; align-items: flex-end; gap: 6px; }
+.vos-pip-emotion { font-size: 15px; line-height: 1; }
+.vos-pip-attention { flex: 1; }
+.vos-pip-attention-label { font-size: 8px; color: rgba(255,255,255,.4); font-weight: 700; margin-bottom: 2px; }
+.vos-pip-attention-track {
+  height: 3px; border-radius: 2px; background: rgba(255,255,255,.1); overflow: hidden;
+}
+.vos-pip-attention-fill {
+  height: 100%; border-radius: 2px;
+  background: linear-gradient(90deg, #22c55e, #3b82f6);
+  transition: width .8s ease;
+}
+
 /* ─── objections ─── */
 .vos-objections-wrap {
   display: flex; flex-direction: column; gap: 3px;
@@ -945,6 +986,8 @@ export default function VoiceOrbSession({
   cameraEnabled,
   onToggleCamera,
   userVideoRef,
+  personaAvatarImageUrl,
+  visualState,
 }: VoiceOrbSessionProps) {
   const isVideoMode = mode === 'video'
   const isTextMode = mode === 'text'
@@ -952,12 +995,45 @@ export default function VoiceOrbSession({
   const isRetakePrompt = entryPromptMode === 'retake'
   const [isOpen, setIsOpen] = useState(false)
   const [latestMsgId, setLatestMsgId] = useState<string | null>(null)
-  const lastMessageId = messages[messages.length - 1]?.id ?? null
   const userClosedRef = useRef(false)
   const scrollRef = useRef<HTMLDivElement>(null)
   const linesRef = useRef<HTMLDivElement>(null)
   const ringsRef = useRef<HTMLDivElement>(null)
   const rafRef = useRef<number>(0)
+
+  // ── Body cue helpers ────────────────────────────────────────────────────────
+  const vs = visualState ?? null
+  const postureLabel = (p: string) =>
+    p === 'leaning_in'
+      ? 'Leaning in'
+      : p === 'leaning_back'
+        ? 'Leaning back'
+        : p === 'upright'
+          ? 'Upright'
+          : ''
+  const postureColor = (p: string) =>
+    p === 'leaning_in' ? 'green' : p === 'leaning_back' ? 'yellow' : p === 'upright' ? '' : 'muted'
+  const gazeLabel = (g: string) =>
+    g === 'camera'
+      ? 'On camera'
+      : g === 'left'
+        ? 'Left'
+        : g === 'right'
+          ? 'Right'
+          : g === 'down'
+            ? 'Looking down'
+            : ''
+  const gazeColor = (g: string) => (g === 'camera' ? 'green' : g === 'unknown' ? 'muted' : 'yellow')
+  const emotionEmoji = (e: string): string =>
+    ({
+      happy: '😊',
+      sad: '😔',
+      angry: '😠',
+      frustrated: '😤',
+      surprised: '😲',
+      neutral: '😐',
+      unknown: '',
+    })[e] ?? ''
 
   // Auto-open on first messages — only if user hasn't explicitly closed (voice only)
   useEffect(() => {
@@ -967,8 +1043,8 @@ export default function VoiceOrbSession({
 
   // Track newest message for word animation
   useEffect(() => {
-    if (lastMessageId) setLatestMsgId(lastMessageId)
-  }, [lastMessageId])
+    if (messages.length > 0) setLatestMsgId(messages[messages.length - 1].id)
+  }, [messages.length])
 
   // Auto-scroll to bottom
   useEffect(() => {
@@ -1170,23 +1246,23 @@ export default function VoiceOrbSession({
                 autoPlay
                 playsInline
               />
+            ) : personaAvatarImageUrl ? (
+              <>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={personaAvatarImageUrl} alt="AI persona" className="vos-persona-img" />
+                <div className="vos-persona-img-overlay" />
+              </>
+            ) : avatarVideoStatus === 'failed' ? (
+              <div className="vos-zoom-overlay" style={{ color: 'rgba(255,255,255,.4)' }}>
+                <span style={{ color: '#f87171' }}>⚠ Render failed</span>
+                {avatarVideoError && (
+                  <span style={{ fontSize: 10, opacity: 0.7 }}>{avatarVideoError}</span>
+                )}
+              </div>
             ) : (
               <div className="vos-zoom-overlay" style={{ color: 'rgba(255,255,255,.4)' }}>
-                {avatarVideoStatus === 'queued' || avatarVideoStatus === 'rendering' ? (
-                  <>
-                    <div className="vos-zoom-spinner" />
-                    <span>Generating video…</span>
-                  </>
-                ) : avatarVideoStatus === 'failed' ? (
-                  <>
-                    <span style={{ color: '#f87171' }}>⚠ Render failed</span>
-                    {avatarVideoError && (
-                      <span style={{ fontSize: 10, opacity: 0.7 }}>{avatarVideoError}</span>
-                    )}
-                  </>
-                ) : (
-                  <span>Waiting for avatar video…</span>
-                )}
+                <div className="vos-zoom-spinner" />
+                <span>Connecting…</span>
               </div>
             )}
 
@@ -1209,6 +1285,37 @@ export default function VoiceOrbSession({
                 <div className="vos-zoom-pip-off">
                   <IconVideoOff size={22} />
                   <span>Camera off</span>
+                </div>
+              )}
+
+              {/* Body detection cue overlay — only shown when camera is on and person detected */}
+              {cameraEnabled && vs?.present && (
+                <div className="vos-pip-cues">
+                  <div className="vos-pip-cue-row">
+                    {postureLabel(vs.posture) && (
+                      <span className={`vos-pip-cue ${postureColor(vs.posture)}`}>
+                        {postureLabel(vs.posture)}
+                      </span>
+                    )}
+                    {gazeLabel(vs.gaze) && (
+                      <span className={`vos-pip-cue ${gazeColor(vs.gaze)}`}>
+                        {gazeLabel(vs.gaze)}
+                      </span>
+                    )}
+                    {vs.headMotion !== 'still' && (
+                      <span className="vos-pip-cue blue">
+                        {vs.headMotion === 'nodding' ? '↕ Nodding' : '↔ Shaking'}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="vos-pip-cue-bottom">
+                    {emotionEmoji(vs.emotion) && (
+                      <span className="vos-pip-emotion" title={vs.emotion}>
+                        {emotionEmoji(vs.emotion)}
+                      </span>
+                    )}
+                  </div>
                 </div>
               )}
             </div>

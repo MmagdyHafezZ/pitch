@@ -117,7 +117,11 @@ export class CoachStreamService {
     userId?: string,
   ): AsyncGenerator<StreamItem> {
     const systemPrompt = buildSystemPrompt(context);
-    const openaiMessages = this.buildMessages(messages, systemPrompt, context);
+    const openaiMessages = await this.buildMessagesAsync(
+      messages,
+      systemPrompt,
+      context,
+    );
     yield* this.runWithTools(openaiMessages, userId);
   }
 
@@ -534,7 +538,34 @@ export class CoachStreamService {
   }
 
   private extractInlineOptions(content: string): string[] {
-    const trimmed = content.trim();
+    if (!content.trim()) return [];
+
+    // ── [show_options] artifact handling ──────────────────────────────────────
+    // The model sometimes writes [show_options] or [show_options: opt1, opt2]
+    // as literal text instead of calling the tool. Strip the marker and, if it
+    // contained inline options, return them immediately.
+    const showOptRe = /\[show_options(?::\s*([^\]]*))?\]\s*\\?\s*/gi;
+    let inlineShowOptions: string[] = [];
+    const stripped = content.replace(showOptRe, (_match, opts?: string) => {
+      if (opts && inlineShowOptions.length === 0) {
+        // Prefer | as separator (handles options that contain commas);
+        // fall back to , when | is absent.
+        const sep = opts.includes('|') ? /\s*\|\s*/ : /\s*,\s*/;
+        const parsed = opts
+          .split(sep)
+          .map((s) => s.trim())
+          .filter(Boolean);
+        if (parsed.length >= 2 && parsed.length <= 5) {
+          inlineShowOptions = parsed;
+        }
+      }
+      return '';
+    });
+
+    if (inlineShowOptions.length > 0) return inlineShowOptions;
+
+    // ── Standard extraction on the cleaned text ────────────────────────────────
+    const trimmed = stripped.trim();
     if (!trimmed) return [];
 
     const lines = trimmed
@@ -567,6 +598,85 @@ export class CoachStreamService {
   }
 
   // ─── Message builder ───────────────────────────────────────────────────────
+
+  /**
+   * Async wrapper around buildMessages that eagerly pre-fetches any S3 document
+   * URLs referenced in user message parts. This avoids the 2-round-trip cost of
+   * letting the model call fetch_document itself and prevents "I don't have
+   * access" responses when the model ignores the instruction text.
+   */
+  private async buildMessagesAsync(
+    messages: ChatMessage[],
+    systemPrompt: string,
+    context?: ChatContext,
+  ): Promise<OpenAIMessages> {
+    const built = this.buildMessages(messages, systemPrompt, context);
+
+    // Pattern injected by appendAttachmentParts for S3 documents
+    const docUrlPattern =
+      /\[(?:Attached|Saved context) document: [^\]]*?—\s*to read it, call fetch_document with this exact URL:\s*([^\]]+)\]/g;
+
+    for (let mi = 0; mi < built.length; mi++) {
+      const msg = built[mi];
+      if (msg.role !== 'user') continue;
+      const rawContent = msg.content as unknown;
+
+      // Content is either a plain string or an array of content parts
+      const isArray = Array.isArray(rawContent);
+      const textParts: Array<
+        { type: string; text: string } & Record<string, unknown>
+      > = isArray
+        ? ((rawContent as Array<Record<string, unknown>>).filter(
+            (p) => p.type === 'text' && typeof p.text === 'string',
+          ) as Array<{ type: string; text: string } & Record<string, unknown>>)
+        : typeof rawContent === 'string'
+          ? [{ type: 'text', text: rawContent }]
+          : [];
+
+      for (const part of textParts) {
+        const urls: string[] = [];
+        let m: RegExpExecArray | null;
+        docUrlPattern.lastIndex = 0;
+        while ((m = docUrlPattern.exec(part.text)) !== null) {
+          const url = m[1].trim();
+          if (url) urls.push(url);
+        }
+
+        if (urls.length === 0) continue;
+
+        let updated = part.text;
+        for (const url of urls) {
+          try {
+            const docContent = await this.fetchDocumentContent(url);
+            const filename = url.split('?')[0].split('/').pop() ?? 'document';
+            updated = updated.replace(
+              new RegExp(
+                `\\[(?:Attached|Saved context) document: [^\\]]*?—\\s*to read it, call fetch_document with this exact URL:\\s*${url.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\]`,
+              ),
+              `[Attached document: ${filename}]\n\`\`\`\n${docContent}\n\`\`\``,
+            );
+          } catch (err) {
+            this.logger.warn(
+              'Pre-fetch failed for %s: %s — keeping instruction text',
+              url,
+              err instanceof Error ? err.message : String(err),
+            );
+          }
+        }
+
+        if (updated !== part.text) {
+          if (isArray) {
+            // Mutate the part in-place (it's a reference into the built array)
+            part.text = updated;
+          } else {
+            (built[mi] as { role: string; content: string }).content = updated;
+          }
+        }
+      }
+    }
+
+    return built;
+  }
 
   /**
    * Converts the frontend message array to the OpenAI format, injecting

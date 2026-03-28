@@ -151,8 +151,7 @@ export class LLMPricingService {
     await this.refreshPromise;
   }
 
-  private async refreshProviders(providers: string[]): Promise<void> {
-    void providers;
+  private async refreshProviders(_providers: string[]): Promise<void> {
     // Helicone covers openai, anthropic, google, mistral, deepseek, xai, etc.
     await this.refreshFromHelicone();
 

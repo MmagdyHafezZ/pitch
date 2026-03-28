@@ -14,7 +14,6 @@ import { ApiTags, ApiOperation, ApiSecurity } from '@nestjs/swagger';
 import { firstValueFrom } from 'rxjs';
 import { LTI_PATTERNS } from '@microservices/lti/common/constants/lti-patterns.constants';
 import { CreatePlatformDto } from '@microservices/lti/platform/dto/create-platform.dto';
-import { SystemAdminOnly } from '../../decorators/system-admin.decorator';
 
 /**
  * LTI Platform management endpoints (admin use).
@@ -23,7 +22,6 @@ import { SystemAdminOnly } from '../../decorators/system-admin.decorator';
  */
 @ApiTags('LTI Management')
 @ApiSecurity('bearer')
-@SystemAdminOnly()
 @Controller('lti/platforms')
 export class LtiManagementGatewayController {
   constructor(@Inject('LTI_SERVICE') private readonly ltiClient: ClientProxy) {}

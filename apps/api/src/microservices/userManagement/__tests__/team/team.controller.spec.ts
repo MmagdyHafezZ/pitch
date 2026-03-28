@@ -45,6 +45,7 @@ describe('TeamController', () => {
     name: 'Engineering',
     slug: 'engineering',
     isActive: true,
+    approvalStatus: 'APPROVED',
     billingEmail: 'billing@example.com',
     billingAddress: {
       street: '123 Main St',
@@ -128,6 +129,7 @@ describe('TeamController', () => {
         },
       },
       basePayload.userClaims.id,
+      { systemProvisioned: false },
     );
   });
 

@@ -56,14 +56,28 @@ export type HeaderProps = {
   searchPlaceholder?: string
   rightSlot?: ReactNode
   teamName?: string
-  currentPage?: 'Home' | 'Sessions' | 'Teams' | 'Analytics' | 'Challenges' | 'Settings' | 'Admin'
+  currentPage?:
+    | 'Home'
+    | 'Sessions'
+    | 'Teams'
+    | 'Analytics'
+    | 'Challenges'
+    | 'Settings'
+    | 'Subscription'
   selectedTab?: string
   onTabChange?: (tab: string) => void
   onToggleMobileNav?: () => void
   mobileNavOpened?: boolean
 }
 
-type PageKey = 'Home' | 'Sessions' | 'Teams' | 'Analytics' | 'Challenges' | 'Settings' | 'Admin'
+type PageKey =
+  | 'Home'
+  | 'Sessions'
+  | 'Teams'
+  | 'Analytics'
+  | 'Challenges'
+  | 'Settings'
+  | 'Subscription'
 type ActionBarProps = {
   actionButtons?: ReactNode
   leadingAction?: ReactNode
@@ -348,6 +362,7 @@ function ActionConfig({
   onTabChange?: (tab: string) => void
 }) {
   const router = useRouter()
+  const pathname = usePathname()
   const { t } = useI18n()
 
   const tabLabels: Record<string, string> = {
@@ -376,7 +391,13 @@ function ActionConfig({
           translateTab={(tab) => tabLabels[tab] ?? tab}
         />
       )
-    case 'Sessions':
+    case 'Sessions': {
+      // On individual session pages (/studio/sessions/[id] or /studio/scenarios/...)
+      // the list header controls are irrelevant — hide them.
+      const isSessionDetail =
+        /^\/studio\/sessions\/[^/]+/.test(pathname ?? '') ||
+        /^\/studio\/scenarios\/[^/]+/.test(pathname ?? '')
+      if (isSessionDetail) return null
       return (
         <ActionBar
           enableSearch={true}
@@ -407,7 +428,10 @@ function ActionConfig({
           }
         />
       )
+    }
     case 'Teams':
+      // On /studio/team-config the stepper/tabs live in the page itself — no top bar controls needed.
+      if (pathname?.startsWith('/studio/team-config')) return null
       return (
         <ActionBar
           enableSearch={true}
@@ -523,8 +547,7 @@ export function AppTopBar({
   const isNarrow = useMediaQuery('(max-width: 520px)')
   const queryClient = useQueryClient()
   const currentUser = useAuthStore((state) => state.user)
-  const storedTeams = useTeamsStore((state) => state.teams)
-  const teams = useMemo(() => storedTeams ?? [], [storedTeams])
+  const teams = useTeamsStore((state) => state.teams) ?? []
   const refreshUserTeams = useTeamsStore((state) => state.fetchUserTeams)
   const sessionQuery = useMemo(() => searchParams.get('q') ?? '', [searchParams])
   const handleSessionSearch = (next: string) => {
@@ -1094,6 +1117,7 @@ export function AppTopBar({
         size={16}
         color="red"
         offset={6}
+        inline
       >
         <ActionIcon
           aria-label={t('topbar.notifications')}

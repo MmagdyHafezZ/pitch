@@ -26,18 +26,10 @@ const DEFAULT_ROUTING_CONFIG: LLMRoutingConfig = {
     provider: 'openai',
     model: 'gpt-4o',
   },
-  fallbacks: [
-    {
-      provider: 'watsonx',
-      model: 'granite-13b-chat-v2',
-    },
-  ],
+  fallbacks: [],
   providers: {
     openai: {
       defaultModel: 'gpt-4o',
-    },
-    watsonx: {
-      defaultModel: 'granite-13b-chat-v2',
     },
   },
   strategy: {
@@ -155,10 +147,6 @@ export class LLMRoutingConfigService {
 
     this.invalidateCache(scope, orgId ?? undefined, userId ?? undefined);
     return config;
-  }
-
-  normalizeForAdmin(raw: unknown): LLMRoutingConfig {
-    return this.normalizeConfig(raw);
   }
 
   private async findByScope(

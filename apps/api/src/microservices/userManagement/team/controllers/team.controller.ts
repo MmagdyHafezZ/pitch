@@ -38,7 +38,10 @@ export class TeamController {
   @UsePipes(new ValidationPipe({ transform: true }))
   async createTeam(
     @Payload()
-    data: CreateTeamRequestDto & userClaimsInterface.MessageWithUserClaims,
+    data: CreateTeamRequestDto &
+      userClaimsInterface.MessageWithUserClaims & {
+        isSystemProvisioned?: boolean;
+      },
   ) {
     try {
       this.logger.log(
@@ -56,7 +59,9 @@ export class TeamController {
         metadata: createTeamDto.metadata as unknown as TeamMetadata,
       };
 
-      return await this.teamService.createTeam(dto, _userClaims.id);
+      return await this.teamService.createTeam(dto, _userClaims.id, {
+        systemProvisioned: data.isSystemProvisioned === true,
+      });
     } catch (error) {
       throw toRpcException(error);
     }
@@ -348,6 +353,50 @@ export class TeamController {
         data.teamId,
         data.userClaims.id,
       );
+    } catch (error) {
+      throw toRpcException(error);
+    }
+  }
+
+  @MessagePattern(USER_SERVICE_PATTERNS.LIST_PENDING_TEAMS)
+  async listPendingTeams(
+    @Payload() _data: userClaimsInterface.MessageWithUserClaims,
+  ) {
+    try {
+      return await this.teamService.listPendingTeams();
+    } catch (error) {
+      throw toRpcException(error);
+    }
+  }
+
+  @MessagePattern(USER_SERVICE_PATTERNS.APPROVE_TEAM)
+  async approveTeam(
+    @Payload()
+    data: userClaimsInterface.MessageWithUserClaims & { teamId: string },
+  ) {
+    try {
+      this.logger.log(
+        `Approving team ${data.teamId} - By: ${data.userClaims?.email ?? 'admin'}`,
+      );
+      return await this.teamService.approveTeam(data.teamId);
+    } catch (error) {
+      throw toRpcException(error);
+    }
+  }
+
+  @MessagePattern(USER_SERVICE_PATTERNS.REJECT_TEAM)
+  async rejectTeam(
+    @Payload()
+    data: userClaimsInterface.MessageWithUserClaims & {
+      teamId: string;
+      note?: string;
+    },
+  ) {
+    try {
+      this.logger.log(
+        `Rejecting team ${data.teamId} - By: ${data.userClaims?.email ?? 'admin'}`,
+      );
+      return await this.teamService.rejectTeam(data.teamId, data.note);
     } catch (error) {
       throw toRpcException(error);
     }

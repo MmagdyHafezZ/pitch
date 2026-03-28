@@ -1,8 +1,16 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  CoinRefillRequest,
+  UserSettings,
+} from '@pitch/shared-backend/interfaces/user.interface';
 import { CoinRedisService } from './coin-redis.service';
 import { CoinLedgerRepository } from '../repositories/coin-ledger.repository';
 import { CoinBalanceRepository } from '../repositories/coin-balance.repository';
-import { SubscriptionWithPlan } from '../../subscription/repositories/subscription.repository';
+import { UserRepository } from '../../user/repositories/user.repository';
+import {
+  SubscriptionRepository,
+  SubscriptionWithPlan,
+} from '../../subscription/repositories/subscription.repository';
 
 function errorMessage(e: unknown): string {
   if (e instanceof Error) return e.message;
@@ -25,10 +33,14 @@ function getRemainingAfter(v: unknown): number | undefined {
 
 @Injectable()
 export class CoinRefillService {
+  private readonly logger = new Logger(CoinRefillService.name);
+
   constructor(
     private readonly coinRedis: CoinRedisService,
     private readonly coinLedgerRepo: CoinLedgerRepository,
     private readonly coinBalanceRepo: CoinBalanceRepository,
+    private readonly userRepository: UserRepository,
+    private readonly subscriptionRepository: SubscriptionRepository,
   ) {}
 
   public buildPeriodKey(subscriptionId: string, start: Date, end: Date) {
@@ -198,5 +210,178 @@ export class CoinRefillService {
       `[REFILL DONE] team=${teamId} period=${newPeriodKey} remaining=${remainingAfter}`,
     );
     return { remainingAfter };
+  }
+
+  // ─── User-request refill workflow ────────────────────────────────────────
+
+  async requestRefill(dto: {
+    userId: string;
+    teamId: string;
+    requestedCoins: number;
+  }): Promise<CoinRefillRequest> {
+    const user = await this.userRepository.findById(dto.userId);
+    if (!user) throw new NotFoundException('User not found');
+
+    const settings = this.toSettings(user.settings);
+    const now = new Date().toISOString();
+
+    const refillRequest: CoinRefillRequest = {
+      requestedCoins: dto.requestedCoins,
+      requestedAt: now,
+      status: 'pending',
+      teamId: dto.teamId,
+    };
+
+    await this.userRepository.updateSettings(dto.userId, {
+      ...settings,
+      coinRefillRequest: refillRequest,
+    });
+
+    this.logger.log(
+      `requestRefill: user=${dto.userId} team=${dto.teamId} coins=${dto.requestedCoins}`,
+    );
+    return refillRequest;
+  }
+
+  async listPendingRefills(): Promise<
+    Array<CoinRefillRequest & { userId: string; email: string; name: string }>
+  > {
+    const users = await this.userRepository.findMany();
+
+    return users
+      .flatMap((user) => {
+        const settings = this.toSettings(user.settings);
+        const req = settings.coinRefillRequest;
+        if (!req || req.status !== 'pending') return [];
+        return [
+          { ...req, userId: user.id, email: user.email, name: user.name },
+        ];
+      })
+      .sort((a, b) => a.requestedAt.localeCompare(b.requestedAt));
+  }
+
+  async approveRefill(dto: {
+    userId: string;
+    approvedCoins: number;
+    reviewer: string;
+  }): Promise<CoinRefillRequest> {
+    const user = await this.userRepository.findById(dto.userId);
+    if (!user) throw new NotFoundException('User not found');
+
+    const settings = this.toSettings(user.settings);
+    const req = settings.coinRefillRequest;
+    if (!req || req.status !== 'pending') {
+      throw new NotFoundException('No pending refill request found');
+    }
+
+    const sub = await this.subscriptionRepository.findActiveWithPlanByTeamId(
+      req.teamId,
+    );
+    if (!sub)
+      throw new NotFoundException('No active subscription for this team');
+
+    const start = new Date(sub.currentPeriodStart);
+    const end = new Date(sub.currentPeriodEnd);
+    const periodKey = this.buildPeriodKey(sub.id, start, end);
+    const ttlSeconds = Math.max(
+      60,
+      Math.ceil((end.getTime() - Date.now()) / 1000) + 7 * 24 * 3600,
+    );
+
+    // Hard-reset Redis balance
+    await this.coinRedis.setRemaining(
+      req.teamId,
+      periodKey,
+      dto.approvedCoins,
+      ttlSeconds,
+    );
+
+    const eventId = `refill:admin:${req.teamId}:${periodKey}:${Date.now()}`;
+
+    await this.coinBalanceRepo.upsertRefill({
+      teamId: req.teamId,
+      subscriptionId: sub.id,
+      periodKey,
+      allowance: dto.approvedCoins,
+      remainingAfter: dto.approvedCoins,
+      debtApplied: 0,
+      eventId,
+    });
+
+    await this.coinLedgerRepo.createRefillIfNotExists({
+      userId: dto.userId,
+      eventId,
+      teamId: req.teamId,
+      subscriptionId: sub.id,
+      planId: sub.planId,
+      requestId: eventId,
+      reservationId: eventId,
+      periodKey,
+      allowance: dto.approvedCoins,
+      debtApplied: 0,
+      remainingAfter: dto.approvedCoins,
+    });
+
+    const now = new Date().toISOString();
+    const updated: CoinRefillRequest = {
+      ...req,
+      status: 'approved',
+      approvedCoins: dto.approvedCoins,
+      reviewedAt: now,
+      reviewedBy: dto.reviewer,
+      periodKey,
+    };
+
+    await this.userRepository.updateSettings(dto.userId, {
+      ...settings,
+      coinRefillRequest: updated,
+    });
+
+    this.logger.log(
+      `approveRefill: user=${dto.userId} team=${req.teamId} approvedCoins=${dto.approvedCoins}`,
+    );
+    return updated;
+  }
+
+  async denyRefill(dto: {
+    userId: string;
+    reviewer: string;
+  }): Promise<CoinRefillRequest> {
+    const user = await this.userRepository.findById(dto.userId);
+    if (!user) throw new NotFoundException('User not found');
+
+    const settings = this.toSettings(user.settings);
+    const req = settings.coinRefillRequest;
+    if (!req || req.status !== 'pending') {
+      throw new NotFoundException('No pending refill request found');
+    }
+
+    const now = new Date().toISOString();
+    const updated: CoinRefillRequest = {
+      ...req,
+      status: 'denied',
+      reviewedAt: now,
+      reviewedBy: dto.reviewer,
+    };
+
+    await this.userRepository.updateSettings(dto.userId, {
+      ...settings,
+      coinRefillRequest: updated,
+    });
+
+    this.logger.log(`denyRefill: user=${dto.userId} team=${req.teamId}`);
+    return updated;
+  }
+
+  async getMyRefillRequest(userId: string): Promise<CoinRefillRequest | null> {
+    const user = await this.userRepository.findById(userId);
+    if (!user) return null;
+    const settings = this.toSettings(user.settings);
+    return settings.coinRefillRequest ?? null;
+  }
+
+  private toSettings(value: unknown): UserSettings {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+    return value as UserSettings;
   }
 }

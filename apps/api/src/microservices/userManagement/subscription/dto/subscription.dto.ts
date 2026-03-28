@@ -121,6 +121,13 @@ export class UpdateSubscriptionRequestDTO {
 
 export class UpgradeSubscriptionRequestDTO {
   @ApiProperty({
+    description: 'ID of the team associated with the subscription',
+    example: 'team_12345',
+  })
+  @IsString()
+  teamId!: string;
+
+  @ApiProperty({
     description: 'Optional ID of the plan associated with the subscription',
     example: 'plan_12345',
   })

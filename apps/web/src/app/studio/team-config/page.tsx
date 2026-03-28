@@ -12,17 +12,15 @@ import {
   Paper,
   SimpleGrid,
   Stack,
-  Stepper,
+  Tabs,
   Text,
   TextInput,
   Title,
 } from '@mantine/core'
-import { useMediaQuery } from '@mantine/hooks'
 import {
   IconAlertCircle,
   IconBuildingSkyscraper,
   IconChevronLeft,
-  IconChevronRight,
   IconCreditCard,
   IconMapPin,
   IconSettings,
@@ -62,7 +60,6 @@ function TeamConfigInner() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const isCreateMode = searchParams.get('mode') === 'create'
-  const isCompactStepper = useMediaQuery('(max-width: 900px)')
   const { startTour } = useTour()
   const autoStartedTourKeyRef = useRef<string | null>(null)
 
@@ -70,7 +67,7 @@ function TeamConfigInner() {
   const { currentTeam, updateTeam, loading, fetchTeamById } = useTeams()
   const { values, errors, setField, submit, submitting, apiError } = useCreateTeamForm()
 
-  const [activeStep, setActiveStep] = useState(0)
+  const [activeTab, setActiveTab] = useState<string>('profile')
   const [editValues, setEditValues] = useState<TeamEditValues>({
     name: '',
     billingEmail: '',
@@ -178,7 +175,7 @@ function TeamConfigInner() {
 
     if (!name) {
       setEditError('Team name is required')
-      setActiveStep(0)
+      setActiveTab('profile')
       return
     }
 
@@ -254,6 +251,25 @@ function TeamConfigInner() {
             </Alert>
           )}
 
+          {!isCreateMode && currentTeam?.approvalStatus === 'PENDING' && (
+            <Alert variant="light" color="yellow" icon={<IconAlertCircle size={16} />} radius="md">
+              <Text fw={600}>This team is pending admin approval.</Text>
+              <Text size="sm" c="dimmed" mt={4}>
+                You can configure your team while you wait, but it won&apos;t be visible to others
+                until an admin activates it.
+              </Text>
+            </Alert>
+          )}
+
+          {!isCreateMode && currentTeam?.approvalStatus === 'REJECTED' && (
+            <Alert variant="light" color="red" icon={<IconAlertCircle size={16} />} radius="md">
+              <Text fw={600}>This team request was rejected.</Text>
+              <Text size="sm" c="dimmed" mt={4}>
+                Please contact support if you believe this was a mistake.
+              </Text>
+            </Alert>
+          )}
+
           {isCreateMode ? (
             <CreateModeLayout
               formValues={formValues}
@@ -264,9 +280,8 @@ function TeamConfigInner() {
             />
           ) : (
             <EditModeLayout
-              activeStep={activeStep}
-              setActiveStep={setActiveStep}
-              isCompactStepper={!!isCompactStepper}
+              activeTab={activeTab}
+              setActiveTab={setActiveTab}
               currentTeamName={currentTeam?.name ?? 'Team'}
               currentTeamId={currentTeam?.id ?? ''}
               canManage={hasElevatedAccess}
@@ -389,9 +404,8 @@ function CreateModeLayout({
 }
 
 function EditModeLayout({
-  activeStep,
-  setActiveStep,
-  isCompactStepper,
+  activeTab,
+  setActiveTab,
   currentTeamName,
   currentTeamId,
   canManage,
@@ -402,9 +416,8 @@ function EditModeLayout({
   classes,
   fontClass,
 }: {
-  activeStep: number
-  setActiveStep: (value: number) => void
-  isCompactStepper: boolean
+  activeTab: string
+  setActiveTab: (value: string) => void
   currentTeamName: string
   currentTeamId: string
   canManage: boolean
@@ -415,12 +428,6 @@ function EditModeLayout({
   classes: Record<string, string>
   fontClass: string
 }) {
-  const maxStep = 3
-  const profileIcon = <IconSettings size={16} />
-  const membersIcon = <IconUsersGroup size={16} />
-  const billingIcon = <IconMapPin size={16} />
-  const subscriptionIcon = <IconCreditCard size={16} />
-
   return (
     <Stack gap="lg">
       <Stack data-tour-id="team-config-header" gap={4}>
@@ -429,173 +436,140 @@ function EditModeLayout({
         </Title>
       </Stack>
 
-      <Paper data-tour-id="team-config-stepper" className={classes.stepperWrap} p="md">
-        <Stepper
-          active={activeStep}
-          onStepClick={setActiveStep}
-          allowNextStepsSelect
-          orientation={isCompactStepper ? 'vertical' : 'horizontal'}
-          size="sm"
-          className={classes.stepper}
-        >
-          <Stepper.Step
-            className={`${classes.stepItem} ${activeStep === 0 ? classes.stepCurrent : ''}`}
-            icon={profileIcon}
-            completedIcon={profileIcon}
-            label="Profile"
-            description="Team identity"
-          />
-          <Stepper.Step
-            className={`${classes.stepItem} ${activeStep === 1 ? classes.stepCurrent : ''}`}
-            icon={membersIcon}
-            completedIcon={membersIcon}
-            label="Members"
-            description="Roster + invites"
-          />
-          <Stepper.Step
-            className={`${classes.stepItem} ${activeStep === 2 ? classes.stepCurrent : ''}`}
-            icon={billingIcon}
-            completedIcon={billingIcon}
-            label="Billing"
-            description="Address + contact"
-          />
-          <Stepper.Step
-            className={`${classes.stepItem} ${activeStep === 3 ? classes.stepCurrent : ''}`}
-            icon={subscriptionIcon}
-            completedIcon={subscriptionIcon}
-            label="Subscription"
-            description="Plans"
-          />
-        </Stepper>
-      </Paper>
+      <Tabs
+        data-tour-id="team-config-stepper"
+        value={activeTab}
+        onChange={(v) => setActiveTab(v ?? 'profile')}
+        variant="pills"
+        radius="md"
+      >
+        <Tabs.List mb="md">
+          <Tabs.Tab value="profile" leftSection={<IconSettings size={15} />}>
+            Profile
+          </Tabs.Tab>
+          <Tabs.Tab value="members" leftSection={<IconUsersGroup size={15} />}>
+            Members
+          </Tabs.Tab>
+          <Tabs.Tab value="billing" leftSection={<IconMapPin size={15} />}>
+            Billing
+          </Tabs.Tab>
+          <Tabs.Tab value="subscription" leftSection={<IconCreditCard size={15} />}>
+            Subscription
+          </Tabs.Tab>
+        </Tabs.List>
 
-      {activeStep === 0 && (
-        <Paper data-tour-id="team-profile-form" className={classes.contentCard} p="lg">
-          <Stack gap="md">
-            <Title order={3} className={fontClass}>
-              Team profile
-            </Title>
-            <Text c="dimmed" size="sm">
-              Basic organization identity used across invitations, billing, and studio workflows.
-            </Text>
-
-            <TextInput
-              label="Team name"
-              placeholder="Revenue Operations"
-              value={formValues.name}
-              onChange={(e) => setEditField('name', e.currentTarget.value)}
-              required
-            />
-
-            <TextInput
-              label="Billing email"
-              placeholder="billing@company.com"
-              value={formValues.billingEmail}
-              onChange={(e) => setEditField('billingEmail', e.currentTarget.value)}
-            />
-
-            <Group justify="space-between" wrap="wrap">
-              <Text size="sm" c="dimmed">
-                Manage the team profile used across invites and billing.
+        <Tabs.Panel value="profile">
+          <Paper data-tour-id="team-profile-form" className={classes.contentCard} p="lg">
+            <Stack gap="md">
+              <Title order={3} className={fontClass}>
+                Team profile
+              </Title>
+              <Text c="dimmed" size="sm">
+                Basic organization identity used across invitations, billing, and studio workflows.
               </Text>
-              <Button onClick={onSaveProfile} loading={savingEdit} disabled={!canManage}>
-                Save profile
-              </Button>
-            </Group>
-          </Stack>
-        </Paper>
-      )}
 
-      {activeStep === 1 && (
-        <Box data-tour-id="team-members">
-          <TeamMembersPanel />
-        </Box>
-      )}
+              <TextInput
+                label="Team name"
+                placeholder="Revenue Operations"
+                value={formValues.name}
+                onChange={(e) => setEditField('name', e.currentTarget.value)}
+                required
+              />
 
-      {activeStep === 2 && (
-        <Paper data-tour-id="team-billing-form" className={classes.contentCard} p="lg">
-          <Stack gap="md">
-            <Group justify="space-between" align="center" wrap="wrap">
-              <Group gap="xs">
-                <IconMapPin size={18} />
-                <Title order={3} className={fontClass}>
-                  Billing address
-                </Title>
+              <TextInput
+                label="Billing email"
+                placeholder="billing@company.com"
+                value={formValues.billingEmail}
+                onChange={(e) => setEditField('billingEmail', e.currentTarget.value)}
+              />
+
+              <Group justify="space-between" wrap="wrap">
+                <Text size="sm" c="dimmed">
+                  Manage the team profile used across invites and billing.
+                </Text>
+                <Button onClick={onSaveProfile} loading={savingEdit} disabled={!canManage}>
+                  Save profile
+                </Button>
               </Group>
-              <Badge variant="light" color="gray">
-                Used for invoices
-              </Badge>
-            </Group>
+            </Stack>
+          </Paper>
+        </Tabs.Panel>
 
-            <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
-              <TextInput
-                label="Street address"
-                placeholder="123 Main St"
-                value={formValues.street}
-                onChange={(e) => setEditField('street', e.currentTarget.value)}
-              />
-              <TextInput
-                label="Country"
-                placeholder="United States"
-                value={formValues.country}
-                onChange={(e) => setEditField('country', e.currentTarget.value)}
-              />
-              <TextInput
-                label="City"
-                placeholder="New York"
-                value={formValues.city}
-                onChange={(e) => setEditField('city', e.currentTarget.value)}
-              />
-              <TextInput
-                label="State / Province"
-                placeholder="NY"
-                value={formValues.stateProvince}
-                onChange={(e) => setEditField('stateProvince', e.currentTarget.value)}
-              />
-              <TextInput
-                label="Postal code"
-                placeholder="10001"
-                value={formValues.postalCode}
-                onChange={(e) => setEditField('postalCode', e.currentTarget.value)}
-              />
-            </SimpleGrid>
+        <Tabs.Panel value="members">
+          <Box data-tour-id="team-members">
+            <TeamMembersPanel />
+          </Box>
+        </Tabs.Panel>
 
-            <Group justify="flex-end">
-              <Button onClick={onSaveProfile} loading={savingEdit} disabled={!canManage}>
-                Save billing details
-              </Button>
-            </Group>
-          </Stack>
-        </Paper>
-      )}
+        <Tabs.Panel value="billing">
+          <Paper data-tour-id="team-billing-form" className={classes.contentCard} p="lg">
+            <Stack gap="md">
+              <Group justify="space-between" align="center" wrap="wrap">
+                <Group gap="xs">
+                  <IconMapPin size={18} />
+                  <Title order={3} className={fontClass}>
+                    Billing address
+                  </Title>
+                </Group>
+                <Badge variant="light" color="gray">
+                  Used for invoices
+                </Badge>
+              </Group>
 
-      {activeStep === 3 && currentTeamId && (
-        <Box data-tour-id="team-subscription">
-          <TeamSubscriptionPanel
-            teamId={currentTeamId}
-            teamName={currentTeamName}
-            canManage={canManage}
-          />
-        </Box>
-      )}
+              <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
+                <TextInput
+                  label="Street address"
+                  placeholder="123 Main St"
+                  value={formValues.street}
+                  onChange={(e) => setEditField('street', e.currentTarget.value)}
+                />
+                <TextInput
+                  label="Country"
+                  placeholder="United States"
+                  value={formValues.country}
+                  onChange={(e) => setEditField('country', e.currentTarget.value)}
+                />
+                <TextInput
+                  label="City"
+                  placeholder="New York"
+                  value={formValues.city}
+                  onChange={(e) => setEditField('city', e.currentTarget.value)}
+                />
+                <TextInput
+                  label="State / Province"
+                  placeholder="NY"
+                  value={formValues.stateProvince}
+                  onChange={(e) => setEditField('stateProvince', e.currentTarget.value)}
+                />
+                <TextInput
+                  label="Postal code"
+                  placeholder="10001"
+                  value={formValues.postalCode}
+                  onChange={(e) => setEditField('postalCode', e.currentTarget.value)}
+                />
+              </SimpleGrid>
 
-      <Group data-tour-id="team-config-nav" justify="space-between" wrap="wrap">
-        <Button
-          variant="default"
-          leftSection={<IconChevronLeft size={16} />}
-          onClick={() => setActiveStep(Math.max(0, activeStep - 1))}
-          disabled={activeStep === 0}
-        >
-          Back
-        </Button>
-        <Button
-          rightSection={<IconChevronRight size={16} />}
-          onClick={() => setActiveStep(Math.min(maxStep, activeStep + 1))}
-          disabled={activeStep === maxStep}
-        >
-          Next
-        </Button>
-      </Group>
+              <Group justify="flex-end">
+                <Button onClick={onSaveProfile} loading={savingEdit} disabled={!canManage}>
+                  Save billing details
+                </Button>
+              </Group>
+            </Stack>
+          </Paper>
+        </Tabs.Panel>
+
+        <Tabs.Panel value="subscription">
+          {currentTeamId && (
+            <Box data-tour-id="team-subscription">
+              <TeamSubscriptionPanel
+                teamId={currentTeamId}
+                teamName={currentTeamName}
+                canManage={canManage}
+              />
+            </Box>
+          )}
+        </Tabs.Panel>
+      </Tabs>
     </Stack>
   )
 }

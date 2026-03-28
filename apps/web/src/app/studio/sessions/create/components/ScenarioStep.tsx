@@ -276,9 +276,12 @@ export function ScenarioStep({
                   </Text>
                 ) : (
                   <div className={classes.scenarioList}>
-                    {savedScenarios.map((scenario) => {
+                    {savedScenarios.map((scenario, scenarioIdx) => {
                       const summary = getScenarioSummary(scenario)
                       const isSelected = scenario.id === selectedScenarioId
+                      const isFirstNonSelected =
+                        !isSelected &&
+                        scenarioIdx === savedScenarios.findIndex((s) => s.id !== selectedScenarioId)
 
                       return (
                         <div
@@ -291,6 +294,9 @@ export function ScenarioStep({
                             if (e.key === 'Enter' || e.key === ' ')
                               handleSelectSavedScenario(scenario.id)
                           }}
+                          {...(isFirstNonSelected
+                            ? { 'data-tour-id': 'create-session-scenario-item' }
+                            : {})}
                         >
                           <Group justify="space-between" align="flex-start" gap="xs" wrap="nowrap">
                             <Stack gap={2} style={{ minWidth: 0, flex: 1 }}>
@@ -552,6 +558,7 @@ export function ScenarioStep({
                   onChange={(e) => setScenarioTopic(e.currentTarget.value)}
                   onKeyDown={stopFieldKeyPropagation}
                   error={errors.scenarioTopic}
+                  data-tour-id="create-session-topic"
                 />
 
                 <Textarea
@@ -562,6 +569,7 @@ export function ScenarioStep({
                   value={scenarioContext}
                   onChange={(e) => setScenarioContext(e.currentTarget.value)}
                   onKeyDown={stopFieldKeyPropagation}
+                  data-tour-id="create-session-context"
                 />
 
                 <Textarea
@@ -572,6 +580,7 @@ export function ScenarioStep({
                   value={scenarioObjective}
                   onChange={(e) => setScenarioObjective(e.currentTarget.value)}
                   onKeyDown={stopFieldKeyPropagation}
+                  data-tour-id="create-session-objective"
                 />
 
                 <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
@@ -582,6 +591,7 @@ export function ScenarioStep({
                     value={userRole}
                     onChange={(e) => setUserRole(e.currentTarget.value)}
                     onKeyDown={stopFieldKeyPropagation}
+                    data-tour-id="create-session-user-role"
                   />
                   <TextInput
                     label="AI counterpart"
@@ -590,6 +600,7 @@ export function ScenarioStep({
                     value={aiRole}
                     onChange={(e) => setAiRole(e.currentTarget.value)}
                     onKeyDown={stopFieldKeyPropagation}
+                    data-tour-id="create-session-ai-role"
                   />
                 </SimpleGrid>
 
@@ -627,6 +638,7 @@ export function ScenarioStep({
                     rightSection={<IconArrowRight size={15} />}
                     onClick={onGenerate}
                     loading={isGenerating}
+                    data-tour-id="create-session-generate"
                   >
                     Generate {scenarioCount > 1 ? `${scenarioCount} options` : 'scenario'}
                   </Button>

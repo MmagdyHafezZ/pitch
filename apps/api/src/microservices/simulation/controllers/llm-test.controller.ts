@@ -33,7 +33,6 @@ import { LLMRequestDto } from '../dto/llm.dto';
 import { HttpErrorResponseDto } from '../dto/http-error.dto';
 import { LLMProvidersResponseDto } from '../dto/llm-providers.dto';
 import { ProviderError } from '../providers/llm/llm-provider.interface';
-import { SystemAdminOnly } from '../../../gateway/decorators/system-admin.decorator';
 
 /**
  * LLM Test Controller
@@ -62,7 +61,6 @@ export class LLMTestController {
    * GET /simulation/llm/health
    */
   @Get('health')
-  @SystemAdminOnly()
   @ApiOperation({ summary: 'Health check' })
   @ApiOkResponse({
     schema: {
@@ -98,7 +96,6 @@ export class LLMTestController {
    */
   @Post('test')
   @HttpCode(200)
-  @SystemAdminOnly()
   @ApiOperation({ summary: 'Simple LLM completion test' })
   @ApiOkResponse({ type: LLMTestResponseDto })
   @ApiBadRequestResponse({
@@ -205,7 +202,6 @@ export class LLMTestController {
    */
   @Post('complete')
   @HttpCode(200)
-  @SystemAdminOnly()
   @ApiOperation({ summary: 'Model-specific LLM completion test' })
   @ApiOkResponse({ type: LLMTestResponseDto })
   @ApiBadRequestResponse({
@@ -308,11 +304,6 @@ export class LLMTestController {
     ]);
 
     const openaiFallback = [
-      'gpt-5.2-pro',
-      'gpt-5.2',
-      'gpt-5.2-chat-latest',
-      'gpt-5.2-mini',
-      'gpt-5.2-nano',
       'gpt-5',
       'gpt-5-chat-latest',
       'gpt-5-mini',
@@ -332,7 +323,6 @@ export class LLMTestController {
       'gpt-3.5-turbo',
     ];
     const watsonxFallback = [
-      'ibm/granite-13b-chat-v2',
       'ibm/granite-20b-chat-v2',
       'ibm/granite-34b-chat-v2',
       'meta-llama/llama-3-8b-instruct',

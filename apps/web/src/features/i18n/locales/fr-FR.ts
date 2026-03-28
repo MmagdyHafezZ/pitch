@@ -25,7 +25,6 @@ export const frFR: LocaleDictionary = {
     'nav.sessions': 'Sessions',
     'nav.analytics': 'Analytique',
     'nav.teamConfig': "Configuration de l'équipe",
-    'nav.admin': 'Admin',
     'nav.challenges': 'Défis',
     'nav.calendar': 'Calendrier',
     'nav.settings': 'Paramètres',

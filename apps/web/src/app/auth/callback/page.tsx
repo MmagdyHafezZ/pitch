@@ -114,7 +114,7 @@ function AuthCallbackContent() {
         clearTimeout(redirectTimer)
       }
     }
-  }, [router, searchParams, setToken, setUser])
+  }, [searchParams, router])
 
   const handleRetry = () => {
     router.push('/auth/login')

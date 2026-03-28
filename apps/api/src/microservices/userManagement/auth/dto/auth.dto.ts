@@ -93,9 +93,6 @@ export class UserResponseDto {
 
   @ApiProperty()
   updatedAt: Date;
-
-  @ApiProperty({ required: false })
-  isSystemAdmin?: boolean;
 }
 
 export class AuthResponseDto {

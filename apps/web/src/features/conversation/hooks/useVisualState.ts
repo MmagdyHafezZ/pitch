@@ -29,7 +29,7 @@ interface UseVisualStateOptions {
 // Rolling-window sizes — calibrated to useCameraDetection's inference rates:
 //   Pose: ~20 fps (POSE_INTERVAL_MS = 50)
 //   Face: ~10 fps (FACE_INTERVAL_MS = 100)
-const MOTION_WINDOW = 20 // ~1 s of nose history at 20 fps (nod/shake detection)
+const MOTION_WINDOW = 30 // ~1.5 s of nose history at 20 fps (catches longer nod/shake gestures)
 const ATTENTION_WINDOW = 200 // ~10 s of gaze history at 20 fps
 
 const isFaceBlendshape = (value: unknown): value is FaceBlendshape => {
@@ -84,9 +84,13 @@ export function useVisualState({
   const prevWristRef = useRef<{ lx: number; ly: number; rx: number; ry: number } | null>(null)
   const wristAvgRef = useRef<number[]>([])
 
-  // Emotion: 15-frame majority-vote window (~500 ms at 30 fps)
+  // Emotion: 25-frame majority-vote window (~2.5 s at 10 fps face model)
   const emotionWindowRef = useRef<EmotionState[]>([])
   const latestEmotionRef = useRef<EmotionState>('unknown')
+
+  // Eye-direction gaze (from face blendshapes) — updated at face-model rate (~10 fps)
+  // Combined with head-turn gaze in handleLandmarks for higher accuracy.
+  const latestEyeGazeRef = useRef<GazeState | null>(null)
 
   // Absence tracking
   const absenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -120,6 +124,7 @@ export function useVisualState({
     prevWristRef.current = null
     wristAvgRef.current = []
     emotionWindowRef.current = []
+    latestEyeGazeRef.current = null
     // Intentionally do NOT clear gazeHistoryRef here — the attention score
     // should survive brief detection gaps (blink, slight head turn, etc.).
     // It resets only when the person is confirmed absent (see handleLandmarks).
@@ -176,19 +181,32 @@ export function useVisualState({
         return
       }
 
-      // ── Posture / gaze smoothing (7-frame majority vote) ───────────────────
+      // ── Posture smoothing (12-frame majority vote ≈ 600 ms at 20 fps) ───────
       const pWin = postureWindowRef.current
       pWin.push(raw.posture)
-      if (pWin.length > 7) pWin.shift()
+      if (pWin.length > 12) pWin.shift()
+      const smoothedPosture = majority(pWin, raw.posture)
+
+      // ── Gaze: combine head-turn (pose) + eye-direction (face blendshapes) ──
+      // Head-turn gaze from ear-visibility asymmetry (raw.gaze).
+      // Eye-direction gaze from eyeLook* blendshapes (latestEyeGazeRef) —
+      // updates at face-model rate (~10 fps) via handleBlendshapes.
+      // Eye direction is authoritative for non-camera states; use head-turn
+      // as fallback when eye model hasn't fired yet.
+      const eyeGaze = latestEyeGazeRef.current
+      const combinedGaze: GazeState =
+        eyeGaze !== null && eyeGaze !== 'camera'
+          ? eyeGaze // eyes clearly pointing away from camera → trust eyes
+          : eyeGaze === 'camera' && raw.gaze !== 'camera'
+            ? 'camera' // eyes on camera despite head turn → person is looking at screen
+            : raw.gaze // no eye data yet → fall back to head-turn
 
       const gWin = gazeWindowRef.current
-      gWin.push(raw.gaze)
-      if (gWin.length > 7) gWin.shift()
+      gWin.push(combinedGaze)
+      if (gWin.length > 10) gWin.shift()
+      const smoothedGaze = majority(gWin, combinedGaze)
 
-      const smoothedPosture = majority(pWin, raw.posture)
-      const smoothedGaze = majority(gWin, raw.gaze)
-
-      // ── Head motion (nod / shake) ──────────────────────────────────────────
+      // ── Head motion (nod / shake) — 30-frame window ≈ 1.5 s at 20 fps ──────
       const nose = landmarks[0] // NOSE index
       const noseHist = noseHistoryRef.current
       noseHist.push({ x: nose.x, y: nose.y })
@@ -251,18 +269,23 @@ export function useVisualState({
     [sessionId, sendIntervalMs, absenceTimeoutMs, clearAbsenceTimer, resetBuffers]
   )
 
-  // ── Emotion from Face Landmarker blendshapes ─────────────────────────────
+  // ── Emotion + eye-direction gaze from Face Landmarker blendshapes ──────────
   const handleBlendshapes = useCallback((blendshapes: FaceBlendshape[] | null) => {
-    // Face not detected — don't overwrite the window; let last known emotion
-    // persist until the 15-frame window naturally fills with new classifications.
+    // Face not detected — don't overwrite the window; let last known values
+    // persist until the window naturally fills with new classifications.
     if (!blendshapes) return
     const normalizedBlendshapes = normalizeBlendshapes(blendshapes)
     if (normalizedBlendshapes.length === 0) return
-    const raw = classifyEmotion(normalizedBlendshapes)
+
+    // Emotion classification (25-frame window ≈ 2.5 s at 10 fps)
+    const rawEmotion = classifyEmotion(normalizedBlendshapes)
     const win = emotionWindowRef.current
-    win.push(raw)
-    if (win.length > 15) win.shift()
-    latestEmotionRef.current = majority(win, raw)
+    win.push(rawEmotion)
+    if (win.length > 25) win.shift()
+    latestEmotionRef.current = majority(win, rawEmotion)
+
+    // Eye-direction gaze (more accurate than head-turn for small shifts)
+    latestEyeGazeRef.current = computeEyeGaze(normalizedBlendshapes)
   }, [])
 
   // ── Single RAF loop for both models (shared WASM, throttled) ─────────────
@@ -470,14 +493,17 @@ function computeVisualState(
 /**
  * detectHeadMotion
  *
- * Analyses a 1-second nose position buffer for nod/shake patterns.
+ * Analyses a 1.5-second nose position buffer (~30 frames at 20 fps) for
+ * deliberate nod/shake gestures.
  *
- * Algorithm: count direction reversals (zero-crossings of velocity) in
- * Y (nod) and X (shake). A genuine gesture needs ≥2 reversals with
- * enough peak-to-peak amplitude to rule out micro-tremor.
+ * Improvement over naive reversal counting: velocity magnitude gating.
+ * Only direction changes where the instantaneous speed exceeds a noise floor
+ * (VELOCITY_NOISE_FLOOR) are counted as genuine reversals. This filters out
+ * micro-jitter from breathing, speech, and natural head micro-movement which
+ * all produce tiny, rapid direction changes that look like gestures.
  */
 function detectHeadMotion(history: Array<{ x: number; y: number }>): HeadMotion {
-  if (history.length < 10) return 'still'
+  if (history.length < 12) return 'still'
 
   const ys = history.map((p) => p.y)
   const xs = history.map((p) => p.x)
@@ -485,25 +511,37 @@ function detectHeadMotion(history: Array<{ x: number; y: number }>): HeadMotion 
   const yRange = Math.max(...ys) - Math.min(...ys)
   const xRange = Math.max(...xs) - Math.min(...xs)
 
-  // Require enough amplitude to distinguish gesture from normal micro-movement
-  const yReversals = yRange > 0.025 ? countReversals(ys) : 0
-  const xReversals = xRange > 0.022 ? countReversals(xs) : 0
+  // Require meaningful peak-to-peak amplitude before counting reversals.
+  // Slightly higher thresholds than before to filter speech-head-bob.
+  const yReversals = yRange > 0.03 ? countSignificantReversals(ys) : 0
+  const xReversals = xRange > 0.026 ? countSignificantReversals(xs) : 0
 
   if (yReversals >= 2) return 'nodding'
   if (xReversals >= 2) return 'shaking'
   return 'still'
 }
 
-/** Counts direction changes (velocity sign flips) in a position sequence. */
-function countReversals(arr: number[]): number {
+/**
+ * Velocity noise floor: frame-to-frame nose movement below this value
+ * is treated as measurement noise, not intentional movement (~0.003 in
+ * normalised image coords ≈ 0.3% of frame width per 50 ms frame).
+ */
+const VELOCITY_NOISE_FLOOR = 0.003
+
+/**
+ * Counts direction reversals in a position sequence, ignoring velocity
+ * samples below VELOCITY_NOISE_FLOOR.  This prevents breathing tremor and
+ * speech-induced micro-movement from registering as nod/shake gestures.
+ */
+function countSignificantReversals(positions: number[]): number {
   let count = 0
   let prevDir = 0
-  for (let i = 1; i < arr.length; i++) {
-    const dir = Math.sign(arr[i] - arr[i - 1])
-    if (dir !== 0) {
-      if (prevDir !== 0 && dir !== prevDir) count++
-      prevDir = dir
-    }
+  for (let i = 1; i < positions.length; i++) {
+    const velocity = positions[i] - positions[i - 1]
+    if (Math.abs(velocity) < VELOCITY_NOISE_FLOOR) continue // skip noise
+    const dir = Math.sign(velocity)
+    if (prevDir !== 0 && dir !== prevDir) count++
+    prevDir = dir
   }
   return count
 }
@@ -548,18 +586,33 @@ function bsScore(shapes: FaceBlendshape[], name: string): number {
 /**
  * classifyEmotion
  *
- * Maps MediaPipe Face Landmarker blendshapes (52 ARKit-compatible Action Units,
- * each [0–1]) to a discrete EmotionState using composite FACS-inspired scores.
+ * Maps MediaPipe Face Landmarker blendshapes (52 ARKit-compatible AUs)
+ * to a discrete EmotionState using composite FACS-inspired scores.
  *
- * Zero per-frame heap allocation — uses cached index lookups via bsScore().
+ * Key accuracy improvements over naive thresholding:
  *
- * Priority: happy first so a Duchenne smile (which also widens eyes) is never
- * mis-classified as surprised.
+ * HAPPY  — requires Duchenne marker: both mouth-corner smile (AU12) AND cheek
+ *   squint (AU6) must be present at meaningful levels. Normal speech produces
+ *   mouthSmile scores of 0.2–0.4 but almost no cheekSquint, so the
+ *   min(smile × 1.5, squint × 2) gate prevents speech-mouth false positives.
+ *
+ * ANGRY  — three converging signals: brow furrow (AU4) + nose wrinkle (AU9)
+ *   + eye squint (AU7). Requiring all three makes it robust against isolated
+ *   concentration faces (furrow only → frustrated, not angry).
+ *
+ * FRUSTRATED — brow furrow (AU4) + lip press (AU28) WITHOUT sneer or smile.
+ *   The negative sneer term separates frustrated-concentration from anger.
+ *
+ * SAD — lip-corner depressor (AU15) + inner brow raise (AU1), suppressed
+ *   by any smile activation.
+ *
+ * SURPRISED — wide eyes (AU5) must be present as a gate before scoring,
+ *   preventing open-mouth-from-speech from triggering this class.
  */
 function classifyEmotion(blendshapes: FaceBlendshape[]): EmotionState {
   const g = (name: string) => bsScore(blendshapes, name)
 
-  // Raw signals
+  // ── Raw AU signals ─────────────────────────────────────────────────────────
   const smile = (g('mouthSmileLeft') + g('mouthSmileRight')) / 2
   const squint = (g('cheekSquintLeft') + g('cheekSquintRight')) / 2
   const frown = (g('mouthFrownLeft') + g('mouthFrownRight')) / 2
@@ -567,20 +620,74 @@ function classifyEmotion(blendshapes: FaceBlendshape[]): EmotionState {
   const browInner = g('browInnerUp')
   const browOuter = (g('browOuterUpLeft') + g('browOuterUpRight')) / 2
   const eyeWide = (g('eyeWideLeft') + g('eyeWideRight')) / 2
+  const eyeSquint = (g('eyeSquintLeft') + g('eyeSquintRight')) / 2
   const jawOpen = g('jawOpen')
   const sneer = (g('noseSneerLeft') + g('noseSneerRight')) / 2
+  const press = (g('mouthPressLeft') + g('mouthPressRight')) / 2
 
-  // Composite scores (FACS-inspired)
-  const happyScore = smile * 0.65 + squint * 0.35 // AU12 + AU6
-  const angryScore = browDown * 0.5 + sneer * 0.5 // AU4 + AU9
-  const frustratedScore = Math.max(0, browDown - sneer * 1.5) // AU4 without AU9
-  const sadScore = Math.max(0, (frown * 0.5 + browInner * 0.5) * (1 - smile * 2))
-  const surprisedScore = eyeWide * 0.4 + jawOpen * 0.4 + browOuter * 0.2
+  // ── Composite scores ───────────────────────────────────────────────────────
 
-  if (happyScore > 0.3) return 'happy'
-  if (angryScore > 0.35) return 'angry'
-  if (frustratedScore > 0.28) return 'frustrated'
-  if (sadScore > 0.22) return 'sad'
-  if (surprisedScore > 0.35) return 'surprised'
+  // HAPPY: Duchenne smile gate — requires BOTH corners up AND cheeks lifting.
+  // min(smile*1.5, squint*2) forces both AUs to be present; a lone smile
+  // from speech movement scores near zero since squint stays flat.
+  const happyScore = Math.min(smile * 1.5, squint * 2) * 0.6 + smile * 0.4
+
+  // ANGRY: brow furrow + contempt sneer + eye squint all present together.
+  const angryScore = browDown * 0.4 + sneer * 0.35 + eyeSquint * 0.25
+
+  // FRUSTRATED: brow down + lip press, penalised by sneer and smile so it
+  // doesn't overlap with angry or happy.
+  const frustratedScore = Math.max(0, browDown * 0.55 + press * 0.3 - sneer * 0.9 - smile * 1.5)
+
+  // SAD: lip corners down + inner brow raise, entirely suppressed by smile.
+  const sadScore = Math.max(0, (frown * 0.45 + browInner * 0.55) * (1 - smile * 2.5))
+
+  // SURPRISED: wide eyes required as gate to prevent open-mouth-from-speech.
+  const surprisedScore = eyeWide > 0.12 ? eyeWide * 0.4 + jawOpen * 0.35 + browOuter * 0.25 : 0
+
+  // ── Classification (higher thresholds → fewer false positives) ────────────
+  if (happyScore > 0.38) return 'happy'
+  if (angryScore > 0.38) return 'angry'
+  if (frustratedScore > 0.24) return 'frustrated'
+  if (sadScore > 0.2) return 'sad'
+  if (surprisedScore > 0.38) return 'surprised'
   return 'neutral'
+}
+
+/**
+ * computeEyeGaze
+ *
+ * Derives gaze direction from the 8 ARKit eyeLook* blendshapes which encode
+ * actual iris movement — far more accurate than head-turn detection alone for
+ * small gaze shifts (e.g. glancing at a second monitor without turning head).
+ *
+ * Coordinate convention:
+ *   eyeLookOutLeft  = left eye turns outward (user's left)
+ *   eyeLookInRight  = right eye turns inward (user's left)  → combined = user looking LEFT
+ *   eyeLookInLeft   = left eye turns inward (user's right)
+ *   eyeLookOutRight = right eye turns outward (user's right) → combined = user looking RIGHT
+ *
+ * Returns null when all scores are below threshold (insufficient data / face
+ * not fully frontal) so the caller can fall back to head-turn gaze.
+ */
+function computeEyeGaze(blendshapes: FaceBlendshape[]): GazeState | null {
+  const g = (name: string) => bsScore(blendshapes, name)
+
+  const down = (g('eyeLookDownLeft') + g('eyeLookDownRight')) / 2
+  const up = (g('eyeLookUpLeft') + g('eyeLookUpRight')) / 2
+  // User's LEFT  = left eye out + right eye in
+  const left = (g('eyeLookOutLeft') + g('eyeLookInRight')) / 2
+  // User's RIGHT = left eye in + right eye out
+  const right = (g('eyeLookInLeft') + g('eyeLookOutRight')) / 2
+
+  const EYE_GAZE_THRESHOLD = 0.1 // activation needed for a confident reading
+
+  const strongest = Math.max(down, up, left, right)
+  if (strongest < EYE_GAZE_THRESHOLD) return 'camera' // all quiet → looking at screen
+
+  // Return the dominant direction; ties go to 'camera' via threshold guard
+  if (down === strongest) return 'down'
+  if (left === strongest) return 'left'
+  if (right === strongest) return 'right'
+  return 'camera'
 }
