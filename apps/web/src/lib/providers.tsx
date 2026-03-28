@@ -45,10 +45,7 @@ type CardPalette = {
   shadow: string
 }
 
-const CURATED_CARD_PALETTES: Record<
-  string,
-  { light: CardPalette; dark: CardPalette }
-> = {
+const CURATED_CARD_PALETTES: Record<string, { light: CardPalette; dark: CardPalette }> = {
   ocean: {
     light: {
       bg: '#f4f8fc',

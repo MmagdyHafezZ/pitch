@@ -207,7 +207,7 @@ export class SubscriptionGatewayController {
   async createSubscription(
     @Body() createSubscriptionDto: CreateSubscriptionRequestDTO,
     @UserClaims() userClaims: UserClaimsType,
-  ) {
+  ): Promise<unknown> {
     const teamId = await this.resolveAccessibleTeamId(
       userClaims,
       createSubscriptionDto.teamId,
@@ -215,7 +215,7 @@ export class SubscriptionGatewayController {
 
     return lastValueFrom(
       this.userService
-        .send(USER_SERVICE_PATTERNS.CREATE_SUBSCRIPTION, {
+        .send<unknown>(USER_SERVICE_PATTERNS.CREATE_SUBSCRIPTION, {
           ...createSubscriptionDto,
           teamId,
           userClaims,
@@ -243,7 +243,7 @@ export class SubscriptionGatewayController {
     @Param('id') id: string,
     @Body() updateSubscriptionDto: UpdateSubscriptionRequestDTO,
     @UserClaims() userClaims: UserClaimsType,
-  ) {
+  ): Promise<unknown> {
     const teamId = await this.resolveAccessibleTeamId(
       userClaims,
       updateSubscriptionDto.teamId,
@@ -251,7 +251,7 @@ export class SubscriptionGatewayController {
 
     return lastValueFrom(
       this.userService
-        .send(USER_SERVICE_PATTERNS.UPDATE_SUBSCRIPTION, {
+        .send<unknown>(USER_SERVICE_PATTERNS.UPDATE_SUBSCRIPTION, {
           id,
           ...updateSubscriptionDto,
           teamId,
@@ -280,7 +280,7 @@ export class SubscriptionGatewayController {
     @Param('id') id: string,
     @Body() upgradeSubscriptionDto: UpgradeSubscriptionRequestDTO,
     @UserClaims() userClaims: UserClaimsType,
-  ) {
+  ): Promise<unknown> {
     const teamId = await this.resolveAccessibleTeamId(
       userClaims,
       upgradeSubscriptionDto.teamId,
@@ -404,7 +404,7 @@ export class SubscriptionGatewayController {
   async getSubscriptionByTeamId(
     @Param('teamId') teamId: string,
     @UserClaims() userClaims: UserClaimsType,
-  ) {
+  ): Promise<unknown> {
     const resolvedTeamId = await this.resolveAccessibleTeamId(
       userClaims,
       teamId,
@@ -412,7 +412,7 @@ export class SubscriptionGatewayController {
 
     return lastValueFrom(
       this.userService
-        .send(USER_SERVICE_PATTERNS.GET_TEAM_SUBSCRIPTION, {
+        .send<unknown>(USER_SERVICE_PATTERNS.GET_TEAM_SUBSCRIPTION, {
           teamId: resolvedTeamId,
           userClaims,
         })

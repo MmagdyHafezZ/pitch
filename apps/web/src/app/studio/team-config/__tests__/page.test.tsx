@@ -286,19 +286,27 @@ describe('TeamConfigPage', () => {
 
   it('switches step content and keeps only one current step marker', async () => {
     const user = userEvent.setup()
-    const { container } = render(<TeamConfigPage />)
+    render(<TeamConfigPage />)
+
+    const expectSingleActiveTab = (label: 'Profile' | 'Members' | 'Billing' | 'Subscription') => {
+      const activeTabs = screen
+        .getAllByRole('tab')
+        .filter((tab) => tab.getAttribute('aria-selected') === 'true')
+      expect(activeTabs).toHaveLength(1)
+      expect(screen.getByRole('tab', { name: label })).toHaveAttribute('aria-selected', 'true')
+    }
 
     await screen.findByRole('heading', { name: 'Team profile' })
     expect(screen.getByRole('heading', { name: 'Team profile' })).toBeInTheDocument()
-    expect(container.querySelectorAll('.stepCurrent')).toHaveLength(1)
+    expectSingleActiveTab('Profile')
 
     await user.click(screen.getByText('Members'))
     expect(await screen.findByTestId('team-members-panel')).toBeInTheDocument()
-    expect(container.querySelectorAll('.stepCurrent')).toHaveLength(1)
+    expectSingleActiveTab('Members')
 
     await user.click(screen.getByText('Subscription'))
     expect(await screen.findByTestId('team-subscription-panel')).toBeInTheDocument()
-    expect(container.querySelectorAll('.stepCurrent')).toHaveLength(1)
+    expectSingleActiveTab('Subscription')
 
     expect(mockTeamSubscriptionPanel).toHaveBeenLastCalledWith(
       expect.objectContaining({

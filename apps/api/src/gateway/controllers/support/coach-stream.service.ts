@@ -630,7 +630,7 @@ export class CoachStreamService {
             (p) => p.type === 'text' && typeof p.text === 'string',
           ) as Array<{ type: string; text: string } & Record<string, unknown>>)
         : typeof rawContent === 'string'
-          ? [{ type: 'text', text: rawContent as string }]
+          ? [{ type: 'text', text: rawContent }]
           : [];
 
       for (const part of textParts) {

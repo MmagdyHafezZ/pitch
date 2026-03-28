@@ -103,10 +103,10 @@ export class CoinsGatewayController {
   async requestRefill(
     @UserClaims() claims: UserClaimsType,
     @Body() body: { requestedCoins: number; teamId: string },
-  ) {
+  ): Promise<unknown> {
     return lastValueFrom(
       this.userService
-        .send(USER_SERVICE_COIN_PATTERNS.COIN_REFILL_REQUEST, {
+        .send<unknown>(USER_SERVICE_COIN_PATTERNS.COIN_REFILL_REQUEST, {
           userId: claims.id,
           teamId: body.teamId,
           requestedCoins: body.requestedCoins,
@@ -120,10 +120,12 @@ export class CoinsGatewayController {
 
   @Get('refill/my-request')
   @ApiOperation({ summary: 'Get own pending refill request' })
-  async getMyRefillRequest(@UserClaims() claims: UserClaimsType) {
+  async getMyRefillRequest(
+    @UserClaims() claims: UserClaimsType,
+  ): Promise<unknown> {
     return lastValueFrom(
       this.userService
-        .send(USER_SERVICE_COIN_PATTERNS.COIN_REFILL_MY_REQUEST, {
+        .send<unknown>(USER_SERVICE_COIN_PATTERNS.COIN_REFILL_MY_REQUEST, {
           userId: claims.id,
         })
         .pipe(
@@ -136,10 +138,10 @@ export class CoinsGatewayController {
   @Get('refill/requests')
   @UseGuards(CheckSystemAdmin)
   @ApiOperation({ summary: '[Admin] List all pending refill requests' })
-  async listRefillRequests() {
+  async listRefillRequests(): Promise<unknown> {
     return lastValueFrom(
       this.userService
-        .send(USER_SERVICE_COIN_PATTERNS.COIN_REFILL_REQUEST_LIST, {})
+        .send<unknown>(USER_SERVICE_COIN_PATTERNS.COIN_REFILL_REQUEST_LIST, {})
         .pipe(
           timeout(10000),
           catchError((err) => throwError(() => normalizeError(err))),
@@ -154,10 +156,10 @@ export class CoinsGatewayController {
     @Param('userId') userId: string,
     @Body() body: { approvedCoins: number },
     @UserClaims() claims: UserClaimsType,
-  ) {
+  ): Promise<unknown> {
     return lastValueFrom(
       this.userService
-        .send(USER_SERVICE_COIN_PATTERNS.COIN_REFILL_REQUEST_APPROVE, {
+        .send<unknown>(USER_SERVICE_COIN_PATTERNS.COIN_REFILL_REQUEST_APPROVE, {
           userId,
           approvedCoins: body.approvedCoins,
           reviewer: claims.email,
@@ -175,10 +177,10 @@ export class CoinsGatewayController {
   async denyRefillRequest(
     @Param('userId') userId: string,
     @UserClaims() claims: UserClaimsType,
-  ) {
+  ): Promise<unknown> {
     return lastValueFrom(
       this.userService
-        .send(USER_SERVICE_COIN_PATTERNS.COIN_REFILL_REQUEST_DENY, {
+        .send<unknown>(USER_SERVICE_COIN_PATTERNS.COIN_REFILL_REQUEST_DENY, {
           userId,
           reviewer: claims.email,
         })
@@ -192,10 +194,10 @@ export class CoinsGatewayController {
   @Get('usage/admin')
   @UseGuards(CheckSystemAdmin)
   @ApiOperation({ summary: '[Admin] Get all-teams coin usage summary' })
-  async getAdminUsage() {
+  async getAdminUsage(): Promise<unknown> {
     return lastValueFrom(
       this.userService
-        .send(USER_SERVICE_COIN_PATTERNS.COIN_USAGE_ADMIN, {})
+        .send<unknown>(USER_SERVICE_COIN_PATTERNS.COIN_USAGE_ADMIN, {})
         .pipe(
           timeout(15000),
           catchError((err) => throwError(() => normalizeError(err))),
@@ -210,10 +212,10 @@ export class CoinsGatewayController {
   async getLedgerHistory(
     @Query('teamId') teamId: string,
     @Query('periodKey') periodKey?: string,
-  ) {
+  ): Promise<unknown> {
     return lastValueFrom(
       this.userService
-        .send(USER_SERVICE_COIN_PATTERNS.COIN_LEDGER_HISTORY, {
+        .send<unknown>(USER_SERVICE_COIN_PATTERNS.COIN_LEDGER_HISTORY, {
           teamId,
           periodKey,
         })

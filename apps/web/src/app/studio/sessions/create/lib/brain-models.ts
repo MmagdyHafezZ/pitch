@@ -13,7 +13,6 @@ const EXCLUDED_MODEL_PATTERNS = [
 ]
 
 const PREFERRED_MODEL_NAMES = [
-  'gpt-5',
   'gpt-5-chat-latest',
   'gpt-5-mini',
   'o3',
@@ -44,6 +43,20 @@ export const getPreferredBrainModel = (provider?: LLMProvider | null) => {
   const models = getBrainCompatibleModels(provider)
   if (models.length === 0) {
     return null
+  }
+
+  const versionedGpt5Matches = models
+    .filter((model) => /^gpt-5(?:\.\d+)+$/i.test(model.name))
+    .sort((left, right) =>
+      right.name.localeCompare(left.name, undefined, { numeric: true, sensitivity: 'base' })
+    )
+  if (versionedGpt5Matches.length > 0) {
+    return versionedGpt5Matches[0]
+  }
+
+  const exactGpt5 = models.find((model) => model.name === 'gpt-5')
+  if (exactGpt5) {
+    return exactGpt5
   }
 
   for (const preferredName of PREFERRED_MODEL_NAMES) {

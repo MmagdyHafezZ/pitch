@@ -129,6 +129,7 @@ describe('TeamController', () => {
         },
       },
       basePayload.userClaims.id,
+      { systemProvisioned: false },
     );
   });
 

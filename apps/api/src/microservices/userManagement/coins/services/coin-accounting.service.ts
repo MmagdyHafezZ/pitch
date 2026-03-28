@@ -349,10 +349,17 @@ export class CoinAccountingService {
       remainingAfter?: number;
     }>
   > {
-    const entries = await this.coinLedgerRepo.findByTeamId(teamId, periodKey);
+    const entries = (await this.coinLedgerRepo.findByTeamId(
+      teamId,
+      periodKey,
+    )) as Array<
+      import('../../mongo/schemas/coin-ledger.schema').CoinLedger & {
+        createdAt?: Date;
+      }
+    >;
     return entries.map((e) => ({
       type: e.type,
-      createdAt: (e as any).createdAt,
+      createdAt: e.createdAt,
       estimatedCoins: e.estimatedCoins,
       deltaCoins: e.deltaCoins,
       sessionId: e.sessionId,
