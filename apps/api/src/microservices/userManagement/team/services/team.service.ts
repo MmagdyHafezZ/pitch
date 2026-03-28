@@ -39,6 +39,7 @@ export class TeamService {
   async createTeam(
     createTeamDto: CreateTeamDto,
     requesterId: string,
+    options?: { systemProvisioned?: boolean },
   ): Promise<Team> {
     const slug = await this.createSlug({
       name: createTeamDto.name,
@@ -53,8 +54,8 @@ export class TeamService {
       {
         ...createTeamDto,
         slug,
-        isActive: false, // inactive until admin approves
-        approvalStatus: 'PENDING',
+        isActive: options?.systemProvisioned ? true : false, // inactive until admin approves
+        approvalStatus: options?.systemProvisioned ? 'APPROVED' : 'PENDING',
         metadata,
       },
       requesterId,

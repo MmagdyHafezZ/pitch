@@ -1710,6 +1710,7 @@ export default function LiveSessionPage() {
   const [sessionStatus, setSessionStatus] = useState<string | null>(null)
   const [sessionName, setSessionName] = useState<string>('')
   const [personaName, setPersonaName] = useState<string | null>(null)
+  const [personaAvatarImageUrl, setPersonaAvatarImageUrl] = useState<string | null>(null)
   const [hintsEnabled, setHintsEnabled] = useState(false)
   const [timelineEnabled, setTimelineEnabled] = useState(false)
   const [callStarted, setCallStarted] = useState(false)
@@ -2033,6 +2034,7 @@ export default function LiveSessionPage() {
       setSessionStatus(normalizedStatus)
       setSessionName((session as any)?.name ?? (session as any)?.scenario?.name ?? '')
       setPersonaName((session as any)?.persona?.name ?? null)
+      setPersonaAvatarImageUrl((session as any)?.persona?.traits?.avatar?.imageUrl ?? null)
       setAvatarVideoStatus(avatarState.status)
       setAvatarVideoProvider(avatarState.provider)
       setAvatarVideoError(avatarState.error)
@@ -4115,6 +4117,7 @@ export default function LiveSessionPage() {
                 avatarVideoStatus={avatarVideoStatus}
                 avatarVideoProvider={avatarVideoProvider}
                 avatarVideoError={avatarVideoError}
+                personaAvatarImageUrl={personaAvatarImageUrl}
                 videoRef={videoRef}
                 visualState={visualState}
                 poseIsReady={poseIsReady}

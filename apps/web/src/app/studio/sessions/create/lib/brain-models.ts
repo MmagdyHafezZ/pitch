@@ -13,9 +13,6 @@ const EXCLUDED_MODEL_PATTERNS = [
 ]
 
 const PREFERRED_MODEL_NAMES = [
-  'gpt-5.2',
-  'gpt-5.2-chat-latest',
-  'gpt-5.2-mini',
   'gpt-5',
   'gpt-5-chat-latest',
   'gpt-5-mini',

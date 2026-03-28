@@ -179,7 +179,7 @@ export class LLMProviderRegistry implements OnModuleInit {
   private getModelsForProvider(providerName: string): string[] {
     const commonModels: Record<string, string[]> = {
       openai: ['gpt-4', 'gpt-4-turbo', 'gpt-3.5-turbo'],
-      watsonx: ['granite-13b-chat-v2', 'llama-3-70b-instruct'],
+      watsonx: ['llama-3-70b-instruct'],
       anthropic: ['claude-3-5-sonnet-20241022', 'claude-3-opus-20240229'],
     };
 

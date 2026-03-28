@@ -1,19 +1,44 @@
 import { Module } from '@nestjs/common';
+import { ClientsModule, Transport } from '@nestjs/microservices';
 import { SubscriptionService } from './services/subscription.service';
 import { SubscriptionRepository } from './repositories/subscription.repository';
 import { SubscriptionController } from './controllers/subscription.controller';
 import { PlansModule } from '../plans/plans.module';
 import { CoinsModule } from '../coins/coins.module';
-import { ElevatedAccessGuard } from '../guards/elevated-access.guard';
+import { SubscriptionAccessGuard } from '../guards/subscription-access.guard';
 import { TeamRepository } from '../team/repositories/team.repository';
+import {
+  getQueueOptions,
+  getRabbitMQUrl,
+} from '../../../config/microservices.config';
+import { NotificationModule } from '../notifications/notification.module';
+import { UserModule } from '../user/user.module';
+import { PlanChangeNotificationService } from './services/plan-change-notification.service';
 
 @Module({
-  imports: [PlansModule, CoinsModule],
+  imports: [
+    PlansModule,
+    CoinsModule,
+    NotificationModule,
+    UserModule,
+    ClientsModule.register([
+      {
+        name: 'SUPPORT_SERVICE',
+        transport: Transport.RMQ,
+        options: {
+          urls: [getRabbitMQUrl()],
+          queue: process.env.SUPPORT_RMQ_QUEUE || 'support_queue',
+          queueOptions: getQueueOptions(),
+        },
+      },
+    ]),
+  ],
   controllers: [SubscriptionController],
   providers: [
     SubscriptionService,
     SubscriptionRepository,
-    ElevatedAccessGuard,
+    PlanChangeNotificationService,
+    SubscriptionAccessGuard,
     TeamRepository,
   ],
   exports: [SubscriptionService, SubscriptionRepository],

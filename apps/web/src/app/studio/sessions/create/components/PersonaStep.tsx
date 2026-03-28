@@ -306,7 +306,6 @@ export function PersonaStep({
                         exit={{ opacity: 0, y: 160, scale: 0.88 }}
                         transition={{ duration: 0.38, ease: [0.4, 0, 0.2, 1] }}
                         style={{ flexShrink: 0 }}
-                        data-tour-id="create-session-persona-item"
                       >
                         <PersonaProfileCard
                           persona={persona}

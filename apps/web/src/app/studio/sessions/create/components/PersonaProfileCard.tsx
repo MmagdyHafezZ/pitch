@@ -150,6 +150,7 @@ export function PersonaProfileCard({
       tabIndex={0}
       aria-label={`Select persona ${persona.name}`}
       data-open={infoOpen ? 'true' : 'false'}
+      data-tour-id="create-session-persona-item"
       className={styles.cardWrapper}
       style={cardStyle}
       onClick={onSelect}

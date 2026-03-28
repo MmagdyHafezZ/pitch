@@ -304,11 +304,6 @@ export class LLMTestController {
     ]);
 
     const openaiFallback = [
-      'gpt-5.2-pro',
-      'gpt-5.2',
-      'gpt-5.2-chat-latest',
-      'gpt-5.2-mini',
-      'gpt-5.2-nano',
       'gpt-5',
       'gpt-5-chat-latest',
       'gpt-5-mini',
@@ -328,7 +323,6 @@ export class LLMTestController {
       'gpt-3.5-turbo',
     ];
     const watsonxFallback = [
-      'ibm/granite-13b-chat-v2',
       'ibm/granite-20b-chat-v2',
       'ibm/granite-34b-chat-v2',
       'meta-llama/llama-3-8b-instruct',

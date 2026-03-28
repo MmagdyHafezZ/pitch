@@ -38,7 +38,10 @@ export class TeamController {
   @UsePipes(new ValidationPipe({ transform: true }))
   async createTeam(
     @Payload()
-    data: CreateTeamRequestDto & userClaimsInterface.MessageWithUserClaims,
+    data: CreateTeamRequestDto &
+      userClaimsInterface.MessageWithUserClaims & {
+        isSystemProvisioned?: boolean;
+      },
   ) {
     try {
       this.logger.log(
@@ -56,7 +59,9 @@ export class TeamController {
         metadata: createTeamDto.metadata as unknown as TeamMetadata,
       };
 
-      return await this.teamService.createTeam(dto, _userClaims.id);
+      return await this.teamService.createTeam(dto, _userClaims.id, {
+        systemProvisioned: data.isSystemProvisioned === true,
+      });
     } catch (error) {
       throw toRpcException(error);
     }

@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   ConflictException,
+  Logger,
 } from '@nestjs/common';
 import { Prisma, BillingInterval } from '@prisma/user-client';
 import {
@@ -20,15 +21,19 @@ import { PlanRepository } from '../../plans/repositories/plans.repository';
 import { CoinRefillService } from '../../coins/services/coin-refill.service';
 import { CoinRedisService } from '../../coins/services/coin-redis.service';
 import { CoinAccountingService } from '../../coins/services/coin-accounting.service';
+import { PlanChangeNotificationService } from './plan-change-notification.service';
 
 @Injectable()
 export class SubscriptionService {
+  private readonly logger = new Logger(SubscriptionService.name);
+
   constructor(
     private readonly coinAccountingService: CoinAccountingService,
     private readonly coinRedisService: CoinRedisService,
     private readonly coinRefillService: CoinRefillService,
     private readonly subscriptionRepository: SubscriptionRepository,
     private readonly planRepository: PlanRepository,
+    private readonly planChangeNotificationService: PlanChangeNotificationService,
   ) {}
 
   private toSubscription<T extends { metadata?: unknown }>(
@@ -416,9 +421,25 @@ export class SubscriptionService {
         requestedByUserId: requesterId,
       },
     };
-    return this.subscriptionRepository.update(subscriptionId, {
+    const updated = await this.subscriptionRepository.update(subscriptionId, {
       metadata: updatedMeta,
     });
+
+    await this.planChangeNotificationService
+      .notifyAdminsOfRequest({
+        requesterId,
+        currentPlanName: existing.plan?.name,
+        requestedPlanName: newPlan.name,
+        requestedInterval: dto.interval ?? existing.interval,
+      })
+      .catch((error: unknown) => {
+        this.logger.error(
+          `Failed to notify admins about plan change request for subscription ${subscriptionId}`,
+          error as Error,
+        );
+      });
+
+    return updated;
   }
 
   async listPendingPlanChanges(): Promise<SubscriptionWithPlan[]> {
@@ -443,11 +464,14 @@ export class SubscriptionService {
       );
     }
 
+    const requestedByUserId = pending.requestedByUserId;
+    const requestedPlanId = pending.requestedPlanId;
+
     // Apply the actual plan change
     const upgraded = await this.upgradeSubscription(
       subscriptionId,
       {
-        planId: pending.requestedPlanId,
+        planId: requestedPlanId,
         interval:
           pending.requestedInterval as import('@prisma/user-client').BillingInterval,
       },
@@ -457,9 +481,26 @@ export class SubscriptionService {
     // Clear the pending flag
     const cleanedMeta = this.toMetadataObject(upgraded.metadata);
     delete cleanedMeta.pendingPlanChange;
-    return this.subscriptionRepository.update(subscriptionId, {
+    const updated = await this.subscriptionRepository.update(subscriptionId, {
       metadata: cleanedMeta as Prisma.InputJsonValue,
     });
+
+    if (requestedByUserId) {
+      await this.planChangeNotificationService
+        .notifyUserOfDecision({
+          requesterId: requestedByUserId,
+          decision: 'approved',
+          planName: upgraded.plan?.name,
+        })
+        .catch((error: unknown) => {
+          this.logger.error(
+            `Failed to notify requester ${requestedByUserId} about approved plan change for subscription ${subscriptionId}`,
+            error as Error,
+          );
+        });
+    }
+
+    return updated;
   }
 
   async rejectPlanChange(
@@ -477,10 +518,33 @@ export class SubscriptionService {
         `No pending plan change for subscription ${subscriptionId}`,
       );
     }
+    const pending = meta.pendingPlanChange;
+    const requestedPlan = pending.requestedPlanId
+      ? await this.planRepository
+          .findById(pending.requestedPlanId)
+          .catch(() => null)
+      : null;
     delete meta.pendingPlanChange;
-    return this.subscriptionRepository.update(subscriptionId, {
+    const updated = await this.subscriptionRepository.update(subscriptionId, {
       metadata: meta as Prisma.InputJsonValue,
     });
+
+    if (pending.requestedByUserId) {
+      await this.planChangeNotificationService
+        .notifyUserOfDecision({
+          requesterId: pending.requestedByUserId,
+          decision: 'rejected',
+          planName: requestedPlan?.name,
+        })
+        .catch((error: unknown) => {
+          this.logger.error(
+            `Failed to notify requester ${pending.requestedByUserId} about rejected plan change for subscription ${subscriptionId}`,
+            error as Error,
+          );
+        });
+    }
+
+    return updated;
   }
 
   public addInterval(d: Date, interval: BillingInterval): Date {

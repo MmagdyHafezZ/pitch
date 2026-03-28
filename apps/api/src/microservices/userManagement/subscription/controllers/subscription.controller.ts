@@ -21,7 +21,7 @@ import {
   SubscriptionMetadata,
 } from '@pitch/shared-backend/interfaces/user.interface';
 import { SubscriptionService } from '../services/subscription.service';
-import { ElevatedAccessGuard } from '../../guards/elevated-access.guard';
+import { SubscriptionAccessGuard } from '../../guards/subscription-access.guard';
 
 @Controller()
 export class SubscriptionController {
@@ -29,7 +29,7 @@ export class SubscriptionController {
 
   constructor(private readonly subscriptionService: SubscriptionService) {}
 
-  @UseGuards(ElevatedAccessGuard)
+  @UseGuards(SubscriptionAccessGuard)
   @MessagePattern(USER_SERVICE_PATTERNS.CREATE_SUBSCRIPTION)
   @UsePipes(new ValidationPipe({ transform: true }))
   async createSubscription(
@@ -65,7 +65,7 @@ export class SubscriptionController {
     }
   }
 
-  @UseGuards(ElevatedAccessGuard)
+  @UseGuards(SubscriptionAccessGuard)
   @MessagePattern(USER_SERVICE_PATTERNS.UPDATE_SUBSCRIPTION)
   @UsePipes(
     new ValidationPipe({ transform: true, skipMissingProperties: true }),
@@ -101,7 +101,7 @@ export class SubscriptionController {
     }
   }
 
-  @UseGuards(ElevatedAccessGuard)
+  @UseGuards(SubscriptionAccessGuard)
   @MessagePattern(USER_SERVICE_PATTERNS.UPGRADE_SUBSCRIPTION)
   @UsePipes(
     new ValidationPipe({ transform: true, skipMissingProperties: true }),
@@ -165,7 +165,7 @@ export class SubscriptionController {
     }
   }
 
-  @UseGuards(ElevatedAccessGuard)
+  @UseGuards(SubscriptionAccessGuard)
   @MessagePattern(USER_SERVICE_PATTERNS.GET_TEAM_SUBSCRIPTION)
   async getTeamSubscription(
     @Payload()
@@ -195,7 +195,7 @@ export class SubscriptionController {
     }
   }
 
-  @UseGuards(ElevatedAccessGuard)
+  @UseGuards(SubscriptionAccessGuard)
   @MessagePattern(USER_SERVICE_PATTERNS.REQUEST_PLAN_CHANGE)
   async requestPlanChange(
     @Payload()

@@ -51,6 +51,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
+import { CoachChatWidget } from '@/components/ui/CoachChatWidget'
 import { api } from '@/lib/client'
 
 type AssessmentSummary = {
@@ -273,6 +274,62 @@ const buildRecommendation = (item: {
   return 'Keep this pattern: concise response with explicit relevance to stakeholder goals.'
 }
 
+const buildCoachStarterPrompt = (params: {
+  score: number | null
+  normalizedScore: number | null
+  objectiveMet?: boolean
+  narrativeSummary?: string
+  coachTips: Array<{ text: string; link?: string }>
+  improvements: TurnAnnotation[]
+}) => {
+  const summaryLines = [
+    'I just finished this session. Act as my coach.',
+    'Tell me my biggest weakness first, explain why it showed up, and give me a concrete plan to improve with specific phrasing I can practice.',
+  ]
+
+  if (params.score !== null) {
+    const normalized =
+      params.normalizedScore !== null ? ` (${Math.round(params.normalizedScore)}% normalized)` : ''
+    summaryLines.push(`Score: ${params.score}${normalized}`)
+  }
+
+  if (params.objectiveMet !== undefined) {
+    summaryLines.push(`Objective met: ${params.objectiveMet ? 'yes' : 'no'}`)
+  }
+
+  if (params.narrativeSummary?.trim()) {
+    summaryLines.push(`Narrative summary: ${params.narrativeSummary.trim()}`)
+  }
+
+  if (params.coachTips.length > 0) {
+    summaryLines.push(
+      `Coach tips: ${params.coachTips
+        .slice(0, 3)
+        .map((tip) => tip.text.trim())
+        .filter(Boolean)
+        .join(' | ')}`
+    )
+  }
+
+  if (params.improvements.length > 0) {
+    const weaknessLines = params.improvements.slice(0, 3).map((item, index) => {
+      const details = [
+        `${index + 1}. ${labelTitle(item.label)}`,
+        typeof item.scoreDelta === 'number' ? `delta ${formatSigned(item.scoreDelta)}` : null,
+        item.reasonSummary?.trim() || shorten(item.evidence || item.text, 140) || null,
+      ].filter(Boolean)
+      return details.join(' — ')
+    })
+    summaryLines.push(`Weak moments:\n${weaknessLines.join('\n')}`)
+  }
+
+  summaryLines.push(
+    'Prioritize the most repeated or highest-impact weakness. Keep the feedback direct, specific, and actionable.'
+  )
+
+  return summaryLines.join('\n')
+}
+
 const getMoveGrade = (
   item: Pick<TurnAnnotation, 'label' | 'scoreDelta' | 'reasonSummary'>
 ): MoveGrade => {
@@ -447,6 +504,15 @@ export default function SessionPerformancePage() {
       .slice(0, 4)
   }, [turnAnnotations])
 
+  const coachRecentTurns = useMemo(
+    () =>
+      conversationHistory.slice(-8).map((turn) => ({
+        role: turn.role ?? 'unknown',
+        text: turn.text?.trim() || 'No text captured for this turn.',
+      })),
+    [conversationHistory]
+  )
+
   const statusLabel = useMemo(() => {
     if (!assessment) return 'Preparing'
     switch (assessment.status) {
@@ -480,6 +546,30 @@ export default function SessionPerformancePage() {
       assessment.status === 'running' ||
       isWaitingForCompletedRunReport ||
       isWaitingForFinalAssessment)
+
+  const coachStarterMessage = useMemo(() => {
+    if (showAnalyticsLoadingScreen || assessment?.status !== 'completed') {
+      return null
+    }
+
+    return buildCoachStarterPrompt({
+      score,
+      normalizedScore,
+      objectiveMet,
+      narrativeSummary,
+      coachTips,
+      improvements,
+    })
+  }, [
+    assessment?.status,
+    coachTips,
+    improvements,
+    narrativeSummary,
+    normalizedScore,
+    objectiveMet,
+    score,
+    showAnalyticsLoadingScreen,
+  ])
 
   const loadingTitle = useMemo(() => {
     if (!assessment || loading) return 'Preparing your analytics'
@@ -1542,6 +1632,22 @@ export default function SessionPerformancePage() {
             </Alert>
           )}
       </Stack>
+      <CoachChatWidget
+        context={{
+          page: `/session/${sessionId}/performance`,
+          sessionId,
+          recentTurns: coachRecentTurns,
+        }}
+        starter={
+          coachStarterMessage
+            ? {
+                key: `post-session-coach:${assessment?.runId ?? sessionId}`,
+                message: coachStarterMessage,
+                open: true,
+              }
+            : undefined
+        }
+      />
     </Box>
   )
 }

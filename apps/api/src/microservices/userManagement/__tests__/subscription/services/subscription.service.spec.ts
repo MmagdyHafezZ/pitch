@@ -6,6 +6,7 @@ import { PlanRepository } from '../../../plans/repositories/plans.repository';
 import { CoinRefillService } from '../../../coins/services/coin-refill.service';
 import { CoinRedisService } from '../../../coins/services/coin-redis.service';
 import { CoinAccountingService } from '../../../coins/services/coin-accounting.service';
+import { PlanChangeNotificationService } from '../../../subscription/services/plan-change-notification.service';
 
 describe('SubscriptionService', () => {
   let service: SubscriptionService;
@@ -14,6 +15,7 @@ describe('SubscriptionService', () => {
   let coinRefillService: jest.Mocked<CoinRefillService>;
   let coinRedisService: jest.Mocked<CoinRedisService>;
   let coinAccountingService: jest.Mocked<CoinAccountingService>;
+  let planChangeNotificationService: jest.Mocked<PlanChangeNotificationService>;
 
   const basePlan = {
     id: 'plan-1',
@@ -64,6 +66,10 @@ describe('SubscriptionService', () => {
     planRepository = {
       findById: jest.fn(),
     } as unknown as jest.Mocked<PlanRepository>;
+    planChangeNotificationService = {
+      notifyAdminsOfRequest: jest.fn(),
+      notifyUserOfDecision: jest.fn(),
+    } as unknown as jest.Mocked<PlanChangeNotificationService>;
 
     service = new SubscriptionService(
       coinAccountingService,
@@ -71,6 +77,7 @@ describe('SubscriptionService', () => {
       coinRefillService,
       subscriptionRepository,
       planRepository,
+      planChangeNotificationService,
     );
   });
 

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import {
   Badge,
   Box,
@@ -30,7 +30,8 @@ import {
 import Link from 'next/link'
 import { api, queryClient } from '@/lib/client'
 import { useTeams } from '@/features/teams/hooks/useTeams'
-import { useCoinsBalance } from '@/features/coins/hooks/useCoinsBalance'
+import { useCoinsBalance, usePersonalCoinsBalance } from '@/features/coins/hooks/useCoinsBalance'
+import { useAuthStore } from '@/features/auth/stores/auth.store'
 
 // ── types ────────────────────────────────────────────────────────────────────
 type Plan = {
@@ -111,16 +112,25 @@ function periodPacingLabel(
 
 // ── page ─────────────────────────────────────────────────────────────────────
 export default function SubscriptionPage() {
-  const { activeTeamId, teams } = useTeams()
-  const teamBalance = useCoinsBalance(activeTeamId)
+  const user = useAuthStore((state) => state.user)
+  const setUser = useAuthStore((state) => state.setUser)
+  const { activeTeamId, teams, loading: teamsLoading, fetchUserTeams, setActiveTeamId } = useTeams()
+  const personalBalance = usePersonalCoinsBalance()
 
-  // Determine whether this is the user's personal workspace or a shared team.
-  // The frontend uses `user.id` as orgId for personal sessions; personal teams
-  // typically have a single member (the owner). We treat a team as "personal"
-  // when its membership count is exactly 1.
-  const activeTeam = teams.find((t) => t.id === activeTeamId) ?? null
-  const isPersonal = !activeTeam || !activeTeam.memberships || activeTeam.memberships.length <= 1
-  const teamDisplayName = isPersonal ? null : (activeTeam?.name ?? null)
+  // This screen is for the user's personal workspace plan. Shared-team
+  // subscriptions are managed from Team Config. Resolve the personal workspace
+  // first, then fall back to the currently selected team only if no dedicated
+  // personal workspace is available yet.
+  const personalWorkspaceTeam =
+    teams.find((team) => !team.memberships || team.memberships.length <= 1) ?? null
+  const personalWorkspaceTeamId = user?.settings?.studioAccess?.teamId ?? null
+  const subscriptionTeamId =
+    personalWorkspaceTeam?.id ?? personalWorkspaceTeamId ?? activeTeamId ?? null
+  const subscriptionTeam = teams.find((team) => team.id === subscriptionTeamId) ?? null
+  const isPersonal =
+    !subscriptionTeam || !subscriptionTeam.memberships || subscriptionTeam.memberships.length <= 1
+  const teamDisplayName = isPersonal ? null : (subscriptionTeam?.name ?? null)
+  const teamBalance = useCoinsBalance(isPersonal ? null : subscriptionTeamId)
 
   const [subscription, setSubscription] = useState<Subscription | null>(null)
   const [plans, setPlans] = useState<Plan[]>([])
@@ -133,7 +143,11 @@ export default function SubscriptionPage() {
   const [topupOpen, setTopupOpen] = useState(false)
   const [mounted, setMounted] = useState(false)
 
-  const balance = teamBalance.data?.ok ? teamBalance.data : null
+  const balance = isPersonal
+    ? (personalBalance.data ?? null)
+    : teamBalance.data?.ok
+      ? teamBalance.data
+      : null
   const currentPlan = subscription?.plan ?? plans.find((p) => p.id === subscription?.planId)
   const usedCoins = balance ? balance.allowance - balance.remaining : 0
   const usedPct =
@@ -166,19 +180,74 @@ export default function SubscriptionPage() {
 
   const barColor = usedPct >= 90 ? 'red' : usedPct >= 70 ? 'orange' : 'teal'
 
+  const syncWorkspaceContext = useCallback(
+    async (teamId: string) => {
+      if (user) {
+        setUser({
+          ...user,
+          settings: {
+            ...(user.settings ?? {}),
+            studioAccess: {
+              ...(user.settings?.studioAccess ?? {}),
+              teamId,
+            },
+          },
+        })
+      }
+
+      setActiveTeamId(teamId)
+      await fetchUserTeams()
+      await queryClient.invalidateQueries({ queryKey: ['coins'] })
+    },
+    [fetchUserTeams, setActiveTeamId, setUser, user]
+  )
+
+  const ensureSubscriptionTeamId = useCallback(async () => {
+    if (personalWorkspaceTeam?.id) {
+      return personalWorkspaceTeam.id
+    }
+
+    if (personalWorkspaceTeamId) {
+      try {
+        const refreshedTeams = await api.teams.getUserTeams()
+        const matchingTeam = refreshedTeams.find((team) => team.id === personalWorkspaceTeamId)
+        if (matchingTeam) {
+          await syncWorkspaceContext(matchingTeam.id)
+          return matchingTeam.id
+        }
+      } catch {
+        // Fall through to the fresh active-team lookup below.
+      }
+    }
+
+    const refreshedTeams = await api.teams.getUserTeams()
+    const fallbackTeam =
+      refreshedTeams.find((team) => !team.memberships || team.memberships.length <= 1) ??
+      refreshedTeams[0] ??
+      null
+
+    if (fallbackTeam) {
+      await syncWorkspaceContext(fallbackTeam.id)
+      return fallbackTeam.id
+    }
+
+    return null
+  }, [personalWorkspaceTeam?.id, personalWorkspaceTeamId, syncWorkspaceContext])
+
   useEffect(() => {
     const t = setTimeout(() => setMounted(true), 10)
     return () => clearTimeout(t)
   }, [])
 
   useEffect(() => {
-    if (!activeTeamId) return
     let active = true
     void (async () => {
       setLoadingPage(true)
       try {
         const [sub, allPlans, myRequest] = await Promise.all([
-          api.subscriptions.getByTeamId(activeTeamId).catch(() => null),
+          subscriptionTeamId
+            ? api.subscriptions.getByTeamId(subscriptionTeamId).catch(() => null)
+            : null,
           api.plans.getAll().catch(() => []),
           api.coins.myRefillRequest().catch(() => null),
         ])
@@ -195,9 +264,11 @@ export default function SubscriptionPage() {
           })
         )
         setRefillRequest(myRequest)
-        if (sub) {
-          const history = await api.coins.ledgerHistory(activeTeamId).catch(() => [])
+        if (sub && subscriptionTeamId) {
+          const history = await api.coins.ledgerHistory(subscriptionTeamId).catch(() => [])
           if (active) setLedger(history as LedgerEntry[])
+        } else if (active) {
+          setLedger([])
         }
       } finally {
         if (active) setLoadingPage(false)
@@ -206,25 +277,57 @@ export default function SubscriptionPage() {
     return () => {
       active = false
     }
-  }, [activeTeamId])
+  }, [subscriptionTeamId])
 
   const handleSwitchPlan = async (plan: Plan) => {
-    if (!subscription) return
     setSwitchingPlan(plan.id)
     try {
-      await api.subscriptions.upgrade(subscription.id, {
-        planId: plan.id,
-        interval: subscription.interval ?? 'MONTH',
-        teamId: subscription.teamId,
-      })
-      // Refresh subscription to show the pending plan change badge
-      const updated = await api.subscriptions.getByTeamId(activeTeamId!)
-      setSubscription(updated)
+      const existingTeamId = await ensureSubscriptionTeamId()
+      const requestedTeamId = existingTeamId ?? subscription?.teamId ?? user?.id
+      let nextSubscription: Subscription | null = null
+
+      if (!requestedTeamId) {
+        throw new Error('Unable to resolve a personal workspace for this account.')
+      }
+
+      if (!subscription?.id) {
+        const created = await api.subscriptions.create({
+          teamId: requestedTeamId,
+          planId: plan.id,
+          interval: 'MONTH',
+        })
+        const createdTeamId = created?.teamId ?? requestedTeamId
+        await syncWorkspaceContext(createdTeamId)
+        nextSubscription = await api.subscriptions.getByTeamId(createdTeamId)
+      } else {
+        const upgradeResult = await api.subscriptions.upgrade(subscription.id, {
+          planId: plan.id,
+          interval: subscription.interval ?? 'MONTH',
+          teamId: requestedTeamId,
+        })
+        await syncWorkspaceContext(requestedTeamId)
+        nextSubscription =
+          upgradeResult?.metadata?.pendingPlanChange != null
+            ? upgradeResult
+            : await api.subscriptions.getByTeamId(requestedTeamId)
+      }
+
+      setSubscription(nextSubscription)
+      const changeQueued = nextSubscription?.metadata?.pendingPlanChange != null
+
       notifications.show({
-        title: 'Plan change requested',
-        message: `Your request to switch to ${plan.name} is pending admin review.`,
+        title: !subscription?.id
+          ? 'Plan selected'
+          : changeQueued
+            ? 'Plan change requested'
+            : 'Plan updated',
+        message: !subscription?.id
+          ? `${plan.name} is now active for your personal workspace.`
+          : changeQueued
+            ? `Your request to switch to ${plan.name} is pending admin review.`
+            : `${plan.name} is now active for your personal workspace.`,
         color: 'blue',
-        icon: <IconClock size={16} />,
+        icon: subscription?.id && changeQueued ? <IconClock size={16} /> : <IconCheck size={16} />,
       })
     } catch (err) {
       notifications.show({
@@ -238,10 +341,13 @@ export default function SubscriptionPage() {
   }
 
   const handleRefillRequest = async () => {
-    if (!activeTeamId) return
     setSubmittingRefill(true)
     try {
-      const result = await api.coins.refillRequest({ requestedCoins, teamId: activeTeamId })
+      const teamId = (await ensureSubscriptionTeamId()) ?? subscription?.teamId ?? null
+      if (!teamId) {
+        throw new Error('Choose a plan first to activate your personal workspace.')
+      }
+      const result = await api.coins.refillRequest({ requestedCoins, teamId })
       setRefillRequest(result)
       setTopupOpen(false)
       notifications.show({
@@ -261,7 +367,7 @@ export default function SubscriptionPage() {
     }
   }
 
-  if (loadingPage) {
+  if (teamsLoading || loadingPage) {
     return (
       <Stack align="center" justify="center" h={320}>
         <Loader size="md" color="var(--pitch-accent-strong)" />
@@ -803,7 +909,7 @@ export default function SubscriptionPage() {
                           fullWidth
                           mt="auto"
                           loading={switchingPlan === plan.id}
-                          disabled={hasPendingChange}
+                          disabled={hasPendingChange || !user?.id}
                           rightSection={<IconBolt size={11} />}
                           onClick={() => handleSwitchPlan(plan)}
                           style={{ marginTop: 8 }}
