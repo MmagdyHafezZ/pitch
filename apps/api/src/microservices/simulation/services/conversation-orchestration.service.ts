@@ -8,7 +8,9 @@ import { AssessmentService } from '../assessment/assessment.service';
 import { SimulationRedisService } from './redis/redis.service';
 import {
   buildConversationFallbackResponse,
+  buildConversationStarterPrompt,
   buildConversationSystemPrompt,
+  ensureStarterGreetingWithUserName,
   isDisallowedGenericFallbackReply,
 } from '../prompts/conversation.prompt';
 import {
@@ -449,6 +451,12 @@ export class ConversationOrchestrationService {
       visualContext: payload.visualContext,
       moodContext,
     });
+    const defaultStarterPrompt = buildConversationStarterPrompt({
+      persona: personaData,
+      session,
+      sessionConfig,
+      scenarioConfig,
+    });
 
     const historyForPrompt = startAsAssistant
       ? historyMessages.filter((m) => m.role === 'user')
@@ -484,7 +492,7 @@ export class ConversationOrchestrationService {
         content:
           starterPrompt && starterPrompt.length > 0
             ? starterPrompt
-            : 'Start the conversation by greeting the user and setting the scene.',
+            : defaultStarterPrompt,
       });
     }
 
@@ -657,6 +665,10 @@ export class ConversationOrchestrationService {
         sessionConfig,
         scenarioConfig,
       });
+    }
+
+    if (addStarterPrompt) {
+      fullText = ensureStarterGreetingWithUserName(fullText, sessionConfig);
     }
 
     requestState.fullText = fullText;

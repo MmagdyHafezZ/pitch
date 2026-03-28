@@ -66,12 +66,12 @@ export const resolveTtsConfig = ({
   return {
     provider:
       override?.provider ??
-      personaVoice.provider ??
       sessionVoice.provider ??
+      personaVoice.provider ??
       defaultProvider,
-    voice: override?.voice ?? personaVoice.voice ?? sessionVoice.voice,
+    voice: override?.voice ?? sessionVoice.voice ?? personaVoice.voice,
     language:
-      override?.language ?? personaVoice.language ?? sessionVoice.language,
-    model: override?.model ?? personaVoice.model ?? sessionVoice.model,
+      override?.language ?? sessionVoice.language ?? personaVoice.language,
+    model: override?.model ?? sessionVoice.model ?? personaVoice.model,
   };
 };

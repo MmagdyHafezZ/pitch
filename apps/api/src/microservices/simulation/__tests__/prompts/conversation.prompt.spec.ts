@@ -1,6 +1,8 @@
 import {
   buildConversationFallbackResponse,
+  buildConversationStarterPrompt,
   buildConversationSystemPrompt,
+  ensureStarterGreetingWithUserName,
   isDisallowedGenericFallbackReply,
   type ConversationPromptInput,
 } from '../../prompts/conversation.prompt';
@@ -231,15 +233,103 @@ describe('buildConversationSystemPrompt', () => {
         name: 'Arden',
         traits: { role: 'IBM Procurement Reviewer' },
       },
-      sessionConfig: {},
+      sessionConfig: {
+        userSnapshot: {
+          name: 'Magdy',
+        },
+        userRole: 'Sales Representative',
+      },
       scenarioConfig: {
         objective:
           'Confirm a credible implementation timeline and close architecture risks.',
+        context:
+          'You are presenting a rollout plan to an enterprise procurement lead.',
       },
     });
 
-    expect(response).toContain('As IBM Procurement Reviewer,');
-    expect(response).toContain('Give me specifics, not a high-level pitch.');
+    expect(response).toContain('Hi Magdy, welcome to Pitch.');
+    expect(response).toContain(
+      "I'm IBM Procurement Reviewer for this simulation.",
+    );
+    expect(response).toContain(
+      'This scenario has you working as Sales Representative',
+    );
+    expect(response).toContain("Let's begin: as IBM Procurement Reviewer");
+  });
+
+  it('builds a first-turn starter prompt that greets the user by name and introduces Pitch', () => {
+    const prompt = buildConversationStarterPrompt(
+      makeInput(
+        undefined,
+        {
+          userSnapshot: {
+            name: 'Magdy',
+          },
+          userRole: 'Sales Representative',
+        },
+        {
+          scenario: {
+            id: 'scenario_1',
+            name: 'Enterprise Security Rollout',
+            description:
+              'Present the rollout plan and address enterprise risk.',
+          },
+        },
+        {
+          name: 'Arden',
+          traits: { role: 'IBM Procurement Reviewer' },
+        },
+        {
+          objective:
+            'Confirm a credible implementation timeline and close architecture risks.',
+          context:
+            'You are meeting an enterprise procurement lead who is skeptical about rollout risk.',
+        },
+      ),
+    );
+
+    expect(prompt).toContain('Open with the exact greeting "Hi Magdy,"');
+    expect(prompt).toContain(
+      'give a short introduction to Pitch as the app hosting this practice simulation',
+    );
+    expect(prompt).toContain(
+      'Mention that you are playing IBM Procurement Reviewer.',
+    );
+    expect(prompt).toContain(
+      'Mention that the user is playing Sales Representative.',
+    );
+    expect(prompt).toContain(
+      'Mention the scenario title: Enterprise Security Rollout.',
+    );
+  });
+
+  it('forces the first-turn greeting to include the user name when the model omits it', () => {
+    expect(
+      ensureStarterGreetingWithUserName('Hello, welcome to Pitch.', {
+        userSnapshot: {
+          name: 'Magdy',
+        },
+      }),
+    ).toBe('Hi Magdy, welcome to Pitch.');
+
+    expect(
+      ensureStarterGreetingWithUserName(
+        'I am your procurement reviewer for this simulation.',
+        {
+          userSnapshot: {
+            name: 'Magdy',
+          },
+        },
+      ),
+    ).toBe('Hi Magdy, I am your procurement reviewer for this simulation.');
+
+    expect(
+      ensureStarterGreetingWithUserName('Hi Magdy, welcome to Pitch.', {
+        userSnapshot: {
+          name: 'Magdy',
+        },
+      }),
+    ).toBe('Hi Magdy, welcome to Pitch.');
   });
 
   it('flags the legacy generic clarification fallback as disallowed', () => {

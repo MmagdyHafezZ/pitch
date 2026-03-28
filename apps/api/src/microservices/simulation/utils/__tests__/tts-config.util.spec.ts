@@ -20,7 +20,7 @@ describe('tts-config utility', () => {
     });
   });
 
-  it('prefers overrides, then persona traits, then session config', () => {
+  it('prefers overrides, then session config, then persona traits', () => {
     expect(
       resolveTtsConfig({
         sessionConfig: {
@@ -46,8 +46,31 @@ describe('tts-config utility', () => {
     ).toEqual({
       provider: 'openai',
       voice: 'sage',
-      language: 'en-US',
+      language: 'en-GB',
       model: 'tts-1-hd',
+    });
+  });
+
+  it('uses the session TTS provider over the persona voice provider when the user picked one', () => {
+    expect(
+      resolveTtsConfig({
+        sessionConfig: {
+          ttsProvider: 'elevenlabs',
+          ttsVoice: 'Rachel',
+        },
+        personaTraits: {
+          voice: {
+            provider: 'melotts',
+            voiceName: 'en - English',
+            language: 'en',
+          },
+        },
+      }),
+    ).toEqual({
+      provider: 'elevenlabs',
+      voice: 'Rachel',
+      language: 'en',
+      model: undefined,
     });
   });
 

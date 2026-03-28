@@ -17,7 +17,9 @@ import { Observable, Subject } from 'rxjs';
 import { StreamEvent, TextStreamChunk } from '../dto/text-stream.dto';
 import {
   buildConversationFallbackResponse,
+  buildConversationStarterPrompt,
   buildConversationSystemPrompt,
+  ensureStarterGreetingWithUserName,
   isDisallowedGenericFallbackReply,
 } from '../prompts/conversation.prompt';
 import { resolveTtsConfig } from '../utils/tts-config';
@@ -140,6 +142,7 @@ export class ConversationController {
       const sessionId = envelope.sessionId;
       const userId = envelope.userId;
       const startAsAssistant = payload.startAsAssistant === true;
+      const starterPrompt = payload.starterPrompt?.trim();
 
       if (!sessionId || !userId) {
         throw new Error('sessionId and userId are required');
@@ -262,6 +265,12 @@ export class ConversationController {
           scenarioConfig,
         }),
       };
+      const defaultStarterPrompt = buildConversationStarterPrompt({
+        persona: personaData,
+        session,
+        sessionConfig,
+        scenarioConfig,
+      });
       const systemPromptForLog =
         typeof systemMessage.content === 'string'
           ? systemMessage.content
@@ -302,7 +311,9 @@ export class ConversationController {
         messages.push({
           role: 'user',
           content:
-            'Start the conversation by greeting the user and setting the scene.',
+            starterPrompt && starterPrompt.length > 0
+              ? starterPrompt
+              : defaultStarterPrompt,
         });
       }
 
@@ -371,6 +382,9 @@ export class ConversationController {
           sessionConfig,
           scenarioConfig,
         });
+      }
+      if (addStarterPrompt) {
+        fullText = ensureStarterGreetingWithUserName(fullText, sessionConfig);
       }
 
       // Save assistant turn
@@ -676,6 +690,7 @@ export class ConversationController {
       const sessionId = envelope.sessionId;
       const userId = envelope.userId;
       const startAsAssistant = payload.startAsAssistant === true;
+      const starterPrompt = payload.starterPrompt?.trim();
 
       if (!sessionId) {
         throw new Error('sessionId is required');
@@ -832,6 +847,12 @@ export class ConversationController {
           scenarioConfig,
         }),
       };
+      const defaultStarterPrompt = buildConversationStarterPrompt({
+        persona: personaData,
+        session,
+        sessionConfig,
+        scenarioConfig,
+      });
 
       const historyForPrompt = startAsAssistant
         ? historyMessages.filter((msg) => msg.role === 'user')
@@ -866,7 +887,9 @@ export class ConversationController {
         messages.push({
           role: 'user',
           content:
-            'Start the conversation by greeting the user and setting the scene.',
+            starterPrompt && starterPrompt.length > 0
+              ? starterPrompt
+              : defaultStarterPrompt,
         });
       }
 
@@ -925,6 +948,12 @@ export class ConversationController {
           sessionConfig,
           scenarioConfig,
         });
+      }
+      if (addStarterPrompt) {
+        responseText = ensureStarterGreetingWithUserName(
+          responseText,
+          sessionConfig,
+        );
       }
 
       const assistantOrder = startAsAssistant ? nextOrder : nextOrder + 1;

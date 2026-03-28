@@ -208,6 +208,94 @@ export function buildConversationSystemPrompt(
   return sections.join('\n');
 }
 
+export function buildConversationStarterPrompt(
+  input: ConversationPromptInput,
+): string {
+  const scenarioSessionConfig = isRecord(input.scenarioConfig.sessionConfig)
+    ? input.scenarioConfig.sessionConfig
+    : {};
+  const effectiveSessionConfig = {
+    ...scenarioSessionConfig,
+    ...input.sessionConfig,
+  } as SessionConfig;
+  const roleContext = resolveRoleContext(
+    input.scenarioConfig,
+    input.persona?.id,
+    effectiveSessionConfig,
+  );
+  const counterpartProfile = isRecord(effectiveSessionConfig.counterpartProfile)
+    ? effectiveSessionConfig.counterpartProfile
+    : {};
+  const personaTraits = {
+    ...counterpartProfile,
+    ...(isRecord(input.persona?.traits) ? input.persona.traits : {}),
+  };
+  const aiRole =
+    roleContext.aiRole ??
+    pickString(counterpartProfile.role) ??
+    pickString(personaTraits.role) ??
+    pickString(input.persona?.name) ??
+    'the counterpart';
+  const userRole = roleContext.userRole ?? 'the participant';
+  const userSnapshot = effectiveSessionConfig.userSnapshot as
+    | Record<string, unknown>
+    | undefined;
+  const userName = pickString(userSnapshot?.name);
+  const scenarioSummary = buildStarterScenarioSummary(
+    input.session,
+    input.scenarioConfig,
+    effectiveSessionConfig,
+    aiRole,
+    userRole,
+  );
+
+  return [
+    'This is the very first turn of a newly started simulation session.',
+    userName
+      ? `Open with the exact greeting "Hi ${userName}," before anything else.`
+      : 'Open with a warm "Hi" greeting before anything else.',
+    'In the next sentence, give a short introduction to Pitch as the app hosting this practice simulation.',
+    scenarioSummary
+      ? `Then explain the scenario briefly in plain language. ${scenarioSummary}`
+      : 'Then explain the scenario briefly in plain language so the user understands who they are speaking with and what they need to do.',
+    `After that short introduction, fully transition into character as ${aiRole} and continue the live scenario.`,
+    'Lead with one concrete concern, decision, or question from your role so the conversation starts immediately.',
+    'Keep the full opening natural, concise, and under 5 sentences.',
+  ].join(' ');
+}
+
+export function ensureStarterGreetingWithUserName(
+  text: string,
+  sessionConfig: SessionConfig,
+): string {
+  const userSnapshot = sessionConfig.userSnapshot as
+    | Record<string, unknown>
+    | undefined;
+  const userName = pickString(userSnapshot?.name);
+  const trimmed = text.trim();
+
+  if (!userName || !trimmed) {
+    return text;
+  }
+
+  const escapedUserName = escapeRegExp(userName);
+  const namedGreetingPattern = new RegExp(
+    `^(?:hi|hello|hey|good morning|good afternoon|good evening)\\s+${escapedUserName}\\b`,
+    'i',
+  );
+  if (namedGreetingPattern.test(trimmed)) {
+    return trimmed;
+  }
+
+  const genericGreetingPattern =
+    /^(?:hi|hello|hey|good morning|good afternoon|good evening)(?:\s+(?:there|everyone|team|folks|friend))?(?:[,\s!.:-]+)/i;
+  if (genericGreetingPattern.test(trimmed)) {
+    return `Hi ${userName}, ${trimmed.replace(genericGreetingPattern, '')}`.trim();
+  }
+
+  return `Hi ${userName}, ${trimmed}`;
+}
+
 export function buildConversationFallbackResponse(
   input: ConversationFallbackInput,
 ): string {
@@ -223,6 +311,11 @@ export function buildConversationFallbackResponse(
     roleContext.aiRole ??
     pickString(personaTraits.role) ??
     pickString(input.persona?.name);
+  const userRole = roleContext.userRole ?? 'the participant';
+  const userSnapshot = input.sessionConfig.userSnapshot as
+    | Record<string, unknown>
+    | undefined;
+  const userName = pickString(userSnapshot?.name);
   const objective = clipForFallback(pickString(input.scenarioConfig.objective));
   const context = clipForFallback(
     pickString(input.scenarioConfig.context) ??
@@ -230,14 +323,21 @@ export function buildConversationFallbackResponse(
   );
 
   if (input.startAsAssistant) {
-    const rolePrefix = aiRole ? `As ${aiRole},` : 'In this conversation,';
-    if (context) {
-      return `${rolePrefix} I want to get straight to the real issue: ${context} Start with one concrete point, risk, metric, or next step so I can evaluate it.`;
-    }
-    if (objective) {
-      return `${rolePrefix} I need a concrete answer tied to ${objective}. Give me specifics, not a high-level pitch.`;
-    }
-    return `${rolePrefix} give me one concrete point, risk, number, or next step so we can move the conversation forward.`;
+    const greeting = userName
+      ? `Hi ${userName}, welcome to Pitch.`
+      : 'Hi, welcome to Pitch.';
+    const roleIntro = aiRole
+      ? `I'm ${aiRole} for this simulation.`
+      : 'I am your counterpart for this simulation.';
+    const scenarioIntro =
+      context || objective
+        ? `This scenario has you working as ${userRole}${objective ? ` with the goal to ${objective}` : ''}${context ? `. Context: ${context}` : '.'}`
+        : `This scenario has you working as ${userRole}.`;
+    const transition = aiRole
+      ? `Let's begin: as ${aiRole}, I need one concrete point, risk, number, or next step from you so we can move forward.`
+      : "Let's begin: give me one concrete point, risk, number, or next step so we can move the conversation forward.";
+
+    return `${greeting} ${roleIntro} ${scenarioIntro} ${transition}`;
   }
 
   const rolePrefix = aiRole ? `As ${aiRole},` : 'In this roleplay,';
@@ -256,6 +356,48 @@ export function isDisallowedGenericFallbackReply(
 }
 
 // ── Section builders ─────────────────────────────────────────────────────────
+
+function buildStarterScenarioSummary(
+  session: ConversationPromptInput['session'],
+  scenarioConfig: ScenarioConfig,
+  sessionConfig: SessionConfig,
+  aiRole: string,
+  userRole: string,
+): string {
+  const scenarioFromSessionConfig = isRecord(sessionConfig.scenario)
+    ? sessionConfig.scenario
+    : {};
+  const title =
+    pickString(session.scenario?.name) ??
+    pickString(scenarioFromSessionConfig.topic) ??
+    pickString(scenarioFromSessionConfig.name);
+  const objective = reframeUserPerspective(
+    pickString(scenarioConfig.objective) ??
+      pickString(scenarioFromSessionConfig.objective),
+    userRole,
+  );
+  const context = reframeUserPerspective(
+    pickString(scenarioConfig.context) ??
+      pickString(scenarioConfig.background) ??
+      pickString(scenarioFromSessionConfig.context) ??
+      pickString(scenarioFromSessionConfig.background),
+    userRole,
+  );
+
+  return [
+    `Mention that the user is playing ${userRole}.`,
+    `Mention that you are playing ${aiRole}.`,
+    title ? `Mention the scenario title: ${title}.` : '',
+    objective ? `Mention the user's goal: ${objective}.` : '',
+    context ? `Mention the relevant context: ${context}.` : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
 
 function buildCustomInstructionsSection(
   systemPrompt?: string,
