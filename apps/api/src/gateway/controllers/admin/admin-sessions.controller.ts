@@ -11,25 +11,11 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
 import { catchError, timeout } from 'rxjs/operators';
 import { throwError } from 'rxjs';
 import { CheckSystemAdmin } from '../../guards/check-system-admin.guard';
 import { SIMULATION_SERVICE_PATTERNS } from '@pitch/shared-backend/interfaces/message-patterns.interface';
 import { normalizeError } from '@pitch/shared-backend/helpers/exceptions';
-import {
-  IEventLog,
-  EventLogModel,
-} from '../../../microservices/simulation/schemas/mongodb/event-log.schema';
-import {
-  IEnrichedTranscript,
-  EnrichedTranscriptModel,
-} from '../../../microservices/simulation/schemas/mongodb/enriched-transcript.schema';
-import {
-  ILLMTrace,
-  LLMTraceModel,
-} from '../../../microservices/simulation/schemas/mongodb/llm-trace.schema';
 
 @Controller({ path: 'admin/sessions', version: '1' })
 @UseGuards(CheckSystemAdmin)
@@ -37,12 +23,6 @@ export class AdminSessionsController {
   constructor(
     @Inject('SIMULATION_SERVICE')
     private readonly simulationService: ClientProxy,
-    @InjectModel(EventLogModel, 'gateway')
-    private readonly eventLogModel: Model<IEventLog>,
-    @InjectModel(EnrichedTranscriptModel, 'gateway')
-    private readonly transcriptModel: Model<IEnrichedTranscript>,
-    @InjectModel(LLMTraceModel, 'gateway')
-    private readonly llmTraceModel: Model<ILLMTrace>,
   ) {}
 
   @Get()
@@ -98,63 +78,78 @@ export class AdminSessionsController {
   }
 
   @Get(':id/events')
-  async getSessionEvents(
+  getSessionEvents(
     @Param('id') id: string,
     @Query('limit') limit?: string,
     @Query('offset') offset?: string,
   ) {
-    const lim = limit ? parseInt(limit, 10) : 100;
-    const skip = offset ? parseInt(offset, 10) : 0;
-
-    const [events, total] = await Promise.all([
-      this.eventLogModel
-        .find({ iterationId: id })
-        .sort({ createdAt: 1 })
-        .skip(skip)
-        .limit(lim)
-        .lean()
-        .exec(),
-      this.eventLogModel.countDocuments({ iterationId: id }).exec(),
-    ]);
-
-    return { events, total };
+    return this.simulationService
+      .send(SIMULATION_SERVICE_PATTERNS.ADMIN_GET_SESSION_EVENTS, {
+        iterationId: id,
+        limit: limit ? parseInt(limit, 10) : 100,
+        skip: offset ? parseInt(offset, 10) : 0,
+      })
+      .pipe(
+        timeout(10000),
+        catchError((err: unknown) => {
+          const error = normalizeError(err);
+          return throwError(
+            () =>
+              new HttpException(
+                error.message ?? 'Failed to get session events',
+                error.status ?? HttpStatus.INTERNAL_SERVER_ERROR,
+              ),
+          );
+        }),
+      );
   }
 
   @Get(':id/transcript')
-  async getSessionTranscript(@Param('id') id: string) {
-    const transcript = await this.transcriptModel
-      .findOne({ iterationId: id })
-      .lean()
-      .exec();
-
-    if (!transcript) {
-      throw new HttpException('Transcript not found', HttpStatus.NOT_FOUND);
-    }
-
-    return transcript;
+  getSessionTranscript(@Param('id') id: string) {
+    return this.simulationService
+      .send(SIMULATION_SERVICE_PATTERNS.ADMIN_GET_SESSION_TRANSCRIPT, {
+        iterationId: id,
+      })
+      .pipe(
+        timeout(10000),
+        catchError((err: unknown) => {
+          const error = normalizeError(err);
+          return throwError(
+            () =>
+              new HttpException(
+                error.message ?? 'Transcript not found',
+                error.status ?? HttpStatus.NOT_FOUND,
+              ),
+          );
+        }),
+      );
   }
 
   @Get(':id/llm-calls')
-  async getSessionLlmCalls(
+  getSessionLlmCalls(
     @Param('id') id: string,
     @Query('limit') limit?: string,
     @Query('offset') offset?: string,
   ) {
-    const lim = limit ? parseInt(limit, 10) : 50;
-    const skip = offset ? parseInt(offset, 10) : 0;
-
-    const [traces, total] = await Promise.all([
-      this.llmTraceModel
-        .find({ iterationId: id })
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(lim)
-        .lean()
-        .exec(),
-      this.llmTraceModel.countDocuments({ iterationId: id }).exec(),
-    ]);
-
-    return { traces, total };
+    return this.simulationService
+      .send(SIMULATION_SERVICE_PATTERNS.ADMIN_GET_SESSION_LLM_CALLS, {
+        iterationId: id,
+        limit: limit ? parseInt(limit, 10) : 50,
+        skip: offset ? parseInt(offset, 10) : 0,
+      })
+      .pipe(
+        timeout(10000),
+        catchError((err: unknown) => {
+          const error = normalizeError(err);
+          return throwError(
+            () =>
+              new HttpException(
+                error.message ?? 'Failed to get LLM calls',
+                error.status ?? HttpStatus.INTERNAL_SERVER_ERROR,
+              ),
+          );
+        }),
+      );
   }
 
   @Post(':id/force-end')

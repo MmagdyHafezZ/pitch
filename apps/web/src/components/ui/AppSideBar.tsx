@@ -150,31 +150,31 @@ export function AppSidebar({
                 }}
               />
             ))}
+            {isAdmin === true && (
+              <>
+                <Divider my="xs" color="var(--pitch-nav-text-dim)" />
+                <NavLink
+                  onClick={() => {
+                    router.push('/admin')
+                    onNavigate?.()
+                  }}
+                  leftSection={<IconShield size={18} />}
+                  label={
+                    <Text size="sm" className={classes.navLabel}>
+                      Admin
+                    </Text>
+                  }
+                  variant="subtle"
+                  classNames={{
+                    root: classes.navLink,
+                    section: classes.navSection,
+                    body: classes.navBody,
+                    label: classes.navLabel,
+                  }}
+                />
+              </>
+            )}
             <Box mt="auto" pt="lg" mx="0" pb={10} style={{ width: '100%' }}>
-              {isAdmin === true && (
-                <>
-                  <Divider my="xs" color="var(--pitch-nav-text-dim)" />
-                  <NavLink
-                    onClick={() => {
-                      router.push('/admin')
-                      onNavigate?.()
-                    }}
-                    leftSection={<IconShield size={18} />}
-                    label={
-                      <Text size="sm" className={classes.navLabel}>
-                        Admin
-                      </Text>
-                    }
-                    variant="subtle"
-                    classNames={{
-                      root: classes.navLink,
-                      section: classes.navSection,
-                      body: classes.navBody,
-                      label: classes.navLabel,
-                    }}
-                  />
-                </>
-              )}
               <Box
                 style={{
                   background: `linear-gradient(

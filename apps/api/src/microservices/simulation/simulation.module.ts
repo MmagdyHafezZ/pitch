@@ -16,6 +16,8 @@ import { HintsController } from './controllers/hints.controller';
 import { TimelineController } from './controllers/timeline.controller';
 import { ChallengeController } from './controllers/challenge.controller';
 import { CalendarSessionController } from './controllers/calendar-session.controller';
+import { AdminSessionQueryRpc } from './admin/admin-session-query.rpc';
+import { AdminSessionQueryService } from './admin/admin-session-query.service';
 import { CalendarSessionService } from './services/calendar-session.service';
 import { SimulationPrismaService } from './prisma/simulation-prisma.service';
 import { MongoConnectionService } from './services/mongo/mongo-connection.service';
@@ -122,6 +124,7 @@ import {
     TimelineController,
     ChallengeController,
     CalendarSessionController,
+    AdminSessionQueryRpc,
   ],
   providers: [
     SimulationPrismaService,
@@ -174,6 +177,7 @@ import {
     CalendarSessionService,
     CoinGatingService,
     CoinEstimationService,
+    AdminSessionQueryService,
   ],
   exports: [
     PhoneModule,
