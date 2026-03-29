@@ -10,7 +10,7 @@ import { SimulationModule } from './simulation.module';
 import { MicroserviceExceptionFilter } from '@pitch/shared-backend/filters/microservice-exception.filter';
 import { PrismaClientExceptionFilter } from '@pitch/shared-backend/filters/prisma-exception.filter';
 import { RpcExceptionLoggingFilter } from '@pitch/shared-backend/filters/rpc-exception.filter';
-import { getRabbitMQUrl } from './config/rabbitmq.config';
+import { getRabbitMQUrls } from './config/rabbitmq.config';
 
 async function bootstrap() {
   const logger = new Logger('SimulationMicroservice');
@@ -26,7 +26,7 @@ async function bootstrap() {
   const microservice = app.connectMicroservice<MicroserviceOptions>({
     transport: Transport.RMQ,
     options: {
-      urls: [getRabbitMQUrl()],
+      urls: getRabbitMQUrls(),
       queue: 'simulation_queue',
       queueOptions: {
         durable: true,

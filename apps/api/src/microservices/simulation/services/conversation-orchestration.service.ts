@@ -1280,7 +1280,12 @@ export class ConversationOrchestrationService {
       if (!this.isCancelled(requestState, subscriber) && !subscriber.closed) {
         subscriber.next({
           type: 'audio_sentence',
-          data: { sentenceIndex: idx, audio: audioBuffer, contentType },
+          data: {
+            sentenceIndex: idx,
+            audio: audioBuffer,
+            contentType,
+            sentenceText: text,
+          },
         });
       }
     } catch (err) {
@@ -1303,6 +1308,7 @@ export class ConversationOrchestrationService {
                 sentenceIndex: idx,
                 audio: fallback.audioBuffer,
                 contentType: fallback.contentType,
+                sentenceText: text,
               },
             });
           }

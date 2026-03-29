@@ -39,6 +39,7 @@ interface ConversationMessage {
 interface QueuedAudioChunk {
   audio: ArrayBuffer
   contentType: string
+  sentenceText?: string
 }
 
 interface UseConversationOptions {
@@ -84,7 +85,7 @@ export function useConversation(options: UseConversationOptions) {
 
   const currentRequestIdRef = useRef<string | null>(null)
   const currentAudioRef = useRef<HTMLAudioElement | null>(null)
-  const pendingAudioUrlRef = useRef<string | null>(null)
+  const pendingPlaybackRef = useRef<{ audioUrl: string; onEnded?: () => void } | null>(null)
   const onErrorRef = useRef(onError)
   const onExternalAudioChunkRef = useRef(onExternalAudioChunk)
   const onExternalAudioStopRef = useRef(onExternalAudioStop)
@@ -100,6 +101,9 @@ export function useConversation(options: UseConversationOptions) {
   const audioQueueVersionRef = useRef(0)
   // Set once the 'completed' event arrives so gap detection can skip failed sentences
   const totalSentencesRef = useRef<number | null>(null)
+  // Text/audio sync: maps sentenceIndex → sentence text; ttsActiveRef gates delta updates
+  const sentenceTextsRef = useRef<Map<number, string>>(new Map())
+  const ttsActiveRef = useRef(false)
 
   useEffect(() => {
     onErrorRef.current = onError
@@ -116,6 +120,22 @@ export function useConversation(options: UseConversationOptions) {
   useEffect(() => {
     messagesRef.current = messages
   }, [messages])
+
+  const upsertAssistantMessage = useCallback(
+    (requestId: string, updater: (current?: ConversationMessage) => ConversationMessage) => {
+      setMessages((prev) => {
+        const index = prev.findIndex((msg) => msg.id === requestId)
+        if (index === -1) {
+          return [...prev, updater()]
+        }
+        const updated = [...prev]
+        updated[index] = updater(updated[index])
+        return updated
+      })
+    },
+    []
+  )
+
   const playAudio = useCallback(async (audioUrl: string, onEnded?: () => void) => {
     try {
       // Stop any currently playing audio first
@@ -158,13 +178,16 @@ export function useConversation(options: UseConversationOptions) {
       }
 
       await newAudio.play()
-      pendingAudioUrlRef.current = null
+      pendingPlaybackRef.current = null
       setError((previousError) =>
         previousError === AUDIO_AUTOPLAY_BLOCKED_ERROR ? null : previousError
       )
     } catch (err) {
       if (err instanceof DOMException && err.name === 'NotAllowedError') {
-        pendingAudioUrlRef.current = audioUrl
+        // Freeze the queue at the current sentence: do NOT call onEnded (which would
+        // advance the queue and revoke the blob URL). Store everything needed to
+        // resume from this exact position once the user provides a gesture.
+        pendingPlaybackRef.current = { audioUrl, onEnded }
         setError(AUDIO_AUTOPLAY_BLOCKED_ERROR)
         onErrorRef.current?.(AUDIO_AUTOPLAY_BLOCKED_ERROR)
       } else {
@@ -172,9 +195,9 @@ export function useConversation(options: UseConversationOptions) {
           err instanceof Error ? `Failed to play audio: ${err.message}` : 'Failed to play audio'
         setError(errorMsg)
         onErrorRef.current?.(errorMsg)
+        setIsAudioPlaying(false)
+        onEnded?.()
       }
-      setIsAudioPlaying(false)
-      onEnded?.()
     }
   }, [])
 
@@ -190,7 +213,7 @@ export function useConversation(options: UseConversationOptions) {
       setCurrentAudioUrl(null)
       setIsAudioPlaying(false)
     }
-    pendingAudioUrlRef.current = null
+    pendingPlaybackRef.current = null
     onExternalAudioStopRef.current?.()
   }, [])
 
@@ -200,6 +223,9 @@ export function useConversation(options: UseConversationOptions) {
     nextPlayIndexRef.current = 0
     totalSentencesRef.current = null
     isPlayingChunkRef.current = false
+    pendingPlaybackRef.current = null
+    sentenceTextsRef.current.clear()
+    ttsActiveRef.current = false
   }, [])
 
   const tryPlayNext = useCallback(() => {
@@ -265,6 +291,28 @@ export function useConversation(options: UseConversationOptions) {
     const audioBlob = new Blob([queuedChunk.audio], { type: queuedChunk.contentType })
     const audioUrl = URL.createObjectURL(audioBlob)
     setCurrentAudioUrl(audioUrl) // expose URL so the replay button always reflects current sentence
+
+    // Reveal accumulated text up to and including this sentence
+    if (ttsActiveRef.current && currentRequestIdRef.current) {
+      const accumulatedText = Array.from(
+        { length: idx + 1 },
+        (_, i) => sentenceTextsRef.current.get(i) ?? ''
+      )
+        .filter(Boolean)
+        .join(' ')
+      if (accumulatedText) {
+        const reqId = currentRequestIdRef.current
+        upsertAssistantMessage(reqId, (current) => ({
+          id: reqId,
+          role: 'assistant',
+          text: accumulatedText,
+          timestamp: current?.timestamp ?? new Date(),
+          usage: current?.usage,
+          audioUrl: current?.audioUrl,
+        }))
+      }
+    }
+
     void playAudio(audioUrl, () => {
       if (audioQueueVersionRef.current !== playbackVersion) {
         isPlayingChunkRef.current = false
@@ -279,7 +327,7 @@ export function useConversation(options: UseConversationOptions) {
       isPlayingChunkRef.current = false
       tryPlayNext()
     })
-  }, [audioOutput, playAudio])
+  }, [audioOutput, playAudio, upsertAssistantMessage])
 
   const disconnect = useCallback(() => {
     // Cancel any scheduled reconnect timer and reset the attempt counter so
@@ -331,21 +379,6 @@ export function useConversation(options: UseConversationOptions) {
     conversationService.offConversationHangupRequested()
     conversationService.offConversationToolExecuted()
 
-    const upsertAssistantMessage = (
-      requestId: string,
-      updater: (current?: ConversationMessage) => ConversationMessage
-    ) => {
-      setMessages((prev) => {
-        const index = prev.findIndex((msg) => msg.id === requestId)
-        if (index === -1) {
-          return [...prev, updater()]
-        }
-        const updated = [...prev]
-        updated[index] = updater(updated[index])
-        return updated
-      })
-    }
-
     conversationService.onConversationText((data: WsEnvelope<ConversationTextPayload>) => {
       if (isHungUpRef.current) return
       if (data.requestId !== currentRequestIdRef.current) return
@@ -364,6 +397,9 @@ export function useConversation(options: UseConversationOptions) {
       (data: WsEnvelope<ConversationStreamDeltaPayload>) => {
         if (isHungUpRef.current) return
         if (data.requestId !== currentRequestIdRef.current) return
+        // When TTS is active, text is revealed sentence-by-sentence in tryPlayNext.
+        // Skip delta updates so text doesn't race ahead of audio.
+        if (ttsActiveRef.current) return
 
         upsertAssistantMessage(data.requestId, (current) => ({
           id: data.requestId,
@@ -435,10 +471,16 @@ export function useConversation(options: UseConversationOptions) {
         if (isHungUpRef.current) return
         if (envelope.requestId !== currentRequestIdRef.current) return
 
-        const { sentenceIndex, audio, contentType } = envelope.payload
+        const { sentenceIndex, audio, contentType, sentenceText } = envelope.payload
+        // First audio chunk activates TTS-controlled text reveal
+        ttsActiveRef.current = true
+        if (sentenceText) {
+          sentenceTextsRef.current.set(sentenceIndex, sentenceText)
+        }
         audioQueueRef.current.set(sentenceIndex, {
           audio: normalizeAudioChunk(audio),
           contentType,
+          sentenceText,
         })
         tryPlayNext()
       }
@@ -506,7 +548,7 @@ export function useConversation(options: UseConversationOptions) {
         })
       }
     )
-  }, [playAudio, stopAudio, revokeAudioUrls, tryPlayNext, clearAudioQueue])
+  }, [playAudio, stopAudio, revokeAudioUrls, tryPlayNext, clearAudioQueue, upsertAssistantMessage])
 
   const connect = useCallback(
     async (resetAttempts = true) => {
@@ -800,9 +842,11 @@ export function useConversation(options: UseConversationOptions) {
 
   useEffect(() => {
     const replayPendingAudio = () => {
-      const pendingAudioUrl = pendingAudioUrlRef.current
-      if (!pendingAudioUrl) return
-      void playAudio(pendingAudioUrl)
+      const pending = pendingPlaybackRef.current
+      if (!pending) return
+      // Clear first so a re-entrant NotAllowedError doesn't loop forever
+      pendingPlaybackRef.current = null
+      void playAudio(pending.audioUrl, pending.onEnded)
     }
 
     window.addEventListener('pointerdown', replayPendingAudio)

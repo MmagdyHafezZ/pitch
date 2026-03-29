@@ -37,7 +37,10 @@ export class VapiConfigService implements OnModuleInit {
   }
 
   getPublicApiBaseUrl(): string {
-    const value = this.configService.get<string>('PHONE_CALL_WEBHOOK_URL');
+    const value =
+      this.configService.get<string>('PHONE_CALL_WEBHOOK_URL') ??
+      this.configService.get<string>('PUBLIC_API_BASE_URL') ??
+      this.configService.get<string>('API_BASE_URL');
 
     if (!value || value.trim().length === 0) {
       throw new InternalServerErrorException(

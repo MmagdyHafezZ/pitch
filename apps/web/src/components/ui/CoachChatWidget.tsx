@@ -56,6 +56,7 @@ interface CoachChatWidgetProps {
     key: string
     message: string
     open?: boolean
+    hidden?: boolean
   }
 }
 
@@ -1206,7 +1207,8 @@ export function CoachChatWidget({ context, starter }: CoachChatWidgetProps) {
     savedContextAttachments.some((attachment) => attachment.uploading)
 
   const send = useCallback(
-    async (overrideText?: string) => {
+    async (overrideText?: string, options?: { visibleUserMessage?: boolean }) => {
+      const visibleUserMessage = options?.visibleUserMessage ?? true
       const text = (overrideText ?? input).trim()
       const readyAttachments = attachments.filter((attachment) => !attachment.uploading)
       if ((!text && readyAttachments.length === 0) || streaming || hasUploading) return
@@ -1221,10 +1223,9 @@ export function CoachChatWidget({ context, starter }: CoachChatWidgetProps) {
         content: text,
         attachments: readyAttachments.length > 0 ? [...readyAttachments] : undefined,
       }
-      const nextMessages = [
-        ...messages.map((message) => ({ ...message, quickReplies: undefined })),
-        userMsg,
-      ]
+      const baseMessages = messages.map((message) => ({ ...message, quickReplies: undefined }))
+      const nextMessages = [...baseMessages, userMsg]
+      const nextVisibleMessages = visibleUserMessage ? nextMessages : baseMessages
       const nextContext = {
         ...context,
         recentTurns: includeRecentTurns ? context?.recentTurns : undefined,
@@ -1235,7 +1236,7 @@ export function CoachChatWidget({ context, starter }: CoachChatWidgetProps) {
       }
 
       setSavedContextAttachments(nextSavedContextAttachments)
-      setMessages([...nextMessages, { role: 'assistant', content: '' }])
+      setMessages([...nextVisibleMessages, { role: 'assistant', content: '' }])
       setInput('')
       setAttachments([])
       setStreaming(true)
@@ -1396,7 +1397,7 @@ export function CoachChatWidget({ context, starter }: CoachChatWidgetProps) {
     if (starter.open !== false) {
       setOpen(true)
     }
-    void send(starter.message)
+    void send(starter.message, { visibleUserMessage: !starter.hidden })
   }, [hasRestoredPersistedState, messages, persistenceKey, send, starter, streaming])
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {

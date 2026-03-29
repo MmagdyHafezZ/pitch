@@ -2,31 +2,50 @@ import {
   Injectable,
   InternalServerErrorException,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ElevenLabsClient } from '@elevenlabs/elevenlabs-js';
-import { TtsProvider, TtsOptions, TtsResult } from './tts.provider';
+import {
+  TtsProvider,
+  TtsOptions,
+  TtsResult,
+  TtsStreamResult,
+} from './tts.provider';
 
 type ElevenVoice = { voice_id: string; name: string };
+type ElevenLabsContext = { apiKey: string; client: ElevenLabsClient };
 
 const DEFAULT_PCM_SAMPLE_RATE = 24000;
+const ELEVENLABS_VOICES_URL = 'https://api.elevenlabs.io/v1/voices';
+const ELEVENLABS_KEY_ERROR =
+  'ELEVENLABS_API_KEY is not configured. Set ELEVENLABS_API_KEY or ELEVENLABS_API_KEYS.';
+const MISSING_DEFAULT_VOICE_ERROR =
+  'No voice specified and no default voice available. Please specify a voice or configure ELEVENLABS_DEFAULT_VOICE.';
 
 @Injectable()
 export class ElevenLabsTtsProvider implements TtsProvider {
   readonly name = 'elevenlabs';
   readonly description = 'ElevenLabs neural text-to-speech';
+  private readonly logger = new Logger(ElevenLabsTtsProvider.name);
 
-  private readonly apiKey: string;
+  private readonly apiKeys: string[];
   private readonly configuredDefaultVoice: string | undefined;
   private readonly modelId: string;
   private readonly outputFormat: string;
+  private readonly clientsByApiKey: Map<string, ElevenLabsClient>;
+  private preferredApiKeyIndex = 0;
 
-  private readonly client: ElevenLabsClient;
-
-  private voiceNameToId: Map<string, string> | null = null;
+  private voiceNameToIdByApiKey = new Map<string, Map<string, string>>();
+  private voicesCacheByApiKey = new Map<string, string[]>();
   private voicesCache: string[] = [];
+
   constructor(private readonly config: ConfigService) {
-    this.apiKey = this.config.getOrThrow<string>('ELEVENLABS_API_KEY');
+    this.apiKeys = this.resolveApiKeys();
+    if (this.apiKeys.length === 0) {
+      throw new Error(ELEVENLABS_KEY_ERROR);
+    }
+
     this.configuredDefaultVoice = this.config.get<string>(
       'ELEVENLABS_DEFAULT_VOICE',
     );
@@ -37,15 +56,11 @@ export class ElevenLabsTtsProvider implements TtsProvider {
     this.outputFormat =
       this.config.get<string>('ELEVENLABS_OUTPUT_FORMAT') || 'mp3_44100_128';
 
-    this.client = new ElevenLabsClient({ apiKey: this.apiKey });
-    this.ensureVoicesLoaded().catch(() => {});
-  }
+    this.clientsByApiKey = new Map(
+      this.apiKeys.map((apiKey) => [apiKey, new ElevenLabsClient({ apiKey })]),
+    );
 
-  private get defaultVoice(): string | undefined {
-    if (this.configuredDefaultVoice) {
-      return this.configuredDefaultVoice;
-    }
-    return this.voicesCache.length > 0 ? this.voicesCache[0] : undefined;
+    this.ensureVoicesLoaded().catch(() => {});
   }
 
   get voices(): string[] {
@@ -54,32 +69,28 @@ export class ElevenLabsTtsProvider implements TtsProvider {
 
   async synthesize(text: string, options?: TtsOptions): Promise<TtsResult> {
     try {
-      await this.ensureVoicesLoaded();
-
-      const requested = options?.voice || this.defaultVoice;
-      if (!requested) {
-        throw new BadRequestException(
-          'No voice specified and no default voice available. Please specify a voice or configure ELEVENLABS_DEFAULT_VOICE.',
-        );
-      }
-      const voiceId = this.resolveVoiceId(requested.trim());
-
       const resolvedOutputFormat = this.resolveOutputFormat(options);
       const outputFormat = resolvedOutputFormat as Parameters<
         ElevenLabsClient['textToSpeech']['convert']
       >[1]['outputFormat'];
+      const contentType = this.resolveContentType(resolvedOutputFormat);
 
-      const audioStream = await this.client.textToSpeech.convert(voiceId, {
-        text,
-        modelId: this.modelId,
-        outputFormat,
-      });
+      const audioBuffer = await this.withApiKeyFailover(
+        async ({ apiKey, client }) => {
+          const voiceId = await this.resolveVoiceIdForApiKey(apiKey, options);
+          const audioStream = await client.textToSpeech.convert(voiceId, {
+            text,
+            modelId: this.modelId,
+            outputFormat,
+          });
 
-      const audioBuffer = await this.readWebStreamToBuffer(audioStream);
+          return this.readWebStreamToBuffer(audioStream);
+        },
+      );
 
       return {
         audioBuffer,
-        contentType: this.resolveContentType(resolvedOutputFormat),
+        contentType,
       };
     } catch (err) {
       if (err instanceof BadRequestException) throw err;
@@ -94,34 +105,26 @@ export class ElevenLabsTtsProvider implements TtsProvider {
   async synthesizeStream(
     text: string,
     options?: TtsOptions,
-  ): Promise<import('./tts.provider').TtsStreamResult> {
+  ): Promise<TtsStreamResult> {
     try {
-      await this.ensureVoicesLoaded();
-
-      const requested = options?.voice || this.defaultVoice;
-      if (!requested) {
-        throw new BadRequestException(
-          'No voice specified and no default voice available. Please specify a voice or configure ELEVENLABS_DEFAULT_VOICE.',
-        );
-      }
-
-      const voiceId = this.resolveVoiceId(requested.trim());
-
-      // ElevenLabs streaming call
       const resolvedOutputFormat = this.resolveOutputFormat(options);
-
-      const audioSource = await this.client.textToSpeech.stream(voiceId, {
-        text,
-        modelId: this.modelId,
-        outputFormat: resolvedOutputFormat as Parameters<
-          ElevenLabsClient['textToSpeech']['stream']
-        >[1]['outputFormat'],
-      });
-
-      const audioStream = this.normalizeToAsyncIterable(audioSource);
-
+      const outputFormat = resolvedOutputFormat as Parameters<
+        ElevenLabsClient['textToSpeech']['stream']
+      >[1]['outputFormat'];
       const contentType = this.resolveContentType(resolvedOutputFormat);
 
+      const audioSource = await this.withApiKeyFailover(
+        async ({ apiKey, client }) => {
+          const voiceId = await this.resolveVoiceIdForApiKey(apiKey, options);
+          return client.textToSpeech.stream(voiceId, {
+            text,
+            modelId: this.modelId,
+            outputFormat,
+          });
+        },
+      );
+
+      const audioStream = this.normalizeToAsyncIterable(audioSource);
       return { audioStream, contentType };
     } catch (err) {
       if (err instanceof BadRequestException) throw err;
@@ -133,9 +136,7 @@ export class ElevenLabsTtsProvider implements TtsProvider {
   /**
    * Normalize either a Web ReadableStream or an async iterable into an async iterable of Uint8Array
    */
-  private normalizeToAsyncIterable(
-    source: ReadableStream<Uint8Array>,
-  ): AsyncIterable<Uint8Array> {
+  private normalizeToAsyncIterable(source: unknown): AsyncIterable<Uint8Array> {
     if (source == null) {
       throw new InternalServerErrorException(
         'Empty audio stream from ElevenLabs',
@@ -170,8 +171,14 @@ export class ElevenLabsTtsProvider implements TtsProvider {
     };
 
     // Web ReadableStream
-    if (typeof source.getReader === 'function') {
-      const reader = source.getReader();
+    if (
+      typeof source === 'object' &&
+      source !== null &&
+      'getReader' in source &&
+      typeof (source as { getReader: unknown }).getReader === 'function'
+    ) {
+      const webStream = source as ReadableStream<Uint8Array>;
+      const reader = webStream.getReader();
       return (async function* () {
         while (true) {
           const { done, value } = await reader.read();
@@ -182,7 +189,14 @@ export class ElevenLabsTtsProvider implements TtsProvider {
     }
 
     // Async iterable (for-await-of)
-    if (typeof source[Symbol.asyncIterator] === 'function') {
+    if (
+      typeof source === 'object' &&
+      source !== null &&
+      Symbol.asyncIterator in source &&
+      typeof (source as { [Symbol.asyncIterator]?: unknown })[
+        Symbol.asyncIterator
+      ] === 'function'
+    ) {
       return (async function* () {
         for await (const chunk of source as AsyncIterable<
           Uint8Array | ArrayBuffer | string | { data: unknown }
@@ -223,23 +237,152 @@ export class ElevenLabsTtsProvider implements TtsProvider {
     );
   }
 
-  private resolveVoiceId(input: string): string {
-    if (this.voiceNameToId?.has(input)) {
-      return this.voiceNameToId.get(input)!;
+  private resolveApiKeys(): string[] {
+    const fromList = (this.config.get<string>('ELEVENLABS_API_KEYS') ?? '')
+      .split(',')
+      .map((value) => value.trim())
+      .filter((value) => value.length > 0);
+    const fromSingle = this.config.get<string>('ELEVENLABS_API_KEY');
+
+    const uniqueKeys = new Set<string>(fromList);
+    if (fromSingle?.trim()) {
+      uniqueKeys.add(fromSingle.trim());
+    }
+
+    return [...uniqueKeys];
+  }
+
+  private getOrderedApiKeys(): string[] {
+    if (
+      this.preferredApiKeyIndex <= 0 ||
+      this.preferredApiKeyIndex >= this.apiKeys.length
+    ) {
+      return [...this.apiKeys];
+    }
+
+    const preferredApiKey = this.apiKeys[this.preferredApiKeyIndex];
+    return [
+      preferredApiKey,
+      ...this.apiKeys.filter((apiKey) => apiKey !== preferredApiKey),
+    ];
+  }
+
+  private markApiKeySuccessful(apiKey: string): void {
+    const index = this.apiKeys.indexOf(apiKey);
+    if (index >= 0) {
+      this.preferredApiKeyIndex = index;
+    }
+  }
+
+  private getApiKeyOrdinal(apiKey: string): string {
+    const index = this.apiKeys.indexOf(apiKey);
+    if (index < 0) {
+      return '?';
+    }
+    return `${index + 1}/${this.apiKeys.length}`;
+  }
+
+  private async withApiKeyFailover<T>(
+    operation: (context: ElevenLabsContext) => Promise<T>,
+  ): Promise<T> {
+    const orderedApiKeys = this.getOrderedApiKeys();
+    let lastError: unknown;
+
+    for (let i = 0; i < orderedApiKeys.length; i += 1) {
+      const apiKey = orderedApiKeys[i];
+      const client = this.clientsByApiKey.get(apiKey);
+      if (!client) {
+        continue;
+      }
+
+      try {
+        const result = await operation({ apiKey, client });
+        this.markApiKeySuccessful(apiKey);
+        return result;
+      } catch (error) {
+        lastError = error;
+        const isLastAttempt = i === orderedApiKeys.length - 1;
+        if (!isLastAttempt) {
+          this.logger.warn(
+            `ElevenLabs request failed for API key ${this.getApiKeyOrdinal(apiKey)}; trying next key.`,
+          );
+        }
+      }
+    }
+
+    if (lastError) {
+      if (lastError instanceof Error) {
+        throw lastError;
+      }
+      throw new Error('ElevenLabs request failed with a non-Error rejection');
+    }
+
+    throw new Error(ELEVENLABS_KEY_ERROR);
+  }
+
+  private async resolveVoiceIdForApiKey(
+    apiKey: string,
+    options?: TtsOptions,
+  ): Promise<string> {
+    const requested = options?.voice?.trim();
+    if (requested) {
+      return this.resolveVoiceIdForApiKeyInput(apiKey, requested);
+    }
+
+    const configuredDefault = this.configuredDefaultVoice?.trim();
+    if (configuredDefault) {
+      return this.resolveVoiceIdForApiKeyInput(apiKey, configuredDefault);
+    }
+
+    await this.ensureVoicesLoadedForApiKey(apiKey);
+    const fallbackVoice = this.voicesCacheByApiKey.get(apiKey)?.[0];
+    if (!fallbackVoice) {
+      throw new BadRequestException(MISSING_DEFAULT_VOICE_ERROR);
+    }
+
+    const voiceNameToId =
+      this.voiceNameToIdByApiKey.get(apiKey) ?? new Map<string, string>();
+    return this.resolveVoiceId(fallbackVoice, voiceNameToId);
+  }
+
+  private async resolveVoiceIdForApiKeyInput(
+    apiKey: string,
+    input: string,
+  ): Promise<string> {
+    if (this.looksLikeVoiceId(input)) {
+      return input;
+    }
+
+    await this.ensureVoicesLoadedForApiKey(apiKey);
+    const voiceNameToId =
+      this.voiceNameToIdByApiKey.get(apiKey) ?? new Map<string, string>();
+    return this.resolveVoiceId(input, voiceNameToId);
+  }
+
+  private resolveVoiceId(
+    input: string,
+    voiceNameToId: Map<string, string>,
+  ): string {
+    if (voiceNameToId.has(input)) {
+      return voiceNameToId.get(input)!;
     }
 
     const lower = input.toLowerCase();
-    for (const [name, id] of this.voiceNameToId ?? []) {
+    for (const [name, id] of voiceNameToId) {
       if (name.toLowerCase() === lower) return id;
     }
 
-    if (/^[a-zA-Z0-9_-]{10,}$/.test(input)) {
+    if (this.looksLikeVoiceId(input)) {
       return input;
     }
 
     throw new BadRequestException(
       `Unknown ElevenLabs voice "${input}". Call /tts/voices?provider=elevenlabs to see valid voices.`,
     );
+  }
+
+  private looksLikeVoiceId(input: string): boolean {
+    return /^[a-zA-Z0-9_-]{10,}$/.test(input);
   }
 
   private resolveOutputFormat(options?: TtsOptions): string {
@@ -288,12 +431,24 @@ export class ElevenLabsTtsProvider implements TtsProvider {
   }
 
   private async ensureVoicesLoaded(): Promise<void> {
-    if (this.voiceNameToId) return;
+    if (this.voicesCache.length > 0) {
+      return;
+    }
 
-    const resp = await fetch('https://api.elevenlabs.io/v1/voices', {
+    await this.withApiKeyFailover(async ({ apiKey }) => {
+      await this.ensureVoicesLoadedForApiKey(apiKey);
+    });
+  }
+
+  private async ensureVoicesLoadedForApiKey(apiKey: string): Promise<void> {
+    if (this.voiceNameToIdByApiKey.has(apiKey)) {
+      return;
+    }
+
+    const resp = await fetch(ELEVENLABS_VOICES_URL, {
       method: 'GET',
       headers: {
-        'xi-api-key': this.apiKey,
+        'xi-api-key': apiKey,
         'Content-Type': 'application/json',
       },
     });
@@ -315,8 +470,22 @@ export class ElevenLabsTtsProvider implements TtsProvider {
       names.push(v.name);
     }
 
-    this.voiceNameToId = map;
-    this.voicesCache = names.sort((a, b) => a.localeCompare(b));
+    this.voiceNameToIdByApiKey.set(apiKey, map);
+    this.voicesCacheByApiKey.set(
+      apiKey,
+      names.sort((a, b) => a.localeCompare(b)),
+    );
+    this.refreshVoiceCache();
+  }
+
+  private refreshVoiceCache(): void {
+    const merged = new Set<string>();
+    for (const voices of this.voicesCacheByApiKey.values()) {
+      for (const voice of voices) {
+        merged.add(voice);
+      }
+    }
+    this.voicesCache = [...merged].sort((a, b) => a.localeCompare(b));
   }
 
   /**

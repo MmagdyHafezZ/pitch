@@ -7,7 +7,7 @@ import { MicroserviceOptions, Transport } from '@nestjs/microservices';
 import { ValidationPipe } from '@nestjs/common';
 import { UserMicroserviceModule } from './user-microservice.module';
 import { RpcExceptionLoggingFilter } from '@pitch/shared-backend/filters/rpc-exception.filter';
-import { getRabbitMQUrl } from '../../config/microservices.config';
+import { getRabbitMQUrls } from '@pitch/shared-backend/config/microservices.config';
 
 async function bootstrap() {
   const app = await NestFactory.createMicroservice<MicroserviceOptions>(
@@ -15,7 +15,7 @@ async function bootstrap() {
     {
       transport: Transport.RMQ,
       options: {
-        urls: [getRabbitMQUrl()],
+        urls: getRabbitMQUrls(),
         queue: 'user_queue',
         queueOptions: {
           durable: true,

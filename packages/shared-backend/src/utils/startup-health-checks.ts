@@ -35,15 +35,35 @@ export interface PrismaLike {
   $queryRaw(query: TemplateStringsArray): Promise<any>
 }
 
-export async function checkRabbitMQConnection(rabbitmqUrl: string): Promise<void> {
-  logger.log('🔍 Checking RabbitMQ connection...')
+export async function checkRabbitMQConnection(rabbitmqUrls: string[]): Promise<void> {
+  const urls = [...new Set(rabbitmqUrls.map((url) => url.trim()).filter(Boolean))]
+  if (urls.length === 0) {
+    throw new Error('No RabbitMQ URL configured for startup health checks')
+  }
+
+  logger.log(
+    `🔍 Checking RabbitMQ connection (${urls.length} endpoint${urls.length > 1 ? 's' : ''})...`
+  )
 
   await withRetry('RabbitMQ', async () => {
+    const errors: string[] = []
     const amqp = await import('amqplib')
-    const connection = await amqp.connect(rabbitmqUrl)
-    const channel = await connection.createChannel()
-    await channel.close()
-    await connection.close()
+
+    for (let i = 0; i < urls.length; i += 1) {
+      const rabbitmqUrl = urls[i]
+      try {
+        const connection = await amqp.connect(rabbitmqUrl)
+        const channel = await connection.createChannel()
+        await channel.close()
+        await connection.close()
+        return
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error)
+        errors.push(`endpoint ${i + 1}/${urls.length}: ${errorMessage}`)
+      }
+    }
+
+    throw new Error(`All RabbitMQ endpoints failed (${errors.join('; ')})`)
   })
 
   logger.log('✅ RabbitMQ connection successful')
@@ -61,13 +81,16 @@ export async function checkDatabaseConnection(prismaClient: PrismaLike): Promise
 }
 
 export async function runStartupHealthChecks(
-  rabbitmqUrl: string,
+  rabbitmqUrls: string[],
   prismaClient: PrismaLike
 ): Promise<void> {
   logger.log('🏥 Running startup health checks...')
 
   try {
-    await Promise.all([checkRabbitMQConnection(rabbitmqUrl), checkDatabaseConnection(prismaClient)])
+    await Promise.all([
+      checkRabbitMQConnection(rabbitmqUrls),
+      checkDatabaseConnection(prismaClient),
+    ])
     logger.log('✅ All health checks passed')
   } catch (error) {
     logger.error('❌ Startup health checks failed after all retries')

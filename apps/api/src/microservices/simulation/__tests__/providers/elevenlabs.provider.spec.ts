@@ -2,10 +2,12 @@ import {
   BadRequestException,
   InternalServerErrorException,
 } from '@nestjs/common';
+import { ElevenLabsClient } from '@elevenlabs/elevenlabs-js';
 import { ElevenLabsTtsProvider } from '../../tts/providers/elevenlabs.provider';
 
 const convertMock = jest.fn();
 const streamMock = jest.fn();
+const ElevenLabsClientMock = ElevenLabsClient as unknown as jest.Mock;
 
 jest.mock('@elevenlabs/elevenlabs-js', () => ({
   ElevenLabsClient: jest.fn().mockImplementation(() => ({
@@ -43,6 +45,8 @@ const createConfig = (values: Record<string, string | undefined>) => ({
 describe('ElevenLabsTtsProvider', () => {
   beforeEach(() => {
     convertMock.mockReset();
+    streamMock.mockReset();
+    ElevenLabsClientMock.mockClear();
     global.fetch = jest.fn();
   });
 
@@ -98,6 +102,37 @@ describe('ElevenLabsTtsProvider', () => {
     expect(response.contentType).toBe('audio/mpeg');
   });
 
+  it('fails over to the next configured API key when synthesis fails', async () => {
+    const configService = createConfig({
+      ELEVENLABS_API_KEYS: 'primary-key,secondary-key',
+      ELEVENLABS_DEFAULT_VOICE: 'Test Voice',
+    });
+
+    (global.fetch as jest.Mock).mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          voices: [{ voice_id: 'voice-1', name: 'Test Voice' }],
+        }),
+    });
+
+    convertMock
+      .mockRejectedValueOnce(new Error('primary key failed'))
+      .mockResolvedValueOnce(createStream([[1, 2, 3, 4]]));
+
+    const provider = new ElevenLabsTtsProvider(configService as any);
+    const response = await provider.synthesize('hello');
+
+    expect(response.audioBuffer.length).toBe(4);
+    expect(convertMock).toHaveBeenCalledTimes(2);
+    expect(ElevenLabsClientMock).toHaveBeenCalledWith({
+      apiKey: 'primary-key',
+    });
+    expect(ElevenLabsClientMock).toHaveBeenCalledWith({
+      apiKey: 'secondary-key',
+    });
+  });
+
   it('returns streaming chunks when using synthesizeStream', async () => {
     const configService = createConfig({
       ELEVENLABS_API_KEY: 'key',
@@ -144,5 +179,29 @@ describe('ElevenLabsTtsProvider', () => {
     await expect(provider.synthesize('hello')).rejects.toThrow(
       InternalServerErrorException,
     );
+  });
+
+  it('throws internal error when all configured API keys fail', async () => {
+    const configService = createConfig({
+      ELEVENLABS_API_KEYS: 'primary-key,secondary-key',
+      ELEVENLABS_DEFAULT_VOICE: 'Test Voice',
+    });
+
+    (global.fetch as jest.Mock).mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          voices: [{ voice_id: 'voice-1', name: 'Test Voice' }],
+        }),
+    });
+
+    convertMock.mockRejectedValue(new Error('all keys down'));
+
+    const provider = new ElevenLabsTtsProvider(configService as any);
+
+    await expect(provider.synthesize('hello')).rejects.toThrow(
+      InternalServerErrorException,
+    );
+    expect(convertMock).toHaveBeenCalledTimes(2);
   });
 });

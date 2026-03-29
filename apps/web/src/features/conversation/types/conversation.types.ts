@@ -100,6 +100,7 @@ export interface ConversationAudioChunkPayload {
   sentenceIndex: number
   audio: ArrayBuffer | Uint8Array
   contentType: string
+  sentenceText?: string
 }
 
 export interface ConversationAudioReadyPayload {
