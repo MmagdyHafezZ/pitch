@@ -21,7 +21,7 @@ export class CheckSystemAdmin implements CanActivate {
 
   constructor(private readonly jwtService: JwtService) {}
 
-  canActivate(context: ExecutionContext): boolean {
+  canActivate(context: ExecutionContext): Promise<boolean> {
     const req = context
       .switchToHttp()
       .getRequest<RequestWithHeaders & RequestWithUser>();
@@ -39,10 +39,10 @@ export class CheckSystemAdmin implements CanActivate {
         );
         if (superAdminEmails.includes(payload.email.toLowerCase())) {
           this.logger.log(`User ${payload.email} is a system admin.`);
-          return true;
+          return Promise.resolve(true);
         }
       }
-      return false;
+      return Promise.resolve(false);
     } catch (error) {
       const normalized = normalizeError(error) as ServiceError & {
         name?: string;
@@ -51,7 +51,7 @@ export class CheckSystemAdmin implements CanActivate {
         `JWT validation failed: ${normalized.message ?? 'Unknown error'}`,
       );
 
-      return false;
+      return Promise.resolve(false);
     }
   }
 }

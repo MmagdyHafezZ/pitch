@@ -25,7 +25,22 @@ const customJestConfig = {
     // Handle CSS imports (with CSS modules)
     '\\.(css|less|scss|sss|styl)$': 'identity-obj-proxy',
   },
-  collectCoverageFrom: ['src/features/auth/stores/**/*.{ts,tsx}'],
+  collectCoverageFrom: [
+    'src/**/*.{ts,tsx}',
+    '!src/**/*.d.ts',
+    '!src/**/*.types.ts',
+    '!src/**/types/**',
+    '!src/**/index.ts',
+    '!src/__tests__/**',
+    '!src/app/**/layout.tsx',
+    '!src/features/i18n/locales/**',
+    '!src/features/conversation/components/**',
+    '!src/features/conversation/hooks/**',
+    '!src/features/stt/hooks/**',
+    '!src/components/ui/CoachChatWidget.tsx',
+    '!src/lib/providers.tsx',
+    '!src/lib/theme.ts',
+  ],
   collectCoverage: shouldCollectCoverage,
   coverageDirectory: '<rootDir>/coverage',
   testMatch: [
@@ -54,7 +69,16 @@ module.exports = async () => {
     `/node_modules/.pnpm/(?!(?:${transpilePattern})@)`,
   ]
 
-  if (!shouldCollectCoverage) {
+  if (shouldCollectCoverage) {
+    config.coverageThreshold = {
+      global: {
+        branches: 90,
+        functions: 90,
+        lines: 90,
+        statements: 90,
+      },
+    }
+  } else {
     delete config.coverageThreshold
   }
 

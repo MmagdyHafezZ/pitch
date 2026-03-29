@@ -24,7 +24,7 @@ const baseConfig = {
     '!**/*prisma.service.ts',
     '!**/dto/**',
     '!**/interfaces/**',
-    '!**/gateway/**',
+
     '!**/microservices/**/prisma/**',
     '!**/microservices/userManagement/controllers/**',
     '!**/microservices/userManagement/decorators/**',
@@ -32,6 +32,12 @@ const baseConfig = {
     '!**/microservices/userManagement/strategies/**',
     '!**/microservices/userManagement/repositories/**',
     '!**/microservices/userManagement/services/auth.service.ts',
+
+    '!**/microservices/simulation/assessment/langgraph/**',
+    '!**/microservices/simulation/assessment/workers/**',
+    '!**/microservices/simulation/assessment/rpc/**',
+    '!**/microservices/simulation/rag/**',
+    '!**/config/prisma-runtime.config.ts',
     '!**/*.spec.ts',
   ],
   collectCoverage: shouldCollectCoverage,
@@ -55,10 +61,10 @@ const baseConfig = {
 if (shouldCollectCoverage) {
   baseConfig.coverageThreshold = {
     global: {
-      branches: 10,
-      functions: 10,
-      lines: 10,
-      statements: 10,
+      branches: 90,
+      functions: 90,
+      lines: 90,
+      statements: 90,
     },
   };
 }

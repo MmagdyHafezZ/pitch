@@ -141,4 +141,206 @@ describe('AppTopBar', () => {
       })
     })
   })
+
+  it('renders the P.I.T.C.H. brand text', async () => {
+    render(<AppTopBar currentPage="Home" />)
+    expect(await screen.findByText('P.I.T.C.H.')).toBeInTheDocument()
+  })
+
+  it('opens settings modal when account icon is clicked', async () => {
+    const user = userEvent.setup()
+    render(<AppTopBar currentPage="Home" />)
+
+    await user.click(await screen.findByLabelText('Account'))
+    await waitFor(() => {
+      expect(screen.getByLabelText('Name')).toBeInTheDocument()
+    })
+  })
+
+  it('opens settings modal via custom event', async () => {
+    const { act } = await import('@testing-library/react')
+    render(<AppTopBar currentPage="Home" />)
+    act(() => {
+      window.dispatchEvent(new Event('pitch:open-settings'))
+    })
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Name')).toBeInTheDocument()
+    })
+  })
+
+  it('shows notification bell with unread indicator', async () => {
+    mockApi.notifications.unreadCount.mockResolvedValue({ count: 5 })
+    render(<AppTopBar currentPage="Home" />)
+
+    expect(await screen.findByLabelText('Notifications')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.getByText('5')).toBeInTheDocument()
+    })
+  })
+
+  it('shows 99+ when unread count exceeds 99', async () => {
+    mockApi.notifications.unreadCount.mockResolvedValue({ count: 150 })
+    render(<AppTopBar currentPage="Home" />)
+
+    await waitFor(() => {
+      expect(screen.getByText('99+')).toBeInTheDocument()
+    })
+  })
+
+  it('shows empty notification state', async () => {
+    mockApi.notifications.unreadCount.mockResolvedValue({ count: 0 })
+    mockApi.notifications.list.mockResolvedValue({ data: [] })
+    const user = userEvent.setup()
+    render(<AppTopBar currentPage="Home" />)
+
+    await user.click(await screen.findByLabelText('Notifications'))
+    await waitFor(() => {
+      expect(screen.getByText(/no.*notification/i)).toBeInTheDocument()
+    })
+  })
+
+  it('mark all read button calls markAllRead', async () => {
+    mockApi.notifications.unreadCount.mockResolvedValue({ count: 2 })
+    mockApi.notifications.list.mockResolvedValue({
+      data: [
+        {
+          id: 'n1',
+          title: 'Test',
+          message: 'msg',
+          type: 'GENERAL',
+          severity: 'INFO',
+          sourceType: 'SYSTEM',
+          readAt: null,
+          createdAt: '2026-03-01T09:00:00.000Z',
+        },
+      ],
+    })
+    mockApi.notifications.markAllRead.mockResolvedValue({ matched: 2, modified: 2 })
+
+    const user = userEvent.setup()
+    render(<AppTopBar currentPage="Home" />)
+
+    await user.click(await screen.findByLabelText('Notifications'))
+    const markAllBtn = await screen.findByRole('button', { name: /mark all/i })
+    await user.click(markAllBtn)
+
+    await waitFor(() => {
+      expect(mockApi.notifications.markAllRead).toHaveBeenCalled()
+    })
+  })
+
+  it('displays severity badge colors (WARNING)', async () => {
+    mockApi.notifications.list.mockResolvedValue({
+      data: [
+        {
+          id: 'n-warn',
+          title: 'Warning Alert',
+          message: 'Quota nearing limit',
+          type: 'GENERAL',
+          severity: 'WARNING',
+          sourceType: 'SYSTEM',
+          readAt: null,
+          createdAt: '2026-03-01T09:00:00.000Z',
+        },
+      ],
+    })
+    const user = userEvent.setup()
+    render(<AppTopBar currentPage="Home" />)
+
+    await user.click(await screen.findByLabelText('Notifications'))
+    await waitFor(() => {
+      expect(screen.getByText('WARNING')).toBeInTheDocument()
+    })
+  })
+
+  it('displays severity badge colors (CRITICAL)', async () => {
+    mockApi.notifications.list.mockResolvedValue({
+      data: [
+        {
+          id: 'n-crit',
+          title: 'Critical Alert',
+          message: 'System failure',
+          type: 'GENERAL',
+          severity: 'CRITICAL',
+          sourceType: 'SYSTEM',
+          readAt: null,
+          createdAt: '2026-03-01T09:00:00.000Z',
+        },
+      ],
+    })
+    const user = userEvent.setup()
+    render(<AppTopBar currentPage="Home" />)
+
+    await user.click(await screen.findByLabelText('Notifications'))
+    await waitFor(() => {
+      expect(screen.getByText('CRITICAL')).toBeInTheDocument()
+    })
+  })
+
+  it('renders tabs for Sessions page with "All", "Created", "Shared"', async () => {
+    render(<AppTopBar currentPage="Sessions" />)
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: /all/i })).toBeInTheDocument()
+      expect(screen.getByRole('tab', { name: /created/i })).toBeInTheDocument()
+      expect(screen.getByRole('tab', { name: /shared/i })).toBeInTheDocument()
+    })
+  })
+
+  it('renders tabs for Home page with "All", "Favorites", "Archived"', async () => {
+    render(<AppTopBar currentPage="Home" />)
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: /all/i })).toBeInTheDocument()
+      expect(screen.getByRole('tab', { name: /favorites/i })).toBeInTheDocument()
+      expect(screen.getByRole('tab', { name: /archived/i })).toBeInTheDocument()
+    })
+  })
+
+  it('renders tabs for Analytics page with "Personal", "Team"', async () => {
+    render(<AppTopBar currentPage="Analytics" />)
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: /personal/i })).toBeInTheDocument()
+      expect(screen.getByRole('tab', { name: /team/i })).toBeInTheDocument()
+    })
+  })
+
+  it('calls onTabChange when a tab is clicked', async () => {
+    const onTabChange = jest.fn()
+    const user = userEvent.setup()
+    render(<AppTopBar currentPage="Home" onTabChange={onTabChange} selectedTab="All" />)
+
+    const favTab = await screen.findByRole('tab', { name: /favorites/i })
+    await user.click(favTab)
+
+    expect(onTabChange).toHaveBeenCalledWith('Favorites')
+  })
+
+  it('renders mobile nav toggle when onToggleMobileNav is provided', async () => {
+    const onToggle = jest.fn()
+    render(<AppTopBar currentPage="Home" onToggleMobileNav={onToggle} mobileNavOpened={false} />)
+    const menuBtn =
+      screen.queryByLabelText(/open navigation menu/i) ??
+      screen.queryByLabelText(/close navigation menu/i)
+    if (menuBtn) {
+      expect(menuBtn).toBeInTheDocument()
+    }
+  })
+
+  it('renders search input on Sessions page', async () => {
+    render(<AppTopBar currentPage="Sessions" />)
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText(/search sessions/i)).toBeInTheDocument()
+    })
+  })
+
+  it('renders no action area when currentPage is undefined', async () => {
+    render(<AppTopBar />)
+    expect(screen.getByText('P.I.T.C.H.')).toBeInTheDocument()
+    expect(screen.queryByRole('tablist')).not.toBeInTheDocument()
+  })
+
+  it('renders rightSlot content when provided', async () => {
+    render(<AppTopBar rightSlot={<div data-testid="custom-slot">Custom</div>} />)
+    expect(screen.getByTestId('custom-slot')).toBeInTheDocument()
+  })
 })

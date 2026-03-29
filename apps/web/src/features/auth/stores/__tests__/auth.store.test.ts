@@ -332,4 +332,171 @@ describe('AuthStore', () => {
       expect(state.isAuthenticated).toBe(false)
     })
   })
+
+  describe('Delete Account', () => {
+    it('should delete account and clear state', async () => {
+      const logoutSpy = jest.spyOn(api.auth, 'logout').mockResolvedValue(undefined as any)
+      server.use(
+        http.delete(`${API_BASE_URL}/users/:id`, () => {
+          return HttpResponse.json({ deleted: true })
+        })
+      )
+
+      act(() => {
+        useAuthStore.setState({
+          user: {
+            id: '1',
+            email: 'test@example.com',
+            name: 'Test',
+            isActive: true,
+            createdAt: '',
+            updatedAt: '',
+          },
+          token: 'token',
+          isAuthenticated: true,
+        })
+      })
+
+      await act(async () => {
+        await useAuthStore.getState().deleteAccount()
+      })
+
+      const state = useAuthStore.getState()
+      expect(state.user).toBeNull()
+      expect(state.token).toBeNull()
+      expect(state.isAuthenticated).toBe(false)
+      logoutSpy.mockRestore()
+    })
+
+    it('should throw when no user is authenticated', async () => {
+      await expect(
+        act(async () => {
+          await useAuthStore.getState().deleteAccount()
+        })
+      ).rejects.toThrow('No authenticated user found')
+
+      expect(useAuthStore.getState().error).toBe('No authenticated user found')
+    })
+
+    it('should handle deleteAccount failure', async () => {
+      server.use(
+        http.delete(`${API_BASE_URL}/users/:id`, () => {
+          return new HttpResponse(JSON.stringify({ message: 'Delete forbidden' }), {
+            status: 403,
+            headers: { 'Content-Type': 'application/json' },
+          })
+        })
+      )
+
+      act(() => {
+        useAuthStore.setState({
+          user: {
+            id: '1',
+            email: 'test@example.com',
+            name: 'Test',
+            isActive: true,
+            createdAt: '',
+            updatedAt: '',
+          },
+          token: 'token',
+          isAuthenticated: true,
+        })
+      })
+
+      try {
+        await act(async () => {
+          await useAuthStore.getState().deleteAccount()
+        })
+      } catch {
+        // expected to throw
+      }
+
+      await act(async () => {
+        await flushPromises()
+      })
+
+      const state = useAuthStore.getState()
+      expect(state.error).toBeDefined()
+    })
+  })
+
+  describe('Refresh Access Token', () => {
+    it('should refresh token successfully', async () => {
+      server.use(
+        http.post(`${API_BASE_URL}/auth/refresh`, () => {
+          return HttpResponse.json({ accessToken: 'refreshed-token' })
+        })
+      )
+
+      let result: boolean = false
+      await act(async () => {
+        result = await useAuthStore.getState().refreshAccessToken()
+      })
+
+      expect(result).toBe(true)
+      expect(useAuthStore.getState().token).toBe('refreshed-token')
+      expect(useAuthStore.getState().isAuthenticated).toBe(true)
+    })
+
+    it('should handle refresh failure with expired token', async () => {
+      server.use(
+        http.post(`${API_BASE_URL}/auth/refresh`, () => {
+          return new HttpResponse(null, { status: 401 })
+        })
+      )
+
+      act(() => {
+        useAuthStore.setState({ token: null })
+      })
+
+      let result: boolean = false
+      await act(async () => {
+        result = await useAuthStore.getState().refreshAccessToken()
+      })
+
+      expect(result).toBe(false)
+      expect(useAuthStore.getState().token).toBeNull()
+      expect(useAuthStore.getState().isAuthenticated).toBe(false)
+    })
+  })
+
+  describe('setUser with null', () => {
+    it('sets isAuthenticated to false when user is null', () => {
+      act(() => {
+        useAuthStore.setState({
+          user: {
+            id: '1',
+            email: 'a',
+            name: 'b',
+            isActive: true,
+            createdAt: '',
+            updatedAt: '',
+          } as any,
+          isAuthenticated: true,
+        })
+      })
+
+      act(() => {
+        useAuthStore.getState().setUser(null)
+      })
+
+      expect(useAuthStore.getState().user).toBeNull()
+      expect(useAuthStore.getState().isAuthenticated).toBe(false)
+    })
+  })
+
+  describe('setToken with null', () => {
+    it('sets isAuthenticated to false when token is null', () => {
+      act(() => {
+        useAuthStore.setState({ token: 'abc', isAuthenticated: true })
+      })
+
+      act(() => {
+        useAuthStore.getState().setToken(null)
+      })
+
+      expect(useAuthStore.getState().token).toBeNull()
+      expect(useAuthStore.getState().isAuthenticated).toBe(false)
+    })
+  })
 })
