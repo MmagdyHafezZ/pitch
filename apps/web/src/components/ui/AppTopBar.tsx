@@ -48,6 +48,16 @@ type NotificationItem = {
   createdAt: string
 }
 
+const getStudioAccessRequesterId = (notification: NotificationItem) => {
+  if (notification.type !== 'STUDIO_ACCESS_REQUEST') return null
+
+  if (typeof notification.metadata?.requesterUserId === 'string') {
+    return notification.metadata.requesterUserId
+  }
+
+  return typeof notification.sourceUserId === 'string' ? notification.sourceUserId : null
+}
+
 export type HeaderProps = {
   value?: string
   onChange?: (v: string) => void
@@ -777,6 +787,7 @@ export function AppTopBar({
       notification.type === 'TEAM_INVITE' && typeof notification.metadata?.teamId === 'string'
         ? notification.metadata.teamId
         : null
+    const studioAccessRequesterId = getStudioAccessRequesterId(notification)
     const decision =
       notification.type === 'STUDIO_ACCESS_REVIEWED' &&
       typeof notification.metadata?.decision === 'string'
@@ -810,8 +821,14 @@ export function AppTopBar({
     }
 
     if (notification.type === 'STUDIO_ACCESS_REQUEST') {
+      const params = new URLSearchParams()
+      if (studioAccessRequesterId) {
+        params.set('userId', studioAccessRequesterId)
+      }
+      params.set('panel', 'access')
+
       closeNotificationsModal()
-      router.push('/studio/admin/access')
+      router.push(`/studio/admin/users?${params.toString()}`)
       return
     }
 
@@ -873,6 +890,7 @@ export function AppTopBar({
         ?.memberships?.some(
           (membership) => membership.userId === currentUser.id && membership.isActive !== false
         )
+    const studioAccessRequesterId = getStudioAccessRequesterId(selectedNotification)
 
     if (teamId) {
       return {
@@ -884,7 +902,7 @@ export function AppTopBar({
 
     if (selectedNotification.type === 'STUDIO_ACCESS_REQUEST') {
       return {
-        label: 'Review request',
+        label: studioAccessRequesterId ? 'Open requester' : 'Open access review',
         disabled: false,
         loading: false,
       }
@@ -1233,7 +1251,14 @@ export function AppTopBar({
                       withBorder
                       p="md"
                       radius="lg"
-                      onClick={() => setSelectedNotification(notification)}
+                      onClick={() => {
+                        if (notification.type === 'STUDIO_ACCESS_REQUEST') {
+                          void handleNotificationAction(notification)
+                          return
+                        }
+
+                        setSelectedNotification(notification)
+                      }}
                       style={isUnread ? unreadNotificationCardStyle : notificationCardStyle}
                     >
                       <Group justify="space-between" align="flex-start" wrap="nowrap">

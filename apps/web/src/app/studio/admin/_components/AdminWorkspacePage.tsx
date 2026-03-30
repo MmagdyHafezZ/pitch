@@ -159,6 +159,17 @@ type SessionMemberCreateFormState = {
   role: string
 }
 
+type StudioAccessRequest = {
+  userId: string
+  email: string
+  name: string
+  requestedAt: string
+  quota?: number
+  role?: 'MEMBER' | 'ADMIN' | 'OWNER'
+}
+
+type ReviewRole = 'MEMBER' | 'ADMIN'
+
 export type AdminWorkspaceView = 'dashboard' | 'system' | 'users' | 'teams' | 'plans' | 'sessions'
 
 type AdminEntityView = 'users' | 'teams' | 'sessions'
@@ -891,8 +902,46 @@ const getStatusColor = (value: unknown, fallback = 'gray') => {
   return (normalized && STATUS_COLORS[normalized]) || fallback
 }
 
+const getStudioAccessSettings = (user: JsonRecord | null | undefined) => {
+  const settings = isRecord(user?.settings) ? user.settings : EMPTY_RECORD
+  return isRecord(settings.studioAccess) ? settings.studioAccess : EMPTY_RECORD
+}
+
+const getStudioAccessStatus = (user: JsonRecord | null | undefined) =>
+  readString(getStudioAccessSettings(user).status)?.toLowerCase() ?? null
+
+const getStudioAccessRequestedAt = (user: JsonRecord | null | undefined) =>
+  readString(getStudioAccessSettings(user).requestedAt)
+
+const toStudioAccessRequest = (
+  request: JsonRecord | null | undefined
+): StudioAccessRequest | null => {
+  const userId = readString(request?.userId)
+  const email = readString(request?.email)
+  const requestedAt = readString(request?.requestedAt)
+
+  if (!userId || !email || !requestedAt) {
+    return null
+  }
+
+  const roleValue = readString(request?.role)?.toUpperCase()
+  const role =
+    roleValue === 'OWNER' || roleValue === 'ADMIN' || roleValue === 'MEMBER' ? roleValue : undefined
+
+  return {
+    userId,
+    email,
+    name: readString(request?.name, email, userId) ?? email,
+    requestedAt,
+    quota: readNumber(request?.quota) ?? undefined,
+    role,
+  }
+}
+
 const getUserStatus = (user: JsonRecord | null | undefined) =>
-  readString(user?.status)?.toLowerCase() ??
+  (getStudioAccessStatus(user) === 'pending'
+    ? 'pending access'
+    : readString(user?.status)?.toLowerCase()) ??
   (readBoolean(user?.isActive) === false ? 'inactive' : 'active')
 
 const getTeamLabel = (team: JsonRecord) =>
@@ -2153,6 +2202,7 @@ export function AdminWorkspacePage({ view }: { view: AdminWorkspaceView }) {
   const { adminIdentity, isSystemAdmin, isCheckingAccess, accessError } = useAdminAccess()
   const [autoRefresh, setAutoRefresh] = useState(true)
   const [userFilter, setUserFilter] = useState('')
+  const [userListMode, setUserListMode] = useState<'all' | 'access-requests'>('all')
   const [teamFilter, setTeamFilter] = useState('')
   const [planFilter, setPlanFilter] = useState('')
   const [sessionFilter, setSessionFilter] = useState('')
@@ -2160,6 +2210,11 @@ export function AdminWorkspacePage({ view }: { view: AdminWorkspaceView }) {
   const [isInvitingUser, setIsInvitingUser] = useState(false)
   const [createUserForm, setCreateUserForm] = useState<UserCreateFormState>(EMPTY_USER_CREATE_FORM)
   const [inviteUserForm, setInviteUserForm] = useState<UserInviteFormState>(EMPTY_USER_INVITE_FORM)
+  const [studioAccessQuotas, setStudioAccessQuotas] = useState<Record<string, number>>({})
+  const [studioAccessRoles, setStudioAccessRoles] = useState<Record<string, ReviewRole>>({})
+  const [reviewingStudioAccessUserId, setReviewingStudioAccessUserId] = useState<string | null>(
+    null
+  )
   const [isCreatingTeam, setIsCreatingTeam] = useState(false)
   const [createTeamForm, setCreateTeamForm] = useState<TeamCreateFormState>(EMPTY_TEAM_CREATE_FORM)
   const [isCreatingSession, setIsCreatingSession] = useState(false)
@@ -2199,6 +2254,7 @@ export function AdminWorkspacePage({ view }: { view: AdminWorkspaceView }) {
   const [selectedTraceKey, setSelectedTraceKey] = useState<string | null>(null)
 
   const requestedUserId = searchParams.get('userId')?.trim() || null
+  const requestedUserPanel = searchParams.get('panel')?.trim() || null
   const requestedTeamId = searchParams.get('teamId')?.trim() || null
   const requestedSessionId = searchParams.get('sessionId')?.trim() || null
 
@@ -2243,6 +2299,12 @@ export function AdminWorkspacePage({ view }: { view: AdminWorkspaceView }) {
     liveRefetch
   )
   const usersQuery = useConsoleJsonQuery('users', '/api/v1/admin/users', isSystemAdmin)
+  const studioAccessRequestsQuery = useConsoleJsonQuery(
+    'studio-access-requests',
+    '/api/v1/studio-access/requests',
+    isSystemAdmin && view === 'users',
+    liveRefetch
+  )
   const teamsQuery = useConsoleJsonQuery('teams', '/api/v1/admin/teams', isSystemAdmin)
   const plansQuery = useConsoleJsonQuery('plans', '/api/v1/admin/plans', isSystemAdmin)
   const subscriptionsQuery = useConsoleJsonQuery(
@@ -2578,6 +2640,93 @@ export function AdminWorkspacePage({ view }: { view: AdminWorkspaceView }) {
       })
     },
   })
+
+  const approveStudioAccessMutation = useMutation({
+    mutationFn: ({
+      request,
+      quota,
+      role,
+    }: {
+      request: StudioAccessRequest
+      quota: number
+      role: ReviewRole
+    }) =>
+      requestJsonPath(
+        `/api/v1/studio-access/requests/${encodeURIComponent(request.userId)}/approve`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ quota, role }),
+        }
+      ),
+    onSuccess: (_result, { request, quota, role }) => {
+      notifications.show({
+        title: 'Access approved',
+        message: `${request.email} now has Studio access as ${role === 'ADMIN' ? 'an admin' : 'a regular user'} with ${formatNumber(quota)} coins.`,
+        color: 'success',
+      })
+      queryClient.invalidateQueries({ queryKey: ['admin-console'] })
+      queryClient.invalidateQueries({ queryKey: ['notifications'] })
+    },
+    onError: (error) => {
+      notifications.show({
+        title: 'Approval failed',
+        message: error instanceof Error ? error.message : 'Unable to approve access right now.',
+        color: 'brand',
+      })
+    },
+    onSettled: () => {
+      setReviewingStudioAccessUserId(null)
+    },
+  })
+
+  const denyStudioAccessMutation = useMutation({
+    mutationFn: ({ request }: { request: StudioAccessRequest }) =>
+      requestJsonPath(`/api/v1/studio-access/requests/${encodeURIComponent(request.userId)}/deny`, {
+        method: 'POST',
+      }),
+    onSuccess: (_result, { request }) => {
+      notifications.show({
+        title: 'Access denied',
+        message: `${request.email} was notified that Studio access was not approved.`,
+        color: 'yellow',
+      })
+      queryClient.invalidateQueries({ queryKey: ['admin-console'] })
+      queryClient.invalidateQueries({ queryKey: ['notifications'] })
+    },
+    onError: (error) => {
+      notifications.show({
+        title: 'Denial failed',
+        message: error instanceof Error ? error.message : 'Unable to deny access right now.',
+        color: 'brand',
+      })
+    },
+    onSettled: () => {
+      setReviewingStudioAccessUserId(null)
+    },
+  })
+
+  const handleApproveStudioAccess = (request: StudioAccessRequest) => {
+    const quota = Math.floor(studioAccessQuotas[request.userId] ?? request.quota ?? 5000)
+    const role =
+      studioAccessRoles[request.userId] ?? (request.role === 'ADMIN' ? 'ADMIN' : 'MEMBER')
+
+    if (quota <= 0) {
+      notifications.show({
+        title: 'Invalid quota',
+        message: 'Quota must be greater than zero.',
+        color: 'brand',
+      })
+      return
+    }
+
+    setReviewingStudioAccessUserId(request.userId)
+    approveStudioAccessMutation.mutate({ request, quota, role })
+  }
+
+  const handleDenyStudioAccess = (request: StudioAccessRequest) => {
+    setReviewingStudioAccessUserId(request.userId)
+    denyStudioAccessMutation.mutate({ request })
+  }
 
   const buildSessionUpdatePayload = () => {
     if (!sessionEditForm) {
@@ -3639,6 +3788,24 @@ export function AdminWorkspacePage({ view }: { view: AdminWorkspaceView }) {
   const overviewTotals = isRecord(overviewData.totals) ? overviewData.totals : {}
   const dependencies = isRecord(dependenciesData.dependencies) ? dependenciesData.dependencies : {}
   const users = extractArray(usersQuery.data)
+  const studioAccessRequests = useMemo(
+    () =>
+      extractArray(studioAccessRequestsQuery.data)
+        .map((request) => toStudioAccessRequest(request))
+        .filter((request): request is StudioAccessRequest => request !== null),
+    [studioAccessRequestsQuery.data]
+  )
+  const studioAccessRequestUserIds = useMemo(
+    () => new Set(studioAccessRequests.map((request) => request.userId)),
+    [studioAccessRequests]
+  )
+  const selectedUserStudioAccessRequest = useMemo(
+    () =>
+      selectedUserId
+        ? (studioAccessRequests.find((request) => request.userId === selectedUserId) ?? null)
+        : null,
+    [selectedUserId, studioAccessRequests]
+  )
   const teams = extractArray(teamsQuery.data)
   const plans = extractArray(plansQuery.data)
   const subscriptions = extractArray(subscriptionsQuery.data)
@@ -3660,11 +3827,35 @@ export function AdminWorkspacePage({ view }: { view: AdminWorkspaceView }) {
   )
   const filteredUsers = useMemo(() => {
     const needle = userFilter.trim().toLowerCase()
-    if (!needle) return users
-    return users.filter((user) =>
-      [user.name, user.email, user.id, user.role].join(' ').toLowerCase().includes(needle)
-    )
-  }, [userFilter, users])
+    return users.filter((user) => {
+      const userId = getRecordId(user)
+      const matchesMode =
+        userListMode === 'all' || (userId ? studioAccessRequestUserIds.has(userId) : false)
+
+      if (!matchesMode) {
+        return false
+      }
+
+      if (!needle) {
+        return true
+      }
+
+      return [
+        user.name,
+        user.email,
+        user.id,
+        user.role,
+        getUserStatus(user),
+        getStudioAccessStatus(user),
+        getStudioAccessSettings(user).role,
+        getStudioAccessRequestedAt(user),
+        studioAccessRequestUserIds.has(userId ?? '') ? 'requested access' : '',
+      ]
+        .join(' ')
+        .toLowerCase()
+        .includes(needle)
+    })
+  }, [studioAccessRequestUserIds, userFilter, userListMode, users])
   const filteredTeams = useMemo(() => {
     const needle = teamFilter.trim().toLowerCase()
     if (!needle) return teams
@@ -4267,6 +4458,7 @@ export function AdminWorkspacePage({ view }: { view: AdminWorkspaceView }) {
   const selectedUserStatus = getUserStatus(
     Object.keys(userDetail).length > 0 ? userDetail : (selectedUserListItem ?? userActivityUser)
   )
+  const selectedUserHasPendingStudioAccess = selectedUserStudioAccessRequest !== null
   const selectedUserVisibleCompletedSessions =
     userCompletedSessions.length > 0 ? userCompletedSessions : userRecentSessions
   const selectedUserTeamMembership = teamMemberships.find(
@@ -4416,13 +4608,48 @@ export function AdminWorkspacePage({ view }: { view: AdminWorkspaceView }) {
   }, [selectedUserId, userInspectorReturnMode])
 
   useEffect(() => {
+    setStudioAccessQuotas((current) => {
+      const next: Record<string, number> = {}
+
+      studioAccessRequests.forEach((request) => {
+        next[request.userId] = current[request.userId] ?? request.quota ?? 5000
+      })
+
+      return next
+    })
+
+    setStudioAccessRoles((current) => {
+      const next: Record<string, ReviewRole> = {}
+
+      studioAccessRequests.forEach((request) => {
+        next[request.userId] =
+          current[request.userId] ?? (request.role === 'ADMIN' ? 'ADMIN' : 'MEMBER')
+      })
+
+      return next
+    })
+  }, [studioAccessRequests])
+
+  useEffect(() => {
+    if (userListMode !== 'access-requests') return
+    if (studioAccessRequestsQuery.isLoading) return
+    if (studioAccessRequests.length > 0) return
+
+    setUserListMode('all')
+  }, [studioAccessRequests.length, studioAccessRequestsQuery.isLoading, userListMode])
+
+  useEffect(() => {
     if (!selectedUserId) {
       setUserInspectorSections({})
       return
     }
 
     if (userInspectorMode === 'user') {
-      setUserInspectorSections({})
+      setUserInspectorSections(
+        requestedUserPanel === 'access' || selectedUserHasPendingStudioAccess
+          ? { 'user:access': true }
+          : {}
+      )
       return
     }
 
@@ -4432,7 +4659,14 @@ export function AdminWorkspacePage({ view }: { view: AdminWorkspaceView }) {
     }
 
     setUserInspectorSections({})
-  }, [selectedSessionId, selectedTeamId, selectedUserId, userInspectorMode])
+  }, [
+    requestedUserPanel,
+    selectedSessionId,
+    selectedTeamId,
+    selectedUserHasPendingStudioAccess,
+    selectedUserId,
+    userInspectorMode,
+  ])
 
   useEffect(() => {
     setUserEditForm(userEditBaseline)
@@ -5142,9 +5376,17 @@ export function AdminWorkspacePage({ view }: { view: AdminWorkspaceView }) {
                     </Box>
                     <Group gap="sm">
                       <Badge color="info" variant="light">
-                        {userFilter.trim()
-                          ? `${filteredUsers.length} of ${users.length} users`
-                          : `${filteredUsers.length} users`}
+                        {userListMode === 'access-requests'
+                          ? `${filteredUsers.length} of ${studioAccessRequests.length} requesters`
+                          : userFilter.trim()
+                            ? `${filteredUsers.length} of ${users.length} users`
+                            : `${filteredUsers.length} users`}
+                      </Badge>
+                      <Badge
+                        color={studioAccessRequests.length > 0 ? 'yellow' : 'gray'}
+                        variant="light"
+                      >
+                        {formatNumber(studioAccessRequests.length)} requested access
                       </Badge>
                       <Button
                         variant={isInvitingUser ? 'filled' : 'light'}
@@ -5170,8 +5412,26 @@ export function AdminWorkspacePage({ view }: { view: AdminWorkspaceView }) {
                       <TextInput
                         value={userFilter}
                         onChange={(event) => setUserFilter(event.currentTarget.value)}
-                        placeholder="Search users by name, email, id, or status"
+                        placeholder={
+                          userListMode === 'access-requests'
+                            ? 'Search requesters by name, email, id, or access state'
+                            : 'Search users by name, email, id, status, or access state'
+                        }
                         leftSection={<IconSearch size={16} />}
+                      />
+                      <SegmentedControl
+                        value={userListMode}
+                        onChange={(value) => setUserListMode(value as 'all' | 'access-requests')}
+                        data={[
+                          {
+                            label: `All users (${formatNumber(users.length)})`,
+                            value: 'all',
+                          },
+                          {
+                            label: `Requested access (${formatNumber(studioAccessRequests.length)})`,
+                            value: 'access-requests',
+                          },
+                        ]}
                       />
                     </div>
 
@@ -5185,15 +5445,23 @@ export function AdminWorkspacePage({ view }: { view: AdminWorkspaceView }) {
                       <div className={classes.logTable}>
                         {filteredUsers.length === 0 ? (
                           <div className={classes.logEmptyState}>
-                            <Text fw={700}>No users matched this filter</Text>
+                            <Text fw={700}>
+                              {userListMode === 'access-requests'
+                                ? 'No access requests matched this filter'
+                                : 'No users matched this filter'}
+                            </Text>
                             <Text size="sm" className={classes.mutedText}>
-                              Try a broader search by email, id, or account state.
+                              {userListMode === 'access-requests'
+                                ? 'Try a broader search by requester name, email, or switch back to all users.'
+                                : 'Try a broader search by email, id, or account state.'}
                             </Text>
                           </div>
                         ) : (
                           <ScrollArea h={640}>
                             <div className={classes.logTableBody}>
-                              <div className={classes.logTableHeader}>
+                              <div
+                                className={`${classes.logTableHeader} ${classes.userLogTableCompact}`}
+                              >
                                 <Text
                                   size="xs"
                                   tt="uppercase"
@@ -5226,14 +5494,6 @@ export function AdminWorkspacePage({ view }: { view: AdminWorkspaceView }) {
                                 >
                                   Activity
                                 </Text>
-                                <Text
-                                  size="xs"
-                                  tt="uppercase"
-                                  fw={700}
-                                  className={classes.metaLabel}
-                                >
-                                  Flags
-                                </Text>
                               </div>
 
                               {filteredUsers.map((user) => {
@@ -5241,12 +5501,15 @@ export function AdminWorkspacePage({ view }: { view: AdminWorkspaceView }) {
                                 if (!userId) return null
 
                                 const status = getUserStatus(user)
+                                const studioAccessStatus = getStudioAccessStatus(user)
+                                const hasPendingStudioAccess = studioAccessStatus === 'pending'
+                                const studioAccessRequestedAt = getStudioAccessRequestedAt(user)
 
                                 return (
                                   <button
                                     key={userId}
                                     type="button"
-                                    className={`${classes.logTableRow} ${
+                                    className={`${classes.logTableRow} ${classes.userLogTableCompact} ${
                                       selectedUserId === userId ? classes.logTableRowActive : ''
                                     }`}
                                     onClick={() => {
@@ -5279,7 +5542,7 @@ export function AdminWorkspacePage({ view }: { view: AdminWorkspaceView }) {
                                           className={`${classes.logDot} ${
                                             status === 'active'
                                               ? classes.logDotSuccess
-                                              : status === 'pending'
+                                              : status.includes('pending')
                                                 ? classes.logDotWarning
                                                 : classes.logDotError
                                           }`}
@@ -5308,32 +5571,10 @@ export function AdminWorkspacePage({ view }: { view: AdminWorkspaceView }) {
                                       className={`${classes.logTableCell} ${classes.logTableSummary}`}
                                     >
                                       <Text size="sm" className={classes.logSummaryText}>
-                                        Updated{' '}
-                                        {formatCompactDate(user.updatedAt ?? user.createdAt) ??
-                                          'n/a'}
+                                        {hasPendingStudioAccess
+                                          ? `Requested ${formatCompactDate(studioAccessRequestedAt) ?? 'recently'}`
+                                          : `Updated ${formatCompactDate(user.updatedAt ?? user.createdAt) ?? 'n/a'}`}
                                       </Text>
-                                    </div>
-                                    <div
-                                      className={`${classes.logTableCell} ${classes.logTableBadges}`}
-                                    >
-                                      <Group gap="xs" wrap="wrap">
-                                        <Badge
-                                          color={getStatusColor(status, 'success')}
-                                          variant="light"
-                                        >
-                                          {status}
-                                        </Badge>
-                                        {readString(user.role) ? (
-                                          <Badge color="selected" variant="light">
-                                            {readString(user.role)}
-                                          </Badge>
-                                        ) : null}
-                                        {readBoolean(user.emailVerified) ? (
-                                          <Badge color="brand" variant="light">
-                                            verified
-                                          </Badge>
-                                        ) : null}
-                                      </Group>
                                     </div>
                                   </button>
                                 )
@@ -6518,8 +6759,9 @@ export function AdminWorkspacePage({ view }: { view: AdminWorkspaceView }) {
                                         color="gray"
                                         variant="light"
                                         className={classes.consoleText}
+                                        title={selectedUserId ?? undefined}
                                       >
-                                        {selectedUserId}
+                                        {truncateMiddle(selectedUserId, 18)}
                                       </Badge>
                                     </Group>
                                     <Text fw={700}>
@@ -6583,6 +6825,134 @@ export function AdminWorkspacePage({ view }: { view: AdminWorkspaceView }) {
                                   </Text>
                                 </div>
                               </div>
+
+                              {selectedUserStudioAccessRequest ? (
+                                <DetailSection
+                                  title="Access request"
+                                  icon={<IconShield size={16} />}
+                                  collapsible
+                                  expanded={isUserInspectorSectionExpanded('user:access')}
+                                  onToggle={() => toggleUserInspectorSection('user:access')}
+                                  bodyClassName={classes.inspectorSectionBody}
+                                  action={
+                                    <Badge color="yellow" variant="light">
+                                      pending access
+                                    </Badge>
+                                  }
+                                >
+                                  <Stack gap="md">
+                                    <Group justify="space-between" align="flex-start" wrap="wrap">
+                                      <Box style={{ minWidth: 0, flex: 1 }}>
+                                        <Text fw={700}>
+                                          {selectedUserStudioAccessRequest.email}
+                                        </Text>
+                                        <Text size="sm" className={classes.mutedText}>
+                                          Requested on{' '}
+                                          {formatCompactDate(
+                                            selectedUserStudioAccessRequest.requestedAt
+                                          ) ??
+                                            new Date(
+                                              selectedUserStudioAccessRequest.requestedAt
+                                            ).toLocaleString()}
+                                        </Text>
+                                      </Box>
+                                      <Badge
+                                        color="gray"
+                                        variant="light"
+                                        className={classes.consoleText}
+                                      >
+                                        {truncateMiddle(selectedUserStudioAccessRequest.userId, 18)}
+                                      </Badge>
+                                    </Group>
+
+                                    <Grid gutter="md">
+                                      <Grid.Col span={{ base: 12, md: 6 }}>
+                                        <NumberInput
+                                          label="Quota"
+                                          min={1}
+                                          step={100}
+                                          thousandSeparator=","
+                                          value={
+                                            studioAccessQuotas[
+                                              selectedUserStudioAccessRequest.userId
+                                            ] ??
+                                            selectedUserStudioAccessRequest.quota ??
+                                            5000
+                                          }
+                                          onChange={(value) =>
+                                            setStudioAccessQuotas((current) => ({
+                                              ...current,
+                                              [selectedUserStudioAccessRequest.userId]:
+                                                typeof value === 'number' && Number.isFinite(value)
+                                                  ? value
+                                                  : 0,
+                                            }))
+                                          }
+                                        />
+                                      </Grid.Col>
+                                      <Grid.Col span={{ base: 12, md: 6 }}>
+                                        <Select
+                                          label="Role"
+                                          data={[
+                                            { value: 'MEMBER', label: 'Regular user' },
+                                            { value: 'ADMIN', label: 'Admin user' },
+                                          ]}
+                                          value={
+                                            studioAccessRoles[
+                                              selectedUserStudioAccessRequest.userId
+                                            ] ??
+                                            (selectedUserStudioAccessRequest.role === 'ADMIN'
+                                              ? 'ADMIN'
+                                              : 'MEMBER')
+                                          }
+                                          onChange={(value) =>
+                                            setStudioAccessRoles((current) => ({
+                                              ...current,
+                                              [selectedUserStudioAccessRequest.userId]:
+                                                value === 'ADMIN' ? 'ADMIN' : 'MEMBER',
+                                            }))
+                                          }
+                                        />
+                                      </Grid.Col>
+                                    </Grid>
+
+                                    <Group justify="space-between" align="flex-end" wrap="wrap">
+                                      <Text size="sm" className={classes.mutedText}>
+                                        Review and resolve this Studio access request directly from
+                                        the selected user profile.
+                                      </Text>
+                                      <Group gap="sm" wrap="wrap">
+                                        <Button
+                                          variant="light"
+                                          color="yellow"
+                                          loading={
+                                            reviewingStudioAccessUserId ===
+                                            selectedUserStudioAccessRequest.userId
+                                          }
+                                          onClick={() =>
+                                            handleDenyStudioAccess(selectedUserStudioAccessRequest)
+                                          }
+                                        >
+                                          Deny
+                                        </Button>
+                                        <Button
+                                          loading={
+                                            reviewingStudioAccessUserId ===
+                                            selectedUserStudioAccessRequest.userId
+                                          }
+                                          onClick={() =>
+                                            handleApproveStudioAccess(
+                                              selectedUserStudioAccessRequest
+                                            )
+                                          }
+                                        >
+                                          Approve
+                                        </Button>
+                                      </Group>
+                                    </Group>
+                                  </Stack>
+                                </DetailSection>
+                              ) : null}
 
                               <DetailSection
                                 title="User editor"

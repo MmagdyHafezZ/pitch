@@ -64,16 +64,7 @@ const ADMIN_SECONDARY_LINKS: SidebarLink[] = [
 ]
 
 export default function ClientLayerComponent({ children }: { children: React.ReactNode }) {
-  const [active, setActive] = useState<
-    | 'Home'
-    | 'Sessions'
-    | 'Teams'
-    | 'Analytics'
-    | 'Settings'
-    | 'Team Config'
-    | 'Challenges'
-    | 'Subscription'
-  >('Home')
+  const [active, setActive] = useState<string>('Home')
   const [selectedDate, setSelectedDate] = useState<Date | null>(new Date())
   const {
     teams,

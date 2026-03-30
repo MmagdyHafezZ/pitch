@@ -82,17 +82,12 @@ describe('AppSideBar', () => {
     expect(mockPush).toHaveBeenCalledWith('/studio/home')
   })
 
-  it('routes the bottom admin shortcut to the studio admin dashboard', async () => {
+  it('renders a single admin entry in the main nav and routes it to the studio admin dashboard', async () => {
     const user = userEvent.setup()
 
-    render(
-      <AppSidebar
-        {...baseProps}
-        mainLinks={[{ icon: () => null, label: 'Home', href: '/studio/home' }]}
-        showAdmin
-        showTeamConfig={false}
-      />
-    )
+    render(<AppSidebar {...baseProps} showAdmin showTeamConfig={false} />)
+
+    expect(screen.getAllByText('Admin')).toHaveLength(1)
 
     await user.click(getNavControl('Admin'))
 
