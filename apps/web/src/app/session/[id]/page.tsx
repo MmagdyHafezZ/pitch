@@ -190,6 +190,30 @@ const readAvatarVideoState = (session: unknown): AvatarVideoState => {
   }
 }
 
+const readVideoPresenter = (session: unknown) => {
+  if (!isRecord(session)) {
+    return {
+      name: null,
+      avatarImageUrl: null,
+    }
+  }
+
+  const sessionConfig = isRecord(session.sessionConfig) ? session.sessionConfig : {}
+  const videoConfig = isRecord(sessionConfig.video) ? sessionConfig.video : {}
+  const presenter = isRecord(videoConfig.presenter) ? videoConfig.presenter : null
+
+  return {
+    name:
+      (presenter && typeof presenter.name === 'string' ? presenter.name : null) ??
+      (typeof videoConfig.presenterName === 'string' ? videoConfig.presenterName : null),
+    avatarImageUrl:
+      (presenter && typeof presenter.avatarImageUrl === 'string'
+        ? presenter.avatarImageUrl
+        : null) ??
+      (typeof videoConfig.avatarImageUrl === 'string' ? videoConfig.avatarImageUrl : null),
+  }
+}
+
 const buildSessionVideoStreamUrl = (sessionId: string, token: string, jobId?: string | null) => {
   const url = new URL(`${API_CONFIG.baseURL}/simulation/video/stream/${sessionId}`)
   url.searchParams.set('token', token)
@@ -2123,6 +2147,7 @@ export default function LiveSessionPage() {
     (session: any, history: TranscriptMessage[] = []) => {
       const config = (session?.sessionConfig as Record<string, any>) ?? {}
       const avatarState = readAvatarVideoState(session)
+      const videoPresenter = readVideoPresenter(session)
       const phoneRuntime = readPhoneCallRuntime(session)
       const normalizedStatus = normalizeSessionStatus(session)
       const nextAvatarVideoUrl =
@@ -2144,8 +2169,10 @@ export default function LiveSessionPage() {
       setSessionType(session?.type ?? null)
       setSessionStatus(normalizedStatus)
       setSessionName((session as any)?.name ?? (session as any)?.scenario?.name ?? '')
-      setPersonaName((session as any)?.persona?.name ?? null)
-      setPersonaAvatarImageUrl((session as any)?.persona?.traits?.avatar?.imageUrl ?? null)
+      setPersonaName((session as any)?.persona?.name ?? videoPresenter.name ?? null)
+      setPersonaAvatarImageUrl(
+        (session as any)?.persona?.traits?.avatar?.imageUrl ?? videoPresenter.avatarImageUrl ?? null
+      )
       setAvatarVideoStatus(avatarState.status)
       setAvatarVideoProvider(avatarState.provider)
       setAvatarVideoError(avatarState.error)
@@ -4293,6 +4320,7 @@ export default function LiveSessionPage() {
                 sttCommitProgress={sttCommitProgress}
                 textInput={textInput}
                 currentAudioUrl={currentAudioUrl}
+                audioElementRef={audioElementRef}
                 isMobile={!!isMobile}
                 activeObjections={activeObjections}
                 latestNextStep={latestNextStep}

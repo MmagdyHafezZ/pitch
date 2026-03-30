@@ -111,6 +111,14 @@ export interface ConversationAudioReadyPayload {
   text?: string
 }
 
+export interface CharacterAlignmentPayload {
+  characters?: string[]
+  characterStartTimesSeconds?: number[]
+  characterEndTimesSeconds?: number[]
+  character_start_times_seconds?: number[]
+  character_end_times_seconds?: number[]
+}
+
 export interface ConversationErrorPayload {
   error: string
   code?: string

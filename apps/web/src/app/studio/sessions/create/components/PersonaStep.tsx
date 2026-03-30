@@ -39,6 +39,8 @@ import { CreatePersonaModal } from './CreatePersonaModal'
 import { notifications } from '@mantine/notifications'
 import { api } from '@/lib/client'
 import { PersonaProfileCard } from './PersonaProfileCard'
+import type { SessionType } from '@/features/sessions'
+import { PABLO_VIDEO_PRESENTER_PERSONA } from '../lib/videoPresenter'
 
 export const metricIconMap: Record<string, ReactNode> = {
   empathy: <IconHeart size={12} />,
@@ -84,6 +86,7 @@ const resolvePersonaAvatarUrl = (
 }
 
 interface PersonaStepProps {
+  sessionType: SessionType | null
   personasLoading: boolean
   personas: Persona[]
   filteredPersonas: Persona[]
@@ -101,6 +104,7 @@ interface PersonaStepProps {
 }
 
 export function PersonaStep({
+  sessionType,
   personasLoading,
   personas,
   filteredPersonas,
@@ -123,6 +127,7 @@ export function PersonaStep({
   const previewAudioRef = useRef<HTMLAudioElement | null>(null)
   const previewUrlRef = useRef<string | null>(null)
   const visiblePersonas = filteredPersonas.filter((persona) => persona.id !== selectedPersona)
+  const isVideoSession = sessionType === 'video'
 
   const clearPreviewUrl = () => {
     if (previewUrlRef.current) {
@@ -154,6 +159,77 @@ export function PersonaStep({
       }
     }
   }, [])
+
+  if (isVideoSession) {
+    const presenterTraits = PABLO_VIDEO_PRESENTER_PERSONA.traits ?? {}
+    const presenterImageUrl = resolvePersonaAvatarUrl(presenterTraits)
+
+    return (
+      <LayoutGroup>
+        <Stack gap="md">
+          <Box>
+            <Title order={3}>Select Video Presenter</Title>
+            <Text size="sm" c="dimmed">
+              Video sessions use Pablo as the fixed presenter, so this step is locked to one host.
+            </Text>
+          </Box>
+
+          <Paper
+            withBorder
+            radius="xl"
+            p="lg"
+            className={`${classes.personaPreview} ${classes.personaSelectedCard}`}
+          >
+            <Stack gap="md">
+              <Group align="center" className={classes.personaPreviewHeader}>
+                <Avatar size={72} radius="lg" src={presenterImageUrl}>
+                  <IconUser size={34} />
+                </Avatar>
+                <Stack gap={2}>
+                  <Text fw={700}>{PABLO_VIDEO_PRESENTER_PERSONA.name}</Text>
+                  <Text size="xs" c="dimmed">
+                    {presenterTraits.role ?? 'Video Presenter'} ·{' '}
+                    {presenterTraits.level ?? 'Locked'}
+                  </Text>
+                  <Group gap={6}>
+                    <Badge size="xs" variant="light">
+                      {presenterTraits.archetype ?? 'Studio Host'}
+                    </Badge>
+                    <Badge size="xs" variant="outline" color="yellow">
+                      Locked for video
+                    </Badge>
+                  </Group>
+                </Stack>
+              </Group>
+
+              <Text size="sm" c="dimmed" className={classes.personaPreviewBio}>
+                {presenterTraits.personality ??
+                  'Warm and animated presenter for guided video sessions.'}
+              </Text>
+
+              <Box className={classes.personaPreviewBlock}>
+                <Text size="xs" fw={600}>
+                  Presenter Profile
+                </Text>
+                <Text size="sm" c="dimmed">
+                  {getVoiceProfile(presenterTraits)}
+                </Text>
+                <Text size="xs" c="dimmed">
+                  Pablo stays on-camera for every video simulation.
+                </Text>
+              </Box>
+            </Stack>
+          </Paper>
+
+          {errors.persona && (
+            <Text c="red" size="sm">
+              {errors.persona}
+            </Text>
+          )}
+        </Stack>
+      </LayoutGroup>
+    )
+  }
 
   const handlePreviewAudio = async (persona: Persona) => {
     if (playingPersonaId === persona.id) {
