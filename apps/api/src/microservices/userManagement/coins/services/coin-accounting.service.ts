@@ -42,6 +42,19 @@ export class CoinAccountingService {
     return `${args.subscriptionId}:${args.startMs}-${args.endMs}`;
   }
 
+  private getDefaultPersonalAllowance(): number {
+    return Number(this.config.get('PERSONAL_COINS_PER_MONTH') ?? 100);
+  }
+
+  private buildPersonalPeriodKey(userId: string, at = new Date()): string {
+    const ym = `${at.getFullYear()}-${String(at.getMonth() + 1).padStart(2, '0')}`;
+    return `personal:${userId}:${ym}`;
+  }
+
+  private buildPersonalEntityKey(userId: string): string {
+    return `user:${userId}`;
+  }
+
   private async getEntitlementOrNull(teamId: string): Promise<null | {
     subscriptionId: string;
     planId: string;
@@ -369,6 +382,44 @@ export class CoinAccountingService {
     }));
   }
 
+  async recordPlanUpgrade(args: {
+    teamId: string;
+    subscriptionId: string;
+    planId: string;
+    requesterId: string;
+    periodKey: string;
+    allowance: number;
+    remainingAfter: number;
+    deltaCoins: number;
+    eventId: string;
+  }): Promise<void> {
+    if (!(await this.coinLedgerRepo.existsByEventId(args.eventId))) {
+      await this.coinLedgerRepo.create({
+        type: CoinLedgerType.UPGRADE,
+        userId: args.requesterId,
+        eventId: args.eventId,
+        teamId: args.teamId,
+        subscriptionId: args.subscriptionId,
+        planId: args.planId,
+        requestId: args.eventId,
+        reservationId: args.eventId,
+        periodKey: args.periodKey,
+        deltaCoins: args.deltaCoins,
+        allowance: args.allowance,
+        remainingAfter: args.remainingAfter,
+      });
+    }
+
+    await this.coinBalanceRepo.upsertUpgrade({
+      teamId: args.teamId,
+      subscriptionId: args.subscriptionId,
+      periodKey: args.periodKey,
+      allowance: args.allowance,
+      remainingAfter: args.remainingAfter,
+      eventId: args.eventId,
+    });
+  }
+
   private async guardReservationLifecycle(reservationId: string) {
     const entries =
       await this.coinLedgerRepo.findAllByReservationId(reservationId);
@@ -413,19 +464,22 @@ export class CoinAccountingService {
     remainingAfter?: number;
     reason?: 'INSUFFICIENT_COINS';
   }> {
-    const allowance = Number(
-      this.config.get('PERSONAL_COINS_PER_MONTH') ?? 100,
-    );
+    const defaultAllowance = this.getDefaultPersonalAllowance();
     const now = new Date();
-    const ym = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-    const periodKey = `personal:${args.userId}:${ym}`;
-    const entityKey = `user:${args.userId}`;
+    const periodKey = this.buildPersonalPeriodKey(args.userId, now);
+    const entityKey = this.buildPersonalEntityKey(args.userId);
 
     const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
     const ttlSeconds = Math.max(
       3600,
       Math.floor((endOfMonth.getTime() - now.getTime()) / 1000) + 7 * 24 * 3600,
     );
+
+    const existingBalance = await this.coinBalanceRepo.getSnapshot(
+      entityKey,
+      periodKey,
+    );
+    const allowance = existingBalance?.allowance ?? defaultAllowance;
 
     await this.redis.initRemainingIfMissing(
       entityKey,
@@ -504,17 +558,14 @@ export class CoinAccountingService {
     allowance: number;
     periodKey: string;
   }> {
-    const allowance = Number(
-      this.config.get('PERSONAL_COINS_PER_MONTH') ?? 100,
-    );
+    const defaultAllowance = this.getDefaultPersonalAllowance();
 
     // Build a stable monthly period key
     const now = new Date();
-    const ym = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-    const periodKey = `personal:${userId}:${ym}`;
+    const periodKey = this.buildPersonalPeriodKey(userId, now);
 
     // Entity key uses "user:" prefix to avoid collision with UUID team IDs
-    const entityKey = `user:${userId}`;
+    const entityKey = this.buildPersonalEntityKey(userId);
 
     // TTL: rest of month + 7-day buffer
     const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
@@ -522,6 +573,12 @@ export class CoinAccountingService {
       3600,
       Math.floor((endOfMonth.getTime() - now.getTime()) / 1000) + 7 * 24 * 3600,
     );
+
+    const existingBalance = await this.coinBalanceRepo.getSnapshot(
+      entityKey,
+      periodKey,
+    );
+    const allowance = existingBalance?.allowance ?? defaultAllowance;
 
     await this.redis.initRemainingIfMissing(
       entityKey,
@@ -535,7 +592,7 @@ export class CoinAccountingService {
     return {
       ok: true,
       userId,
-      remaining: remaining ?? allowance,
+      remaining: remaining ?? existingBalance?.remaining ?? allowance,
       allowance,
       periodKey,
     };

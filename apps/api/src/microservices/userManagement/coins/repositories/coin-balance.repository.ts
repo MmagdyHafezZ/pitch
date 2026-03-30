@@ -17,6 +17,26 @@ export class CoinBalanceRepository {
     return this.model.findOne({ teamId, periodKey }).lean();
   }
 
+  async getSnapshot(
+    teamId: string,
+    periodKey: string,
+  ): Promise<{ allowance: number; remaining: number } | null> {
+    const doc = await this.model
+      .findOne({ teamId, periodKey }, { allowance: 1, remaining: 1 })
+      .lean<{ allowance?: unknown; remaining?: unknown }>();
+
+    if (!doc) return null;
+
+    const allowance = Number(doc.allowance);
+    const remaining = Number(doc.remaining);
+
+    if (!Number.isFinite(allowance) || !Number.isFinite(remaining)) {
+      return null;
+    }
+
+    return { allowance, remaining };
+  }
+
   async getRemaining(
     teamId: string,
     periodKey: string,
@@ -121,6 +141,30 @@ export class CoinBalanceRepository {
     allowance: number;
     remainingAfter: number;
     debtApplied: number;
+    eventId: string;
+  }) {
+    return this.model.updateOne(
+      { teamId: args.teamId, periodKey: args.periodKey },
+      {
+        $set: {
+          teamId: args.teamId,
+          subscriptionId: args.subscriptionId,
+          periodKey: args.periodKey,
+          allowance: args.allowance,
+          remaining: args.remainingAfter,
+          lastEventId: args.eventId,
+        },
+      },
+      { upsert: true },
+    );
+  }
+
+  upsertUpgrade(args: {
+    teamId: string;
+    subscriptionId: string;
+    periodKey: string;
+    allowance: number;
+    remainingAfter: number;
     eventId: string;
   }) {
     return this.model.updateOne(

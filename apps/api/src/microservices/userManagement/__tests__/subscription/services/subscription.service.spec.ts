@@ -7,6 +7,7 @@ import { CoinRefillService } from '../../../coins/services/coin-refill.service';
 import { CoinRedisService } from '../../../coins/services/coin-redis.service';
 import { CoinAccountingService } from '../../../coins/services/coin-accounting.service';
 import { PlanChangeNotificationService } from '../../../subscription/services/plan-change-notification.service';
+import { NotificationService } from '../../../notifications/service/notification.service';
 
 describe('SubscriptionService', () => {
   let service: SubscriptionService;
@@ -16,6 +17,7 @@ describe('SubscriptionService', () => {
   let coinRedisService: jest.Mocked<CoinRedisService>;
   let coinAccountingService: jest.Mocked<CoinAccountingService>;
   let planChangeNotificationService: jest.Mocked<PlanChangeNotificationService>;
+  let notificationService: jest.Mocked<NotificationService>;
 
   const basePlan = {
     id: 'plan-1',
@@ -42,10 +44,16 @@ describe('SubscriptionService', () => {
   beforeEach(() => {
     coinAccountingService = {
       buildPeriodKey: jest.fn().mockReturnValue('period-key'),
+      getRemainingCoins: jest.fn(),
+      recordPlanUpgrade: jest.fn().mockResolvedValue(undefined),
     } as unknown as jest.Mocked<CoinAccountingService>;
     coinRedisService = {
       initRemainingIfMissing: jest.fn(),
-      applyDeltaIdempotent: jest.fn(),
+      applyDeltaIdempotent: jest.fn().mockResolvedValue({
+        applied: true,
+        remainingAfter: 250,
+        reason: 'APPLIED',
+      }),
     } as unknown as jest.Mocked<CoinRedisService>;
     coinRefillService = {
       refillInitialForSubscription: jest.fn().mockResolvedValue({
@@ -67,9 +75,15 @@ describe('SubscriptionService', () => {
       findById: jest.fn(),
     } as unknown as jest.Mocked<PlanRepository>;
     planChangeNotificationService = {
-      notifyAdminsOfRequest: jest.fn(),
-      notifyUserOfDecision: jest.fn(),
+      notifyAdminsOfRequest: jest.fn().mockResolvedValue(undefined),
+      notifyUserOfDecision: jest.fn().mockResolvedValue(undefined),
     } as unknown as jest.Mocked<PlanChangeNotificationService>;
+    notificationService = {
+      markMatchingRead: jest.fn().mockResolvedValue({
+        matched: 0,
+        modified: 0,
+      }),
+    } as unknown as jest.Mocked<NotificationService>;
 
     service = new SubscriptionService(
       coinAccountingService,
@@ -78,6 +92,7 @@ describe('SubscriptionService', () => {
       subscriptionRepository,
       planRepository,
       planChangeNotificationService,
+      notificationService,
     );
   });
 
@@ -217,15 +232,27 @@ describe('SubscriptionService', () => {
     const newPlan = { ...basePlan, id: 'plan-2', maxCoins: 250 };
     subscriptionRepository.findById.mockResolvedValue(existing);
     planRepository.findById.mockResolvedValue(newPlan);
+    coinAccountingService.getRemainingCoins.mockResolvedValue({
+      ok: true,
+      teamId: 'team-1',
+      periodKey: 'period-key',
+      allowance: 250,
+      remaining: 250,
+    } as any);
     subscriptionRepository.update.mockResolvedValue({
       ...existing,
       planId: 'plan-2',
       plan: newPlan,
+      interval: BillingInterval.ANNUAL,
     });
 
     const result = await service.upgradeSubscription(
       'sub-1',
-      { planId: 'plan-2', metadata: { notes: 'manual upgrade' } } as any,
+      {
+        planId: 'plan-2',
+        interval: BillingInterval.ANNUAL,
+        metadata: { notes: 'manual upgrade' },
+      } as any,
       'admin-1',
     );
 
@@ -239,12 +266,35 @@ describe('SubscriptionService', () => {
     expect(coinRedisService.applyDeltaIdempotent).toHaveBeenCalledWith(
       expect.objectContaining({ teamId: 'team-1', deltaCoins: -150 }),
     );
+    expect(coinAccountingService.getRemainingCoins).toHaveBeenCalledWith(
+      'team-1',
+      {
+        periodKey: 'period-key',
+        allowanceFallback: 250,
+        initIfMissing: false,
+      },
+    );
+    expect(coinAccountingService.recordPlanUpgrade).toHaveBeenCalledWith(
+      expect.objectContaining({
+        teamId: 'team-1',
+        subscriptionId: 'sub-1',
+        planId: 'plan-2',
+        requesterId: 'admin-1',
+        allowance: 250,
+        remainingAfter: 250,
+        deltaCoins: 150,
+        eventId: expect.stringContaining('upgrade:sub-1:plan-2:'),
+      }),
+    );
     expect(subscriptionRepository.update).toHaveBeenCalledWith(
       'sub-1',
       expect.objectContaining({
         planId: 'plan-2',
+        interval: BillingInterval.ANNUAL,
         metadata: expect.objectContaining({
+          billing: expect.any(Object),
           notes: 'manual upgrade',
+          seating: expect.any(Object),
           audit: expect.objectContaining({
             updatedByUserId: 'admin-1',
             upgradedByUserId: 'admin-1',
@@ -254,6 +304,7 @@ describe('SubscriptionService', () => {
       }),
     );
     expect(result.planId).toBe('plan-2');
+    expect(result.interval).toBe(BillingInterval.ANNUAL);
   });
 
   it('throws when upgrading missing subscription or plan', async () => {
@@ -419,5 +470,144 @@ describe('SubscriptionService', () => {
     expect(
       service.addInterval(start, BillingInterval.ANNUAL).getUTCFullYear(),
     ).toBe(2025);
+  });
+
+  it('creates a pending plan change request and notifies admins with subscription metadata', async () => {
+    subscriptionRepository.findById.mockResolvedValue(baseSubscriptionWithPlan);
+    planRepository.findById.mockResolvedValue({
+      ...basePlan,
+      id: 'plan-2',
+      name: 'Pro',
+    } as any);
+    subscriptionRepository.update.mockResolvedValue({
+      ...baseSubscriptionWithPlan,
+      metadata: {
+        pendingPlanChange: {
+          requestedPlanId: 'plan-2',
+          requestedInterval: BillingInterval.ANNUAL,
+          requestedAt: '2026-03-29T00:00:00.000Z',
+          requestedByUserId: 'user-9',
+        },
+      },
+    } as any);
+
+    await service.requestPlanChange(
+      'sub-1',
+      { planId: 'plan-2', interval: BillingInterval.ANNUAL },
+      'user-9',
+    );
+
+    expect(subscriptionRepository.update).toHaveBeenCalledWith(
+      'sub-1',
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          pendingPlanChange: expect.objectContaining({
+            requestedPlanId: 'plan-2',
+            requestedInterval: BillingInterval.ANNUAL,
+            requestedByUserId: 'user-9',
+          }),
+        }),
+      }),
+    );
+    expect(
+      planChangeNotificationService.notifyAdminsOfRequest,
+    ).toHaveBeenCalledWith({
+      subscriptionId: 'sub-1',
+      requesterId: 'user-9',
+      currentPlanName: 'Free',
+      requestedPlanName: 'Pro',
+      requestedInterval: BillingInterval.ANNUAL,
+    });
+  });
+
+  it('clears matching admin notifications after approving a pending plan change', async () => {
+    subscriptionRepository.findById.mockResolvedValue({
+      ...baseSubscriptionWithPlan,
+      metadata: {
+        pendingPlanChange: {
+          requestedPlanId: 'plan-2',
+          requestedInterval: BillingInterval.MONTH,
+          requestedAt: '2026-03-29T00:00:00.000Z',
+          requestedByUserId: 'user-9',
+        },
+      },
+    } as any);
+    jest.spyOn(service, 'upgradeSubscription').mockResolvedValue({
+      ...baseSubscriptionWithPlan,
+      id: 'sub-1',
+      planId: 'plan-2',
+      plan: {
+        id: 'plan-2',
+        name: 'Pro',
+        maxCoins: 500,
+      },
+      metadata: {
+        pendingPlanChange: {
+          requestedPlanId: 'plan-2',
+        },
+      },
+    } as any);
+    subscriptionRepository.update.mockResolvedValue({
+      ...baseSubscriptionWithPlan,
+      id: 'sub-1',
+      planId: 'plan-2',
+      plan: {
+        id: 'plan-2',
+        name: 'Pro',
+        maxCoins: 500,
+      },
+      metadata: {},
+    } as any);
+
+    await service.approvePlanChange('sub-1', 'admin-1');
+
+    expect(notificationService.markMatchingRead).toHaveBeenCalledWith({
+      type: 'plan_change_request',
+      metadata: { subscriptionId: 'sub-1' },
+    });
+    expect(
+      planChangeNotificationService.notifyUserOfDecision,
+    ).toHaveBeenCalledWith({
+      requesterId: 'user-9',
+      decision: 'approved',
+      planName: 'Pro',
+    });
+  });
+
+  it('clears matching admin notifications after rejecting a pending plan change', async () => {
+    subscriptionRepository.findById.mockResolvedValue({
+      ...baseSubscriptionWithPlan,
+      metadata: {
+        pendingPlanChange: {
+          requestedPlanId: 'plan-2',
+          requestedInterval: BillingInterval.MONTH,
+          requestedAt: '2026-03-29T00:00:00.000Z',
+          requestedByUserId: 'user-9',
+        },
+      },
+    } as any);
+    planRepository.findById.mockResolvedValue({
+      id: 'plan-2',
+      name: 'Pro',
+      maxCoins: 500,
+    } as any);
+    subscriptionRepository.update.mockResolvedValue({
+      ...baseSubscriptionWithPlan,
+      metadata: {},
+    } as any);
+
+    await service.rejectPlanChange('sub-1');
+
+    expect(notificationService.markMatchingRead).toHaveBeenCalledWith({
+      type: 'plan_change_request',
+      metadata: { subscriptionId: 'sub-1' },
+    });
+    expect(
+      planChangeNotificationService.notifyUserOfDecision,
+    ).toHaveBeenCalledWith({
+      requesterId: 'user-9',
+      decision: 'rejected',
+      planName: 'Pro',
+    });
   });
 });

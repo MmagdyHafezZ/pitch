@@ -1,12 +1,20 @@
 import { act } from '@testing-library/react'
 import { useTeamConfigStore } from '../team-config.store'
-import { api } from '@/lib/client'
+import { api, queryClient } from '@/lib/client'
 
 jest.mock('@/lib/client', () => ({
   api: {
     users: { getAll: jest.fn() },
     plans: { getAll: jest.fn() },
-    subscriptions: { getByTeamId: jest.fn() },
+    subscriptions: {
+      getByTeamId: jest.fn(),
+      create: jest.fn(),
+      update: jest.fn(),
+      upgrade: jest.fn(),
+    },
+  },
+  queryClient: {
+    invalidateQueries: jest.fn(),
   },
 }))
 
@@ -48,5 +56,30 @@ describe('TeamConfigStore', () => {
     expect(result).toBeNull()
     expect(useTeamConfigStore.getState().subscriptionErrorByTeam['team-1']).toBeNull()
     expect(useTeamConfigStore.getState().subscriptionsByTeam['team-1']).toBeNull()
+  })
+
+  it('invalidates coin queries after selecting a team plan', async () => {
+    ;(api.subscriptions.create as jest.Mock).mockResolvedValue({
+      id: 'sub-1',
+      teamId: 'team-1',
+      planId: 'plan-pro',
+      interval: 'YEAR',
+    })
+
+    const result = await useTeamConfigStore.getState().selectTeamPlan('team-1', {
+      planId: 'plan-pro',
+      interval: 'YEAR',
+    })
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        id: 'sub-1',
+        teamId: 'team-1',
+        planId: 'plan-pro',
+      })
+    )
+    expect(queryClient.invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ['coins'],
+    })
   })
 })

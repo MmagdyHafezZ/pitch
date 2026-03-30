@@ -168,6 +168,15 @@ type StudioAccessRequest = {
   role?: 'MEMBER' | 'ADMIN' | 'OWNER'
 }
 
+type PendingCoinRefillRequest = {
+  userId: string
+  email: string
+  name: string
+  teamId: string
+  requestedCoins: number
+  requestedAt: string
+}
+
 type ReviewRole = 'MEMBER' | 'ADMIN'
 
 export type AdminWorkspaceView = 'dashboard' | 'system' | 'users' | 'teams' | 'plans' | 'sessions'
@@ -318,6 +327,21 @@ const isRecord = (value: unknown): value is JsonRecord =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
 
 const toJson = (value: unknown) => JSON.stringify(value, null, 2)
+const areSerializedValuesEqual = (left: unknown, right: unknown) =>
+  JSON.stringify(left) === JSON.stringify(right)
+const areBooleanRecordValuesEqual = (
+  left: Record<string, boolean>,
+  right: Record<string, boolean>
+) => {
+  const leftKeys = Object.keys(left)
+  const rightKeys = Object.keys(right)
+
+  if (leftKeys.length !== rightKeys.length) {
+    return false
+  }
+
+  return leftKeys.every((key) => left[key] === right[key])
+}
 
 const formatDateTime = (value: unknown) => {
   if (typeof value !== 'string' || !value) return 'n/a'
@@ -912,6 +936,37 @@ const getStudioAccessStatus = (user: JsonRecord | null | undefined) =>
 
 const getStudioAccessRequestedAt = (user: JsonRecord | null | undefined) =>
   readString(getStudioAccessSettings(user).requestedAt)
+
+const getCoinRefillSettings = (user: JsonRecord | null | undefined) => {
+  const settings = isRecord(user?.settings) ? user.settings : EMPTY_RECORD
+  return isRecord(settings.coinRefillRequest) ? settings.coinRefillRequest : EMPTY_RECORD
+}
+
+const toPendingCoinRefillRequest = (
+  user: JsonRecord | null | undefined
+): PendingCoinRefillRequest | null => {
+  const request = getCoinRefillSettings(user)
+  const status = readString(request.status)?.toLowerCase()
+  const userId = readString(user?.id)
+  const requestedAt = readString(request.requestedAt)
+  const teamId = readString(request.teamId)
+  const requestedCoins = readNumber(request.requestedCoins)
+
+  if (status !== 'pending' || !userId || !requestedAt || !teamId || requestedCoins === null) {
+    return null
+  }
+
+  const email = readString(user?.email, userId) ?? userId
+
+  return {
+    userId,
+    email,
+    name: readString(user?.name, email, userId) ?? email,
+    teamId,
+    requestedCoins,
+    requestedAt,
+  }
+}
 
 const toStudioAccessRequest = (
   request: JsonRecord | null | undefined
@@ -2212,9 +2267,13 @@ export function AdminWorkspacePage({ view }: { view: AdminWorkspaceView }) {
   const [inviteUserForm, setInviteUserForm] = useState<UserInviteFormState>(EMPTY_USER_INVITE_FORM)
   const [studioAccessQuotas, setStudioAccessQuotas] = useState<Record<string, number>>({})
   const [studioAccessRoles, setStudioAccessRoles] = useState<Record<string, ReviewRole>>({})
+  const [coinRefillApprovedAmounts, setCoinRefillApprovedAmounts] = useState<
+    Record<string, number>
+  >({})
   const [reviewingStudioAccessUserId, setReviewingStudioAccessUserId] = useState<string | null>(
     null
   )
+  const [reviewingCoinRefillUserId, setReviewingCoinRefillUserId] = useState<string | null>(null)
   const [isCreatingTeam, setIsCreatingTeam] = useState(false)
   const [createTeamForm, setCreateTeamForm] = useState<TeamCreateFormState>(EMPTY_TEAM_CREATE_FORM)
   const [isCreatingSession, setIsCreatingSession] = useState(false)
@@ -2726,6 +2785,92 @@ export function AdminWorkspacePage({ view }: { view: AdminWorkspaceView }) {
   const handleDenyStudioAccess = (request: StudioAccessRequest) => {
     setReviewingStudioAccessUserId(request.userId)
     denyStudioAccessMutation.mutate({ request })
+  }
+
+  const approveCoinRefillMutation = useMutation({
+    mutationFn: ({
+      request,
+      approvedCoins,
+    }: {
+      request: PendingCoinRefillRequest
+      approvedCoins: number
+    }) =>
+      requestJsonPath(
+        `/api/v1/coins/refill/requests/${encodeURIComponent(request.userId)}/approve`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ approvedCoins }),
+        }
+      ),
+    onSuccess: (_result, { request, approvedCoins }) => {
+      notifications.show({
+        title: 'Top-up approved',
+        message: `Approved ${formatNumber(approvedCoins)} personal credits for ${request.email}.`,
+        color: 'success',
+      })
+      queryClient.invalidateQueries({ queryKey: ['admin-console'] })
+      queryClient.invalidateQueries({ queryKey: ['notifications'] })
+    },
+    onError: (error) => {
+      notifications.show({
+        title: 'Approval failed',
+        message:
+          error instanceof Error ? error.message : 'Unable to approve this top-up right now.',
+        color: 'brand',
+      })
+    },
+    onSettled: () => {
+      setReviewingCoinRefillUserId(null)
+    },
+  })
+
+  const denyCoinRefillMutation = useMutation({
+    mutationFn: ({ request }: { request: PendingCoinRefillRequest }) =>
+      requestJsonPath(`/api/v1/coins/refill/requests/${encodeURIComponent(request.userId)}/deny`, {
+        method: 'POST',
+      }),
+    onSuccess: (_result, { request }) => {
+      notifications.show({
+        title: 'Top-up denied',
+        message: `Denied the personal credit top-up request for ${request.email}.`,
+        color: 'yellow',
+      })
+      queryClient.invalidateQueries({ queryKey: ['admin-console'] })
+      queryClient.invalidateQueries({ queryKey: ['notifications'] })
+    },
+    onError: (error) => {
+      notifications.show({
+        title: 'Denial failed',
+        message: error instanceof Error ? error.message : 'Unable to deny this top-up right now.',
+        color: 'brand',
+      })
+    },
+    onSettled: () => {
+      setReviewingCoinRefillUserId(null)
+    },
+  })
+
+  const handleApproveCoinRefill = (request: PendingCoinRefillRequest) => {
+    const approvedCoins = Math.floor(
+      coinRefillApprovedAmounts[request.userId] ?? request.requestedCoins
+    )
+
+    if (approvedCoins <= 0) {
+      notifications.show({
+        title: 'Invalid amount',
+        message: 'Approved coins must be greater than zero.',
+        color: 'brand',
+      })
+      return
+    }
+
+    setReviewingCoinRefillUserId(request.userId)
+    approveCoinRefillMutation.mutate({ request, approvedCoins })
+  }
+
+  const handleDenyCoinRefill = (request: PendingCoinRefillRequest) => {
+    setReviewingCoinRefillUserId(request.userId)
+    denyCoinRefillMutation.mutate({ request })
   }
 
   const buildSessionUpdatePayload = () => {
@@ -3856,6 +4001,19 @@ export function AdminWorkspacePage({ view }: { view: AdminWorkspaceView }) {
         .includes(needle)
     })
   }, [studioAccessRequestUserIds, userFilter, userListMode, users])
+  const userListModeOptions = useMemo(
+    () => [
+      {
+        label: `All users (${formatNumber(users.length)})`,
+        value: 'all',
+      },
+      {
+        label: `Requested access (${formatNumber(studioAccessRequests.length)})`,
+        value: 'access-requests',
+      },
+    ],
+    [studioAccessRequests.length, users.length]
+  )
   const filteredTeams = useMemo(() => {
     const needle = teamFilter.trim().toLowerCase()
     if (!needle) return teams
@@ -4459,6 +4617,8 @@ export function AdminWorkspacePage({ view }: { view: AdminWorkspaceView }) {
     Object.keys(userDetail).length > 0 ? userDetail : (selectedUserListItem ?? userActivityUser)
   )
   const selectedUserHasPendingStudioAccess = selectedUserStudioAccessRequest !== null
+  const selectedUserPendingCoinRefillRequest = toPendingCoinRefillRequest(selectedUserSnapshot)
+  const selectedUserHasPendingCoinRefill = selectedUserPendingCoinRefillRequest !== null
   const selectedUserVisibleCompletedSessions =
     userCompletedSessions.length > 0 ? userCompletedSessions : userRecentSessions
   const selectedUserTeamMembership = teamMemberships.find(
@@ -4640,27 +4800,40 @@ export function AdminWorkspacePage({ view }: { view: AdminWorkspaceView }) {
 
   useEffect(() => {
     if (!selectedUserId) {
-      setUserInspectorSections({})
+      setUserInspectorSections((current) => (Object.keys(current).length === 0 ? current : {}))
       return
     }
 
     if (userInspectorMode === 'user') {
-      setUserInspectorSections(
-        requestedUserPanel === 'access' || selectedUserHasPendingStudioAccess
-          ? { 'user:access': true }
-          : {}
+      const nextSections: Record<string, boolean> = {}
+
+      if (requestedUserPanel === 'access' || selectedUserHasPendingStudioAccess) {
+        nextSections['user:access'] = true
+      }
+
+      if (requestedUserPanel === 'topup' || selectedUserHasPendingCoinRefill) {
+        nextSections['user:topup'] = true
+      }
+
+      setUserInspectorSections((current) =>
+        areBooleanRecordValuesEqual(current, nextSections) ? current : nextSections
       )
       return
     }
 
     if (userInspectorMode === 'team') {
-      setUserInspectorSections({ 'team:selected-user': true })
+      setUserInspectorSections((current) =>
+        areBooleanRecordValuesEqual(current, { 'team:selected-user': true })
+          ? current
+          : { 'team:selected-user': true }
+      )
       return
     }
 
-    setUserInspectorSections({})
+    setUserInspectorSections((current) => (Object.keys(current).length === 0 ? current : {}))
   }, [
     requestedUserPanel,
+    selectedUserHasPendingCoinRefill,
     selectedSessionId,
     selectedTeamId,
     selectedUserHasPendingStudioAccess,
@@ -4669,23 +4842,37 @@ export function AdminWorkspacePage({ view }: { view: AdminWorkspaceView }) {
   ])
 
   useEffect(() => {
-    setUserEditForm(userEditBaseline)
+    setUserEditForm((current) =>
+      areSerializedValuesEqual(current, userEditBaseline) ? current : userEditBaseline
+    )
   }, [userEditBaseline])
 
   useEffect(() => {
-    setTeamEditForm(teamEditBaseline)
+    setTeamEditForm((current) =>
+      areSerializedValuesEqual(current, teamEditBaseline) ? current : teamEditBaseline
+    )
   }, [teamEditBaseline])
 
   useEffect(() => {
-    setTeamSubscriptionForm(teamSubscriptionBaseline)
+    setTeamSubscriptionForm((current) =>
+      areSerializedValuesEqual(current, teamSubscriptionBaseline)
+        ? current
+        : teamSubscriptionBaseline
+    )
   }, [teamSubscriptionBaseline])
 
   useEffect(() => {
-    setSessionEditForm(sessionEditBaseline)
+    setSessionEditForm((current) =>
+      areSerializedValuesEqual(current, sessionEditBaseline) ? current : sessionEditBaseline
+    )
   }, [sessionEditBaseline])
 
   useEffect(() => {
-    setTeamMembershipEditForm(teamMembershipEditBaseline)
+    setTeamMembershipEditForm((current) =>
+      areSerializedValuesEqual(current, teamMembershipEditBaseline)
+        ? current
+        : teamMembershipEditBaseline
+    )
   }, [teamMembershipEditBaseline])
 
   useEffect(() => {
@@ -4773,11 +4960,16 @@ export function AdminWorkspacePage({ view }: { view: AdminWorkspaceView }) {
 
   useEffect(() => {
     if (isCreatingPlan) {
-      setPlanForm(EMPTY_PLAN_FORM)
+      setPlanForm((current) =>
+        areSerializedValuesEqual(current, EMPTY_PLAN_FORM) ? current : EMPTY_PLAN_FORM
+      )
       return
     }
 
-    setPlanForm(toPlanFormState(selectedPlanSnapshot))
+    const nextPlanForm = toPlanFormState(selectedPlanSnapshot)
+    setPlanForm((current) =>
+      areSerializedValuesEqual(current, nextPlanForm) ? current : nextPlanForm
+    )
   }, [isCreatingPlan, selectedPlanSnapshot])
 
   useEffect(() => {
@@ -5422,16 +5614,7 @@ export function AdminWorkspacePage({ view }: { view: AdminWorkspaceView }) {
                       <SegmentedControl
                         value={userListMode}
                         onChange={(value) => setUserListMode(value as 'all' | 'access-requests')}
-                        data={[
-                          {
-                            label: `All users (${formatNumber(users.length)})`,
-                            value: 'all',
-                          },
-                          {
-                            label: `Requested access (${formatNumber(studioAccessRequests.length)})`,
-                            value: 'access-requests',
-                          },
-                        ]}
+                        data={userListModeOptions}
                       />
                     </div>
 
@@ -6943,6 +7126,146 @@ export function AdminWorkspacePage({ view }: { view: AdminWorkspaceView }) {
                                           onClick={() =>
                                             handleApproveStudioAccess(
                                               selectedUserStudioAccessRequest
+                                            )
+                                          }
+                                        >
+                                          Approve
+                                        </Button>
+                                      </Group>
+                                    </Group>
+                                  </Stack>
+                                </DetailSection>
+                              ) : null}
+
+                              {selectedUserPendingCoinRefillRequest ? (
+                                <DetailSection
+                                  title="Personal coin top-up"
+                                  icon={<IconBolt size={16} />}
+                                  collapsible
+                                  expanded={isUserInspectorSectionExpanded('user:topup')}
+                                  onToggle={() => toggleUserInspectorSection('user:topup')}
+                                  bodyClassName={classes.inspectorSectionBody}
+                                  action={
+                                    <Badge color="yellow" variant="light">
+                                      pending top-up
+                                    </Badge>
+                                  }
+                                >
+                                  <Stack gap="md">
+                                    <Group justify="space-between" align="flex-start" wrap="wrap">
+                                      <Box style={{ minWidth: 0, flex: 1 }}>
+                                        <Text fw={700}>
+                                          {selectedUserPendingCoinRefillRequest.email}
+                                        </Text>
+                                        <Text size="sm" className={classes.mutedText}>
+                                          Requested on{' '}
+                                          {formatCompactDate(
+                                            selectedUserPendingCoinRefillRequest.requestedAt
+                                          ) ??
+                                            new Date(
+                                              selectedUserPendingCoinRefillRequest.requestedAt
+                                            ).toLocaleString()}
+                                        </Text>
+                                      </Box>
+                                      <Badge
+                                        color="gray"
+                                        variant="light"
+                                        className={classes.consoleText}
+                                      >
+                                        {truncateMiddle(
+                                          selectedUserPendingCoinRefillRequest.userId,
+                                          18
+                                        )}
+                                      </Badge>
+                                    </Group>
+
+                                    <div className={classes.logMetaGrid}>
+                                      <div className={classes.logMetaCard}>
+                                        <Text
+                                          size="xs"
+                                          tt="uppercase"
+                                          fw={700}
+                                          className={classes.metaLabel}
+                                        >
+                                          Requested credits
+                                        </Text>
+                                        <Text fw={700}>
+                                          {formatNumber(
+                                            selectedUserPendingCoinRefillRequest.requestedCoins
+                                          )}
+                                        </Text>
+                                      </div>
+                                      <div className={classes.logMetaCard}>
+                                        <Text
+                                          size="xs"
+                                          tt="uppercase"
+                                          fw={700}
+                                          className={classes.metaLabel}
+                                        >
+                                          Personal workspace
+                                        </Text>
+                                        <Text
+                                          fw={700}
+                                          className={classes.consoleText}
+                                          title={
+                                            selectedUserPendingCoinRefillRequest.teamId ?? undefined
+                                          }
+                                        >
+                                          {truncateMiddle(
+                                            selectedUserPendingCoinRefillRequest.teamId,
+                                            18
+                                          )}
+                                        </Text>
+                                      </div>
+                                    </div>
+
+                                    <Group justify="space-between" align="flex-end" wrap="wrap">
+                                      <Box style={{ minWidth: 220, flex: '1 1 220px' }}>
+                                        <NumberInput
+                                          label="Approve amount"
+                                          min={1}
+                                          step={100}
+                                          thousandSeparator=","
+                                          value={
+                                            coinRefillApprovedAmounts[
+                                              selectedUserPendingCoinRefillRequest.userId
+                                            ] ?? selectedUserPendingCoinRefillRequest.requestedCoins
+                                          }
+                                          onChange={(value) =>
+                                            setCoinRefillApprovedAmounts((current) => ({
+                                              ...current,
+                                              [selectedUserPendingCoinRefillRequest.userId]:
+                                                typeof value === 'number' && Number.isFinite(value)
+                                                  ? value
+                                                  : 0,
+                                            }))
+                                          }
+                                        />
+                                      </Box>
+                                      <Group gap="sm" wrap="wrap">
+                                        <Button
+                                          variant="light"
+                                          color="yellow"
+                                          loading={
+                                            reviewingCoinRefillUserId ===
+                                            selectedUserPendingCoinRefillRequest.userId
+                                          }
+                                          onClick={() =>
+                                            handleDenyCoinRefill(
+                                              selectedUserPendingCoinRefillRequest
+                                            )
+                                          }
+                                        >
+                                          Deny
+                                        </Button>
+                                        <Button
+                                          loading={
+                                            reviewingCoinRefillUserId ===
+                                            selectedUserPendingCoinRefillRequest.userId
+                                          }
+                                          onClick={() =>
+                                            handleApproveCoinRefill(
+                                              selectedUserPendingCoinRefillRequest
                                             )
                                           }
                                         >

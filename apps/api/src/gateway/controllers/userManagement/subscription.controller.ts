@@ -7,6 +7,7 @@ import {
   Body,
   Param,
   Inject,
+  ForbiddenException,
   HttpException,
   HttpStatus,
   UseGuards,
@@ -177,6 +178,9 @@ export class SubscriptionGatewayController {
 
     const teamList = Array.isArray(teams) ? teams : [];
     if (teamList.length === 0) {
+      if (preferredTeamId) {
+        throw new ForbiddenException('You do not have access to this team');
+      }
       return this.provisionPersonalWorkspace(userClaims);
     }
 
@@ -185,6 +189,10 @@ export class SubscriptionGatewayController {
       : null;
     if (preferred) {
       return preferred.id;
+    }
+
+    if (preferredTeamId) {
+      throw new ForbiddenException('You do not have access to this team');
     }
 
     const personalWorkspace = teamList.find(

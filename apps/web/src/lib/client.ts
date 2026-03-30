@@ -894,7 +894,7 @@ export const api = {
         durationMinutes: number
       }>(`/coins/session-estimate?${qs.toString()}`)
     },
-    refillRequest: (data: { requestedCoins: number; teamId: string }) =>
+    refillRequest: (data: { requestedCoins: number; teamId?: string }) =>
       apiRequest<any>('/coins/refill/request', {
         method: 'POST',
         body: JSON.stringify(data),
@@ -1230,11 +1230,15 @@ export const api = {
         }),
     },
     subscriptions: {
-      listPlanChanges: () => apiRequest<any[]>('/admin/subscriptions/plan-changes'),
+      listPlanChanges: () => apiRequest<any[]>('/admin/subscriptions/requests/plan-changes'),
       approvePlanChange: (id: string) =>
-        apiRequest<any>(`/admin/subscriptions/${id}/approve-plan-change`, { method: 'POST' }),
+        apiRequest<any>(`/admin/subscriptions/requests/${id}/approve-plan-change`, {
+          method: 'POST',
+        }),
       rejectPlanChange: (id: string) =>
-        apiRequest<any>(`/admin/subscriptions/${id}/reject-plan-change`, { method: 'POST' }),
+        apiRequest<any>(`/admin/subscriptions/requests/${id}/reject-plan-change`, {
+          method: 'POST',
+        }),
     },
     sessions: {
       list: (params?: {

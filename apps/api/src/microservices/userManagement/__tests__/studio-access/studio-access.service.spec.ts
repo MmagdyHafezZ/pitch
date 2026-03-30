@@ -33,6 +33,7 @@ describe('StudioAccessService', () => {
   const notificationService = {
     createOne: jest.fn(),
     createBatch: jest.fn(),
+    markMatchingRead: jest.fn(),
   } as any;
   const studioAccessEmailService = {
     sendDecisionEmail: jest.fn(),
@@ -159,6 +160,10 @@ describe('StudioAccessService', () => {
         }),
       }),
     );
+    expect(notificationService.markMatchingRead).toHaveBeenCalledWith({
+      type: 'STUDIO_ACCESS_REQUEST',
+      metadata: { requesterUserId: 'user-1' },
+    });
     expect(notificationService.createOne).toHaveBeenCalledWith(
       expect.objectContaining({
         recipientUserId: 'user-1',
@@ -204,6 +209,10 @@ describe('StudioAccessService', () => {
         }),
       }),
     );
+    expect(notificationService.markMatchingRead).toHaveBeenCalledWith({
+      type: 'STUDIO_ACCESS_REQUEST',
+      metadata: { requesterUserId: 'user-1' },
+    });
     expect(studioAccessEmailService.sendDecisionEmail).toHaveBeenCalledWith(
       expect.objectContaining({
         email: 'user@example.com',

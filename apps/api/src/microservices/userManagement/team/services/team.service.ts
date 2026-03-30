@@ -407,6 +407,18 @@ export class TeamService {
     }
 
     const updated = await this.teamRepository.acceptInvite(teamId, userId);
+    try {
+      await this.notificationService.markMatchingRead({
+        recipientUserId: userId,
+        type: 'TEAM_INVITE',
+        metadata: { teamId },
+      });
+    } catch (error) {
+      this.logger.error(
+        `Failed to mark team invite notification as read for user ${userId} on team ${teamId}`,
+        error as Error,
+      );
+    }
     return {
       message: 'Invitation accepted',
       membership: updated,

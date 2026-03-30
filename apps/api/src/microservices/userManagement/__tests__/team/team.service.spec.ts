@@ -50,6 +50,7 @@ describe('TeamService', () => {
 
   const notificationService = {
     createOne: jest.fn(),
+    markMatchingRead: jest.fn(),
   };
 
   beforeEach(() => {
@@ -305,6 +306,11 @@ describe('TeamService', () => {
     const result = await service.acceptInvite('team-1', 'user-2');
 
     expect(repo.acceptInvite).toHaveBeenCalledWith('team-1', 'user-2');
+    expect(notificationService.markMatchingRead).toHaveBeenCalledWith({
+      recipientUserId: 'user-2',
+      type: 'TEAM_INVITE',
+      metadata: { teamId: 'team-1' },
+    });
     expect(result.message).toBe('Invitation accepted');
     expect(result.membership.isActive).toBe(true);
   });

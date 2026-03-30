@@ -22,7 +22,7 @@ import {
 } from '@mantine/core'
 import { IconSearch, IconBell, IconUser, IconHelp, IconX } from '@tabler/icons-react'
 import dayjs from 'dayjs'
-import { ReactNode, useEffect, useMemo, useState } from 'react'
+import { ReactNode, useEffect, useMemo, useRef, useState } from 'react'
 import { SettingsModal } from './SettingsModal'
 import { useMediaQuery } from '@mantine/hooks'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
@@ -50,6 +50,22 @@ type NotificationItem = {
 
 const getStudioAccessRequesterId = (notification: NotificationItem) => {
   if (notification.type !== 'STUDIO_ACCESS_REQUEST') return null
+
+  if (typeof notification.metadata?.requesterUserId === 'string') {
+    return notification.metadata.requesterUserId
+  }
+
+  return typeof notification.sourceUserId === 'string' ? notification.sourceUserId : null
+}
+
+const isCoinRefillRequestNotification = (notification: NotificationItem) =>
+  notification.type === 'coin_refill_request'
+
+const isCoinRefillDecisionNotification = (notification: NotificationItem) =>
+  notification.type === 'coin_refill_decision'
+
+const getCoinRefillRequesterId = (notification: NotificationItem) => {
+  if (!isCoinRefillRequestNotification(notification)) return null
 
   if (typeof notification.metadata?.requesterUserId === 'string') {
     return notification.metadata.requesterUserId
@@ -560,6 +576,7 @@ export function AppTopBar({
   const queryClient = useQueryClient()
   const currentUser = useAuthStore((state) => state.user)
   const storedTeams = useTeamsStore((state) => state.teams)
+  const surfacedCoinDecisionIdsRef = useRef<Set<string>>(new Set())
   const teams = useMemo(() => storedTeams ?? [], [storedTeams])
   const refreshUserTeams = useTeamsStore((state) => state.fetchUserTeams)
   const sessionQuery = useMemo(() => searchParams.get('q') ?? '', [searchParams])
@@ -581,7 +598,7 @@ export function AppTopBar({
     queryKey: ['notifications', 'unread-count', currentUser?.id],
     queryFn: () => api.notifications.unreadCount(currentUser!.id),
     enabled: !!currentUser?.id,
-    refetchInterval: 60_000,
+    refetchInterval: 15_000,
   })
 
   const notificationsQuery = useQuery({
@@ -593,7 +610,9 @@ export function AppTopBar({
         skip: 0,
         limit: 20,
       }),
-    enabled: notificationsOpened && !!currentUser?.id,
+    enabled: !!currentUser?.id,
+    refetchInterval: 15_000,
+    refetchOnWindowFocus: true,
   })
 
   const markReadMutation = useMutation({
@@ -762,6 +781,35 @@ export function AppTopBar({
 
   const unreadCount = unreadCountQuery.data?.count ?? 0
   const notificationItems = (notificationsQuery.data?.data ?? []) as NotificationItem[]
+
+  useEffect(() => {
+    if (!currentUser?.id) {
+      surfacedCoinDecisionIdsRef.current.clear()
+      return
+    }
+
+    const newDecisionNotifications = notificationItems.filter(
+      (notification) =>
+        isCoinRefillDecisionNotification(notification) &&
+        !surfacedCoinDecisionIdsRef.current.has(notification.id)
+    )
+    if (newDecisionNotifications.length === 0) {
+      return
+    }
+
+    newDecisionNotifications.forEach((notification) => {
+      surfacedCoinDecisionIdsRef.current.add(notification.id)
+      notifications.show({
+        title: notification.title,
+        message: notification.message,
+        color: notification.metadata?.decision === 'denied' ? 'yellow' : 'teal',
+      })
+    })
+
+    queryClient.invalidateQueries({ queryKey: ['coins', 'my-balance'] })
+    queryClient.invalidateQueries({ queryKey: ['coins', 'my-refill-request'] })
+  }, [currentUser?.id, notificationItems, queryClient])
+
   const severityColor = (severity: NotificationItem['severity']) => {
     switch (severity) {
       case 'CRITICAL':
@@ -788,6 +836,7 @@ export function AppTopBar({
         ? notification.metadata.teamId
         : null
     const studioAccessRequesterId = getStudioAccessRequesterId(notification)
+    const coinRefillRequesterId = getCoinRefillRequesterId(notification)
     const decision =
       notification.type === 'STUDIO_ACCESS_REVIEWED' &&
       typeof notification.metadata?.decision === 'string'
@@ -838,6 +887,38 @@ export function AppTopBar({
       return
     }
 
+    if (notification.type === 'plan_change_request') {
+      closeNotificationsModal()
+      router.push('/studio/admin/plans')
+      return
+    }
+
+    if (isCoinRefillRequestNotification(notification)) {
+      const params = new URLSearchParams()
+      if (coinRefillRequesterId) {
+        params.set('userId', coinRefillRequesterId)
+        params.set('panel', 'topup')
+      }
+
+      closeNotificationsModal()
+      router.push(
+        params.toString() ? `/studio/admin/users?${params.toString()}` : '/studio/admin/users'
+      )
+      return
+    }
+
+    if (notification.type === 'plan_change_decision') {
+      closeNotificationsModal()
+      router.push('/studio/subscription')
+      return
+    }
+
+    if (isCoinRefillDecisionNotification(notification)) {
+      closeNotificationsModal()
+      router.push('/studio/subscription')
+      return
+    }
+
     setSelectedNotification(null)
   }
 
@@ -868,6 +949,24 @@ export function AppTopBar({
     if (typeof metadata.quota === 'number') {
       entries.push({ label: 'Quota', value: `${metadata.quota} coins` })
     }
+    if (typeof metadata.requestedCoins === 'number') {
+      entries.push({
+        label: 'Requested',
+        value: `${metadata.requestedCoins.toLocaleString()} credits`,
+      })
+    }
+    if (typeof metadata.approvedCoins === 'number') {
+      entries.push({
+        label: 'Approved',
+        value: `${metadata.approvedCoins.toLocaleString()} credits`,
+      })
+    }
+    if (typeof metadata.teamId === 'string') {
+      entries.push({ label: 'Team', value: metadata.teamId })
+    }
+    if (typeof metadata.reviewedBy === 'string') {
+      entries.push({ label: 'Reviewed by', value: metadata.reviewedBy })
+    }
 
     return entries
   }, [selectedNotification])
@@ -891,6 +990,7 @@ export function AppTopBar({
           (membership) => membership.userId === currentUser.id && membership.isActive !== false
         )
     const studioAccessRequesterId = getStudioAccessRequesterId(selectedNotification)
+    const coinRefillRequesterId = getCoinRefillRequesterId(selectedNotification)
 
     if (teamId) {
       return {
@@ -914,6 +1014,38 @@ export function AppTopBar({
           selectedNotification.metadata?.decision === 'denied'
             ? 'View access status'
             : 'Open Studio',
+        disabled: false,
+        loading: false,
+      }
+    }
+
+    if (selectedNotification.type === 'plan_change_request') {
+      return {
+        label: 'Open plan reviews',
+        disabled: false,
+        loading: false,
+      }
+    }
+
+    if (isCoinRefillRequestNotification(selectedNotification)) {
+      return {
+        label: coinRefillRequesterId ? 'Open requester' : 'Open top-up reviews',
+        disabled: false,
+        loading: false,
+      }
+    }
+
+    if (selectedNotification.type === 'plan_change_decision') {
+      return {
+        label: 'Open subscription',
+        disabled: false,
+        loading: false,
+      }
+    }
+
+    if (isCoinRefillDecisionNotification(selectedNotification)) {
+      return {
+        label: 'Open subscription',
         disabled: false,
         loading: false,
       }
@@ -1252,7 +1384,11 @@ export function AppTopBar({
                       p="md"
                       radius="lg"
                       onClick={() => {
-                        if (notification.type === 'STUDIO_ACCESS_REQUEST') {
+                        if (
+                          notification.type === 'STUDIO_ACCESS_REQUEST' ||
+                          isCoinRefillRequestNotification(notification) ||
+                          isCoinRefillDecisionNotification(notification)
+                        ) {
                           void handleNotificationAction(notification)
                           return
                         }

@@ -43,6 +43,7 @@ export class CoinSessionService {
     // When orgId is a real teamId, verify the user is an active member before
     // allowing them to draw from that team's credit pool.
     const isTeamSession = dto.teamId !== dto.userId;
+    let isSharedTeamSession = false;
     if (isTeamSession) {
       const membership = await this.teamRepo.findMembership(
         dto.teamId,
@@ -54,6 +55,12 @@ export class CoinSessionService {
         );
         return { approved: false, reason: 'INVALID_REQUEST' };
       }
+
+      const team = await this.teamRepo.findById(dto.teamId);
+      isSharedTeamSession =
+        (team?.memberships?.filter(
+          (teamMembership) => teamMembership?.isActive !== false,
+        ).length ?? 0) > 1;
     }
 
     const sub = await this.subscriptionRepo.findActiveWithPlanByTeamId(
@@ -93,6 +100,30 @@ export class CoinSessionService {
         estimatedCoins: effectiveCost,
         sessionId: dto.sessionId,
       });
+
+      if (
+        !result.approved &&
+        result.reason === 'INSUFFICIENT_COINS' &&
+        isSharedTeamSession
+      ) {
+        this.logger.warn(
+          `[TEAM] teamId=${dto.teamId} is out of team credits. Falling back to personal quota for userId=${dto.userId}.`,
+        );
+
+        const personalResult = await this.coins.reservePersonalCoins({
+          userId: dto.userId,
+          requestId: dto.requestId,
+          idempotencyKey: dto.idempotencyKey,
+          estimatedCoins: effectiveCost,
+          sessionId: dto.sessionId,
+        });
+
+        return {
+          ...personalResult,
+          estimatedCoins: effectiveCost,
+          coinPriceUsd: effectivePrice,
+        };
+      }
 
       this.logger.log(
         `[TEAM] reserveCoins result: approved=${result.approved} ` +

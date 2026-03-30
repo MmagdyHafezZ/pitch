@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Alert, Badge, Button, Card, Group, Loader, Stack, Text, Title } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
+import { useQueryClient } from '@tanstack/react-query'
 import { IconChartPie, IconShieldLock } from '@tabler/icons-react'
 import { api } from '@/lib/client'
 import { useAuthStore } from '@/features/auth/stores/auth.store'
@@ -26,6 +27,7 @@ type PendingPlanChange = {
 
 export default function AdminPlansPage() {
   const router = useRouter()
+  const queryClient = useQueryClient()
   const user = useAuthStore((state) => state.user)
   const [requests, setRequests] = useState<PendingPlanChange[]>([])
   const [loading, setLoading] = useState(true)
@@ -66,6 +68,7 @@ export default function AdminPlansPage() {
     try {
       await api.admin.subscriptions.approvePlanChange(req.id)
       setRequests((prev) => prev.filter((r) => r.id !== req.id))
+      await queryClient.invalidateQueries({ queryKey: ['notifications'] })
       notifications.show({
         title: 'Plan change approved',
         message: `Subscription ${req.id} has been upgraded.`,
@@ -87,6 +90,7 @@ export default function AdminPlansPage() {
     try {
       await api.admin.subscriptions.rejectPlanChange(req.id)
       setRequests((prev) => prev.filter((r) => r.id !== req.id))
+      await queryClient.invalidateQueries({ queryKey: ['notifications'] })
       notifications.show({
         title: 'Plan change rejected',
         message: 'The request has been cancelled.',

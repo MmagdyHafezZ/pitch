@@ -70,6 +70,7 @@ export default function ClientLayerComponent({ children }: { children: React.Rea
     teams,
     activeTeamId,
     setActiveTeamId,
+    reorderTeams,
     fetchUserTeams,
     leaveTeam,
     loading: teamsLoading,
@@ -341,6 +342,7 @@ export default function ClientLayerComponent({ children }: { children: React.Rea
                 teams={teamsForSidebar}
                 activeTeamId={activeTeamId}
                 onSelectTeam={handleSelectTeam}
+                onReorderTeams={reorderTeams}
                 onLeaveTeam={handleLeaveTeam}
                 onNavigate={closeMobileNav}
               />
