@@ -10,6 +10,7 @@ import { RpcExceptionLoggingFilter } from '@pitch/shared-backend/filters/rpc-exc
 import {
   getQueueOptions,
   getRabbitMQUrl,
+  getRabbitMQUrls,
 } from '../../config/microservices.config';
 import {
   buildRabbitMqQueueTopology,
@@ -17,7 +18,9 @@ import {
 } from '../../config/rabbitmq-topology';
 
 async function bootstrap() {
-  await provisionRabbitMqTopology(getRabbitMQUrl(), [
+  const rabbitmqUrl = getRabbitMQUrl();
+
+  await provisionRabbitMqTopology(rabbitmqUrl, [
     buildRabbitMqQueueTopology('s3_queue'),
   ]);
 
@@ -26,9 +29,9 @@ async function bootstrap() {
     {
       transport: Transport.RMQ,
       options: {
-        urls: [getRabbitMQUrl()],
+        urls: getRabbitMQUrls(),
         queue: 's3_queue',
-        queueOptions: getQueueOptions(),
+        queueOptions: getQueueOptions(rabbitmqUrl),
         noAck: false,
         prefetchCount: 10,
       },

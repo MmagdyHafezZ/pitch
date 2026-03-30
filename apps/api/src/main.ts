@@ -24,6 +24,7 @@ import { runStartupHealthChecks } from '@pitch/shared-backend/utils/startup-heal
 import {
   createMicroserviceOptions,
   getRabbitMQUrl,
+  getRabbitMQUrls,
   MICROSERVICES_CONFIG,
 } from './config/microservices.config';
 import { provisionRabbitMqTopology } from './config/rabbitmq-topology';
@@ -77,7 +78,7 @@ async function bootstrap() {
   const logger = new Logger('Bootstrap');
 
   try {
-    const rabbitmqUrl = getRabbitMQUrl();
+    const rabbitmqUrls = getRabbitMQUrls();
     const { url, useAccelerate } = resolvePrismaRuntimeConfig(
       process.env.USER_DATABASE_URL,
       process.env.USER_DIRECT_URL,
@@ -96,8 +97,8 @@ async function bootstrap() {
     const prisma = useAccelerate
       ? (basePrisma.$extends(withAccelerate()) as unknown as PrismaClient)
       : basePrisma;
-    await runStartupHealthChecks(rabbitmqUrl, prisma);
-    await provisionRabbitMqTopology(rabbitmqUrl);
+    await runStartupHealthChecks(rabbitmqUrls, prisma);
+    await provisionRabbitMqTopology(getRabbitMQUrl());
   } catch {
     logger.error(
       'Startup checks or RabbitMQ topology provisioning failed. Exiting...',
@@ -228,7 +229,7 @@ async function bootstrap() {
   logger.log(
     `📘 Swagger UI at ${baseUrl}/${process.env.SWAGGER_PATH ?? 'docs'}`,
   );
-  logger.log(`🌐 RabbitMQ URL: ${getRabbitMQUrl()}`);
+  logger.log(`🌐 RabbitMQ URLs: ${getRabbitMQUrls().join(', ')}`);
   logger.log(
     `📦 Microservice: ${microserviceName || 'ALL'} started successfully`,
   );

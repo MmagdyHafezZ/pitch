@@ -59,7 +59,9 @@ export interface ConversationStartPayload {
   ttsConfig?: {
     provider?: string
     voice?: string
+    language?: string
     model?: string
+    accent?: string
   }
 }
 
@@ -100,6 +102,7 @@ export interface ConversationAudioChunkPayload {
   sentenceIndex: number
   audio: ArrayBuffer | Uint8Array
   contentType: string
+  sentenceText?: string
 }
 
 export interface ConversationAudioReadyPayload {

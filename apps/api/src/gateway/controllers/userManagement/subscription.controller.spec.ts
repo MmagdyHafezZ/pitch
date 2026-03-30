@@ -1,14 +1,18 @@
 import { ForbiddenException } from '@nestjs/common';
+import { ClientProxy } from '@nestjs/microservices';
 import { of } from 'rxjs';
 import { USER_SERVICE_PATTERNS } from '@pitch/shared-backend/interfaces/message-patterns.interface';
+import type { UserClaims as UserClaimsType } from '@pitch/shared-backend/interfaces/user-claims.interface';
+import { CreateSubscriptionRequestDTO } from '@microservices/userManagement/subscription/dto/subscription.dto';
 import { SubscriptionGatewayController } from './subscription.controller';
 
 describe('SubscriptionGatewayController', () => {
+  const sendMock = jest.fn();
   const userService = {
-    send: jest.fn(),
-  } as any;
+    send: sendMock,
+  } as Pick<ClientProxy, 'send'> as ClientProxy;
 
-  const claims = {
+  const claims: UserClaimsType = {
     id: 'user-1',
     email: 'user@example.com',
     name: 'Pitch User',
@@ -22,24 +26,24 @@ describe('SubscriptionGatewayController', () => {
   });
 
   it('uses the requested accessible team id for getSubscriptionByTeamId', async () => {
-    userService.send
+    sendMock
       .mockReturnValueOnce(
         of([{ id: 'team-1', memberships: [{ isActive: true }] }]),
       )
       .mockReturnValueOnce(of({ id: 'sub-1', teamId: 'team-1' }));
 
     await expect(
-      controller.getSubscriptionByTeamId('team-1', claims as any),
+      controller.getSubscriptionByTeamId('team-1', claims),
     ).resolves.toEqual({ id: 'sub-1', teamId: 'team-1' });
 
-    expect(userService.send).toHaveBeenNthCalledWith(
+    expect(sendMock).toHaveBeenNthCalledWith(
       1,
       USER_SERVICE_PATTERNS.GET_USER_TEAMS,
       {
         userClaims: claims,
       },
     );
-    expect(userService.send).toHaveBeenNthCalledWith(
+    expect(sendMock).toHaveBeenNthCalledWith(
       2,
       USER_SERVICE_PATTERNS.GET_TEAM_SUBSCRIPTION,
       {
@@ -50,19 +54,19 @@ describe('SubscriptionGatewayController', () => {
   });
 
   it('does not silently retarget an inaccessible requested team id', async () => {
-    userService.send.mockReturnValueOnce(
+    sendMock.mockReturnValueOnce(
       of([{ id: 'team-1', memberships: [{ isActive: true }] }]),
     );
 
     await expect(
-      controller.getSubscriptionByTeamId('team-2', claims as any),
+      controller.getSubscriptionByTeamId('team-2', claims),
     ).rejects.toThrow(ForbiddenException);
 
-    expect(userService.send).toHaveBeenCalledTimes(1);
+    expect(sendMock).toHaveBeenCalledTimes(1);
   });
 
   it('provisions a personal workspace only when no team was requested and none exist', async () => {
-    userService.send
+    sendMock
       .mockReturnValueOnce(of([]))
       .mockReturnValueOnce(
         of({
@@ -76,11 +80,16 @@ describe('SubscriptionGatewayController', () => {
       .mockReturnValueOnce(of(undefined))
       .mockReturnValueOnce(of({ id: 'sub-1', teamId: 'team-personal' }));
 
+    const createSubscriptionDto = Object.assign(
+      new CreateSubscriptionRequestDTO(),
+      { planId: 'plan-1' },
+    );
+
     await expect(
-      controller.createSubscription({ planId: 'plan-1' } as any, claims as any),
+      controller.createSubscription(createSubscriptionDto, claims),
     ).resolves.toEqual({ id: 'sub-1', teamId: 'team-personal' });
 
-    expect(userService.send).toHaveBeenLastCalledWith(
+    expect(sendMock).toHaveBeenLastCalledWith(
       USER_SERVICE_PATTERNS.CREATE_SUBSCRIPTION,
       {
         planId: 'plan-1',

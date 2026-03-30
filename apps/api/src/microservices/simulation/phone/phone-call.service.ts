@@ -600,6 +600,10 @@ export class PhoneCallService {
         baseConfig.voice,
       language:
         this.resolveString(phoneVoice, 'language') ?? baseConfig.language,
+      accent:
+        this.resolveString(phoneVoice, 'accent') ??
+        this.resolveString(vapiConfig, 'accent') ??
+        baseConfig.accent,
       model: this.resolveString(phoneVoice, 'model') ?? baseConfig.model,
     };
   }
@@ -647,6 +651,7 @@ export class PhoneCallService {
     const primaryOptions: TtsOptions = {
       ...(resolvedTts.voice ? { voice: resolvedTts.voice } : {}),
       ...(resolvedTts.language ? { language: resolvedTts.language } : {}),
+      ...(resolvedTts.accent ? { accent: resolvedTts.accent } : {}),
       ...(resolvedTts.model ? { model: resolvedTts.model } : {}),
       format: 'pcm',
       sampleRate,
@@ -669,6 +674,7 @@ export class PhoneCallService {
         provider: 'elevenlabs',
         options: {
           ...(resolvedTts.language ? { language: resolvedTts.language } : {}),
+          ...(resolvedTts.accent ? { accent: resolvedTts.accent } : {}),
           format: 'pcm',
           sampleRate,
         },

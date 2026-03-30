@@ -714,8 +714,7 @@
 .outcomeCard ul,
 .strategyCard ol,
 .workflowCard ol,
-.deltaCard ul,
-.mockBuilder ul {
+.deltaCard ul {
   list-style: none;
   margin: 0.7rem 0 0;
   padding: 0;
@@ -723,8 +722,7 @@
   gap: 0.45rem;
 }
 
-.outcomeCard li,
-.mockBuilder li {
+.outcomeCard li {
   display: flex;
   align-items: center;
   gap: 0.36rem;
@@ -732,8 +730,7 @@
   font-size: 0.8rem;
 }
 
-.outcomeCard svg,
-.mockBuilder svg {
+.outcomeCard svg {
   flex: 0 0 auto;
   color: var(--cyan);
 }
@@ -957,148 +954,36 @@
   font-weight: 700;
 }
 
-.mockDashboard,
-.mockLive,
-.mockBuilder {
+.screenShotFrame {
   margin-top: 0.68rem;
+  position: relative;
+  overflow: hidden;
   border: 1px solid rgba(124, 142, 255, 0.22);
   border-radius: 0.78rem;
   background: rgba(7, 11, 25, 0.66);
+  aspect-ratio: 16 / 10;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 12px 22px rgba(2, 12, 27, 0.32);
 }
 
-.mockDashboard {
-  min-height: 10rem;
-  display: grid;
-  grid-template-columns: 3.1rem minmax(0, 1fr);
-}
-
-.mockSidebar {
-  border-right: 1px solid rgba(146, 182, 255, 0.2);
-  padding: 0.5rem;
-  display: grid;
-  gap: 0.44rem;
-}
-
-.mockSidebar span {
-  height: 0.5rem;
-  border-radius: 999px;
-  background: rgba(150, 221, 255, 0.22);
-}
-
-.mockContent {
-  padding: 0.55rem;
-  display: grid;
-  gap: 0.56rem;
-}
-
-.mockHeader {
-  height: 1rem;
-  border-radius: 0.42rem;
-  background: linear-gradient(120deg, rgba(39, 42, 150, 0.52), rgba(150, 221, 255, 0.24));
-}
-
-.mockBars {
-  height: 7rem;
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  align-items: end;
-  gap: 0.28rem;
-}
-
-.mockBars span {
-  border-radius: 0.3rem 0.3rem 0.16rem 0.16rem;
-  background: linear-gradient(180deg, rgba(93, 103, 255, 0.92), rgba(150, 221, 255, 0.5));
-  animation: barRise 0.72s ease both;
-}
-
-.mockBars span:nth-child(2) {
-  animation-delay: 0.08s;
-}
-
-.mockBars span:nth-child(3) {
-  animation-delay: 0.14s;
-}
-
-.mockBars span:nth-child(4) {
-  animation-delay: 0.2s;
-}
-
-.mockBars span:nth-child(5) {
-  animation-delay: 0.26s;
-}
-
-.mockLive {
-  padding: 0.52rem;
-}
-
-.liveMedia {
-  position: relative;
-  border-radius: 0.55rem;
-  overflow: hidden;
-  min-height: 7.6rem;
-}
-
-.liveImage {
-  object-fit: cover;
-  transform: scale(1.03);
-}
-
-.liveMedia em {
+.screenShotFrame::after {
+  content: '';
   position: absolute;
-  left: 0.45rem;
-  top: 0.45rem;
-  font-style: normal;
-  font-size: 0.67rem;
-  font-weight: 700;
-  color: #ffffff;
-  padding: 0.22rem 0.45rem;
-  border-radius: 999px;
-  background: rgba(6, 12, 25, 0.66);
-  backdrop-filter: blur(4px);
+  inset: auto 0 0;
+  height: 42%;
+  pointer-events: none;
+  background: linear-gradient(180deg, transparent 0%, rgba(3, 6, 15, 0.28) 100%);
 }
 
-.mockLive ul {
-  margin: 0.52rem 0 0;
-  list-style: none;
-  padding: 0;
-  display: grid;
-  gap: 0.35rem;
+.screenShotImage {
+  object-fit: cover;
+  object-position: top center;
+  transition: transform 0.38s ease;
 }
 
-.mockLive li {
-  font-size: 0.72rem;
-  color: #d4e6ff;
-  line-height: 1.45;
-  border-radius: 0.43rem;
-  padding: 0.34rem 0.4rem;
-  background: rgba(93, 103, 255, 0.14);
-}
-
-.mockBuilder {
-  padding: 0.56rem;
-}
-
-.mockBuilder div {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-  margin-bottom: 0.45rem;
-}
-
-.mockBuilder small {
-  color: var(--muted);
-  font-size: 0.69rem;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.mockBuilder div span {
-  color: #d5e7ff;
-  font-size: 0.72rem;
-  border-radius: 999px;
-  padding: 0.22rem 0.42rem;
-  background: rgba(156, 141, 255, 0.18);
+.screenCard:hover .screenShotImage {
+  transform: scale(1.02);
 }
 
 .factGrid,
@@ -1209,10 +1094,6 @@
     grid-template-columns: 1fr;
   }
 
-  .mockDashboard {
-    grid-template-columns: 2.5rem minmax(0, 1fr);
-  }
-
   .months {
     font-size: 0.67rem;
   }
@@ -1286,7 +1167,6 @@
   .areaPath,
   .beforeBar span,
   .afterBar span,
-  .mockBars span,
   .backgroundGlowTop,
   .backgroundGlowBottom {
     animation: none;
@@ -1327,17 +1207,6 @@
   to {
     opacity: 1;
     transform: scale(1);
-  }
-}
-
-@keyframes barRise {
-  from {
-    opacity: 0;
-    transform: translateY(16px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
   }
 }
 

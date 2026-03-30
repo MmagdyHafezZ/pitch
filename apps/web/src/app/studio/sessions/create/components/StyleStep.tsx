@@ -22,6 +22,8 @@ import {
 import classes from '../create-session.module.css'
 
 interface StyleStepProps {
+  accent: string
+  setAccent: (value: string) => void
   tone: string
   setTone: (value: string) => void
   speechRate: string
@@ -37,6 +39,69 @@ interface StyleStepProps {
   multiTurnEnabled: boolean
   setMultiTurnEnabled: (value: boolean) => void
 }
+
+const accentOptions = [
+  {
+    value: 'Persona-based',
+    label: 'Persona-based',
+    description: 'Use the selected persona voice profile as-is.',
+    icon: <IconAdjustments size={18} />,
+  },
+  {
+    value: 'American English',
+    label: 'American',
+    description: 'Neutral US pronunciation and cadence.',
+    icon: <IconBriefcase size={18} />,
+  },
+  {
+    value: 'British English',
+    label: 'British',
+    description: 'UK-style pronunciation with crisp delivery.',
+    icon: <IconShieldCheck size={18} />,
+  },
+  {
+    value: 'Australian English',
+    label: 'Australian',
+    description: 'Australian English rhythm and vowel color.',
+    icon: <IconCoffee size={18} />,
+  },
+  {
+    value: 'Canadian English',
+    label: 'Canadian',
+    description: 'Canadian English pronunciation.',
+    icon: <IconMountain size={18} />,
+  },
+  {
+    value: 'Indian English',
+    label: 'Indian',
+    description: 'Indian English pacing and articulation.',
+    icon: <IconFlame size={18} />,
+  },
+  {
+    value: 'Spanish',
+    label: 'Spanish',
+    description: 'Spanish accent profile.',
+    icon: <IconLeaf size={18} />,
+  },
+  {
+    value: 'French',
+    label: 'French',
+    description: 'French accent profile.',
+    icon: <IconMoodSmile size={18} />,
+  },
+  {
+    value: 'German',
+    label: 'German',
+    description: 'German accent profile.',
+    icon: <IconCrown size={18} />,
+  },
+  {
+    value: 'Italian',
+    label: 'Italian',
+    description: 'Italian accent profile.',
+    icon: <IconPlayerTrackNext size={18} />,
+  },
+]
 
 const toneOptions = [
   {
@@ -187,6 +252,8 @@ const difficultyOptions = [
 ]
 
 export function StyleStep({
+  accent,
+  setAccent,
   tone,
   setTone,
   speechRate,
@@ -216,11 +283,46 @@ export function StyleStep({
         </Box>
       </Group>
       <Text size="sm" c="dimmed">
-        Accent and voice are inherited from the persona you selected.
+        Keep the selected voice, and optionally override its accent for this run.
       </Text>
 
       <Paper withBorder p="md" radius="lg" className={classes.styleCard}>
         <Stack gap="lg">
+          <Box>
+            <Text fw={600}>Accent</Text>
+            <Text size="sm" c="dimmed">
+              Set an accent target for the TTS provider while preserving the chosen voice.
+            </Text>
+          </Box>
+          <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} spacing="md">
+            {accentOptions.map((option) => {
+              const isSelected = accent === option.value
+              return (
+                <Paper
+                  key={option.value}
+                  withBorder
+                  p="md"
+                  radius="lg"
+                  data-tour-id={`style-accent-${option.label.toLowerCase().replace(/\s+/g, '-')}`}
+                  className={`${classes.optionCard} ${isSelected ? classes.optionCardSelected : ''}`}
+                  onClick={() => setAccent(option.value)}
+                >
+                  <Group align="center" gap="sm">
+                    <ThemeIcon size="lg" radius="md" variant="light" color="blue">
+                      {option.icon}
+                    </ThemeIcon>
+                    <Stack gap={2}>
+                      <Text fw={700}>{option.label}</Text>
+                      <Text size="xs" c="dimmed">
+                        {option.description}
+                      </Text>
+                    </Stack>
+                  </Group>
+                </Paper>
+              )
+            })}
+          </SimpleGrid>
+
           <Box>
             <Text fw={600}>Conversation tone</Text>
             <Text size="sm" c="dimmed">

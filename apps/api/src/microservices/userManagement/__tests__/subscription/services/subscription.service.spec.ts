@@ -104,7 +104,7 @@ describe('SubscriptionService', () => {
       periodKey: 'period-key',
       allowance: 100,
       remainingAfter: 100,
-    } as any);
+    });
 
     const result = await service.createSubscription(
       {
@@ -238,7 +238,7 @@ describe('SubscriptionService', () => {
       periodKey: 'period-key',
       allowance: 250,
       remaining: 250,
-    } as any);
+    });
     subscriptionRepository.update.mockResolvedValue({
       ...existing,
       planId: 'plan-2',
@@ -478,7 +478,7 @@ describe('SubscriptionService', () => {
       ...basePlan,
       id: 'plan-2',
       name: 'Pro',
-    } as any);
+    });
     subscriptionRepository.update.mockResolvedValue({
       ...baseSubscriptionWithPlan,
       metadata: {
@@ -489,7 +489,7 @@ describe('SubscriptionService', () => {
           requestedByUserId: 'user-9',
         },
       },
-    } as any);
+    });
 
     await service.requestPlanChange(
       'sub-1',
@@ -531,7 +531,7 @@ describe('SubscriptionService', () => {
           requestedByUserId: 'user-9',
         },
       },
-    } as any);
+    });
     jest.spyOn(service, 'upgradeSubscription').mockResolvedValue({
       ...baseSubscriptionWithPlan,
       id: 'sub-1',
@@ -546,7 +546,7 @@ describe('SubscriptionService', () => {
           requestedPlanId: 'plan-2',
         },
       },
-    } as any);
+    });
     subscriptionRepository.update.mockResolvedValue({
       ...baseSubscriptionWithPlan,
       id: 'sub-1',
@@ -557,7 +557,7 @@ describe('SubscriptionService', () => {
         maxCoins: 500,
       },
       metadata: {},
-    } as any);
+    });
 
     await service.approvePlanChange('sub-1', 'admin-1');
 
@@ -585,16 +585,16 @@ describe('SubscriptionService', () => {
           requestedByUserId: 'user-9',
         },
       },
-    } as any);
+    });
     planRepository.findById.mockResolvedValue({
       id: 'plan-2',
       name: 'Pro',
       maxCoins: 500,
-    } as any);
+    });
     subscriptionRepository.update.mockResolvedValue({
       ...baseSubscriptionWithPlan,
       metadata: {},
-    } as any);
+    });
 
     await service.rejectPlanChange('sub-1');
 

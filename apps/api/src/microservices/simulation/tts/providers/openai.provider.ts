@@ -7,6 +7,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import OpenAI from 'openai';
 import { TtsOptions, TtsProvider, TtsResult } from './tts.provider';
+import { buildAccentInstruction } from '../../utils/voice-accent';
 
 const OPENAI_TTS_VOICES = [
   'alloy',
@@ -68,6 +69,7 @@ export class OpenAITtsProvider implements TtsProvider {
     const voice = this.resolveVoice(options?.voice);
     const model = this.resolveModel(options?.model);
     const responseFormat = this.resolveFormat(options?.format);
+    const instructions = this.resolveInstructions(model, options);
 
     try {
       const request: Parameters<typeof this.client.audio.speech.create>[0] = {
@@ -75,6 +77,7 @@ export class OpenAITtsProvider implements TtsProvider {
         voice,
         input: text,
         response_format: responseFormat,
+        ...(instructions ? { instructions } : {}),
       };
       const response = await this.client.audio.speech.create(request);
 
@@ -127,6 +130,17 @@ export class OpenAITtsProvider implements TtsProvider {
     }
 
     return match;
+  }
+
+  private resolveInstructions(
+    model: OpenAITtsModel,
+    options?: TtsOptions,
+  ): string | undefined {
+    if (model === 'tts-1' || model === 'tts-1-hd') {
+      return undefined;
+    }
+
+    return buildAccentInstruction(options?.accent);
   }
 
   private resolveFormat(format?: TtsOptions['format']): 'mp3' | 'wav' | 'opus' {

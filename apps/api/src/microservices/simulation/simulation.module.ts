@@ -59,9 +59,9 @@ import { AssessmentModule } from './assessment/assessment.module';
 import { PhoneModule } from './phone/phone.module';
 import { RagModule } from './rag/rag.module';
 import {
-  getRabbitMQUrl,
+  getRabbitMQUrls,
   getQueueOptions,
-} from '../../config/microservices.config';
+} from '@pitch/shared-backend/config/microservices.config';
 
 @Module({
   imports: [
@@ -80,7 +80,7 @@ import {
         useFactory: () => ({
           transport: Transport.RMQ,
           options: {
-            urls: [getRabbitMQUrl()],
+            urls: getRabbitMQUrls(),
             queue: 'crm_queue',
             queueOptions: getQueueOptions(),
           },
@@ -93,7 +93,7 @@ import {
         useFactory: () => ({
           transport: Transport.RMQ,
           options: {
-            urls: [getRabbitMQUrl()],
+            urls: getRabbitMQUrls(),
             queue: 'user_queue',
             queueOptions: getQueueOptions(),
           },

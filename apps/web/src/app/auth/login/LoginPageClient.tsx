@@ -2,8 +2,9 @@
 
 import { useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { Box, Container, Stack, Text, Title } from '@mantine/core'
+import { Box, Container, Text, Title } from '@mantine/core'
 import { LoginForm } from '@/features/auth/components/LoginForm'
+import SoftAurora from '@/components/SoftAurora'
 import {
   persistTeamInviteContext,
   readTeamInviteContextFromSearch,
@@ -24,13 +25,26 @@ export function LoginPageClient() {
   }, [searchParams])
 
   return (
-    <Box
-      className={styles.page}
-      style={{
-        background:
-          'linear-gradient(135deg, #0b1a52 0%, #112374 45%, #1c3a9a 100%), radial-gradient(380px 380px at 15% 20%, rgba(255, 255, 255, 0.50) 0%, rgba(255, 255, 255, 0) 70%), radial-gradient(420px 420px at 85% 75%, rgba(255, 255, 255, 0.5) 0%, rgba(255, 255, 255, 0) 72%)',
-      }}
-    >
+    <Box className={styles.page}>
+      <Box className={styles.auroraLayer} aria-hidden="true">
+        <SoftAurora
+          speed={0.6}
+          scale={1.5}
+          brightness={1}
+          color1="#f7f7f7"
+          color2="#e100ff"
+          noiseFrequency={2.5}
+          noiseAmplitude={1}
+          bandHeight={0.5}
+          bandSpread={1}
+          octaveDecay={0.1}
+          layerOffset={0}
+          colorSpeed={1}
+          enableMouseInteraction
+          mouseInfluence={0.25}
+        />
+      </Box>
+      <Box className={styles.auroraOverlay} aria-hidden="true" />
       <Box className={styles.brand}>P.IT.C.H.</Box>
       <Box className={`${styles.column} ${styles.columnLeft}`}>
         <Box className={styles.hero}>
@@ -52,10 +66,11 @@ export function LoginPageClient() {
           </Box>
           <Box className={`${styles.heroText} ${styles.heroTextSpacer}`}>
             <Title order={2} fw={700} c="white" className={styles.title}>
-              Welcome back.
+              Train like it&apos;s real.
             </Title>
             <Text size="sm" className={styles.supporting} style={{ maxWidth: '360px' }}>
-              Everything is ready when you are. Your progress is right where you left it.
+              Practice your pitch against AI personas that push back, raise real objections, and
+              think like actual buyers — so you&apos;re sharp and ready when it counts.
             </Text>
           </Box>
         </Box>

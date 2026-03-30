@@ -190,19 +190,23 @@ const improvementBars = [
 
 const exampleCards = [
   {
-    title: 'Leadership dashboard',
+    title: 'Landing overview',
     detail:
-      'A quick view of readiness, improvement velocity, and the coaching priorities that matter most.',
+      'The live marketing experience showing positioning, proof points, and key activity metrics.',
+    image: '/landing/landing-overview.png',
+    alt: 'PITCH landing page overview with headline and activity metrics',
   },
   {
-    title: 'Live practice session',
-    detail:
-      'An interactive simulation with AI feedback, transcript context, and in-the-moment coaching prompts.',
+    title: 'Sign-in experience',
+    detail: 'The real authentication screen used by returning users before entering the studio.',
+    image: '/landing/auth-signin.png',
+    alt: 'PITCH sign-in page with mascot illustration and email form',
   },
   {
-    title: 'Scenario setup',
-    detail:
-      'Configure buyer context, pressure, and evaluation criteria for repeatable team-wide practice.',
+    title: 'Account setup',
+    detail: 'The actual registration flow new users see when creating an account.',
+    image: '/landing/auth-register.png',
+    alt: 'PITCH registration page with mascot illustration and account creation panel',
   },
 ]
 
@@ -662,98 +666,30 @@ export default async function Home() {
             </div>
 
             <div className={styles.screensGrid}>
-              <article
-                className={`${styles.screenCard} ${styles.reveal}`}
-                style={withDelay('0.12s')}
-              >
-                <header>
-                  <span />
-                  <span />
-                  <span />
-                  <p>{exampleCards[0].title}</p>
-                </header>
-                <div className={styles.mockDashboard}>
-                  <div className={styles.mockSidebar}>
+              {exampleCards.map((card, index) => (
+                <article
+                  key={card.title}
+                  className={`${styles.screenCard} ${styles.reveal}`}
+                  style={withDelay(`${0.12 + index * 0.06}s`)}
+                >
+                  <header>
                     <span />
                     <span />
                     <span />
-                    <span />
-                  </div>
-                  <div className={styles.mockContent}>
-                    <div className={styles.mockHeader} />
-                    <div className={styles.mockBars}>
-                      {[72, 47, 85, 62, 77].map((height) => (
-                        <span key={height} style={{ height: `${height}%` }} />
-                      ))}
-                    </div>
-                  </div>
-                </div>
-                <p>{exampleCards[0].detail}</p>
-              </article>
-
-              <article
-                className={`${styles.screenCard} ${styles.reveal}`}
-                style={withDelay('0.18s')}
-              >
-                <header>
-                  <span />
-                  <span />
-                  <span />
-                  <p>{exampleCards[1].title}</p>
-                </header>
-                <div className={styles.mockLive}>
-                  <div className={styles.liveMedia}>
+                    <p>{card.title}</p>
+                  </header>
+                  <div className={styles.screenShotFrame}>
                     <Image
-                      src="/pitchMascot.png"
-                      alt="PITCH AI coach preview"
+                      src={card.image}
+                      alt={card.alt}
                       fill
                       sizes="(max-width: 900px) 100vw, 33vw"
-                      className={styles.liveImage}
+                      className={styles.screenShotImage}
                     />
-                    <em>Live AI Coach</em>
                   </div>
-                  <ul>
-                    <li>Rep: How is your team managing renewal risk right now?</li>
-                    <li>Buyer: We need stronger ROI proof before committing budget.</li>
-                    <li>Coach: Good discovery. Quantify business impact next.</li>
-                  </ul>
-                </div>
-                <p>{exampleCards[1].detail}</p>
-              </article>
-
-              <article
-                className={`${styles.screenCard} ${styles.reveal}`}
-                style={withDelay('0.24s')}
-              >
-                <header>
-                  <span />
-                  <span />
-                  <span />
-                  <p>{exampleCards[2].title}</p>
-                </header>
-                <div className={styles.mockBuilder}>
-                  <div>
-                    <small>Persona</small>
-                    <span>CFO • Enterprise SaaS</span>
-                  </div>
-                  <div>
-                    <small>Pressure</small>
-                    <span>Budget freeze + legal review</span>
-                  </div>
-                  <ul>
-                    <li>
-                      <CheckCircle2 size={14} /> Discovery depth
-                    </li>
-                    <li>
-                      <CheckCircle2 size={14} /> Stakeholder mapping
-                    </li>
-                    <li>
-                      <CheckCircle2 size={14} /> Objection structure
-                    </li>
-                  </ul>
-                </div>
-                <p>{exampleCards[2].detail}</p>
-              </article>
+                  <p>{card.detail}</p>
+                </article>
+              ))}
             </div>
           </div>
         </section>

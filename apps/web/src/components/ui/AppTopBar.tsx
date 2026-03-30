@@ -785,7 +785,10 @@ export function AppTopBar({
   })
 
   const unreadCount = unreadCountQuery.data?.count ?? 0
-  const notificationItems = (notificationsQuery.data?.data ?? []) as NotificationItem[]
+  const notificationItems = useMemo(
+    () => (notificationsQuery.data?.data ?? []) as NotificationItem[],
+    [notificationsQuery.data?.data]
+  )
 
   useEffect(() => {
     if (!currentUser?.id) {

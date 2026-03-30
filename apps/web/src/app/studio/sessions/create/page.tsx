@@ -49,6 +49,7 @@ import { StyleStep } from './components/StyleStep'
 import { UploadSection } from './components/UploadSection'
 import { ReviewStep } from './components/ReviewStep'
 import { SessionConfigForm, Persona, PersonaTraits } from './lib/types'
+import { DEFAULT_ACCENT, deriveAccentFromPersonaTraits } from './lib/accent'
 import type { SessionAttachment } from '@/features/sessions/types/sessions.types'
 import { getBrainCompatibleModels, getPreferredBrainModel } from './lib/brain-models'
 import { useCrm } from '@/features/crm'
@@ -217,7 +218,7 @@ export default function CreateSessionPage() {
   const [ttsProvider, setTtsProvider] = useState('elevenlabs')
   const [ttsVoice, setTtsVoice] = useState('Rachel')
   const [ttsModel, setTtsModel] = useState<string | null>(null)
-  const [accent, setAccent] = useState('Persona-based')
+  const [accent, setAccent] = useState(DEFAULT_ACCENT)
   const [tone, setTone] = useState('Formal')
   const [speechRate, setSpeechRate] = useState('Conversational')
   const [responseLength, setResponseLength] = useState('Balanced')
@@ -460,7 +461,7 @@ export default function CreateSessionPage() {
 
   useEffect(() => {
     if (!selectedPersonaData?.traits) {
-      setAccent('Persona-based')
+      setAccent(DEFAULT_ACCENT)
       return
     }
     const traits = selectedPersonaData.traits as PersonaTraits
@@ -473,8 +474,7 @@ export default function CreateSessionPage() {
     if (traits.voice?.model) {
       setTtsModel(traits.voice.model)
     }
-    const derivedAccent = traits.voice?.language || traits.voiceProfile || 'Persona-based'
-    setAccent(derivedAccent)
+    setAccent(deriveAccentFromPersonaTraits(traits))
   }, [selectedPersonaData])
 
   useEffect(() => {
@@ -1437,6 +1437,8 @@ export default function CreateSessionPage() {
       icon: <IconAdjustments size={18} />,
       content: (
         <StyleStep
+          accent={accent}
+          setAccent={setAccent}
           tone={tone}
           setTone={setTone}
           speechRate={speechRate}

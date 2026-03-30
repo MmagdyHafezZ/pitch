@@ -26,9 +26,9 @@ import { LtiAdvantageGatewayController } from './controllers/lti/lti-advantage-g
 import { LtiManagementGatewayController } from './controllers/lti/lti-management-gateway.controller';
 import {
   MICROSERVICES_CONFIG,
-  getRabbitMQUrl,
+  getRabbitMQUrls,
   getQueueOptions,
-} from '../config/microservices.config';
+} from '@pitch/shared-backend/config/microservices.config';
 import {
   getJwtSecret,
   getJwtAccessExpiration,
@@ -87,7 +87,7 @@ import { CoinsGatewayController } from './controllers/userManagement/coins-gatew
         name,
         transport: Transport.RMQ,
         options: {
-          urls: [getRabbitMQUrl()],
+          urls: getRabbitMQUrls(),
           queue,
           queueOptions: getQueueOptions(),
         },

@@ -379,7 +379,10 @@ export default function SessionPerformancePage() {
     () => assessment?.summary?.scoreBreakdown ?? report?.scoreBreakdown ?? {},
     [assessment?.summary?.scoreBreakdown, report?.scoreBreakdown]
   )
-  const coachTips = assessment?.summary?.coachTips ?? report?.summary?.coachTips ?? []
+  const coachTips = useMemo(
+    () => assessment?.summary?.coachTips ?? report?.summary?.coachTips ?? [],
+    [assessment?.summary?.coachTips, report?.summary?.coachTips]
+  )
   const narrativeSummary =
     assessment?.summary?.narrativeSummary ?? report?.summary?.narrativeSummary
   const objectiveMet = report?.summary?.objectiveMet
@@ -1644,6 +1647,7 @@ export default function SessionPerformancePage() {
                 key: `post-session-coach:${assessment?.runId ?? sessionId}`,
                 message: coachStarterMessage,
                 open: true,
+                hidden: true,
               }
             : undefined
         }
