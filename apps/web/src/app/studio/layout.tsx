@@ -14,6 +14,16 @@ import { useState, useEffect, useMemo, Suspense } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 
 export default function ClientLayerComponent({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname()
+
+  if (pathname?.startsWith('/studio/test')) {
+    return <>{children}</>
+  }
+
+  return <StudioShell>{children}</StudioShell>
+}
+
+function StudioShell({ children }: { children: React.ReactNode }) {
   const [active, setActive] = useState<
     | 'Home'
     | 'Sessions'
