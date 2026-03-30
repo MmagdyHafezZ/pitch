@@ -443,6 +443,7 @@ export class SimulationWsGateway
               sentenceIndex: event.data.sentenceIndex,
               audio: event.data.audio,
               contentType: event.data.contentType,
+              sentenceText: event.data.sentenceText,
             },
           });
         }

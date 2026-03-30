@@ -2,7 +2,7 @@
 import { ActionIcon, Box, Menu, Stack, Tooltip, Text } from '@mantine/core'
 import { useMediaQuery } from '@mantine/hooks'
 import { useRouter } from 'next/navigation'
-import { useRef, useState } from 'react'
+import { DragEvent, useRef, useState } from 'react'
 import classes from './TeamSideBar.module.css'
 
 export type TeamInfo = {
@@ -15,6 +15,7 @@ type TeamSideBarProps = {
   teams: TeamInfo[]
   activeTeamId: string | null
   onSelectTeam: (id: string) => void
+  onReorderTeams?: (teamIds: string[]) => void
   onLeaveTeam?: (team: TeamInfo) => void
   onNavigate?: () => void
 }
@@ -39,6 +40,7 @@ export function TeamSideBar({
   teams,
   activeTeamId,
   onSelectTeam,
+  onReorderTeams,
   onLeaveTeam,
   onNavigate,
 }: TeamSideBarProps) {
@@ -46,13 +48,71 @@ export function TeamSideBar({
   const isMobile = useMediaQuery('(max-width: 48em)')
   const [menuTeamId, setMenuTeamId] = useState<string | null>(null)
   const [hoveredTeamId, setHoveredTeamId] = useState<string | null>(null)
+  const [draggedTeamId, setDraggedTeamId] = useState<string | null>(null)
+  const [dragTargetTeamId, setDragTargetTeamId] = useState<string | null>(null)
   const allowContextOpenRef = useRef(false)
+  const lastDragEndedAtRef = useRef(0)
   const teamButtonSize = isMobile ? 32 : 36
+  const canReorderTeams = teams.length > 1 && typeof onReorderTeams === 'function'
+
+  const resetDragState = () => {
+    setDraggedTeamId(null)
+    setDragTargetTeamId(null)
+    lastDragEndedAtRef.current = Date.now()
+  }
+
+  const handleReorder = (sourceTeamId: string, targetTeamId: string) => {
+    if (!onReorderTeams || sourceTeamId === targetTeamId) return
+
+    const sourceIndex = teams.findIndex((team) => team.id === sourceTeamId)
+    const targetIndex = teams.findIndex((team) => team.id === targetTeamId)
+    if (sourceIndex < 0 || targetIndex < 0) return
+
+    const nextTeams = [...teams]
+    const [movedTeam] = nextTeams.splice(sourceIndex, 1)
+    nextTeams.splice(targetIndex, 0, movedTeam)
+    onReorderTeams(nextTeams.map((team) => team.id))
+  }
 
   const handleTeamClick = (id: string) => {
+    if (Date.now() - lastDragEndedAtRef.current < 250) return
+
     setMenuTeamId(null)
     onSelectTeam(id)
     onNavigate?.()
+  }
+
+  const handleTeamDragStart = (event: DragEvent<HTMLButtonElement>, teamId: string) => {
+    if (!canReorderTeams) return
+
+    setMenuTeamId(null)
+    setDraggedTeamId(teamId)
+    setDragTargetTeamId(teamId)
+    if (event.dataTransfer) {
+      event.dataTransfer.effectAllowed = 'move'
+      event.dataTransfer.setData('text/plain', teamId)
+    }
+  }
+
+  const handleTeamDragOver = (event: DragEvent<HTMLButtonElement>, teamId: string) => {
+    if (!canReorderTeams || !draggedTeamId || draggedTeamId === teamId) return
+
+    event.preventDefault()
+    if (dragTargetTeamId !== teamId) {
+      setDragTargetTeamId(teamId)
+    }
+  }
+
+  const handleTeamDrop = (event: DragEvent<HTMLButtonElement>, teamId: string) => {
+    if (!canReorderTeams) return
+
+    event.preventDefault()
+    const sourceTeamId = draggedTeamId || event.dataTransfer?.getData('text/plain')
+    if (sourceTeamId && sourceTeamId !== teamId) {
+      handleReorder(sourceTeamId, teamId)
+    }
+
+    resetDragState()
   }
 
   const handleCreateTeam = () => {
@@ -68,6 +128,15 @@ export function TeamSideBar({
           {teams.map((team) => {
             const isActive = team.id === activeTeamId
             const showContextHint = team.canLeave && hoveredTeamId === team.id
+            const isDragging = draggedTeamId === team.id
+            const isDragTarget = dragTargetTeamId === team.id && draggedTeamId !== team.id
+            const tooltipLabel = team.canLeave
+              ? canReorderTeams
+                ? `${team.name} (drag to reorder, right-click for options)`
+                : `${team.name} (right-click for options)`
+              : canReorderTeams
+                ? `${team.name} (drag to reorder)`
+                : team.name
 
             return (
               <Menu
@@ -93,21 +162,31 @@ export function TeamSideBar({
               >
                 <Menu.Target>
                   <span>
-                    <Tooltip
-                      label={team.canLeave ? `${team.name} (right-click for options)` : team.name}
-                      position="right"
-                      withArrow
-                    >
+                    <Tooltip label={tooltipLabel} position="right" withArrow>
                       <ActionIcon
+                        aria-label={`Select team ${team.name}`}
                         radius="xl"
                         size="lg"
                         variant="subtle"
-                        className={`${classes.teamButton} ${isActive ? classes.teamButtonActive : ''}`}
+                        className={`${classes.teamButton} ${
+                          isActive ? classes.teamButtonActive : ''
+                        } ${isDragging ? classes.teamButtonDragging : ''} ${
+                          isDragTarget ? classes.teamButtonDropTarget : ''
+                        }`}
+                        draggable={canReorderTeams}
+                        aria-grabbed={isDragging}
                         onMouseEnter={() => setHoveredTeamId(team.id)}
                         onMouseLeave={() =>
                           setHoveredTeamId((current) => (current === team.id ? null : current))
                         }
                         onClick={() => handleTeamClick(team.id)}
+                        onDragStart={(event) => handleTeamDragStart(event, team.id)}
+                        onDragOver={(event) => handleTeamDragOver(event, team.id)}
+                        onDragLeave={() => {
+                          setDragTargetTeamId((current) => (current === team.id ? null : current))
+                        }}
+                        onDrop={(event) => handleTeamDrop(event, team.id)}
+                        onDragEnd={resetDragState}
                         onContextMenu={(event) => {
                           if (!team.canLeave || !onLeaveTeam) return
                           event.preventDefault()
@@ -117,7 +196,13 @@ export function TeamSideBar({
                         style={{
                           width: teamButtonSize,
                           height: teamButtonSize,
-                          cursor: team.canLeave ? 'context-menu' : 'pointer',
+                          cursor: canReorderTeams
+                            ? isDragging
+                              ? 'grabbing'
+                              : 'grab'
+                            : team.canLeave
+                              ? 'context-menu'
+                              : 'pointer',
                           boxShadow: showContextHint
                             ? '0 0 0 2px color-mix(in srgb, var(--pitch-accent-strong) 40%, transparent)'
                             : 'none',

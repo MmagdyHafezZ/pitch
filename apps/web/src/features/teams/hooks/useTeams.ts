@@ -19,6 +19,7 @@ export function useTeams() {
   const updateMember = useTeamsStore((s) => s.updateMember)
   const deleteMember = useTeamsStore((s) => s.deleteMember)
   const leaveTeam = useTeamsStore((s) => s.leaveTeam)
+  const reorderTeams = useTeamsStore((s) => s.reorderTeams)
   const setActiveTeamId = useTeamsStore((s) => s.setActiveTeamId)
 
   return {
@@ -40,6 +41,7 @@ export function useTeams() {
     updateMember,
     deleteMember,
     leaveTeam,
+    reorderTeams,
     setActiveTeamId,
   }
 }

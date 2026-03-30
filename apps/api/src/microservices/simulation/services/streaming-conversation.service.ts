@@ -54,11 +54,13 @@ interface SessionConfig extends JsonRecord {
   ttsProvider?: string;
   ttsVoice?: string;
   ttsModel?: string;
+  accent?: string;
   voice?: {
     provider?: string;
     voice?: string;
     voiceName?: string;
     language?: string;
+    accent?: string;
     model?: string;
   };
 }
@@ -444,6 +446,7 @@ export class StreamingConversationService {
         ttsResult = await this.ttsService.synthesize(text, ttsConfig.provider, {
           voice: ttsConfig.voice,
           language: ttsConfig.language,
+          accent: ttsConfig.accent,
           model: ttsConfig.model,
         });
       } catch (error) {
@@ -456,6 +459,7 @@ export class StreamingConversationService {
           try {
             ttsResult = await this.ttsService.synthesize(text, 'melotts', {
               language: ttsConfig.language,
+              accent: ttsConfig.accent,
             });
           } catch (fallbackError) {
             ttsError = fallbackError;
@@ -629,6 +633,7 @@ export class StreamingConversationService {
     provider: string;
     voice?: string;
     language?: string;
+    accent?: string;
     model?: string;
   } {
     const sessionConfig = toRecord(session.sessionConfig);
@@ -659,6 +664,11 @@ export class StreamingConversationService {
           sessionVoice.language,
           session.language,
         ) || 'en',
+      accent: this.pickFirstString(
+        voice.accent,
+        sessionVoice.accent,
+        sessionConfig.accent,
+      ),
       model: this.pickFirstString(
         voice.model,
         sessionVoice.model,

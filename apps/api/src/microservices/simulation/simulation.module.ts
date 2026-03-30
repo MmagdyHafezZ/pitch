@@ -59,9 +59,9 @@ import { AssessmentModule } from './assessment/assessment.module';
 import { PhoneModule } from './phone/phone.module';
 import { RagModule } from './rag/rag.module';
 import {
-  getRabbitMQUrl,
+  getRabbitMQUrls,
   getQueueOptions,
-} from '../../config/microservices.config';
+} from '@pitch/shared-backend/config/microservices.config';
 
 @Module({
   imports: [
@@ -77,10 +77,10 @@ import {
       {
         name: 'CRM_SERVICE',
         imports: [ConfigModule],
-        useFactory: (_configService: ConfigService) => ({
+        useFactory: () => ({
           transport: Transport.RMQ,
           options: {
-            urls: [getRabbitMQUrl()],
+            urls: getRabbitMQUrls(),
             queue: 'crm_queue',
             queueOptions: getQueueOptions(),
           },
@@ -90,10 +90,10 @@ import {
       {
         name: 'USER_SERVICE',
         imports: [ConfigModule],
-        useFactory: (_configService: ConfigService) => ({
+        useFactory: () => ({
           transport: Transport.RMQ,
           options: {
-            urls: [getRabbitMQUrl()],
+            urls: getRabbitMQUrls(),
             queue: 'user_queue',
             queueOptions: getQueueOptions(),
           },
@@ -179,6 +179,7 @@ import {
     PhoneModule,
     TtsModule,
     LLMService,
+    LLMRoutingConfigService,
     StreamingConversationService,
     ConversationOrchestrationService,
     SessionService,
@@ -188,8 +189,11 @@ import {
     PersonaMediaService,
     HintsService,
     SimulationPrismaService,
+    SimulationRedisService,
     MongoConnectionService,
     VideoGenerationService,
+    AssessmentModule,
+    PhoneModule,
     RagModule,
   ],
 })

@@ -218,8 +218,8 @@ describe('buildConversationSystemPrompt', () => {
       },
     });
 
-    expect(response).toContain('As IBM Procurement Reviewer,');
-    expect(response).toContain('Objective to address:');
+    expect(response).toContain('IBM Procurement Reviewer:');
+    expect(response).toContain('What specifically is your plan for');
     expect(response).not.toContain(
       'Got it. Could you say a bit more so I can respond properly?',
     );
@@ -247,17 +247,17 @@ describe('buildConversationSystemPrompt', () => {
       },
     });
 
-    expect(response).toContain('Hi Magdy, welcome to Pitch.');
+    expect(response).toContain('Hi Magdy.');
+    expect(response).toContain("I'm IBM Procurement Reviewer.");
     expect(response).toContain(
-      "I'm IBM Procurement Reviewer for this simulation.",
+      "I want to talk about You are presenting a rollout plan to an enterprise procurement lead. — let's get right into it.",
     );
     expect(response).toContain(
-      'This scenario has you working as Sales Representative',
+      'Give me one concrete point to start: a specific number, timeline, or decision.',
     );
-    expect(response).toContain("Let's begin: as IBM Procurement Reviewer");
   });
 
-  it('builds a first-turn starter prompt that greets the user by name and introduces Pitch', () => {
+  it('builds a first-turn starter prompt that opens directly in character', () => {
     const prompt = buildConversationStarterPrompt(
       makeInput(
         undefined,
@@ -288,18 +288,18 @@ describe('buildConversationSystemPrompt', () => {
       ),
     );
 
-    expect(prompt).toContain('Open with the exact greeting "Hi Magdy,"');
     expect(prompt).toContain(
-      'give a short introduction to Pitch as the app hosting this practice simulation',
+      'Begin the conversation immediately, fully in character',
     );
     expect(prompt).toContain(
-      'Mention that you are playing IBM Procurement Reviewer.',
+      'Address Magdy naturally, as IBM Procurement Reviewer would in this scenario.',
+    );
+    expect(prompt).toContain('Scenario: "Enterprise Security Rollout".');
+    expect(prompt).toContain(
+      'You are IBM Procurement Reviewer; the other person is Sales Representative.',
     );
     expect(prompt).toContain(
-      'Mention that the user is playing Sales Representative.',
-    );
-    expect(prompt).toContain(
-      'Mention the scenario title: Enterprise Security Rollout.',
+      'Immediately surface one concrete concern, question, or decision point from your role.',
     );
   });
 

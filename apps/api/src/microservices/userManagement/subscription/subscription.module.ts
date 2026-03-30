@@ -9,8 +9,8 @@ import { SubscriptionAccessGuard } from '../guards/subscription-access.guard';
 import { TeamRepository } from '../team/repositories/team.repository';
 import {
   getQueueOptions,
-  getRabbitMQUrl,
-} from '../../../config/microservices.config';
+  getRabbitMQUrls,
+} from '@pitch/shared-backend/config/microservices.config';
 import { NotificationModule } from '../notifications/notification.module';
 import { UserModule } from '../user/user.module';
 import { PlanChangeNotificationService } from './services/plan-change-notification.service';
@@ -26,7 +26,7 @@ import { PlanChangeNotificationService } from './services/plan-change-notificati
         name: 'SUPPORT_SERVICE',
         transport: Transport.RMQ,
         options: {
-          urls: [getRabbitMQUrl()],
+          urls: getRabbitMQUrls(),
           queue: process.env.SUPPORT_RMQ_QUEUE || 'support_queue',
           queueOptions: getQueueOptions(),
         },

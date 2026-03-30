@@ -99,4 +99,32 @@ describe('TeamSideBar', () => {
     })
     expect(onLeaveTeam).not.toHaveBeenCalled()
   })
+
+  it('reorders teams with drag and drop when multiple teams are available', () => {
+    const onSelectTeam = jest.fn()
+    const onReorderTeams = jest.fn()
+
+    render(
+      <TeamSideBar
+        teams={[
+          { id: 'team-1', name: 'Alpha Team', canLeave: true },
+          { id: 'team-2', name: 'Bravo Team', canLeave: true },
+          { id: 'team-3', name: 'Charlie Team', canLeave: true },
+        ]}
+        activeTeamId="team-1"
+        onSelectTeam={onSelectTeam}
+        onReorderTeams={onReorderTeams}
+      />
+    )
+
+    const alphaButton = screen.getByLabelText('Select team Alpha Team')
+    const charlieButton = screen.getByLabelText('Select team Charlie Team')
+
+    fireEvent.dragStart(charlieButton)
+    fireEvent.dragOver(alphaButton)
+    fireEvent.drop(alphaButton)
+
+    expect(onReorderTeams).toHaveBeenCalledWith(['team-3', 'team-1', 'team-2'])
+    expect(onSelectTeam).not.toHaveBeenCalled()
+  })
 })

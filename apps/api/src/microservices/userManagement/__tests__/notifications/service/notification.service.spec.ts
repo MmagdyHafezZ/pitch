@@ -207,4 +207,31 @@ describe('NotificationService', () => {
       { $set: { readAt: expect.any(Date) } },
     );
   });
+
+  it('marks unread notifications as read using semantic filters', async () => {
+    model.updateMany.mockResolvedValue({ matchedCount: 3, modifiedCount: 2 });
+
+    const result = await service.markMatchingRead({
+      type: 'plan_change_request',
+      sourceUserId: 'user-9',
+      metadata: {
+        subscriptionId: 'sub-1',
+        context: {
+          requestedPlanId: 'plan-2',
+        },
+      },
+    });
+
+    expect(model.updateMany).toHaveBeenCalledWith(
+      {
+        readAt: null,
+        type: 'plan_change_request',
+        sourceUserId: 'user-9',
+        'metadata.subscriptionId': 'sub-1',
+        'metadata.context.requestedPlanId': 'plan-2',
+      },
+      { $set: { readAt: expect.any(Date) } },
+    );
+    expect(result).toEqual({ matched: 3, modified: 2 });
+  });
 });

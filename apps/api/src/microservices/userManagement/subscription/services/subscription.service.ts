@@ -22,6 +22,7 @@ import { CoinRefillService } from '../../coins/services/coin-refill.service';
 import { CoinRedisService } from '../../coins/services/coin-redis.service';
 import { CoinAccountingService } from '../../coins/services/coin-accounting.service';
 import { PlanChangeNotificationService } from './plan-change-notification.service';
+import { NotificationService } from '../../notifications/service/notification.service';
 
 @Injectable()
 export class SubscriptionService {
@@ -34,6 +35,7 @@ export class SubscriptionService {
     private readonly subscriptionRepository: SubscriptionRepository,
     private readonly planRepository: PlanRepository,
     private readonly planChangeNotificationService: PlanChangeNotificationService,
+    private readonly notificationService: NotificationService,
   ) {}
 
   private toSubscription<T extends { metadata?: unknown }>(
@@ -259,16 +261,38 @@ export class SubscriptionService {
 
     const eventId = `upgrade:${subscriptionId}:${dto.planId}:${existing.currentPeriodEnd.toISOString()}`;
 
-    await this.coinRedisService.applyDeltaIdempotent({
+    const redisResult = await this.coinRedisService.applyDeltaIdempotent({
       teamId,
       periodKey,
       deltaCoins: -deltaAllowance,
       eventId,
       ttlSeconds,
     });
+    if (!redisResult.applied && redisResult.reason !== 'ALREADY_PROCESSED') {
+      throw new ConflictException(
+        `Unable to apply plan upgrade balance delta for subscription ${subscriptionId}`,
+      );
+    }
+
+    const balanceSnapshot = await this.coinAccountingService.getRemainingCoins(
+      teamId,
+      {
+        periodKey,
+        allowanceFallback: newAllowance,
+        initIfMissing: false,
+      },
+    );
+    if (balanceSnapshot.ok === false) {
+      throw new NotFoundException(
+        `No active coin balance found for team ${teamId}`,
+      );
+    }
+    const remainingAfter =
+      redisResult.remainingAfter ?? balanceSnapshot.remaining;
 
     const updateData: Prisma.SubscriptionUncheckedUpdateInput = {
       planId: dto.planId,
+      ...(dto.interval !== undefined ? { interval: dto.interval } : {}),
     };
     if (dto.metadata !== undefined) {
       updateData.metadata =
@@ -289,7 +313,24 @@ export class SubscriptionService {
       );
     }
 
-    return await this.subscriptionRepository.update(subscriptionId, updateData);
+    const updatedSubscription = await this.subscriptionRepository.update(
+      subscriptionId,
+      updateData,
+    );
+
+    await this.coinAccountingService.recordPlanUpgrade({
+      teamId,
+      subscriptionId,
+      planId: dto.planId,
+      requesterId,
+      periodKey,
+      allowance: newAllowance,
+      remainingAfter,
+      deltaCoins: deltaAllowance,
+      eventId,
+    });
+
+    return updatedSubscription;
   }
 
   async removeSubscription(
@@ -427,6 +468,7 @@ export class SubscriptionService {
 
     await this.planChangeNotificationService
       .notifyAdminsOfRequest({
+        subscriptionId,
         requesterId,
         currentPlanName: existing.plan?.name,
         requestedPlanName: newPlan.name,
@@ -485,6 +527,8 @@ export class SubscriptionService {
       metadata: cleanedMeta as Prisma.InputJsonValue,
     });
 
+    await this.clearPendingPlanChangeNotifications(subscriptionId);
+
     if (requestedByUserId) {
       await this.planChangeNotificationService
         .notifyUserOfDecision({
@@ -529,6 +573,8 @@ export class SubscriptionService {
       metadata: meta as Prisma.InputJsonValue,
     });
 
+    await this.clearPendingPlanChangeNotifications(subscriptionId);
+
     if (pending.requestedByUserId) {
       await this.planChangeNotificationService
         .notifyUserOfDecision({
@@ -545,6 +591,24 @@ export class SubscriptionService {
     }
 
     return updated;
+  }
+
+  private async clearPendingPlanChangeNotifications(
+    subscriptionId: string,
+  ): Promise<void> {
+    try {
+      await this.notificationService.markMatchingRead({
+        type: 'plan_change_request',
+        metadata: {
+          subscriptionId,
+        },
+      });
+    } catch (error) {
+      this.logger.error(
+        `Failed to mark plan change request notifications as read for subscription ${subscriptionId}`,
+        error as Error,
+      );
+    }
   }
 
   public addInterval(d: Date, interval: BillingInterval): Date {

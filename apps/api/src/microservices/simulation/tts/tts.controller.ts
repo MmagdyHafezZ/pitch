@@ -12,6 +12,7 @@ type SpeakRequest = {
     voice?: string;
     model?: string;
     language?: string;
+    accent?: string;
     format?: 'mp3' | 'wav' | 'ogg';
     sampleRate?: number;
   };

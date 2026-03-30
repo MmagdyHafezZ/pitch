@@ -7,19 +7,31 @@ import { MicroserviceOptions, Transport } from '@nestjs/microservices';
 import { ValidationPipe } from '@nestjs/common';
 import { S3Module } from './s3.module';
 import { RpcExceptionLoggingFilter } from '@pitch/shared-backend/filters/rpc-exception.filter';
-import { getRabbitMQUrl } from '../../config/microservices.config';
+import {
+  getQueueOptions,
+  getRabbitMQUrl,
+  getRabbitMQUrls,
+} from '../../config/microservices.config';
+import {
+  buildRabbitMqQueueTopology,
+  provisionRabbitMqTopology,
+} from '../../config/rabbitmq-topology';
 
 async function bootstrap() {
+  const rabbitmqUrl = getRabbitMQUrl();
+
+  await provisionRabbitMqTopology(rabbitmqUrl, [
+    buildRabbitMqQueueTopology('s3_queue'),
+  ]);
+
   const app = await NestFactory.createMicroservice<MicroserviceOptions>(
     S3Module,
     {
       transport: Transport.RMQ,
       options: {
-        urls: [getRabbitMQUrl()],
+        urls: getRabbitMQUrls(),
         queue: 's3_queue',
-        queueOptions: {
-          durable: true,
-        },
+        queueOptions: getQueueOptions(rabbitmqUrl),
         noAck: false,
         prefetchCount: 10,
       },

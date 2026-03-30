@@ -6,7 +6,26 @@ import {
   useLogoutMutation,
   useMeQuery,
 } from '../services/auth.service'
-import { LoginCredentials, RegisterCredentials } from '../types/auth.types'
+import { LoginCredentials, RegisterCredentials, User } from '../types/auth.types'
+
+const hasAuthRelevantUserChange = (currentUser: User | null, nextUser: User) => {
+  if (!currentUser) return true
+
+  return (
+    currentUser.id !== nextUser.id ||
+    currentUser.email !== nextUser.email ||
+    currentUser.name !== nextUser.name ||
+    currentUser.avatar !== nextUser.avatar ||
+    currentUser.phoneNumber !== nextUser.phoneNumber ||
+    currentUser.phoneVerifiedAt !== nextUser.phoneVerifiedAt ||
+    currentUser.isActive !== nextUser.isActive ||
+    currentUser.hasStudioAccess !== nextUser.hasStudioAccess ||
+    currentUser.isSystemAdmin !== nextUser.isSystemAdmin ||
+    currentUser.createdAt !== nextUser.createdAt ||
+    currentUser.updatedAt !== nextUser.updatedAt ||
+    JSON.stringify(currentUser.settings ?? null) !== JSON.stringify(nextUser.settings ?? null)
+  )
+}
 
 export const useAuth = () => {
   const {
@@ -40,7 +59,7 @@ export const useAuth = () => {
 
   // Sync user data from query to store
   useEffect(() => {
-    if (meQuery.data && !user) {
+    if (meQuery.data && hasAuthRelevantUserChange(user, meQuery.data)) {
       setUser(meQuery.data)
     }
   }, [meQuery.data, user, setUser])

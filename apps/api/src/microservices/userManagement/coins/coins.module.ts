@@ -11,6 +11,8 @@ import { UserModule } from '../user/user.module';
 import { TeamModule } from '../team/team.module';
 import { CoinRefillCron } from './services/coin-refill-cron.service';
 import { CoinRefillService } from './services/coin-refill.service';
+import { NotificationModule } from '../notifications/notification.module';
+import { TeamMembershipAccessGuard } from '../guards/team-membership-access.guard';
 
 @Module({
   imports: [
@@ -18,6 +20,7 @@ import { CoinRefillService } from './services/coin-refill.service';
     PlansModule,
     forwardRef(() => UserModule),
     TeamModule,
+    NotificationModule,
   ],
   controllers: [CoinsConsumer],
   providers: [
@@ -28,6 +31,7 @@ import { CoinRefillService } from './services/coin-refill.service';
     CoinRefillService,
     CoinLedgerRepository,
     CoinBalanceRepository,
+    TeamMembershipAccessGuard,
   ],
   exports: [
     CoinAccountingService,

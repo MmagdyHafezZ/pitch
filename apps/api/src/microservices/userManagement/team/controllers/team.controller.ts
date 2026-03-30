@@ -359,9 +359,7 @@ export class TeamController {
   }
 
   @MessagePattern(USER_SERVICE_PATTERNS.LIST_PENDING_TEAMS)
-  async listPendingTeams(
-    @Payload() _data: userClaimsInterface.MessageWithUserClaims,
-  ) {
+  async listPendingTeams() {
     try {
       return await this.teamService.listPendingTeams();
     } catch (error) {

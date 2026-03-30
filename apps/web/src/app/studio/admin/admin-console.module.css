@@ -1,0 +1,1880 @@
+.page {
+  --admin-card-bg:
+    linear-gradient(
+      180deg,
+      var(--pitch-card-bg, var(--pitch-surface-bg, var(--mantine-color-body))) 0%,
+      color-mix(
+        in srgb,
+        var(--pitch-card-bg-subtle, var(--pitch-card-bg, var(--pitch-surface-bg)))
+          84%,
+        transparent
+      )
+      100%
+    );
+  --admin-card-bg-strong:
+    linear-gradient(
+      180deg,
+      var(
+          --pitch-card-hero-start,
+          var(--pitch-card-bg, var(--pitch-surface-bg, var(--mantine-color-body)))
+        )
+        0%,
+      var(
+          --pitch-card-hero-end,
+          var(
+              --pitch-card-bg-strong,
+              var(--pitch-card-bg, var(--pitch-surface-bg, var(--mantine-color-body)))
+            )
+        )
+        100%
+    );
+  --admin-card-bg-subtle: var(
+    --pitch-card-bg-subtle,
+    var(--pitch-card-bg, var(--pitch-surface-bg, var(--mantine-color-body)))
+  );
+  --admin-card-border: var(
+    --pitch-card-border,
+    var(--pitch-border, var(--mantine-color-default-border))
+  );
+  --admin-card-border-strong: var(--pitch-card-border-strong, var(--admin-card-border));
+  --admin-card-shadow-soft: 0 10px 24px
+    color-mix(in srgb, var(--pitch-card-shadow, var(--pitch-surface-bg, #000)) 14%, transparent);
+  --admin-card-shadow: 0 14px 30px
+    color-mix(in srgb, var(--pitch-card-shadow, var(--pitch-surface-bg, #000)) 18%, transparent);
+  --admin-card-shadow-strong: 0 18px 40px
+    color-mix(in srgb, var(--pitch-card-shadow, var(--pitch-surface-bg, #000)) 22%, transparent);
+  position: relative;
+  min-height: 100%;
+  padding: clamp(1rem, 2.7vw, 1.9rem);
+  color: var(--pitch-surface-text);
+}
+
+.page::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: 28px;
+  background:
+    radial-gradient(
+      circle at 6% 12%,
+      color-mix(in srgb, var(--pitch-accent-strong) 12%, transparent),
+      transparent 34%
+    ),
+    radial-gradient(
+      circle at 92% 8%,
+      color-mix(in srgb, var(--pitch-card-hero-end, var(--pitch-selected)) 14%, transparent),
+      transparent 32%
+    ),
+    radial-gradient(
+      circle at 82% 78%,
+      color-mix(in srgb, var(--pitch-card-hero-start, var(--pitch-info)) 10%, transparent),
+      transparent 30%
+    ),
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--pitch-app-bg) 96%, transparent),
+      transparent
+    );
+}
+
+.page::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: 28px;
+  background-image:
+    linear-gradient(
+      color-mix(in srgb, var(--pitch-surface-text-dim) 18%, transparent) 1px,
+      transparent 1px
+    ),
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--pitch-surface-text-dim) 18%, transparent) 1px,
+      transparent 1px
+    );
+  background-size: 44px 44px;
+  opacity: 0.08;
+  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.55), transparent 70%);
+}
+
+.pageInner {
+  position: relative;
+  z-index: 1;
+}
+
+.mutedText {
+  color: var(--pitch-surface-text-dim);
+}
+
+.pillLabel,
+.metaLabel,
+.metricLabel {
+  color: color-mix(in srgb, var(--pitch-selected) 52%, var(--pitch-surface-text));
+  letter-spacing: 0.08em;
+}
+
+.metricValue {
+  color: var(--pitch-surface-text);
+}
+
+.metricNote,
+.logSummaryText {
+  color: var(--pitch-surface-text-dim);
+}
+
+.hero {
+  position: relative;
+  overflow: hidden;
+  padding: clamp(1.1rem, 2.6vw, 1.7rem);
+  border-radius: 24px;
+  border: 1px solid var(--admin-card-border-strong);
+  background: var(--admin-card-bg-strong);
+  box-shadow:
+    var(--admin-card-shadow-strong),
+    inset 0 1px 0 color-mix(in srgb, var(--pitch-surface-text) 6%, transparent);
+}
+
+.hero::after {
+  content: '';
+  position: absolute;
+  inset: auto -8% -35% auto;
+  width: 26rem;
+  height: 26rem;
+  pointer-events: none;
+  border-radius: 999px;
+  background: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--pitch-accent-strong) 12%, transparent),
+    transparent 68%
+  );
+}
+
+.heroGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(260px, 0.7fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.heroPanel,
+.panel,
+.catalogPane,
+.requestPane,
+.logStream,
+.logTable,
+.logDetailPane,
+.logSummaryCard,
+.logMetaCard {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  backdrop-filter: none;
+  background: var(--admin-card-bg);
+  border: 1px solid var(--admin-card-border);
+  box-shadow:
+    var(--admin-card-shadow),
+    inset 0 1px 0 color-mix(in srgb, var(--pitch-surface-text) 6%, transparent);
+}
+
+.heroPanel::before,
+.panel::before,
+.catalogPane::before,
+.requestPane::before,
+.logStream::before,
+.logTable::before,
+.logDetailPane::before,
+.logSummaryCard::before,
+.logMetaCard::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--pitch-surface-text) 4%, transparent),
+      transparent 22%
+    ),
+    radial-gradient(
+      circle at top right,
+      color-mix(in srgb, var(--pitch-accent-strong) 8%, transparent),
+      transparent 36%
+    );
+  opacity: 0.6;
+}
+
+.heroPanel > *,
+.panel > *,
+.catalogPane > *,
+.requestPane > *,
+.logStream > *,
+.logTable > *,
+.logDetailPane > *,
+.logSummaryCard > *,
+.logMetaCard > * {
+  position: relative;
+  z-index: 1;
+}
+
+.heroPanel {
+  position: relative;
+  padding: 1rem;
+  border-radius: 20px;
+  border: 1px solid var(--admin-card-border);
+  background: var(--admin-card-bg);
+  box-shadow: var(--admin-card-shadow-soft);
+}
+
+.kpiGrid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 0.8rem;
+  margin-top: 1rem;
+}
+
+.kpiCard {
+  position: relative;
+  overflow: hidden;
+  padding: 0.9rem;
+  border-radius: 20px;
+  border: 1px solid var(--admin-card-border);
+  background: var(--admin-card-bg);
+  box-shadow:
+    var(--admin-card-shadow-soft),
+    inset 0 1px 0 color-mix(in srgb, var(--pitch-surface-text) 5%, transparent);
+}
+
+.panel {
+  height: 100%;
+  padding: 1.05rem;
+  border-radius: 24px;
+}
+
+.panel > :global(.mantine-Group-root):first-child {
+  position: relative;
+  padding-bottom: 0.95rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--pitch-border) 72%, transparent);
+}
+
+.panel > :global(.mantine-Group-root):first-child::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: -1px;
+  width: 4.5rem;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--pitch-accent) 68%, transparent),
+    color-mix(in srgb, var(--pitch-selected) 52%, transparent),
+    transparent
+  );
+}
+
+.hero :global(h2),
+.panel :global(h3),
+.panel :global(h4) {
+  letter-spacing: -0.025em;
+}
+
+.hero :global(.mantine-ThemeIcon-root),
+.panel :global(.mantine-ThemeIcon-root) {
+  box-shadow:
+    0 10px 24px color-mix(in srgb, var(--pitch-nav-bg) 12%, transparent),
+    inset 0 1px 0 color-mix(in srgb, var(--pitch-surface-text) 6%, transparent);
+}
+
+.consoleText {
+  font-family:
+    ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    Monaco,
+    Consolas,
+    Liberation Mono,
+    Courier New,
+    monospace;
+}
+
+.consoleLink {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--pitch-accent-strong) 65%, transparent);
+  text-underline-offset: 0.18em;
+}
+
+.consoleLink:hover {
+  text-decoration-color: currentColor;
+}
+
+.statusRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.7rem 0.8rem;
+  border-radius: 16px;
+  border: 1px solid var(--admin-card-border);
+  background: var(--admin-card-bg);
+  box-shadow: var(--admin-card-shadow-soft);
+}
+
+.statusList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.miniGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.miniCard {
+  position: relative;
+  overflow: hidden;
+  padding: 0.85rem;
+  border-radius: 18px;
+  border: 1px solid var(--admin-card-border);
+  background: var(--admin-card-bg);
+  box-shadow:
+    var(--admin-card-shadow-soft),
+    inset 0 1px 0 color-mix(in srgb, var(--pitch-surface-text) 5%, transparent);
+}
+
+.feedSection {
+  padding-top: 0.8rem;
+}
+
+.feedItem {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem 0;
+  border-top: 1px solid color-mix(in srgb, var(--pitch-border) 80%, transparent);
+}
+
+.feedItem:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+
+.endpointLayout {
+  display: grid;
+  grid-template-columns: minmax(320px, 0.92fr) minmax(0, 1.08fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.catalogPane,
+.requestPane,
+.logStream,
+.logDetailPane {
+  padding: 0.9rem;
+  border-radius: 20px;
+}
+
+.endpointButton {
+  width: 100%;
+  padding: 0.9rem;
+  text-align: left;
+  color: inherit;
+  border: 1px solid var(--admin-card-border);
+  border-radius: 16px;
+  background: var(--admin-card-bg);
+  box-shadow: var(--admin-card-shadow-soft);
+  transition:
+    border-color 140ms ease,
+    transform 140ms ease,
+    background 140ms ease,
+    box-shadow 140ms ease;
+}
+
+.endpointButton:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--pitch-info) 36%, transparent);
+  background: color-mix(in srgb, var(--pitch-info) 8%, var(--admin-card-bg-subtle));
+  box-shadow: 0 10px 22px color-mix(in srgb, var(--pitch-info) 12%, transparent);
+}
+
+.endpointButtonActive {
+  border-color: color-mix(in srgb, var(--pitch-accent) 42%, transparent);
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--pitch-accent) 12%, var(--admin-card-bg-subtle)),
+    color-mix(in srgb, var(--pitch-selected) 12%, var(--admin-card-bg-subtle))
+  );
+  box-shadow:
+    0 14px 28px color-mix(in srgb, var(--pitch-accent) 12%, transparent),
+    inset 0 1px 0 color-mix(in srgb, var(--pitch-surface-text) 6%, transparent);
+}
+
+.requestPane :global(.mantine-Input-input),
+.catalogPane :global(.mantine-Input-input),
+.entityListPane :global(.mantine-Input-input),
+.entityDetailPane :global(.mantine-Input-input),
+.entityDetailPane :global(.mantine-Textarea-input) {
+  background: var(--admin-card-bg-subtle);
+  border-color: var(--admin-card-border);
+  color: var(--pitch-surface-text);
+}
+
+.requestPane :global(.mantine-Input-input)::placeholder,
+.catalogPane :global(.mantine-Input-input)::placeholder,
+.entityListPane :global(.mantine-Input-input)::placeholder,
+.entityDetailPane :global(.mantine-Input-input)::placeholder,
+.entityDetailPane :global(.mantine-Textarea-input)::placeholder {
+  color: var(--pitch-input-placeholder);
+}
+
+.requestPane :global(.mantine-Input-label),
+.catalogPane :global(.mantine-Input-label),
+.entityDetailPane :global(.mantine-Input-label),
+.entityDetailPane :global(.mantine-Textarea-label),
+.entityDetailPane :global(.mantine-Switch-label) {
+  color: var(--pitch-surface-text);
+  font-weight: 600;
+}
+
+.requestPane :global(.mantine-Input-description),
+.catalogPane :global(.mantine-Input-description),
+.entityDetailPane :global(.mantine-Input-description),
+.entityDetailPane :global(.mantine-Textarea-description) {
+  color: var(--pitch-surface-text-dim);
+}
+
+.jsonBlock {
+  padding: 0.9rem;
+  border-radius: 16px;
+  border: 1px solid var(--admin-card-border);
+  background: var(--admin-card-bg);
+  color: var(--pitch-surface-text);
+  max-height: 22rem;
+  overflow: auto;
+  font-size: 0.77rem;
+  line-height: 1.55;
+}
+
+.jsonBlock pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.explorerLayout {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.78fr) minmax(0, 1.22fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.entityListPane,
+.entityDetailPane,
+.detailSection,
+.detailMetric,
+.transcriptSegment {
+  border: 1px solid var(--admin-card-border);
+  background: var(--admin-card-bg);
+  box-shadow:
+    var(--admin-card-shadow-soft),
+    inset 0 1px 0 color-mix(in srgb, var(--pitch-surface-text) 5%, transparent);
+}
+
+.entityListPane,
+.entityDetailPane {
+  min-height: 100%;
+  padding: 0.95rem;
+  border-radius: 20px;
+}
+
+.entityHeader {
+  padding: 1rem;
+  border-radius: 18px;
+  border: 1px solid var(--admin-card-border-strong);
+  background: var(--admin-card-bg-strong);
+  box-shadow: var(--admin-card-shadow-soft);
+}
+
+.detailMetricGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.detailMetric {
+  padding: 0.85rem 0.95rem;
+  border-radius: 20px;
+}
+
+.detailSection {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+  padding: 1rem;
+  border-radius: 22px;
+}
+
+.detailSectionCollapsible {
+  gap: 0;
+}
+
+.detailSectionHeaderButton {
+  appearance: none;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.detailSectionHeaderButton:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--pitch-accent) 52%, transparent);
+  outline-offset: 2px;
+}
+
+.detailSectionHeaderContent {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.detailSectionHeaderActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.detailSectionBody {
+  margin-top: 0.8rem;
+}
+
+.inspectorSectionBody {
+  max-height: min(28rem, calc(100vh - 24rem));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 0.2rem;
+  scrollbar-gutter: stable;
+}
+
+.detailSectionChevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--pitch-surface-text-dim);
+  transition:
+    transform 140ms ease,
+    color 140ms ease;
+}
+
+.detailSectionChevronOpen {
+  transform: rotate(180deg);
+  color: var(--pitch-surface-text);
+}
+
+.detailSectionHeaderButton:hover .detailSectionChevron {
+  color: var(--pitch-surface-text);
+}
+
+.entityRow {
+  appearance: none;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.75rem;
+  align-items: start;
+  width: 100%;
+  padding: 0.85rem 0.95rem;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  border: 1px solid var(--admin-card-border);
+  border-radius: 18px;
+  background: var(--admin-card-bg);
+  box-shadow: var(--admin-card-shadow-soft);
+  transition:
+    transform 140ms ease,
+    border-color 140ms ease,
+    background 140ms ease,
+    box-shadow 140ms ease;
+}
+
+.entityRowMain {
+  appearance: none;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.75rem;
+  align-items: start;
+  min-width: 0;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+}
+
+.entityRowMain:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--pitch-accent) 52%, transparent);
+  outline-offset: 2px;
+}
+
+.entityRowActions {
+  display: inline-flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  gap: 0.35rem;
+  flex-shrink: 0;
+}
+
+.entityRow:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--pitch-info) 30%, transparent);
+  background: color-mix(in srgb, var(--pitch-info) 7%, var(--admin-card-bg-subtle));
+  box-shadow: 0 16px 28px color-mix(in srgb, var(--pitch-info) 10%, transparent);
+}
+
+.entityRowActive {
+  border-color: color-mix(in srgb, var(--pitch-accent) 38%, transparent);
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--pitch-accent) 10%, var(--admin-card-bg-subtle)),
+    color-mix(in srgb, var(--pitch-selected) 10%, var(--admin-card-bg-subtle))
+  );
+  box-shadow:
+    0 16px 32px color-mix(in srgb, var(--pitch-accent) 12%, transparent),
+    inset 0 1px 0 color-mix(in srgb, var(--pitch-surface-text) 7%, transparent);
+}
+
+.explorerEmptyState {
+  display: flex;
+  min-height: 14rem;
+  padding: 1rem;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 0.4rem;
+  text-align: center;
+  border-radius: 20px;
+  border: 1px dashed color-mix(in srgb, var(--admin-card-border) 88%, transparent);
+  background: color-mix(in srgb, var(--admin-card-bg-subtle) 94%, transparent);
+}
+
+.sessionInspectorGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  align-items: start;
+}
+
+.transcriptList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
+.transcriptSegment {
+  appearance: none;
+  width: 100%;
+  padding: 0.85rem 0.95rem;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  border-radius: 16px;
+  transition:
+    transform 140ms ease,
+    border-color 140ms ease,
+    background 140ms ease,
+    box-shadow 140ms ease;
+}
+
+.transcriptSegment:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--pitch-selected) 28%, transparent);
+  background: color-mix(in srgb, var(--pitch-selected) 6%, var(--admin-card-bg-subtle));
+}
+
+.transcriptSegmentActive {
+  border-color: color-mix(in srgb, var(--pitch-selected) 40%, transparent);
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--pitch-selected) 10%, var(--admin-card-bg-subtle)),
+    color-mix(in srgb, var(--pitch-accent) 9%, var(--admin-card-bg-subtle))
+  );
+  box-shadow:
+    0 14px 28px color-mix(in srgb, var(--pitch-selected) 10%, transparent),
+    inset 0 1px 0 color-mix(in srgb, var(--pitch-surface-text) 6%, transparent);
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.38rem 0.62rem;
+  border-radius: 999px;
+  border: 1px solid var(--admin-card-border);
+  background: var(--admin-card-bg);
+  box-shadow: var(--admin-card-shadow-soft);
+}
+
+.logArea {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.logSummaryGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.logSummaryCard {
+  padding: 0.95rem;
+  border-radius: 18px;
+}
+
+.logToolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.75rem;
+  align-items: end;
+  padding: 0.85rem;
+  border-radius: 18px;
+  border: 1px solid var(--admin-card-border);
+  background: var(--admin-card-bg);
+  box-shadow:
+    var(--admin-card-shadow-soft),
+    inset 0 1px 0 color-mix(in srgb, var(--pitch-surface-text) 4%, transparent);
+}
+
+.logToolbar :global(.mantine-Input-input) {
+  background: var(--admin-card-bg-subtle);
+  border-color: var(--admin-card-border);
+  color: var(--pitch-surface-text);
+  min-height: 46px;
+  border-radius: 14px;
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--pitch-surface-text) 4%, transparent);
+}
+
+.logToolbar :global(.mantine-Input-input)::placeholder {
+  color: var(--pitch-input-placeholder);
+}
+
+.logTable {
+  padding: 0;
+  overflow: hidden;
+  border-radius: 22px;
+}
+
+.logTableHeader,
+.logTableRow {
+  display: grid;
+  grid-template-columns:
+    minmax(110px, 0.7fr)
+    minmax(120px, 0.7fr)
+    minmax(260px, 1.65fr)
+    minmax(220px, 1.2fr)
+    minmax(180px, 0.95fr);
+  min-width: 980px;
+  gap: 0.9rem;
+  align-items: start;
+}
+
+.logTableHeader {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  padding: 0.95rem 1rem;
+  border: 1px solid var(--admin-card-border);
+  border-radius: 16px;
+  background: var(--admin-card-bg);
+  box-shadow: var(--admin-card-shadow-soft);
+  backdrop-filter: none;
+}
+
+.userLogTableCompact {
+  grid-template-columns:
+    minmax(140px, 0.85fr)
+    minmax(140px, 0.8fr)
+    minmax(280px, 1.85fr)
+    minmax(220px, 1.2fr);
+  min-width: 820px;
+}
+
+.logTableBody {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  padding: 0.75rem;
+}
+
+.logTableRow {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.95rem 1rem;
+  border: 1px solid var(--admin-card-border);
+  border-radius: 18px;
+  background: var(--admin-card-bg);
+  box-shadow: var(--admin-card-shadow-soft);
+  color: inherit;
+  text-align: left;
+  transition:
+    transform 140ms ease,
+    border-color 140ms ease,
+    background 140ms ease,
+    box-shadow 140ms ease;
+}
+
+.logTableRow:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--pitch-info) 32%, transparent);
+  background: color-mix(in srgb, var(--pitch-info) 8%, var(--admin-card-bg-subtle));
+  box-shadow: 0 18px 32px color-mix(in srgb, var(--pitch-info) 10%, transparent);
+}
+
+.logTableRowActive {
+  border-color: color-mix(in srgb, var(--pitch-accent) 32%, transparent);
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--pitch-accent) 8%, var(--admin-card-bg-subtle)),
+    color-mix(in srgb, var(--pitch-selected) 10%, var(--admin-card-bg-subtle))
+  );
+  box-shadow:
+    0 20px 34px color-mix(in srgb, var(--pitch-accent) 10%, transparent),
+    inset 3px 0 0 color-mix(in srgb, var(--pitch-accent) 52%, transparent);
+}
+
+.logTableCell {
+  min-width: 0;
+}
+
+.logTableTime {
+  display: flex;
+  flex-direction: column;
+  gap: 0.18rem;
+}
+
+.logTableSource,
+.logTableEvent,
+.logTableSummary {
+  min-width: 0;
+}
+
+.logTableSource .logDot {
+  margin-top: 0;
+}
+
+.logTableTitle,
+.logTableSubtitle {
+  display: block;
+}
+
+.logTableSubtitle {
+  margin-top: 0.25rem;
+}
+
+.logTableBadges {
+  display: flex;
+  align-items: center;
+}
+
+.logLayout {
+  display: grid;
+  gap: 0.9rem;
+  align-items: start;
+}
+
+.logLayoutSingle {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.logLayoutSplit {
+  grid-template-columns: minmax(0, 1.2fr) minmax(360px, 0.96fr);
+}
+
+.logStream {
+  padding: 0;
+  overflow: hidden;
+}
+
+.logStreamHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.9rem 1rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--admin-card-border) 88%, transparent);
+  background: color-mix(in srgb, var(--admin-card-bg-subtle) 96%, transparent);
+}
+
+.logRows {
+  display: flex;
+  flex-direction: column;
+}
+
+.logRow {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 0.75rem;
+  align-items: start;
+  width: 100%;
+  padding: 0.9rem 1rem;
+  border: none;
+  border-top: 1px solid color-mix(in srgb, var(--pitch-border) 80%, transparent);
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  transition: background 140ms ease;
+}
+
+.logRow:first-child {
+  border-top: none;
+}
+
+.logRow:hover {
+  background: color-mix(in srgb, var(--pitch-info) 8%, var(--admin-card-bg-subtle));
+}
+
+.logRowActive {
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--pitch-accent) 8%, var(--admin-card-bg-subtle)),
+    color-mix(in srgb, var(--pitch-selected) 10%, var(--admin-card-bg-subtle))
+  );
+}
+
+.logDot {
+  width: 10px;
+  height: 10px;
+  margin-top: 0.4rem;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+.logDotSuccess {
+  background: var(--pitch-success);
+  box-shadow: 0 0 0 6px color-mix(in srgb, var(--pitch-success) 18%, transparent);
+}
+
+.logDotInfo {
+  background: var(--pitch-info);
+  box-shadow: 0 0 0 6px color-mix(in srgb, var(--pitch-info) 18%, transparent);
+}
+
+.logDotWarning {
+  background: var(--mantine-color-yellow-5);
+  box-shadow: 0 0 0 6px color-mix(in srgb, var(--mantine-color-yellow-5) 18%, transparent);
+}
+
+.logDotError {
+  background: var(--mantine-color-red-5);
+  box-shadow: 0 0 0 6px color-mix(in srgb, var(--mantine-color-red-5) 18%, transparent);
+}
+
+.logSourceSuccess {
+  color: var(--pitch-success);
+}
+
+.logSourceInfo {
+  color: var(--mantine-color-blue-5);
+}
+
+.logSourceWarning {
+  color: var(--mantine-color-yellow-5);
+}
+
+.logSourceError {
+  color: var(--mantine-color-red-5);
+}
+
+.logSourceMeta {
+  margin-top: 0.15rem;
+  display: block;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  opacity: 0.82;
+}
+
+.logRowMeta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.2rem;
+  min-width: 4.5rem;
+}
+
+.logDetailPane {
+  min-height: 100%;
+  position: sticky;
+  top: 0;
+  align-self: start;
+  max-height: calc(100vh - 8rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.logDetailSection {
+  padding: 0.95rem;
+  border-radius: 20px;
+  overflow: hidden;
+  background: var(--admin-card-bg);
+  border: 1px solid var(--admin-card-border);
+  box-shadow:
+    var(--admin-card-shadow-soft),
+    inset 0 1px 0 color-mix(in srgb, var(--pitch-surface-text) 4%, transparent);
+}
+
+.logDetailPane.logDetailSection {
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.logDetailHeader {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  margin: 0 0 0.85rem;
+  padding: 0.95rem 0.95rem 0.55rem;
+  border-radius: 18px;
+  border: 1px solid color-mix(in srgb, var(--admin-card-border) 88%, transparent);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--pitch-surface-bg) 98%, transparent),
+    color-mix(in srgb, var(--pitch-surface-bg) 90%, transparent)
+  );
+  box-shadow:
+    0 12px 28px color-mix(in srgb, var(--pitch-surface-bg) 10%, transparent),
+    inset 0 1px 0 color-mix(in srgb, var(--pitch-surface-text) 3%, transparent);
+  backdrop-filter: blur(10px);
+}
+
+.logMetaGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.logMetaCard {
+  padding: 0.8rem;
+  border-radius: 18px;
+}
+
+.adminWorkspace {
+  display: grid;
+  grid-template-columns: minmax(240px, 280px) minmax(0, 1fr);
+  gap: 1rem;
+  min-height: 100%;
+}
+
+.adminSidebar {
+  min-width: 0;
+}
+
+.adminSidebarPanel {
+  position: sticky;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+  padding: 1rem;
+  border-radius: 24px;
+  border: 1px solid color-mix(in srgb, var(--pitch-border) 88%, transparent);
+  background:
+    radial-gradient(
+      circle at top left,
+      color-mix(in srgb, var(--pitch-selected) 12%, transparent),
+      transparent 38%
+    ),
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--pitch-surface-bg) 94%, transparent),
+      color-mix(in srgb, var(--pitch-nav-bg) 10%, var(--pitch-surface-bg))
+    );
+  box-shadow:
+    0 18px 40px color-mix(in srgb, var(--pitch-nav-bg) 12%, transparent),
+    inset 0 1px 0 color-mix(in srgb, var(--pitch-surface-text) 4%, transparent);
+}
+
+.adminWorkspaceContent {
+  min-width: 0;
+}
+
+.adminNavLink {
+  border-radius: 16px;
+  border: 1px solid color-mix(in srgb, var(--pitch-border) 82%, transparent);
+  background: color-mix(in srgb, var(--pitch-surface-bg) 95%, transparent);
+}
+
+.adminNavLink[data-active='true'] {
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--pitch-accent) 10%, var(--pitch-surface-bg)),
+    color-mix(in srgb, var(--pitch-selected) 10%, var(--pitch-surface-bg))
+  );
+  border-color: color-mix(in srgb, var(--pitch-accent) 38%, transparent);
+}
+
+.quickLinkGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.9rem;
+}
+
+.quickLinkCard {
+  appearance: none;
+  display: block;
+  width: 100%;
+  padding: 1rem;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  border-radius: 20px;
+  border: 1px solid color-mix(in srgb, var(--pitch-border) 84%, transparent);
+  background:
+    radial-gradient(
+      circle at top right,
+      color-mix(in srgb, var(--pitch-selected) 7%, transparent),
+      transparent 35%
+    ),
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--pitch-surface-bg) 98%, transparent),
+      color-mix(in srgb, var(--pitch-nav-bg) 6%, var(--pitch-surface-bg))
+    );
+  transition:
+    transform 140ms ease,
+    border-color 140ms ease,
+    box-shadow 140ms ease,
+    background 140ms ease;
+}
+
+.quickLinkCard:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--pitch-info) 34%, transparent);
+  background: color-mix(in srgb, var(--pitch-info) 8%, var(--pitch-surface-bg));
+  box-shadow: 0 16px 32px color-mix(in srgb, var(--pitch-info) 10%, transparent);
+}
+
+.planCarouselShell {
+  padding: 0.95rem;
+  border-radius: 24px;
+  border: 1px solid color-mix(in srgb, var(--pitch-border) 84%, transparent);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--pitch-surface-bg) 97%, transparent),
+      color-mix(in srgb, var(--pitch-app-bg) 12%, var(--pitch-surface-bg))
+    ),
+    radial-gradient(
+      circle at top right,
+      color-mix(in srgb, var(--pitch-selected) 8%, transparent),
+      transparent 38%
+    );
+  box-shadow:
+    0 18px 38px color-mix(in srgb, var(--pitch-nav-bg) 10%, transparent),
+    inset 0 1px 0 color-mix(in srgb, var(--pitch-surface-text) 4%, transparent);
+}
+
+.planCarousel {
+  display: flex;
+  gap: 1rem;
+  min-width: max-content;
+  padding: 0.45rem 0.15rem 0.35rem;
+  scroll-snap-type: x proximity;
+  align-items: stretch;
+}
+
+.planCard,
+.planCreateCard {
+  --plan-tier-accent: var(--mantine-color-gray-5);
+  --plan-tier-accent-strong: var(--mantine-color-gray-4);
+  --plan-tier-border: color-mix(in srgb, var(--pitch-border) 88%, transparent);
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  overflow: hidden;
+  width: min(420px, 84vw);
+  height: 520px;
+  padding: 1.3rem;
+  border-radius: 30px;
+  border: 1px solid var(--plan-tier-border);
+  box-shadow:
+    0 14px 28px color-mix(in srgb, var(--pitch-nav-bg) 12%, transparent),
+    inset 0 1px 0 color-mix(in srgb, var(--pitch-surface-text) 5%, transparent);
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+  transition:
+    transform 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    filter 160ms ease;
+  scroll-snap-align: start;
+}
+
+.planCard::before,
+.planCreateCard::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(
+      circle at top left,
+      color-mix(in srgb, var(--plan-tier-accent-strong) 12%, transparent),
+      transparent 34%
+    ),
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--pitch-surface-text) 5%, transparent),
+      transparent 24%
+    ),
+    radial-gradient(
+      circle at top right,
+      color-mix(in srgb, var(--plan-tier-accent-strong) 22%, rgba(255, 255, 255, 0.12)),
+      transparent 42%
+    );
+  opacity: 0.9;
+}
+
+.planCard::after,
+.planCreateCard::after {
+  content: none;
+}
+
+.planCard > *,
+.planCreateCard > * {
+  position: relative;
+  z-index: 1;
+}
+
+.planCard:hover,
+.planCreateCard:hover {
+  transform: translateY(-4px);
+  box-shadow:
+    0 20px 40px color-mix(in srgb, var(--pitch-nav-bg) 14%, transparent),
+    inset 0 1px 0 color-mix(in srgb, white 7%, transparent);
+}
+
+.planCardFeatured {
+  border-color: color-mix(in srgb, var(--pitch-info) 34%, var(--pitch-border));
+  box-shadow:
+    0 22px 48px color-mix(in srgb, var(--pitch-info) 16%, transparent),
+    inset 0 1px 0 color-mix(in srgb, white 8%, transparent);
+}
+
+.planCardFeatured:hover {
+  box-shadow:
+    0 26px 56px color-mix(in srgb, var(--pitch-info) 20%, transparent),
+    inset 0 1px 0 color-mix(in srgb, white 8%, transparent);
+}
+
+.planCardDraft {
+  --plan-tier-accent: var(--pitch-selected);
+  --plan-tier-accent-strong: var(--pitch-info);
+  --plan-tier-border: color-mix(in srgb, var(--pitch-selected) 26%, var(--pitch-border));
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--pitch-selected) 8%, var(--pitch-surface-bg)),
+      color-mix(in srgb, var(--pitch-info) 5%, var(--pitch-surface-bg))
+    ),
+    radial-gradient(
+      circle at top right,
+      color-mix(in srgb, var(--pitch-selected) 22%, transparent),
+      transparent 40%
+    ),
+    radial-gradient(
+      circle at bottom left,
+      color-mix(in srgb, var(--pitch-info) 14%, transparent),
+      transparent 46%
+    );
+}
+
+.planCardExpanded {
+  width: min(420px, 84vw);
+  height: 520px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-gutter: stable;
+  cursor: default;
+}
+
+.planCardExpanded.planCreateCard {
+  border-style: solid;
+  border-width: 1px;
+}
+
+.planCardActive {
+  border-color: color-mix(in srgb, var(--pitch-accent) 28%, var(--pitch-border));
+  box-shadow:
+    0 22px 48px color-mix(in srgb, var(--pitch-accent) 12%, transparent),
+    inset 0 0 0 1px color-mix(in srgb, var(--pitch-surface-text) 7%, transparent);
+  transform: translateY(-4px);
+}
+
+.planCardFree {
+  --plan-tier-accent: var(--mantine-color-gray-6);
+  --plan-tier-accent-strong: var(--mantine-color-gray-4);
+  --plan-tier-border: color-mix(in srgb, var(--pitch-border) 90%, transparent);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--mantine-color-gray-7) 12%, var(--pitch-surface-bg)),
+      color-mix(in srgb, var(--mantine-color-gray-8) 8%, var(--pitch-surface-bg))
+    ),
+    radial-gradient(
+      circle at top right,
+      color-mix(in srgb, var(--mantine-color-gray-4) 18%, transparent),
+      transparent 40%
+    ),
+    radial-gradient(
+      circle at bottom left,
+      color-mix(in srgb, var(--mantine-color-gray-5) 12%, transparent),
+      transparent 45%
+    );
+}
+
+.planCardPro {
+  --plan-tier-accent: var(--pitch-info);
+  --plan-tier-accent-strong: var(--pitch-selected);
+  --plan-tier-border: color-mix(in srgb, var(--pitch-info) 32%, var(--pitch-border));
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--pitch-info) 12%, var(--pitch-surface-bg)),
+      color-mix(in srgb, var(--pitch-selected) 7%, var(--pitch-surface-bg))
+    ),
+    radial-gradient(
+      circle at top right,
+      color-mix(in srgb, var(--pitch-selected) 32%, transparent),
+      transparent 38%
+    ),
+    radial-gradient(
+      circle at bottom left,
+      color-mix(in srgb, var(--pitch-info) 22%, transparent),
+      transparent 44%
+    );
+}
+
+.planCardTeam {
+  --plan-tier-accent: var(--mantine-color-indigo-5);
+  --plan-tier-accent-strong: var(--mantine-color-violet-4);
+  --plan-tier-border: color-mix(in srgb, var(--mantine-color-indigo-4) 18%, var(--pitch-border));
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--mantine-color-indigo-6) 12%, var(--pitch-surface-bg)),
+      color-mix(in srgb, var(--mantine-color-violet-5) 7%, var(--pitch-surface-bg))
+    ),
+    radial-gradient(
+      circle at top right,
+      color-mix(in srgb, var(--mantine-color-violet-4) 34%, transparent),
+      transparent 40%
+    ),
+    radial-gradient(
+      circle at bottom left,
+      color-mix(in srgb, var(--mantine-color-indigo-4) 20%, transparent),
+      transparent 46%
+    );
+}
+
+.planCardEnterprise {
+  --plan-tier-accent: var(--mantine-color-yellow-6);
+  --plan-tier-accent-strong: var(--mantine-color-orange-4);
+  --plan-tier-border: color-mix(in srgb, var(--mantine-color-yellow-5) 18%, var(--pitch-border));
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--mantine-color-yellow-6) 11%, var(--pitch-surface-bg)),
+      color-mix(in srgb, var(--mantine-color-orange-4) 7%, var(--pitch-surface-bg))
+    ),
+    radial-gradient(
+      circle at top right,
+      color-mix(in srgb, var(--mantine-color-yellow-4) 36%, transparent),
+      transparent 38%
+    ),
+    radial-gradient(
+      circle at bottom left,
+      color-mix(in srgb, var(--mantine-color-orange-4) 24%, transparent),
+      transparent 44%
+    );
+}
+
+.planCreateCard {
+  --plan-tier-accent: var(--pitch-selected);
+  --plan-tier-accent-strong: var(--pitch-info);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-style: dashed;
+  border-width: 2px;
+  border-color: color-mix(in srgb, var(--pitch-border) 90%, transparent);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--pitch-surface-bg) 98%, transparent),
+      color-mix(in srgb, var(--pitch-app-bg) 10%, var(--pitch-surface-bg))
+    ),
+    radial-gradient(
+      circle at center,
+      color-mix(in srgb, var(--pitch-surface-text-dim) 10%, transparent),
+      transparent 60%
+    );
+}
+
+.planCreateCard:hover {
+  border-color: color-mix(in srgb, var(--pitch-selected) 34%, transparent);
+}
+
+.planCreateInner {
+  display: flex;
+  min-height: 100%;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 0.85rem;
+  text-align: center;
+}
+
+.planCardTop,
+.planCardFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.planCardTop {
+  padding-bottom: 0.85rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--plan-tier-accent) 18%, transparent);
+}
+
+.planCardEditorHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.85rem;
+  margin-bottom: 1rem;
+  padding-bottom: 0.9rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--plan-tier-accent) 18%, transparent);
+}
+
+.planCardBody {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: 0.4rem;
+  margin-top: 0.95rem;
+}
+
+.planCardHero {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.planCardEyebrow {
+  color: color-mix(in srgb, var(--plan-tier-accent-strong) 54%, var(--pitch-surface-text));
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.planCardPriceRow {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.planCardPriceValue {
+  font-size: clamp(2rem, 3.4vw, 2.65rem);
+  line-height: 0.95;
+  font-weight: 900;
+  letter-spacing: -0.05em;
+  color: var(--pitch-surface-text);
+  overflow-wrap: anywhere;
+}
+
+.planCardPriceCadence {
+  margin-bottom: 0.22rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--pitch-surface-text-dim);
+}
+
+.planCardTitle {
+  letter-spacing: -0.03em;
+  font-size: clamp(1.45rem, 2.4vw, 1.8rem);
+  line-height: 1.05;
+  color: var(--pitch-surface-text);
+}
+
+.planCardDescription {
+  color: color-mix(in srgb, var(--pitch-surface-text-dim) 90%, var(--plan-tier-accent) 10%);
+  line-height: 1.55;
+}
+
+.planCardUpdated {
+  color: color-mix(in srgb, var(--pitch-surface-text-dim) 96%, transparent);
+  white-space: nowrap;
+  font-weight: 500;
+  opacity: 0.78;
+}
+
+.planCardBadgeRow {
+  align-items: center;
+}
+
+.planCardMetrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 0.55rem;
+  margin-top: 1rem;
+}
+
+.planMetric {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.7rem 0.75rem;
+  border-radius: 16px;
+  border: 1px solid color-mix(in srgb, var(--plan-tier-accent) 14%, var(--pitch-border));
+  background: color-mix(in srgb, var(--plan-tier-accent) 4%, var(--pitch-surface-bg));
+}
+
+.planCard .metaLabel {
+  color: color-mix(in srgb, var(--pitch-surface-text-dim) 88%, var(--plan-tier-accent) 12%);
+}
+
+.planMetricValue {
+  color: var(--pitch-surface-text);
+}
+
+.planTierBadge {
+  border: 1px solid color-mix(in srgb, var(--plan-tier-accent) 34%, transparent);
+  background: color-mix(in srgb, var(--plan-tier-accent) 20%, var(--pitch-surface-bg));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, white 6%, transparent);
+}
+
+.planStatusBadge {
+  border: 1px solid color-mix(in srgb, var(--pitch-border) 74%, transparent);
+  background: color-mix(in srgb, var(--pitch-surface-bg) 92%, transparent);
+  color: var(--pitch-surface-text-dim);
+}
+
+.planFeatureList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  margin-top: 0.9rem;
+}
+
+.planFeatureItem {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+}
+
+.planFeatureDot {
+  width: 7px;
+  height: 7px;
+  margin-top: 0.42rem;
+  border-radius: 999px;
+  flex-shrink: 0;
+  background: color-mix(in srgb, var(--plan-tier-accent) 76%, white);
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--plan-tier-accent) 12%, transparent);
+}
+
+.planFeatureText {
+  color: color-mix(in srgb, var(--pitch-surface-text) 92%, var(--plan-tier-accent) 8%);
+  line-height: 1.45;
+}
+
+.planCardFormGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(180px, 0.9fr);
+  gap: 0.85rem;
+  margin-top: 1rem;
+  margin-bottom: 0.85rem;
+}
+
+.planCardSwitchWrap {
+  display: flex;
+  align-items: flex-end;
+  padding-bottom: 0.35rem;
+}
+
+.planCardInlineSection {
+  margin-top: 1rem;
+  padding: 0.95rem;
+  border-radius: 22px;
+  border: 1px solid color-mix(in srgb, var(--pitch-border) 76%, transparent);
+  background: color-mix(in srgb, var(--pitch-surface-bg) 68%, transparent);
+  backdrop-filter: blur(10px);
+}
+
+.planCardActionRow {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.9rem;
+  margin-top: auto;
+  padding-top: 0.95rem;
+  border-top: 1px solid color-mix(in srgb, var(--plan-tier-accent) 24%, var(--pitch-border));
+}
+
+.planCardActionRow :global(.mantine-Group-root) {
+  width: 100%;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.planCardFooter {
+  margin-top: auto;
+  padding-top: 0.9rem;
+  border-top: 1px solid color-mix(in srgb, var(--plan-tier-accent) 24%, var(--pitch-border));
+  align-items: center;
+}
+
+.planCardSupportText {
+  flex: 1;
+  min-width: 0;
+  color: var(--pitch-surface-text-dim);
+  line-height: 1.45;
+}
+
+.planCardPrimaryCta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 8.5rem;
+  flex-shrink: 0;
+  padding: 0.7rem 0.95rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--pitch-border) 74%, transparent);
+  background: color-mix(in srgb, var(--pitch-surface-bg) 88%, transparent);
+  color: var(--pitch-surface-text);
+  font-size: 0.9rem;
+  font-weight: 800;
+}
+
+.planCardFeatured .planCardPrimaryCta {
+  border-color: color-mix(in srgb, var(--pitch-info) 42%, transparent);
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--pitch-info) 78%, var(--pitch-selected)),
+    color-mix(in srgb, var(--pitch-selected) 88%, white 12%)
+  );
+  color: white;
+  box-shadow: 0 12px 24px color-mix(in srgb, var(--pitch-info) 24%, transparent);
+}
+
+.planCard :global(.mantine-Input-input),
+.planCard :global(.mantine-Textarea-input) {
+  min-height: 46px;
+  border-radius: 14px;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--plan-tier-accent) 10%, var(--pitch-surface-bg)),
+    color-mix(in srgb, var(--plan-tier-accent-strong) 5%, var(--pitch-surface-bg))
+  );
+  border-color: color-mix(in srgb, var(--plan-tier-accent) 24%, var(--pitch-border));
+  color: var(--pitch-surface-text);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--pitch-surface-text) 4%, transparent);
+}
+
+.planCard :global(.mantine-Textarea-input) {
+  min-height: 132px;
+}
+
+.planCard :global(.mantine-Input-input)::placeholder,
+.planCard :global(.mantine-Textarea-input)::placeholder {
+  color: var(--pitch-input-placeholder);
+}
+
+.planCard :global(.mantine-Input-label),
+.planCard :global(.mantine-Textarea-label),
+.planCard :global(.mantine-Switch-label) {
+  color: var(--pitch-surface-text);
+  font-weight: 700;
+}
+
+.logEmptyState {
+  display: flex;
+  min-height: 13rem;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 0.45rem;
+  padding: 1.2rem;
+  text-align: center;
+  border-radius: 18px;
+  border: 1px dashed color-mix(in srgb, var(--pitch-border) 78%, transparent);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--pitch-surface-bg) 97%, transparent),
+      color-mix(in srgb, var(--pitch-app-bg) 10%, var(--pitch-surface-bg))
+    ),
+    radial-gradient(
+      circle at top right,
+      color-mix(in srgb, var(--pitch-selected) 7%, transparent),
+      transparent 42%
+    );
+}
+
+@media (max-width: 90rem) {
+  .kpiGrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .quickLinkGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 75rem) {
+  .adminWorkspace,
+  .heroGrid,
+  .endpointLayout,
+  .explorerLayout,
+  .sessionInspectorGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .logLayout,
+  .logLayoutSplit,
+  .logLayoutSingle {
+    grid-template-columns: 1fr;
+  }
+
+  .logDetailPane {
+    position: static;
+    max-height: none;
+    overflow: visible;
+    scrollbar-gutter: auto;
+  }
+
+  .logDetailHeader {
+    position: static;
+    top: auto;
+    z-index: auto;
+    margin: 0;
+    padding: 0 0 0.2rem;
+    border: 0;
+    border-radius: 0;
+    background: none;
+    box-shadow: none;
+    backdrop-filter: none;
+  }
+
+  .inspectorSectionBody {
+    max-height: none;
+    overflow: visible;
+    padding-right: 0;
+    scrollbar-gutter: auto;
+  }
+
+  .logTableHeader,
+  .logTableRow {
+    min-width: 0;
+    grid-template-columns: 1fr;
+    gap: 0.55rem;
+  }
+
+  .logTableHeader {
+    display: none;
+  }
+
+  .planCard,
+  .planCreateCard {
+    width: min(380px, 88vw);
+    height: 500px;
+  }
+
+  .planCardExpanded {
+    width: min(380px, 88vw);
+    height: 500px;
+  }
+
+  .planCardFormGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 48rem) {
+  .page {
+    padding: 0.85rem;
+  }
+
+  .kpiGrid,
+  .miniGrid,
+  .detailMetricGrid,
+  .quickLinkGrid,
+  .logSummaryGrid,
+  .logMetaGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .logRow {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .logRowMeta {
+    grid-column: 2;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .logToolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .planCard,
+  .planCreateCard {
+    width: min(340px, 90vw);
+    height: 480px;
+  }
+
+  .planCardExpanded {
+    width: min(340px, 90vw);
+    height: 480px;
+  }
+
+  .planCardMetrics {
+    grid-template-columns: 1fr;
+  }
+
+  .planCardFooter {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .planCardPrimaryCta {
+    width: 100%;
+  }
+
+  .planCardActionRow {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}

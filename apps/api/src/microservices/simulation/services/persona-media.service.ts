@@ -377,7 +377,6 @@ export class PersonaMediaService {
       gender,
       track,
     });
-    const currentAvatar = toRecord((currentTraits as JsonRecord).avatar);
     const language = this.resolveLanguage(currentTraits, accent);
     const voiceName = this.selectVoice({
       accent,

@@ -27,6 +27,7 @@ type TranslationEntry = {
 export function I18nProvider({ children }: { children: React.ReactNode }) {
   const user = useAuthStore((state) => state.user)
   const token = useAuthStore((state) => state.token)
+  const userLocale = user?.settings?.language?.locale
   const [locale, setLocaleState] = useState<SupportedLocale>(DEFAULT_LOCALE)
   const [isReady, setIsReady] = useState(false)
   const [isSavingLocale, setIsSavingLocale] = useState(false)
@@ -41,26 +42,25 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
 
     localPreferenceRef.current = window.localStorage.getItem(LOCALE_STORAGE_KEY)
     const browserLocale = window.navigator?.language
-    const userLocale = user?.settings?.language?.locale
     const resolved = normalizeLocale(localPreferenceRef.current ?? userLocale ?? browserLocale)
 
     setLocaleState(resolved)
     setIsReady(true)
-  }, [])
+  }, [userLocale])
 
   useEffect(() => {
     if (!isReady || localPreferenceRef.current) {
       return
     }
 
-    const nextLocale = user?.settings?.language?.locale
+    const nextLocale = userLocale
     if (!nextLocale) {
       return
     }
 
     const normalized = normalizeLocale(nextLocale)
     setLocaleState((current) => (current === normalized ? current : normalized))
-  }, [isReady, user?.settings?.language?.locale])
+  }, [isReady, userLocale])
 
   useEffect(() => {
     if (typeof document === 'undefined') {

@@ -1,6 +1,13 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
+import type { User as PrismaUser } from '@prisma/user-client';
 import {
   CoinRefillRequest,
+  Team,
   UserSettings,
 } from '@pitch/shared-backend/interfaces/user.interface';
 import { CoinRedisService } from './coin-redis.service';
@@ -11,6 +18,16 @@ import {
   SubscriptionRepository,
   SubscriptionWithPlan,
 } from '../../subscription/repositories/subscription.repository';
+import { TeamRepository } from '../../team/repositories/team.repository';
+import { NotificationService } from '../../notifications/service/notification.service';
+import {
+  NotificationSeverity,
+  NotificationSourceType,
+} from '../../mongo/schemas/notification.schema';
+import { isSystemAdminEmail } from '../../../../gateway/utils/system-admin-access';
+
+type RequestingUser = Pick<PrismaUser, 'id' | 'email' | 'name'>;
+type StoredUser = Pick<PrismaUser, 'id' | 'email' | 'name' | 'settings'>;
 
 function errorMessage(e: unknown): string {
   if (e instanceof Error) return e.message;
@@ -41,10 +58,152 @@ export class CoinRefillService {
     private readonly coinBalanceRepo: CoinBalanceRepository,
     private readonly userRepository: UserRepository,
     private readonly subscriptionRepository: SubscriptionRepository,
+    private readonly teamRepository: TeamRepository,
+    private readonly notificationService: NotificationService,
   ) {}
 
   public buildPeriodKey(subscriptionId: string, start: Date, end: Date) {
     return `${subscriptionId}:${start.getTime()}-${end.getTime()}`;
+  }
+
+  private buildPersonalEntityKey(userId: string): string {
+    return `user:${userId}`;
+  }
+
+  private buildPersonalPeriodKey(userId: string, at = new Date()): string {
+    const ym = `${at.getFullYear()}-${String(at.getMonth() + 1).padStart(2, '0')}`;
+    return `personal:${userId}:${ym}`;
+  }
+
+  private getDefaultPersonalAllowance(): number {
+    return Number(process.env.PERSONAL_COINS_PER_MONTH ?? 100);
+  }
+
+  private normalizePositiveCoins(value: number, fieldName: string): number {
+    const normalized = Math.floor(Number(value));
+    if (!Number.isFinite(normalized) || normalized <= 0) {
+      throw new BadRequestException(`${fieldName} must be greater than zero`);
+    }
+
+    return normalized;
+  }
+
+  private countActiveMemberships(team: Team): number {
+    return Array.isArray(team.memberships)
+      ? team.memberships.filter((membership) => membership?.isActive !== false)
+          .length
+      : 0;
+  }
+
+  private getStudioAccess(
+    settings: UserSettings,
+  ): NonNullable<UserSettings['studioAccess']> {
+    return settings.studioAccess && typeof settings.studioAccess === 'object'
+      ? settings.studioAccess
+      : {};
+  }
+
+  private shouldAutoApproveRequester(user: StoredUser): boolean {
+    if (isSystemAdminEmail(user.email)) {
+      return true;
+    }
+
+    const access = this.getStudioAccess(this.toSettings(user.settings));
+    return (
+      access.status === 'approved' &&
+      (access.role === 'ADMIN' || access.role === 'OWNER')
+    );
+  }
+
+  private async resolvePersonalWorkspaceTeamId(
+    user: StoredUser,
+    fallbackTeamId?: string,
+  ): Promise<string> {
+    const settings = this.toSettings(user.settings);
+    const preferredTeamId =
+      typeof settings.studioAccess?.teamId === 'string'
+        ? settings.studioAccess.teamId.trim()
+        : '';
+    const legacyTeamId = fallbackTeamId?.trim() ?? '';
+    const teams = await this.teamRepository.findUserTeams(user.id);
+
+    const validCandidates = [preferredTeamId, legacyTeamId].filter(Boolean);
+    for (const candidateTeamId of validCandidates) {
+      const matchingTeam = teams.find((team) => team.id === candidateTeamId);
+      if (matchingTeam && this.countActiveMemberships(matchingTeam) <= 1) {
+        return matchingTeam.id;
+      }
+    }
+
+    const personalWorkspace = teams.find(
+      (team) => this.countActiveMemberships(team) <= 1,
+    );
+    if (personalWorkspace) {
+      return personalWorkspace.id;
+    }
+
+    const createdWorkspace = await this.teamRepository.createTeam(
+      {
+        name: `${(user.name || 'My').trim()}'s Workspace`,
+        billingEmail: user.email,
+        metadata: {
+          notes: 'Auto-provisioned personal workspace for coin refill access.',
+        },
+      },
+      user.id,
+    );
+
+    await this.userRepository.updateSettings(user.id, {
+      ...settings,
+      studioAccess: {
+        ...this.getStudioAccess(settings),
+        teamId: createdWorkspace.id,
+      },
+    });
+
+    this.logger.log(
+      `resolvePersonalWorkspaceTeamId: auto-provisioned workspace ${createdWorkspace.id} for user=${user.id}`,
+    );
+
+    return createdWorkspace.id;
+  }
+
+  private async getPersonalBalanceState(userId: string): Promise<{
+    entityKey: string;
+    periodKey: string;
+    ttlSeconds: number;
+    allowance: number;
+    remaining: number;
+  }> {
+    const now = new Date();
+    const entityKey = this.buildPersonalEntityKey(userId);
+    const periodKey = this.buildPersonalPeriodKey(userId, now);
+    const defaultAllowance = this.getDefaultPersonalAllowance();
+    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    const ttlSeconds = Math.max(
+      3600,
+      Math.floor((endOfMonth.getTime() - now.getTime()) / 1000) + 7 * 24 * 3600,
+    );
+
+    const snapshot = await this.coinBalanceRepo.getSnapshot(
+      entityKey,
+      periodKey,
+    );
+    const allowance = snapshot?.allowance ?? defaultAllowance;
+
+    await this.coinRedis.initRemainingIfMissing(
+      entityKey,
+      periodKey,
+      allowance,
+      ttlSeconds,
+    );
+
+    const remaining =
+      (await this.coinRedis.getRemaining(entityKey, periodKey)) ??
+      snapshot?.remaining ??
+      allowance;
+
+    return { entityKey, periodKey, ttlSeconds, allowance, remaining };
   }
 
   async refillInitialForSubscription(
@@ -216,20 +375,62 @@ export class CoinRefillService {
 
   async requestRefill(dto: {
     userId: string;
-    teamId: string;
+    teamId?: string;
     requestedCoins: number;
+    notifyAdmins?: boolean;
   }): Promise<CoinRefillRequest> {
+    const requestedCoins = this.normalizePositiveCoins(
+      dto.requestedCoins,
+      'requestedCoins',
+    );
     const user = await this.userRepository.findById(dto.userId);
     if (!user) throw new NotFoundException('User not found');
 
     const settings = this.toSettings(user.settings);
+    const shouldAutoApprove = this.shouldAutoApproveRequester(user);
+    const existingRequest = settings.coinRefillRequest;
+    if (existingRequest?.status === 'pending') {
+      const resolvedTeamId = await this.resolvePersonalWorkspaceTeamId(
+        user,
+        existingRequest.teamId ?? dto.teamId,
+      );
+      if (existingRequest.teamId === resolvedTeamId) {
+        return shouldAutoApprove
+          ? this.approveRefill({
+              userId: dto.userId,
+              approvedCoins: existingRequest.requestedCoins,
+              reviewer: user.email,
+              notifyRequester: false,
+            })
+          : existingRequest;
+      }
+
+      const normalizedRequest: CoinRefillRequest = {
+        ...existingRequest,
+        teamId: resolvedTeamId,
+      };
+      await this.userRepository.updateSettings(dto.userId, {
+        ...settings,
+        coinRefillRequest: normalizedRequest,
+      });
+      return shouldAutoApprove
+        ? this.approveRefill({
+            userId: dto.userId,
+            approvedCoins: normalizedRequest.requestedCoins,
+            reviewer: user.email,
+            notifyRequester: false,
+          })
+        : normalizedRequest;
+    }
+
+    const teamId = await this.resolvePersonalWorkspaceTeamId(user, dto.teamId);
     const now = new Date().toISOString();
 
     const refillRequest: CoinRefillRequest = {
-      requestedCoins: dto.requestedCoins,
+      requestedCoins,
       requestedAt: now,
       status: 'pending',
-      teamId: dto.teamId,
+      teamId,
     };
 
     await this.userRepository.updateSettings(dto.userId, {
@@ -237,8 +438,21 @@ export class CoinRefillService {
       coinRefillRequest: refillRequest,
     });
 
+    if (shouldAutoApprove) {
+      return this.approveRefill({
+        userId: dto.userId,
+        approvedCoins: requestedCoins,
+        reviewer: user.email,
+        notifyRequester: false,
+      });
+    }
+
+    if (dto.notifyAdmins !== false) {
+      await this.notifySuperAdminsOfRefillRequest(user, refillRequest);
+    }
+
     this.logger.log(
-      `requestRefill: user=${dto.userId} team=${dto.teamId} coins=${dto.requestedCoins}`,
+      `requestRefill: user=${dto.userId} team=${teamId} coins=${requestedCoins}`,
     );
     return refillRequest;
   }
@@ -264,7 +478,12 @@ export class CoinRefillService {
     userId: string;
     approvedCoins: number;
     reviewer: string;
+    notifyRequester?: boolean;
   }): Promise<CoinRefillRequest> {
+    const approvedCoins = this.normalizePositiveCoins(
+      dto.approvedCoins,
+      'approvedCoins',
+    );
     const user = await this.userRepository.findById(dto.userId);
     if (!user) throw new NotFoundException('User not found');
 
@@ -274,36 +493,36 @@ export class CoinRefillService {
       throw new NotFoundException('No pending refill request found');
     }
 
-    const sub = await this.subscriptionRepository.findActiveWithPlanByTeamId(
+    const resolvedTeamId = await this.resolvePersonalWorkspaceTeamId(
+      user,
       req.teamId,
     );
-    if (!sub)
-      throw new NotFoundException('No active subscription for this team');
+    const personalBalance = await this.getPersonalBalanceState(dto.userId);
+    const periodKey = personalBalance.periodKey;
+    const newAllowance = personalBalance.allowance + approvedCoins;
+    const eventId = `refill:personal:${dto.userId}:${periodKey}:${Date.now()}`;
 
-    const start = new Date(sub.currentPeriodStart);
-    const end = new Date(sub.currentPeriodEnd);
-    const periodKey = this.buildPeriodKey(sub.id, start, end);
-    const ttlSeconds = Math.max(
-      60,
-      Math.ceil((end.getTime() - Date.now()) / 1000) + 7 * 24 * 3600,
-    );
-
-    // Hard-reset Redis balance
-    await this.coinRedis.setRemaining(
-      req.teamId,
+    const deltaResult = await this.coinRedis.applyDeltaIdempotent({
+      teamId: personalBalance.entityKey,
       periodKey,
-      dto.approvedCoins,
-      ttlSeconds,
-    );
-
-    const eventId = `refill:admin:${req.teamId}:${periodKey}:${Date.now()}`;
+      deltaCoins: -approvedCoins,
+      eventId,
+      ttlSeconds: personalBalance.ttlSeconds,
+    });
+    if (!deltaResult.applied && deltaResult.reason !== 'ALREADY_PROCESSED') {
+      throw new Error(
+        `Unable to apply personal refill delta: ${deltaResult.reason}`,
+      );
+    }
+    const newRemaining =
+      deltaResult.remainingAfter ?? personalBalance.remaining + approvedCoins;
 
     await this.coinBalanceRepo.upsertRefill({
-      teamId: req.teamId,
-      subscriptionId: sub.id,
+      teamId: personalBalance.entityKey,
+      subscriptionId: 'personal',
       periodKey,
-      allowance: dto.approvedCoins,
-      remainingAfter: dto.approvedCoins,
+      allowance: newAllowance,
+      remainingAfter: newRemaining,
       debtApplied: 0,
       eventId,
     });
@@ -311,22 +530,24 @@ export class CoinRefillService {
     await this.coinLedgerRepo.createRefillIfNotExists({
       userId: dto.userId,
       eventId,
-      teamId: req.teamId,
-      subscriptionId: sub.id,
-      planId: sub.planId,
+      teamId: personalBalance.entityKey,
+      subscriptionId: 'personal',
+      planId: 'personal',
       requestId: eventId,
       reservationId: eventId,
       periodKey,
-      allowance: dto.approvedCoins,
+      allowance: newAllowance,
       debtApplied: 0,
-      remainingAfter: dto.approvedCoins,
+      deltaCoins: approvedCoins,
+      remainingAfter: newRemaining,
     });
 
     const now = new Date().toISOString();
     const updated: CoinRefillRequest = {
       ...req,
+      teamId: resolvedTeamId,
       status: 'approved',
-      approvedCoins: dto.approvedCoins,
+      approvedCoins,
       reviewedAt: now,
       reviewedBy: dto.reviewer,
       periodKey,
@@ -337,8 +558,13 @@ export class CoinRefillService {
       coinRefillRequest: updated,
     });
 
+    await this.clearPendingRequestNotifications(user.id);
+    if (dto.notifyRequester !== false) {
+      await this.notifyRequesterReviewed(user, updated, 'approved');
+    }
+
     this.logger.log(
-      `approveRefill: user=${dto.userId} team=${req.teamId} approvedCoins=${dto.approvedCoins}`,
+      `approveRefill: user=${dto.userId} team=${resolvedTeamId} approvedCoins=${approvedCoins} allowance=${newAllowance} remaining=${newRemaining}`,
     );
     return updated;
   }
@@ -356,9 +582,14 @@ export class CoinRefillService {
       throw new NotFoundException('No pending refill request found');
     }
 
+    const resolvedTeamId = await this.resolvePersonalWorkspaceTeamId(
+      user,
+      req.teamId,
+    );
     const now = new Date().toISOString();
     const updated: CoinRefillRequest = {
       ...req,
+      teamId: resolvedTeamId,
       status: 'denied',
       reviewedAt: now,
       reviewedBy: dto.reviewer,
@@ -369,7 +600,10 @@ export class CoinRefillService {
       coinRefillRequest: updated,
     });
 
-    this.logger.log(`denyRefill: user=${dto.userId} team=${req.teamId}`);
+    await this.clearPendingRequestNotifications(user.id);
+    await this.notifyRequesterReviewed(user, updated, 'denied');
+
+    this.logger.log(`denyRefill: user=${dto.userId} team=${resolvedTeamId}`);
     return updated;
   }
 
@@ -377,11 +611,159 @@ export class CoinRefillService {
     const user = await this.userRepository.findById(userId);
     if (!user) return null;
     const settings = this.toSettings(user.settings);
-    return settings.coinRefillRequest ?? null;
+    const request = settings.coinRefillRequest ?? null;
+    if (!request || request.status !== 'pending') {
+      return request;
+    }
+
+    try {
+      if (this.shouldAutoApproveRequester(user)) {
+        return this.approveRefill({
+          userId,
+          approvedCoins: request.requestedCoins,
+          reviewer: user.email,
+          notifyRequester: false,
+        });
+      }
+
+      const resolvedTeamId = await this.resolvePersonalWorkspaceTeamId(
+        user,
+        request.teamId,
+      );
+      if (request.teamId === resolvedTeamId) {
+        return request;
+      }
+
+      const normalizedRequest: CoinRefillRequest = {
+        ...request,
+        teamId: resolvedTeamId,
+      };
+      await this.userRepository.updateSettings(userId, {
+        ...settings,
+        coinRefillRequest: normalizedRequest,
+      });
+      return normalizedRequest;
+    } catch {
+      return request;
+    }
   }
 
   private toSettings(value: unknown): UserSettings {
     if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
     return value as UserSettings;
+  }
+
+  private getSuperAdminEmails(): string[] {
+    return (process.env.SUPER_ADMIN_EMAILS ?? '')
+      .split(',')
+      .map((value) => value.trim().toLowerCase())
+      .filter(Boolean);
+  }
+
+  private async notifySuperAdminsOfRefillRequest(
+    requester: RequestingUser,
+    refillRequest: CoinRefillRequest,
+  ): Promise<void> {
+    const adminEmails = this.getSuperAdminEmails();
+    if (adminEmails.length === 0) {
+      return;
+    }
+
+    try {
+      const users = await this.userRepository.findMany();
+      const recipientUserIds = users
+        .filter((user) => {
+          const normalizedEmail = user.email.trim().toLowerCase();
+          return (
+            user.id !== requester.id &&
+            Boolean(normalizedEmail && adminEmails.includes(normalizedEmail))
+          );
+        })
+        .map((user) => user.id);
+
+      if (recipientUserIds.length === 0) {
+        return;
+      }
+
+      await this.notificationService.createBatch({
+        recipientUserIds,
+        title: 'New credit top-up request',
+        message: `${requester.name || requester.email} requested ${refillRequest.requestedCoins.toLocaleString()} credits.`,
+        type: 'coin_refill_request',
+        severity: NotificationSeverity.INFO,
+        sourceType: NotificationSourceType.USER,
+        sourceUserId: requester.id,
+        metadata: {
+          requesterUserId: requester.id,
+          requesterEmail: requester.email,
+          teamId: refillRequest.teamId,
+          requestedCoins: refillRequest.requestedCoins,
+        },
+      });
+    } catch (error) {
+      this.logger.error(
+        `Failed to notify super admins about coin refill request for ${requester.email}`,
+        error as Error,
+      );
+    }
+  }
+
+  private async notifyRequesterReviewed(
+    requester: RequestingUser,
+    refillRequest: CoinRefillRequest,
+    decision: 'approved' | 'denied',
+  ): Promise<void> {
+    const title =
+      decision === 'approved'
+        ? 'Credit top-up approved'
+        : 'Credit top-up request denied';
+    const message =
+      decision === 'approved'
+        ? `${(refillRequest.approvedCoins ?? refillRequest.requestedCoins).toLocaleString()} personal credits were added to your account.`
+        : `Your request for ${refillRequest.requestedCoins.toLocaleString()} credits was not approved.`;
+
+    try {
+      await this.notificationService.createOne({
+        recipientUserId: requester.id,
+        title,
+        message,
+        type: 'coin_refill_decision',
+        severity:
+          decision === 'approved'
+            ? NotificationSeverity.INFO
+            : NotificationSeverity.WARNING,
+        sourceType: NotificationSourceType.SYSTEM,
+        metadata: {
+          decision,
+          teamId: refillRequest.teamId,
+          requestedCoins: refillRequest.requestedCoins,
+          approvedCoins: refillRequest.approvedCoins,
+          reviewedBy: refillRequest.reviewedBy,
+        },
+      });
+    } catch (error) {
+      this.logger.error(
+        `Failed to create requester coin refill notification for ${requester.email}`,
+        error as Error,
+      );
+    }
+  }
+
+  private async clearPendingRequestNotifications(
+    requesterUserId: string,
+  ): Promise<void> {
+    try {
+      await this.notificationService.markMatchingRead({
+        type: 'coin_refill_request',
+        metadata: {
+          requesterUserId,
+        },
+      });
+    } catch (error) {
+      this.logger.error(
+        `Failed to mark coin refill request notifications as read for ${requesterUserId}`,
+        error as Error,
+      );
+    }
   }
 }

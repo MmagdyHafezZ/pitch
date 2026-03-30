@@ -19,6 +19,15 @@ var mockApi: {
 
 var mockFetchUserTeams: jest.Mock
 var mockNotificationsShow: jest.Mock
+var mockPush: jest.Mock
+var mockReplace: jest.Mock
+var mockAuthStoreUser: {
+  id: string
+  name: string
+  email: string
+  hasStudioAccess: boolean
+  isSystemAdmin: boolean
+}
 
 jest.mock('@mantine/notifications', () => {
   const actual = jest.requireActual('@mantine/notifications')
@@ -47,27 +56,42 @@ jest.mock('@/lib/client', () => {
 })
 
 jest.mock('@/features/auth', () => ({
-  useAuthStore: (selector: (state: { user: { id: string } }) => unknown) =>
-    selector({ user: { id: 'user-1' } }),
+  useAuthStore: (
+    selector: (state: {
+      user: {
+        id: string
+        name: string
+        email: string
+        hasStudioAccess: boolean
+        isSystemAdmin: boolean
+      }
+    }) => unknown
+  ) => selector({ user: mockAuthStoreUser }),
   useAuth: () => ({
-    user: { id: 'user-1', name: 'Test User', email: 'test@example.com' },
+    user: mockAuthStoreUser,
     logout: jest.fn().mockResolvedValue(undefined),
     deleteAccount: jest.fn().mockResolvedValue(undefined),
   }),
 }))
 
 jest.mock('@/features/teams/stores/teams.store', () => ({
-  useTeamsStore: (selector: (state: { fetchUserTeams: jest.Mock }) => unknown) => {
+  useTeamsStore: (
+    selector: (state: { fetchUserTeams: jest.Mock; teams?: Array<{ id: string }> }) => unknown
+  ) => {
     mockFetchUserTeams = mockFetchUserTeams ?? jest.fn().mockResolvedValue(undefined)
-    return selector({ fetchUserTeams: mockFetchUserTeams })
+    return selector({ fetchUserTeams: mockFetchUserTeams, teams: [] })
   },
 }))
 
 jest.mock('next/navigation', () => ({
-  useRouter: () => ({
-    replace: jest.fn(),
-    push: jest.fn(),
-  }),
+  useRouter: () => {
+    mockPush ??= jest.fn()
+    mockReplace ??= jest.fn()
+    return {
+      replace: mockReplace,
+      push: mockPush,
+    }
+  },
   usePathname: () => '/studio/teams',
   useSearchParams: () => ({
     get: () => null,
@@ -79,6 +103,15 @@ describe('AppTopBar', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     mockFetchUserTeams = jest.fn().mockResolvedValue(undefined)
+    mockPush = jest.fn()
+    mockReplace = jest.fn()
+    mockAuthStoreUser = {
+      id: 'user-1',
+      name: 'Test User',
+      email: 'test@example.com',
+      hasStudioAccess: true,
+      isSystemAdmin: false,
+    }
 
     mockApi.notifications.unreadCount.mockResolvedValue({ count: 1 })
     mockApi.notifications.list.mockResolvedValue({
@@ -127,6 +160,28 @@ describe('AppTopBar', () => {
     )
   })
 
+  it('routes team invitation actions to access request when studio access is missing', async () => {
+    mockAuthStoreUser = {
+      id: 'user-1',
+      name: 'Test User',
+      email: 'test@example.com',
+      hasStudioAccess: false,
+      isSystemAdmin: false,
+    }
+
+    const user = userEvent.setup()
+    render(<AppTopBar currentPage="Teams" />)
+
+    await user.click(await screen.findByLabelText('Notifications'))
+    await user.click(await screen.findByRole('button', { name: /request access/i }))
+
+    await waitFor(() => {
+      expect(mockPush).toHaveBeenCalledWith('/access/request')
+    })
+    expect(mockApi.teams.acceptInvite).not.toHaveBeenCalled()
+    expect(mockApi.notifications.markRead).not.toHaveBeenCalled()
+  })
+
   it('clears an individual notification from the modal', async () => {
     const user = userEvent.setup()
     render(<AppTopBar currentPage="Teams" />)
@@ -139,6 +194,140 @@ describe('AppTopBar', () => {
         notificationIds: ['notification-1'],
         recipientUserId: 'user-1',
       })
+    })
+  })
+
+  it('routes coin refill request notifications to the selected user top-up panel', async () => {
+    mockApi.notifications.list.mockResolvedValue({
+      data: [
+        {
+          id: 'notification-2',
+          title: 'New credit top-up request',
+          message: 'Pitch Nova requested 2,500 credits.',
+          type: 'coin_refill_request',
+          severity: 'INFO',
+          sourceType: 'USER',
+          sourceUserId: 'user-7',
+          metadata: { requesterUserId: 'user-7', requestedCoins: 2500 },
+          readAt: null,
+          createdAt: '2026-03-29T10:00:00.000Z',
+        },
+      ],
+    })
+
+    const user = userEvent.setup()
+    render(<AppTopBar currentPage="Admin" />)
+
+    await user.click(await screen.findByLabelText('Notifications'))
+    await user.click(await screen.findByText('New credit top-up request'))
+
+    await waitFor(() => {
+      expect(mockApi.notifications.markRead).toHaveBeenCalledWith({
+        notificationIds: ['notification-2'],
+        recipientUserId: 'user-1',
+      })
+    })
+    await waitFor(() => {
+      expect(mockPush).toHaveBeenCalledWith('/studio/admin/users?userId=user-7&panel=topup')
+    })
+  })
+
+  it('surfaces coin refill decision notifications without opening the modal', async () => {
+    mockApi.notifications.list.mockResolvedValue({
+      data: [
+        {
+          id: 'notification-3',
+          title: 'Credit top-up request denied',
+          message: 'Your request for 2,500 credits was not approved.',
+          type: 'coin_refill_decision',
+          severity: 'WARNING',
+          sourceType: 'SYSTEM',
+          metadata: { decision: 'denied', requestedCoins: 2500 },
+          readAt: null,
+          createdAt: '2026-03-29T10:05:00.000Z',
+        },
+      ],
+    })
+
+    render(<AppTopBar currentPage="Subscription" />)
+
+    await waitFor(() => {
+      expect(mockNotificationsShow).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: 'Credit top-up request denied',
+          message: 'Your request for 2,500 credits was not approved.',
+        })
+      )
+    })
+  })
+
+  it('routes plan change request notifications to the dedicated review queue', async () => {
+    mockApi.notifications.list.mockResolvedValue({
+      data: [
+        {
+          id: 'notification-4',
+          title: 'Plan change request',
+          message: 'A workspace requested a plan change.',
+          type: 'plan_change_request',
+          severity: 'INFO',
+          sourceType: 'SYSTEM',
+          metadata: { subscriptionId: 'sub-1' },
+          readAt: null,
+          createdAt: '2026-03-29T10:10:00.000Z',
+        },
+      ],
+    })
+
+    const user = userEvent.setup()
+    render(<AppTopBar currentPage="Admin" />)
+
+    await user.click(await screen.findByLabelText('Notifications'))
+    await user.click(await screen.findByText('Plan change request'))
+    await user.click(await screen.findByRole('button', { name: 'Open plan reviews' }))
+
+    await waitFor(() => {
+      expect(mockApi.notifications.markRead).toHaveBeenCalledWith({
+        notificationIds: ['notification-4'],
+        recipientUserId: 'user-1',
+      })
+    })
+    await waitFor(() => {
+      expect(mockPush).toHaveBeenCalledWith('/studio/admin/plans/requests')
+    })
+  })
+
+  it('routes team approval request notifications to the team review queue', async () => {
+    mockApi.notifications.list.mockResolvedValue({
+      data: [
+        {
+          id: 'notification-5',
+          title: 'New team request',
+          message: 'Pitch Nova requested a new team.',
+          type: 'team_approval_request',
+          severity: 'INFO',
+          sourceType: 'USER',
+          sourceUserId: 'user-9',
+          metadata: { teamId: 'team-9', requesterUserId: 'user-9' },
+          readAt: null,
+          createdAt: '2026-03-30T10:10:00.000Z',
+        },
+      ],
+    })
+
+    const user = userEvent.setup()
+    render(<AppTopBar currentPage="Admin" />)
+
+    await user.click(await screen.findByLabelText('Notifications'))
+    await user.click(await screen.findByText('New team request'))
+
+    await waitFor(() => {
+      expect(mockApi.notifications.markRead).toHaveBeenCalledWith({
+        notificationIds: ['notification-5'],
+        recipientUserId: 'user-1',
+      })
+    })
+    await waitFor(() => {
+      expect(mockPush).toHaveBeenCalledWith('/studio/admin/teams/requests')
     })
   })
 })

@@ -1,14 +1,20 @@
 import { Transport } from '@nestjs/microservices';
 import {
   MICROSERVICES_CONFIG,
+  RABBITMQ_DEAD_LETTER_EXCHANGE,
   createMicroserviceOptions,
+  getDeadLetterQueueOptions,
   getQueueOptions,
   getRabbitMQUrl,
+  getRabbitMQUrls,
+  usesRabbitMqPolicyDeadLettering,
 } from '../microservices.config';
 
 describe('microservices.config', () => {
   const originalEnv = process.env.RABBITMQ_URL;
+  const originalSecondaryEnv = process.env.RABBITMQ_URL_SECONDARY;
   const originalCloudEnv = process.env.CLOUDAMQP_URL;
+  const originalCloudSecondaryEnv = process.env.CLOUDAMQP_URL_SECONDARY;
   const originalDepMode = process.env.DEP_MODE;
 
   afterEach(() => {
@@ -17,10 +23,20 @@ describe('microservices.config', () => {
     } else {
       process.env.RABBITMQ_URL = originalEnv;
     }
+    if (originalSecondaryEnv === undefined) {
+      delete process.env.RABBITMQ_URL_SECONDARY;
+    } else {
+      process.env.RABBITMQ_URL_SECONDARY = originalSecondaryEnv;
+    }
     if (originalCloudEnv === undefined) {
       delete process.env.CLOUDAMQP_URL;
     } else {
       process.env.CLOUDAMQP_URL = originalCloudEnv;
+    }
+    if (originalCloudSecondaryEnv === undefined) {
+      delete process.env.CLOUDAMQP_URL_SECONDARY;
+    } else {
+      process.env.CLOUDAMQP_URL_SECONDARY = originalCloudSecondaryEnv;
     }
     if (originalDepMode === undefined) {
       delete process.env.DEP_MODE;
@@ -45,18 +61,24 @@ describe('microservices.config', () => {
 
   it('builds microservice options using the queue name', () => {
     process.env.DEP_MODE = 'local';
-    process.env.RABBITMQ_URL = 'amqp://custom';
+    process.env.RABBITMQ_URL = 'amqp://custom-primary/pitch_local';
+    process.env.RABBITMQ_URL_SECONDARY = 'amqp://custom-secondary/pitch_local';
 
     const options = createMicroserviceOptions('sample_queue');
 
     expect(options).toEqual({
       transport: Transport.RMQ,
       options: {
-        urls: ['amqp://custom'],
+        urls: [
+          'amqp://custom-primary/pitch_local',
+          'amqp://custom-secondary/pitch_local',
+        ],
         queue: 'sample_queue',
         noAck: true,
         prefetchCount: 10,
-        queueOptions: { durable: true },
+        queueOptions: {
+          durable: true,
+        },
         socketOptions: {
           heartbeatIntervalInSeconds: 60,
         },
@@ -67,8 +89,33 @@ describe('microservices.config', () => {
   it('uses CloudAMQP when DEP_MODE is prod', () => {
     process.env.DEP_MODE = 'prod';
     process.env.CLOUDAMQP_URL = 'amqp://cloud';
+    process.env.CLOUDAMQP_URL_SECONDARY = 'amqp://cloud-secondary';
 
     expect(getRabbitMQUrl()).toBe('amqp://cloud');
+    expect(getRabbitMQUrls()).toEqual([
+      'amqp://cloud',
+      'amqp://cloud-secondary',
+    ]);
+  });
+
+  it('falls back to RABBITMQ_URL_SECONDARY alias in prod when cloud secondary is unset', () => {
+    process.env.DEP_MODE = 'production';
+    process.env.CLOUDAMQP_URL = 'amqp://cloud-primary';
+    delete process.env.CLOUDAMQP_URL_SECONDARY;
+    process.env.RABBITMQ_URL_SECONDARY = 'amqp://rabbit-secondary';
+
+    expect(getRabbitMQUrls()).toEqual([
+      'amqp://cloud-primary',
+      'amqp://rabbit-secondary',
+    ]);
+  });
+
+  it('returns only primary URL when no secondary URL is configured', () => {
+    process.env.DEP_MODE = 'local';
+    process.env.RABBITMQ_URL = 'amqp://primary-only';
+    delete process.env.RABBITMQ_URL_SECONDARY;
+
+    expect(getRabbitMQUrls()).toEqual(['amqp://primary-only']);
   });
 
   it('throws error when RABBITMQ_URL environment variable is missing', () => {
@@ -88,6 +135,43 @@ describe('microservices.config', () => {
   });
 
   it('returns queue options with durable queue', () => {
-    expect(getQueueOptions()).toEqual({ durable: true });
+    expect(
+      getQueueOptions('amqp://admin:admin123@localhost:5672/pitch_local'),
+    ).toEqual({
+      durable: true,
+    });
+  });
+
+  it('returns explicit dead-letter queue options outside the local definitions vhost', () => {
+    expect(
+      getQueueOptions('amqp://admin:admin123@localhost:5672/pitch_prod'),
+    ).toEqual({
+      durable: true,
+      arguments: {
+        'x-dead-letter-exchange': RABBITMQ_DEAD_LETTER_EXCHANGE,
+      },
+    });
+  });
+
+  it('detects when the local RabbitMQ policy should supply dead-letter routing', () => {
+    expect(
+      usesRabbitMqPolicyDeadLettering(
+        'amqp://admin:admin123@localhost:5672/pitch_local',
+      ),
+    ).toBe(true);
+    expect(
+      usesRabbitMqPolicyDeadLettering(
+        'amqp://admin:admin123@localhost:5672/pitch_prod',
+      ),
+    ).toBe(false);
+  });
+
+  it('returns topology queue options with dead-letter routing', () => {
+    expect(getDeadLetterQueueOptions()).toEqual({
+      durable: true,
+      arguments: {
+        'x-dead-letter-exchange': RABBITMQ_DEAD_LETTER_EXCHANGE,
+      },
+    });
   });
 });

@@ -62,11 +62,13 @@ interface SessionConfig extends JsonRecord {
   ttsProvider?: string;
   ttsVoice?: string;
   ttsModel?: string;
+  accent?: string;
   voice?: {
     provider?: string;
     voice?: string;
     voiceName?: string;
     language?: string;
+    accent?: string;
     model?: string;
   };
 }
@@ -596,6 +598,7 @@ export class ConversationOrchestrationService {
                     resolvedTts.provider,
                     resolvedTts.voice,
                     resolvedTts.language,
+                    resolvedTts.accent,
                     resolvedTts.model,
                     undefined,
                     undefined,
@@ -684,6 +687,7 @@ export class ConversationOrchestrationService {
             resolvedTts.provider,
             resolvedTts.voice,
             resolvedTts.language,
+            resolvedTts.accent,
             resolvedTts.model,
             undefined,
             undefined,
@@ -1198,6 +1202,7 @@ export class ConversationOrchestrationService {
     provider: string,
     voice: string | undefined,
     language: string | undefined,
+    accent: string | undefined,
     model: string | undefined,
     format: 'mp3' | 'wav' | 'ogg' | 'pcm' | undefined,
     sampleRate: number | undefined,
@@ -1218,6 +1223,7 @@ export class ConversationOrchestrationService {
       const options = {
         ...(voice ? { voice } : {}),
         ...(language ? { language } : {}),
+        ...(accent ? { accent } : {}),
         ...(model ? { model } : {}),
         ...(format ? { format } : {}),
         ...(sampleRate ? { sampleRate } : {}),
@@ -1268,6 +1274,7 @@ export class ConversationOrchestrationService {
           {
             ...(voice ? { voice } : {}),
             ...(language ? { language } : {}),
+            ...(accent ? { accent } : {}),
             ...(model ? { model } : {}),
             format: 'pcm',
             sampleRate: sampleRate ?? 24000,
@@ -1280,7 +1287,12 @@ export class ConversationOrchestrationService {
       if (!this.isCancelled(requestState, subscriber) && !subscriber.closed) {
         subscriber.next({
           type: 'audio_sentence',
-          data: { sentenceIndex: idx, audio: audioBuffer, contentType },
+          data: {
+            sentenceIndex: idx,
+            audio: audioBuffer,
+            contentType,
+            sentenceText: text,
+          },
         });
       }
     } catch (err) {
@@ -1292,6 +1304,7 @@ export class ConversationOrchestrationService {
         try {
           const fallback = await this.ttsService.synthesize(text, 'melotts', {
             language,
+            ...(accent ? { accent } : {}),
           });
           if (
             !this.isCancelled(requestState, subscriber) &&
@@ -1303,6 +1316,7 @@ export class ConversationOrchestrationService {
                 sentenceIndex: idx,
                 audio: fallback.audioBuffer,
                 contentType: fallback.contentType,
+                sentenceText: text,
               },
             });
           }

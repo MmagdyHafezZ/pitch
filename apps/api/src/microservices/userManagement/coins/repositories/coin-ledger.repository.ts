@@ -63,6 +63,7 @@ export class CoinLedgerRepository {
     allowance: number;
     debtApplied: number;
     remainingAfter: number;
+    deltaCoins?: number;
   }) {
     if (await this.existsByEventId(args.eventId)) return;
 
@@ -78,6 +79,7 @@ export class CoinLedgerRepository {
       periodKey: args.periodKey,
       allowance: args.allowance,
       debtApplied: args.debtApplied,
+      deltaCoins: args.deltaCoins,
       remainingAfter: args.remainingAfter,
     } satisfies Partial<CoinLedger>);
   }

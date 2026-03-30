@@ -22,53 +22,11 @@
     linear-gradient(180deg, var(--pitch-surface-bg) 0%, var(--pitch-app-bg) 100%);
 }
 
-.mesh {
+.grainientLayer {
   position: absolute;
   inset: 0;
-  background-image:
-    linear-gradient(
-      color-mix(in srgb, var(--pitch-surface-text-dim) 32%, transparent) 1px,
-      transparent 1px
-    ),
-    linear-gradient(
-      90deg,
-      color-mix(in srgb, var(--pitch-surface-text-dim) 32%, transparent) 1px,
-      transparent 1px
-    );
-  background-size: 38px 38px;
-  opacity: 0.35;
   pointer-events: none;
-  mask-image: radial-gradient(circle at center, rgba(0, 0, 0, 1), transparent 70%);
-}
-
-.glowOrb {
-  position: absolute;
-  width: 260px;
-  height: 260px;
-  border-radius: 999px;
-  filter: blur(24px);
-  opacity: 0.45;
-  pointer-events: none;
-}
-
-.orbA {
-  top: 12%;
-  left: -80px;
-  background: radial-gradient(
-    circle,
-    color-mix(in srgb, var(--pitch-accent) 45%, transparent),
-    transparent 70%
-  );
-}
-
-.orbB {
-  bottom: 10%;
-  right: -60px;
-  background: radial-gradient(
-    circle,
-    color-mix(in srgb, var(--pitch-selected) 35%, transparent),
-    transparent 70%
-  );
+  opacity: 0.6;
 }
 
 .content {

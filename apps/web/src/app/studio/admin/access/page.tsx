@@ -16,6 +16,7 @@ import {
   Title,
 } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
+import { useQueryClient } from '@tanstack/react-query'
 import { IconShieldLock, IconUsers } from '@tabler/icons-react'
 import { api } from '@/lib/client'
 import { useAuthStore } from '@/features/auth/stores/auth.store'
@@ -33,6 +34,7 @@ type ReviewRole = 'MEMBER' | 'ADMIN'
 
 export default function StudioAccessAdminPage() {
   const router = useRouter()
+  const queryClient = useQueryClient()
   const user = useAuthStore((state) => state.user)
   const [requests, setRequests] = useState<StudioAccessRequest[]>([])
   const [loading, setLoading] = useState(true)
@@ -106,6 +108,7 @@ export default function StudioAccessAdminPage() {
     try {
       await api.studioAccess.approveRequest(request.userId, { quota, role })
       setRequests((current) => current.filter((item) => item.userId !== request.userId))
+      await queryClient.invalidateQueries({ queryKey: ['notifications'] })
       notifications.show({
         title: 'Access approved',
         message: `${request.email} now has Studio access as ${role === 'ADMIN' ? 'an admin' : 'a regular user'} with ${quota} coins.`,
@@ -127,6 +130,7 @@ export default function StudioAccessAdminPage() {
     try {
       await api.studioAccess.denyRequest(request.userId)
       setRequests((current) => current.filter((item) => item.userId !== request.userId))
+      await queryClient.invalidateQueries({ queryKey: ['notifications'] })
       notifications.show({
         title: 'Access denied',
         message: `${request.email} was notified that Studio access was not approved.`,

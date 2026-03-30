@@ -33,6 +33,26 @@ export const queryClient = new QueryClient({
   },
 })
 
+const COIN_BALANCE_QUERY_KEYS = [
+  ['coins', 'my-balance'],
+  ['coins', 'balance'],
+] as const
+
+const invalidateCoinBalanceQueries = async () => {
+  await Promise.all(
+    COIN_BALANCE_QUERY_KEYS.map((queryKey) => queryClient.invalidateQueries({ queryKey }))
+  )
+}
+
+const scheduleCoinBalanceRefresh = (delaysMs: number[]) => {
+  if (typeof window === 'undefined') return
+  for (const delayMs of delaysMs) {
+    window.setTimeout(() => {
+      void invalidateCoinBalanceQueries()
+    }, delayMs)
+  }
+}
+
 let accessToken: string | null = null
 let refreshPromise: Promise<string | null> | null = null
 let accessTokenListener: ((token: string | null) => void) | null = null
@@ -628,10 +648,7 @@ export const api = {
         body: JSON.stringify(data),
       })
 
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['coins', 'my-balance'] }),
-        queryClient.invalidateQueries({ queryKey: ['coins', 'balance'] }),
-      ])
+      await invalidateCoinBalanceQueries()
 
       return response
     },
@@ -648,18 +665,22 @@ export const api = {
         body: JSON.stringify(data || {}),
       })
 
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['coins', 'my-balance'] }),
-        queryClient.invalidateQueries({ queryKey: ['coins', 'balance'] }),
-      ])
+      await invalidateCoinBalanceQueries()
+      // Session coin adjustment is emitted async server-side after /end returns.
+      // Re-invalidating avoids caching a pre-adjust balance in the sidebar.
+      scheduleCoinBalanceRefresh([1500, 5000])
 
       return response
     },
-    restart: (id: string, data?: { reason?: string }) =>
-      apiRequest<any>(`/simulation/sessions/${id}/restart`, {
+    restart: async (id: string, data?: { reason?: string }) => {
+      const response = await apiRequest<any>(`/simulation/sessions/${id}/restart`, {
         method: 'POST',
         body: JSON.stringify(data || {}),
-      }),
+      })
+
+      await invalidateCoinBalanceQueries()
+      return response
+    },
     delete: (id: string) =>
       apiRequest<any>(`/simulation/sessions/${id}`, {
         method: 'DELETE',
@@ -894,7 +915,7 @@ export const api = {
         durationMinutes: number
       }>(`/coins/session-estimate?${qs.toString()}`)
     },
-    refillRequest: (data: { requestedCoins: number; teamId: string }) =>
+    refillRequest: (data: { requestedCoins: number; teamId?: string }) =>
       apiRequest<any>('/coins/refill/request', {
         method: 'POST',
         body: JSON.stringify(data),
@@ -1043,12 +1064,6 @@ export const api = {
       apiRequest<any>(`/challenges/${challengeId}/leaderboard${limit ? `?limit=${limit}` : ''}`),
     globalLeaderboard: (limit?: number) =>
       apiRequest<any>(`/challenges/leaderboard${limit ? `?limit=${limit}` : ''}`),
-    adminGenerate: (period: 'DAILY' | 'WEEKLY' | 'MONTHLY') =>
-      apiRequest<any>('/challenges/admin/generate', {
-        method: 'POST',
-        body: JSON.stringify({ period }),
-        timeoutMs: 60000,
-      }),
   },
 
   support: {
@@ -1236,11 +1251,15 @@ export const api = {
         }),
     },
     subscriptions: {
-      listPlanChanges: () => apiRequest<any[]>('/admin/subscriptions/plan-changes'),
+      listPlanChanges: () => apiRequest<any[]>('/admin/subscriptions/requests/plan-changes'),
       approvePlanChange: (id: string) =>
-        apiRequest<any>(`/admin/subscriptions/${id}/approve-plan-change`, { method: 'POST' }),
+        apiRequest<any>(`/admin/subscriptions/requests/${id}/approve-plan-change`, {
+          method: 'POST',
+        }),
       rejectPlanChange: (id: string) =>
-        apiRequest<any>(`/admin/subscriptions/${id}/reject-plan-change`, { method: 'POST' }),
+        apiRequest<any>(`/admin/subscriptions/requests/${id}/reject-plan-change`, {
+          method: 'POST',
+        }),
     },
     sessions: {
       list: (params?: {

@@ -98,6 +98,7 @@ interface TranscriptMessage {
   role: 'user' | 'assistant'
   text: string
   timestamp: Date
+  audioUrl?: string
 }
 
 const EMPTY_PHONE_CALL_RUNTIME: PhoneCallRuntimeState = {
@@ -524,6 +525,115 @@ const readTimelineConversationHistory = (timeline: unknown): TranscriptMessage[]
       }
     })
     .filter((turn): turn is TranscriptMessage => Boolean(turn))
+}
+
+type ReplayAudioConfig = {
+  provider: string
+  voice: string
+  model?: string
+}
+
+const readReplayAudioConfigFromSession = (
+  session: Record<string, unknown> | null
+): ReplayAudioConfig | null => {
+  if (!session) {
+    return null
+  }
+
+  const sessionConfig = isRecord(session.sessionConfig) ? session.sessionConfig : {}
+  const sessionVoice = isRecord(sessionConfig.voice) ? sessionConfig.voice : {}
+  const persona = isRecord(session.persona) ? session.persona : {}
+  const personaTraits = isRecord(persona.traits) ? persona.traits : {}
+  const personaVoice = isRecord(personaTraits.voice) ? personaTraits.voice : {}
+  const personaAudioPreview = isRecord(personaTraits.audioPreview) ? personaTraits.audioPreview : {}
+
+  const provider = readText(
+    sessionVoice.provider,
+    sessionConfig.ttsProvider,
+    personaVoice.provider,
+    'elevenlabs'
+  )
+  const voice = readText(
+    sessionVoice.voiceName,
+    sessionVoice.voice,
+    sessionConfig.ttsVoice,
+    personaVoice.voiceName,
+    personaAudioPreview.voiceName
+  )
+  const model = readText(sessionVoice.model, sessionConfig.ttsModel, personaVoice.model)
+
+  if (!provider || !voice) {
+    return null
+  }
+
+  return {
+    provider: provider.toLowerCase(),
+    voice,
+    ...(model ? { model } : {}),
+  }
+}
+
+const attachReplayAudioToLatestAssistantMessage = async (
+  history: TranscriptMessage[],
+  sessionRecord: Record<string, unknown> | null
+): Promise<{ history: TranscriptMessage[]; replayReady: boolean }> => {
+  if (history.length === 0) {
+    return { history, replayReady: false }
+  }
+
+  let latestAssistantIndex = -1
+  for (let i = history.length - 1; i >= 0; i -= 1) {
+    if (history[i].role === 'assistant' && history[i].text.trim()) {
+      latestAssistantIndex = i
+      break
+    }
+  }
+
+  console.debug(
+    '[replayAudio] latestAssistantIndex',
+    latestAssistantIndex,
+    'history len',
+    history.length
+  )
+
+  if (latestAssistantIndex === -1) {
+    console.debug('[replayAudio] no assistant message found')
+    return { history, replayReady: false }
+  }
+
+  if (history[latestAssistantIndex].audioUrl) {
+    console.debug('[replayAudio] audioUrl already present, replayReady=true')
+    return { history, replayReady: true }
+  }
+
+  const replayConfig = readReplayAudioConfigFromSession(sessionRecord)
+  console.debug('[replayAudio] replayConfig', replayConfig)
+  if (!replayConfig) {
+    console.debug('[replayAudio] no voice config found in session — replayReady=false')
+    return { history, replayReady: false }
+  }
+
+  try {
+    console.debug(
+      '[replayAudio] calling TTS for text:',
+      history[latestAssistantIndex].text.slice(0, 80)
+    )
+    const blob = await api.tts.speak({
+      text: history[latestAssistantIndex].text,
+      provider: replayConfig.provider,
+      voice: replayConfig.voice,
+      ...(replayConfig.model ? { model: replayConfig.model } : {}),
+    })
+    console.debug('[replayAudio] TTS blob received, size', blob.size)
+    const audioUrl = URL.createObjectURL(blob)
+    const nextHistory = history.map((turn, index) =>
+      index === latestAssistantIndex ? { ...turn, audioUrl } : turn
+    )
+    return { history: nextHistory, replayReady: true }
+  } catch (error) {
+    console.warn('[replayAudio] TTS call failed:', error)
+    return { history, replayReady: false }
+  }
 }
 
 const buildTimelineState = (timeline: unknown) => {
@@ -1772,6 +1882,7 @@ export default function LiveSessionPage() {
   const speechBufferRef = useRef<string>('')
   const assistantInterruptTriggeredRef = useRef(false)
   const hasUserEnabledMicRef = useRef(false)
+  const timeoutEndTriggeredRef = useRef(false)
   const [isMultiTurn, setIsMultiTurn] = useState(false)
   const assistantStartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
@@ -2305,43 +2416,59 @@ export default function LiveSessionPage() {
         const session = await api.sessions.getById(sessionId)
         if (cancelled) return
 
-        const sessionRecord = isRecord(session) ? session : {}
-        setLoadedSessionRecord(sessionRecord)
-        setSessionAttachments(readSessionAttachments(sessionRecord))
-        const status = normalizeSessionStatus(session)
-        const isPhoneSession = sessionRecord.type === 'phone'
+        let effectiveSession = session
+        let effectiveSessionRecord = isRecord(session) ? session : {}
+        let effectiveStatus = normalizeSessionStatus(session)
+        let isPhoneSession = effectiveSessionRecord.type === 'phone'
+        let effectivePersistedSessionStartMs = persistedSessionStartMs
 
-        if (status === 'ended' && isPhoneSession && entrySource === 'retake') {
+        setLoadedSessionRecord(effectiveSessionRecord)
+        setSessionAttachments(readSessionAttachments(effectiveSessionRecord))
+
+        if (effectiveStatus === 'ended') {
           try {
             const restartedSession = await api.sessions.restart(sessionId, {
               reason: 'restart_from_scratch',
             })
             if (cancelled) return
 
-            const restartedRecord = isRecord(restartedSession) ? restartedSession : {}
+            effectiveSession = restartedSession
+            effectiveSessionRecord = isRecord(restartedSession) ? restartedSession : {}
+            effectiveStatus = normalizeSessionStatus(restartedSession)
+            isPhoneSession = effectiveSessionRecord.type === 'phone'
+            effectivePersistedSessionStartMs = null
+
             clearPersistedSessionStartMs(sessionId)
-            setLoadedSessionRecord(restartedRecord)
-            syncSessionState(restartedSession)
-            setPhoneSetupRetakeMode(true)
-            setPhoneRetakeChoice('undecided')
+            setSessionStartMs(null)
+            setSessionEndMs(null)
+            setLoadedSessionRecord(effectiveSessionRecord)
+            setSessionAttachments(readSessionAttachments(effectiveSessionRecord))
             setResumePromptOpen(false)
             setEntryPromptMode(null)
-            setAutoConnectConversation(false)
-            return
+
+            if (isPhoneSession) {
+              setPhoneSetupRetakeMode(true)
+              setPhoneRetakeChoice('undecided')
+            }
           } catch {
             if (cancelled) return
+            syncSessionState(session)
+            setEntryPromptMode('retake')
+            setResumePromptOpen(true)
+            setAutoConnectConversation(false)
+            return
           }
         }
 
-        if (status === 'ended') {
-          syncSessionState(session)
+        if (effectiveStatus === 'ended') {
+          syncSessionState(effectiveSession)
           setEntryPromptMode('retake')
           setResumePromptOpen(true)
           setAutoConnectConversation(false)
           return
         }
 
-        syncSessionState(session)
+        syncSessionState(effectiveSession)
 
         if (isPhoneSession) {
           setAutoConnectConversation(false)
@@ -2351,7 +2478,7 @@ export default function LiveSessionPage() {
         let hasExistingProgress = false
         let timelineHistory: TranscriptMessage[] = []
         try {
-          const timeline = await loadTimeline(200, sessionRecord)
+          const timeline = await loadTimeline(200, effectiveSessionRecord)
           if (cancelled) return
           const totalTurns = timeline.totalTurns
           const history = Array.isArray(timeline.conversationHistory)
@@ -2360,8 +2487,7 @@ export default function LiveSessionPage() {
           timelineHistory = readTimelineConversationHistory({
             conversationHistory: history,
           })
-          hydrateMessages(timelineHistory)
-          syncSessionState(session, timelineHistory)
+          syncSessionState(effectiveSession, timelineHistory)
           hasExistingProgress = totalTurns > 0 || history.length > 0
         } catch {
           hasExistingProgress = false
@@ -2370,7 +2496,38 @@ export default function LiveSessionPage() {
         if (cancelled) return
 
         const shouldAutoResume =
-          hasExistingProgress || persistedSessionStartMs !== null || timelineHistory.length > 0
+          hasExistingProgress ||
+          effectivePersistedSessionStartMs !== null ||
+          timelineHistory.length > 0
+
+        console.debug('[replayAudio] shouldAutoResume', shouldAutoResume, {
+          hasExistingProgress,
+          timerMs: effectivePersistedSessionStartMs,
+          historyLen: timelineHistory.length,
+          sessionType: effectiveSessionRecord.type,
+        })
+
+        let replayReady = false
+        if (shouldAutoResume) {
+          const replayHydration = await attachReplayAudioToLatestAssistantMessage(
+            timelineHistory,
+            effectiveSessionRecord
+          )
+          if (cancelled) return
+          timelineHistory = replayHydration.history
+          replayReady = replayHydration.replayReady
+        }
+
+        console.debug(
+          '[replayAudio] replayReady',
+          replayReady,
+          '→ autoPlayLatestAudio',
+          shouldAutoResume && replayReady
+        )
+
+        hydrateMessages(timelineHistory, {
+          autoPlayLatestAudio: shouldAutoResume && replayReady,
+        })
 
         if (shouldAutoResume) {
           setEntryPromptMode(null)
@@ -2521,7 +2678,6 @@ export default function LiveSessionPage() {
     clearCoachingTip,
     clearToolEvents,
     disconnect,
-    hintsEnabled,
     interrupt,
     loadedSessionRecord,
     requestConversationConnect,
@@ -3033,19 +3189,32 @@ export default function LiveSessionPage() {
 
   useEffect(() => {
     const isVoiceOrVideo = sessionType === 'voice' || sessionType === 'video'
-    const canAutoResumeMic = hasUserEnabledMicRef.current || microphonePermission === 'granted'
+    const canAttemptAutoResumeMic =
+      hasUserEnabledMicRef.current || microphonePermission !== 'denied'
     if (
       previousAudioPlayingRef.current &&
       !assistantSpeaking &&
       isVoiceOrVideo &&
-      canAutoResumeMic &&
+      canAttemptAutoResumeMic &&
       isSttSupported &&
       !isSttPermissionBlocked &&
       isConnected &&
       sessionStatus !== 'ended' &&
       !isListening
     ) {
-      void startListening()
+      const resumeMicForUserTurn = async () => {
+        if (!hasUserEnabledMicRef.current && microphonePermission !== 'granted') {
+          const permissionGranted = await requestMicrophoneAccess()
+          if (!permissionGranted) {
+            return
+          }
+        }
+
+        hasUserEnabledMicRef.current = true
+        await startListening()
+      }
+
+      void resumeMicForUserTurn()
     }
     previousAudioPlayingRef.current = assistantSpeaking
   }, [
@@ -3057,6 +3226,7 @@ export default function LiveSessionPage() {
     isConnected,
     sessionStatus,
     isListening,
+    requestMicrophoneAccess,
     startListening,
   ])
 
@@ -3158,72 +3328,115 @@ export default function LiveSessionPage() {
     }
   }, [loadTimeline, messages.length, sessionId, timelineEnabled, sessionType])
 
-  const handleHangUp = useCallback(async () => {
-    clearSpeechFinalizeState()
-    speechBufferRef.current = ''
-    if (isListening) {
-      stopListening()
-    }
+  const performHangUp = useCallback(
+    async (options?: { reason?: string; forcePerformanceRoute?: boolean }) => {
+      const endReason = options?.reason ?? (sessionType === 'phone' ? 'hangup' : 'user_hangup')
+      const forcePerformanceRoute = options?.forcePerformanceRoute ?? false
 
-    try {
-      if (sessionType === 'phone' && phoneCallRuntime.callId) {
-        try {
-          await api.phoneCalls.end({
-            sessionId,
-            reason: 'user_requested_hangup',
-          })
-        } catch (err) {
-          const message = err instanceof Error ? err.message : ''
-          if (!message.includes('No active phone call is registered')) {
-            throw err
+      clearSpeechFinalizeState()
+      speechBufferRef.current = ''
+      if (isListening) {
+        stopListening()
+      }
+
+      try {
+        if (sessionType === 'phone' && phoneCallRuntime.callId) {
+          try {
+            await api.phoneCalls.end({
+              sessionId,
+              reason: endReason,
+            })
+          } catch (err) {
+            const message = err instanceof Error ? err.message : ''
+            if (!message.includes('No active phone call is registered')) {
+              throw err
+            }
           }
         }
-      }
 
-      const hasConversation = activeConversationMessages.length > 0
-      const sessionAlreadyEnded = normalizeSessionStatus(loadedSessionRecord) === 'ended'
+        const hasConversation = activeConversationMessages.length > 0
+        const sessionAlreadyEnded = normalizeSessionStatus(loadedSessionRecord) === 'ended'
 
-      if (!sessionAlreadyEnded && (hasConversation || sessionType === 'phone')) {
-        const endedSession = await api.sessions.end(sessionId, {
-          reason: sessionType === 'phone' ? 'hangup' : 'user_hangup',
+        if (!sessionAlreadyEnded && (hasConversation || sessionType === 'phone')) {
+          const endedSession = await api.sessions.end(sessionId, {
+            reason: endReason,
+          })
+          invalidateCoinsBalance()
+          const endedRecord = isRecord(endedSession) ? endedSession : loadedSessionRecord
+          setLoadedSessionRecord(endedRecord)
+          syncSessionState(endedRecord)
+        } else if (sessionType === 'phone') {
+          setSessionStatus('ended')
+          setCallStarted(false)
+        }
+
+        hangUp()
+        if (forcePerformanceRoute || hasConversation || sessionType === 'phone') {
+          router.push(`/session/${sessionId}/performance`)
+        } else {
+          window.history.back()
+        }
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : 'Unable to finish or hang up the session.'
+        notifications.show({
+          title: 'Hang up failed',
+          message,
+          color: 'red',
         })
-        invalidateCoinsBalance()
-        const endedRecord = isRecord(endedSession) ? endedSession : loadedSessionRecord
-        setLoadedSessionRecord(endedRecord)
-        syncSessionState(endedRecord)
-      } else if (sessionType === 'phone') {
-        setSessionStatus('ended')
-        setCallStarted(false)
+        console.warn('Failed to hang up session', err)
       }
+    },
+    [
+      clearSpeechFinalizeState,
+      hangUp,
+      invalidateCoinsBalance,
+      isListening,
+      activeConversationMessages.length,
+      loadedSessionRecord,
+      phoneCallRuntime.callId,
+      router,
+      sessionId,
+      sessionType,
+      stopListening,
+      syncSessionState,
+    ]
+  )
 
-      hangUp()
-      if (hasConversation || sessionType === 'phone') {
-        router.push(`/session/${sessionId}/performance`)
-      } else {
-        window.history.back()
+  const handleHangUp = useCallback(async () => {
+    await performHangUp()
+  }, [performHangUp])
+
+  useEffect(() => {
+    const hasDurationLimit = sessionDuration > 0
+    const isExpired = hasDurationLimit && time >= sessionDuration
+    const canAutoEnd =
+      !entryDecisionLoading && !prelaunchModalOpen && !resumePromptOpen && sessionStatus !== 'ended'
+
+    if (!isExpired || !canAutoEnd) {
+      if (!isExpired) {
+        timeoutEndTriggeredRef.current = false
       }
-    } catch (err) {
-      const message =
-        err instanceof Error ? err.message : 'Unable to finish or hang up the session.'
-      notifications.show({
-        title: 'Hang up failed',
-        message,
-        color: 'red',
-      })
-      console.warn('Failed to hang up session', err)
+      return
     }
+
+    if (timeoutEndTriggeredRef.current) {
+      return
+    }
+
+    timeoutEndTriggeredRef.current = true
+    void performHangUp({
+      reason: 'timeout',
+      forcePerformanceRoute: true,
+    })
   }, [
-    clearSpeechFinalizeState,
-    hangUp,
-    isListening,
-    activeConversationMessages.length,
-    loadedSessionRecord,
-    phoneCallRuntime.callId,
-    router,
-    sessionId,
-    sessionType,
-    stopListening,
-    syncSessionState,
+    entryDecisionLoading,
+    performHangUp,
+    prelaunchModalOpen,
+    resumePromptOpen,
+    sessionDuration,
+    sessionStatus,
+    time,
   ])
 
   useEffect(() => {
@@ -3535,6 +3748,8 @@ export default function LiveSessionPage() {
         withCloseButton={false}
         closeOnClickOutside={false}
         closeOnEscape={false}
+        zIndex={1100000}
+        overlayProps={{ backgroundOpacity: 0.8, blur: 12 }}
       >
         <Stack gap="md">
           <Text size="sm" c="dimmed">
@@ -3837,30 +4052,6 @@ export default function LiveSessionPage() {
                   <Text size="xs" c="dimmed">
                     with {personaName}
                   </Text>
-                  {(currentEmotion || currentMood) && (
-                    <Tooltip
-                      label={currentMood ? `Mood: ${currentMood}` : ''}
-                      disabled={!currentMood}
-                      position="bottom"
-                    >
-                      <Badge
-                        variant="light"
-                        color={moodDotColor}
-                        size="sm"
-                        style={{
-                          cursor: 'default',
-                          transition: 'all 0.4s ease',
-                          fontWeight: 500,
-                          gap: 4,
-                        }}
-                        leftSection={
-                          currentEmotion ? (EMOTION_EMOJI[currentEmotion] ?? '😐') : undefined
-                        }
-                      >
-                        {currentEmotion ?? currentMood}
-                      </Badge>
-                    </Tooltip>
-                  )}
                 </Group>
               )}
             </Stack>

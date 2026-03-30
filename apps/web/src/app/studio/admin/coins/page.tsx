@@ -15,6 +15,7 @@ import {
   Title,
 } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
+import { useQueryClient } from '@tanstack/react-query'
 import { IconCoin, IconShieldLock } from '@tabler/icons-react'
 import { api } from '@/lib/client'
 import { useAuthStore } from '@/features/auth/stores/auth.store'
@@ -31,6 +32,7 @@ type RefillRequest = {
 
 export default function AdminCoinsPage() {
   const router = useRouter()
+  const queryClient = useQueryClient()
   const user = useAuthStore((state) => state.user)
   const [requests, setRequests] = useState<RefillRequest[]>([])
   const [loading, setLoading] = useState(true)
@@ -91,9 +93,10 @@ export default function AdminCoinsPage() {
     try {
       await api.coins.approveRefillRequest(request.userId, { approvedCoins })
       setRequests((current) => current.filter((r) => r.userId !== request.userId))
+      await queryClient.invalidateQueries({ queryKey: ['notifications'] })
       notifications.show({
         title: 'Refill approved',
-        message: `${request.email} now has ${approvedCoins.toLocaleString()} coins.`,
+        message: `Approved ${approvedCoins.toLocaleString()} personal credits for ${request.email}.`,
         color: 'teal',
       })
     } catch (err) {
@@ -112,9 +115,10 @@ export default function AdminCoinsPage() {
     try {
       await api.coins.denyRefillRequest(request.userId)
       setRequests((current) => current.filter((r) => r.userId !== request.userId))
+      await queryClient.invalidateQueries({ queryKey: ['notifications'] })
       notifications.show({
         title: 'Request denied',
-        message: `${request.email}'s refill request was denied.`,
+        message: `Denied the personal credit top-up request for ${request.email}.`,
         color: 'yellow',
       })
     } catch (err) {

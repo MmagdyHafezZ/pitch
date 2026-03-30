@@ -10,11 +10,24 @@ import { SimulationModule } from './simulation.module';
 import { MicroserviceExceptionFilter } from '@pitch/shared-backend/filters/microservice-exception.filter';
 import { PrismaClientExceptionFilter } from '@pitch/shared-backend/filters/prisma-exception.filter';
 import { RpcExceptionLoggingFilter } from '@pitch/shared-backend/filters/rpc-exception.filter';
-import { getRabbitMQUrl } from './config/rabbitmq.config';
+import {
+  getQueueOptions,
+  getRabbitMQUrl,
+  getRabbitMQUrls,
+} from './config/rabbitmq.config';
+import {
+  buildRabbitMqQueueTopology,
+  provisionRabbitMqTopology,
+} from '../../config/rabbitmq-topology';
 
 async function bootstrap() {
   const logger = new Logger('SimulationMicroservice');
   const httpPort = process.env.SIMULATION_HTTP_PORT || 3001;
+  const rabbitmqUrl = getRabbitMQUrl();
+
+  await provisionRabbitMqTopology(rabbitmqUrl, [
+    buildRabbitMqQueueTopology('simulation_queue'),
+  ]);
 
   const app = await NestFactory.create(SimulationModule);
 
@@ -26,11 +39,9 @@ async function bootstrap() {
   const microservice = app.connectMicroservice<MicroserviceOptions>({
     transport: Transport.RMQ,
     options: {
-      urls: [getRabbitMQUrl()],
+      urls: getRabbitMQUrls(),
       queue: 'simulation_queue',
-      queueOptions: {
-        durable: true,
-      },
+      queueOptions: getQueueOptions(rabbitmqUrl),
       noAck: true,
       prefetchCount: 10,
     },

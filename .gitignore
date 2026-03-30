@@ -25,6 +25,8 @@ CLAUDE.md
 
 # Logs
 logs
+!apps/web/src/app/studio/admin/logs/
+!apps/web/src/app/studio/admin/logs/page.tsx
 *.log
 npm-debug.log*
 pnpm-debug.log*

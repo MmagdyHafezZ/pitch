@@ -220,9 +220,7 @@ export class SubscriptionController {
   }
 
   @MessagePattern(USER_SERVICE_PATTERNS.LIST_PENDING_PLAN_CHANGES)
-  async listPendingPlanChanges(
-    @Payload() _data: userClaimsInterface.MessageWithUserClaims,
-  ) {
+  async listPendingPlanChanges() {
     try {
       return await this.subscriptionService.listPendingPlanChanges();
     } catch (error) {

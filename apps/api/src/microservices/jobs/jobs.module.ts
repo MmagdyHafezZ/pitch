@@ -4,9 +4,9 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ChallengeSchedulerService } from './services/challenge-scheduler.service';
 import { CalendarSyncSchedulerService } from './services/calendar-sync-scheduler.service';
 import {
-  getRabbitMQUrl,
+  getRabbitMQUrls,
   getQueueOptions,
-} from '../../config/microservices.config';
+} from '@pitch/shared-backend/config/microservices.config';
 
 @Module({
   imports: [
@@ -15,10 +15,10 @@ import {
       {
         name: 'SIMULATION_SERVICE',
         imports: [ConfigModule],
-        useFactory: (_configService: ConfigService) => ({
+        useFactory: () => ({
           transport: Transport.RMQ,
           options: {
-            urls: [getRabbitMQUrl()],
+            urls: getRabbitMQUrls(),
             queue: 'simulation_queue',
             queueOptions: getQueueOptions(),
           },
@@ -28,10 +28,10 @@ import {
       {
         name: 'CRM_SERVICE',
         imports: [ConfigModule],
-        useFactory: (_configService: ConfigService) => ({
+        useFactory: () => ({
           transport: Transport.RMQ,
           options: {
-            urls: [getRabbitMQUrl()],
+            urls: getRabbitMQUrls(),
             queue: 'crm_queue',
             queueOptions: getQueueOptions(),
           },
@@ -41,10 +41,10 @@ import {
       {
         name: 'USER_SERVICE',
         imports: [ConfigModule],
-        useFactory: (_configService: ConfigService) => ({
+        useFactory: () => ({
           transport: Transport.RMQ,
           options: {
-            urls: [getRabbitMQUrl()],
+            urls: getRabbitMQUrls(),
             queue: 'user_queue',
             queueOptions: getQueueOptions(),
           },

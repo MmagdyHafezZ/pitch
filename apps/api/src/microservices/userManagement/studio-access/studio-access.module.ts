@@ -8,8 +8,8 @@ import { PlansModule } from '../plans/plans.module';
 import { SubscriptionModule } from '../subscription/subscription.module';
 import {
   getQueueOptions,
-  getRabbitMQUrl,
-} from '../../../config/microservices.config';
+  getRabbitMQUrls,
+} from '@pitch/shared-backend/config/microservices.config';
 import { NotificationModule } from '../notifications/notification.module';
 import { StudioAccessEmailService } from './services/studio-access-email.service';
 
@@ -25,7 +25,7 @@ import { StudioAccessEmailService } from './services/studio-access-email.service
         name: 'SUPPORT_SERVICE',
         transport: Transport.RMQ,
         options: {
-          urls: [getRabbitMQUrl()],
+          urls: getRabbitMQUrls(),
           queue: process.env.SUPPORT_RMQ_QUEUE || 'support_queue',
           queueOptions: getQueueOptions(),
         },

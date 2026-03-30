@@ -14,6 +14,8 @@ import {
   ActionIcon,
   Badge,
   Grid,
+  Modal,
+  Stack,
 } from '@mantine/core'
 import {
   IconAlertCircle,
@@ -47,12 +49,18 @@ import { StyleStep } from './components/StyleStep'
 import { UploadSection } from './components/UploadSection'
 import { ReviewStep } from './components/ReviewStep'
 import { SessionConfigForm, Persona, PersonaTraits } from './lib/types'
+import { DEFAULT_ACCENT, deriveAccentFromPersonaTraits } from './lib/accent'
 import type { SessionAttachment } from '@/features/sessions/types/sessions.types'
 import { getBrainCompatibleModels, getPreferredBrainModel } from './lib/brain-models'
 import { useCrm } from '@/features/crm'
 import { useI18n } from '@/features/i18n'
 import { useTour } from '@/features/onboarding'
-import { useInvalidateCoinsBalance } from '@/features/coins/hooks/useCoinsBalance'
+import {
+  useCoinsBalance,
+  useInvalidateCoinsBalance,
+  usePersonalCoinsBalance,
+  useSessionCoinEstimate,
+} from '@/features/coins/hooks/useCoinsBalance'
 import type {
   EditableScenarioDraft,
   Scenario,
@@ -77,6 +85,7 @@ import {
   type SavedCrmSessionConnection,
   type UserSettingsWithCrmPrefs,
 } from '@/features/crm/utils/session-crm-preferences'
+import { getTeamFundingWarning } from './lib/teamFundingWarning'
 
 const spaceGrotesk = Space_Grotesk({ subsets: ['latin'], display: 'swap' })
 const fraunces = Fraunces({ subsets: ['latin'], display: 'swap' })
@@ -164,6 +173,7 @@ export default function CreateSessionPage() {
   const { createSession, loading, error } = useSessions()
   const { providers: ttsProviders, loading: ttsLoading } = useTtsProviders()
   const invalidateCoinsBalance = useInvalidateCoinsBalance()
+  const personalBalance = usePersonalCoinsBalance()
   const { data: llmProvidersData, isLoading: llmProvidersLoading } = useLLMProviders()
   const isStepperCompact = useMediaQuery('(max-width: 900px)')
 
@@ -208,7 +218,7 @@ export default function CreateSessionPage() {
   const [ttsProvider, setTtsProvider] = useState('elevenlabs')
   const [ttsVoice, setTtsVoice] = useState('Rachel')
   const [ttsModel, setTtsModel] = useState<string | null>(null)
-  const [accent, setAccent] = useState('Persona-based')
+  const [accent, setAccent] = useState(DEFAULT_ACCENT)
   const [tone, setTone] = useState('Formal')
   const [speechRate, setSpeechRate] = useState('Conversational')
   const [responseLength, setResponseLength] = useState('Balanced')
@@ -244,6 +254,7 @@ export default function CreateSessionPage() {
   const [attachmentErrors, setAttachmentErrors] = useState(false)
 
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const [teamFundingWarningOpened, setTeamFundingWarningOpened] = useState(false)
 
   const autoStartedTourKeyRef = useRef<string | null>(null)
   const personaScrollRef = useRef<HTMLDivElement | null>(null)
@@ -253,6 +264,25 @@ export default function CreateSessionPage() {
   const selectedSavedScenario =
     savedScenarios.find((scenario) => scenario.id === selectedScenarioId) ?? null
   const selectedDraft = drafts.find((draft) => draft.draftId === selectedDraftId) ?? null
+  const selectedTeam = teams.find((team) => team.id === selectedTeamId) ?? null
+  const selectedTeamIsShared =
+    (selectedTeam?.memberships?.filter((membership) => membership?.isActive !== false).length ??
+      0) > 1
+  const teamBalance = useCoinsBalance(selectedTeamIsShared ? selectedTeamId : null)
+  const sessionCoinEstimate = useSessionCoinEstimate({
+    model: llmModel ?? undefined,
+    provider: llmProvider ?? undefined,
+    sessionType: sessionType ?? 'text',
+    durationMinutes,
+    enabled: Boolean(sessionType),
+  })
+  const teamFundingWarning = getTeamFundingWarning({
+    selectedTeamId,
+    teams,
+    teamBalance: teamBalance.data,
+    personalBalance: personalBalance.data,
+    estimatedCoins: sessionCoinEstimate.data?.estimatedCoins ?? null,
+  })
 
   useEffect(() => {
     const startTourParam = searchParams.get('startTour')
@@ -431,7 +461,7 @@ export default function CreateSessionPage() {
 
   useEffect(() => {
     if (!selectedPersonaData?.traits) {
-      setAccent('Persona-based')
+      setAccent(DEFAULT_ACCENT)
       return
     }
     const traits = selectedPersonaData.traits as PersonaTraits
@@ -444,8 +474,7 @@ export default function CreateSessionPage() {
     if (traits.voice?.model) {
       setTtsModel(traits.voice.model)
     }
-    const derivedAccent = traits.voice?.language || traits.voiceProfile || 'Persona-based'
-    setAccent(derivedAccent)
+    setAccent(deriveAccentFromPersonaTraits(traits))
   }, [selectedPersonaData])
 
   useEffect(() => {
@@ -836,7 +865,7 @@ export default function CreateSessionPage() {
     setScenarioWorkspaceId(value)
   }
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (skipTeamFundingWarning = false) => {
     if (!user?.id) {
       notifications.show({
         title: 'Error',
@@ -875,6 +904,15 @@ export default function CreateSessionPage() {
         icon: <IconAlertCircle />,
       })
       return
+    }
+
+    if (!skipTeamFundingWarning && teamFundingWarning) {
+      setTeamFundingWarningOpened(true)
+      return
+    }
+
+    if (skipTeamFundingWarning) {
+      setTeamFundingWarningOpened(false)
     }
 
     setIsSubmitting(true)
@@ -1007,6 +1045,7 @@ export default function CreateSessionPage() {
 
       await createSession(sessionData)
       invalidateCoinsBalance()
+      setTeamFundingWarningOpened(false)
 
       notifications.show({
         title: 'Success',
@@ -1398,6 +1437,8 @@ export default function CreateSessionPage() {
       icon: <IconAdjustments size={18} />,
       content: (
         <StyleStep
+          accent={accent}
+          setAccent={setAccent}
           tone={tone}
           setTone={setTone}
           speechRate={speechRate}
@@ -1475,6 +1516,53 @@ export default function CreateSessionPage() {
 
   return (
     <Box className={`${spaceGrotesk.className} ${classes.page}`}>
+      <Modal
+        opened={teamFundingWarningOpened}
+        onClose={() => setTeamFundingWarningOpened(false)}
+        title="Use personal credits?"
+        centered
+        radius="lg"
+      >
+        <Stack gap="md">
+          <Text size="sm" c="dimmed">
+            {teamFundingWarning?.reason === 'no_team_plan'
+              ? `${teamFundingWarning?.teamName ?? 'This team'} does not have an active team credit plan right now.`
+              : `${teamFundingWarning?.teamName ?? 'This team'} is out of team credits for this session.`}{' '}
+            If you continue, this run will use your personal credits instead.
+          </Text>
+
+          <Group gap="xs">
+            {teamFundingWarning?.estimatedCoins != null ? (
+              <Badge variant="light" color="yellow">
+                Estimated {teamFundingWarning.estimatedCoins.toLocaleString()} credits
+              </Badge>
+            ) : null}
+            {teamFundingWarning?.personalRemaining != null ? (
+              <Badge variant="light" color={teamFundingWarning?.canContinue ? 'teal' : 'red'}>
+                Personal available {teamFundingWarning?.personalRemaining?.toLocaleString()}
+              </Badge>
+            ) : null}
+          </Group>
+
+          {!teamFundingWarning?.canContinue ? (
+            <Alert color="red" variant="light">
+              Your personal balance may not cover this session yet.
+            </Alert>
+          ) : null}
+
+          <Group justify="flex-end">
+            <Button variant="subtle" onClick={() => setTeamFundingWarningOpened(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => void handleSubmit(true)}
+              disabled={teamFundingWarning?.canContinue === false}
+            >
+              Continue with personal credits
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
       <Container size="xl" py="xl">
         <Group
           style={{
@@ -1564,7 +1652,7 @@ export default function CreateSessionPage() {
                 </Button>
               ) : (
                 <Button
-                  onClick={handleSubmit}
+                  onClick={() => void handleSubmit()}
                   loading={isSubmitting || loading}
                   disabled={attachmentsUploading || attachmentErrors}
                   leftSection={<IconCheck size={16} />}

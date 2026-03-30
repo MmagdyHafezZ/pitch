@@ -15,14 +15,7 @@ import {
   ActionIcon,
   Tooltip,
 } from '@mantine/core'
-import {
-  IconTrophy,
-  IconClock,
-  IconUsers,
-  IconRefresh,
-  IconSparkles,
-  IconArrowRight,
-} from '@tabler/icons-react'
+import { IconTrophy, IconClock, IconUsers, IconRefresh, IconArrowRight } from '@tabler/icons-react'
 import { useEffect, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useChallenges } from '@/features/challenges'
@@ -160,23 +153,10 @@ export default function ChallengesPage() {
 
   const autoStartedTourKeyRef = useRef<string | null>(null)
   const [accepting, setAccepting] = useState<string | null>(null)
-  const [generating, setGenerating] = useState(false)
-
-  const handleGenerate = async (period: ChallengePeriod) => {
-    setGenerating(true)
-    try {
-      await api.challenges.adminGenerate(period)
-      await fetch(periodParam, difficultyParam)
-    } catch (err) {
-      console.error('Generation failed', err)
-    } finally {
-      setGenerating(false)
-    }
-  }
 
   useEffect(() => {
     void fetch(periodParam, difficultyParam)
-  }, [periodParam, difficultyParam])
+  }, [fetch, periodParam, difficultyParam])
 
   useEffect(() => {
     const startTourParam = searchParams.get('startTour')
@@ -350,16 +330,6 @@ export default function ChallengesPage() {
               <IconRefresh size={18} />
             </ActionIcon>
           </Tooltip>
-          <Button
-            size="xs"
-            variant="light"
-            color="yellow"
-            leftSection={<IconSparkles size={14} />}
-            loading={generating}
-            onClick={() => void handleGenerate('DAILY')}
-          >
-            Generate Daily
-          </Button>
         </Group>
       </Group>
 
@@ -374,10 +344,20 @@ export default function ChallengesPage() {
         </Center>
       ) : challenges.length === 0 ? (
         <Center p="xl">
-          <Stack align="center" gap="sm">
-            <IconTrophy size={48} color="var(--mantine-color-dimmed)" />
-            <Text c="dimmed">No active challenges right now. Check back soon!</Text>
-          </Stack>
+          <Card
+            withBorder
+            radius="lg"
+            p="xl"
+            style={{ maxWidth: 420, width: '100%', textAlign: 'center' }}
+          >
+            <Stack align="center" gap="sm">
+              <IconTrophy size={48} color="var(--mantine-color-dimmed)" />
+              <Text fw={600}>No active challenges right now.</Text>
+              <Text size="sm" c="dimmed">
+                Check back soon — new challenges drop regularly.
+              </Text>
+            </Stack>
+          </Card>
         </Center>
       ) : (
         <Stack data-tour-id="challenges-list" gap="xl">
