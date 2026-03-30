@@ -104,6 +104,11 @@ export function useConversation(options: UseConversationOptions) {
   // Text/audio sync: maps sentenceIndex → sentence text; ttsActiveRef gates delta updates
   const sentenceTextsRef = useRef<Map<number, string>>(new Map())
   const ttsActiveRef = useRef(false)
+  // Separate from currentRequestIdRef — survives onConversationEnd so tryPlayNext
+  // can still reveal text and streamCompleted can still set fullText after END fires.
+  const ttsRequestIdRef = useRef<string | null>(null)
+  // Full text from streamCompleted; once set, tryPlayNext stops overwriting with partial accumulated text.
+  const streamCompletedTextRef = useRef<string | null>(null)
 
   useEffect(() => {
     onErrorRef.current = onError
@@ -226,6 +231,8 @@ export function useConversation(options: UseConversationOptions) {
     pendingPlaybackRef.current = null
     sentenceTextsRef.current.clear()
     ttsActiveRef.current = false
+    ttsRequestIdRef.current = null
+    streamCompletedTextRef.current = null
   }, [])
 
   const tryPlayNext = useCallback(() => {
@@ -234,8 +241,30 @@ export function useConversation(options: UseConversationOptions) {
     const total = totalSentencesRef.current
     const idx = nextPlayIndexRef.current
 
-    // All sentences have played — reset audio state
+    // All sentences have played — finalize text and reset audio state
     if (total !== null && idx >= total) {
+      const reqId = currentRequestIdRef.current ?? ttsRequestIdRef.current
+      if (ttsActiveRef.current && reqId) {
+        // Use fullText from streamCompleted if available; otherwise join all accumulated sentences.
+        const finalText =
+          streamCompletedTextRef.current ??
+          Array.from({ length: total }, (_, i) => sentenceTextsRef.current.get(i) ?? '')
+            .filter(Boolean)
+            .join(' ')
+        if (finalText) {
+          upsertAssistantMessage(reqId, (current) => ({
+            id: reqId,
+            role: 'assistant',
+            text: finalText,
+            timestamp: current?.timestamp ?? new Date(),
+            usage: current?.usage,
+            audioUrl: current?.audioUrl,
+          }))
+        }
+      }
+      ttsActiveRef.current = false
+      ttsRequestIdRef.current = null
+      streamCompletedTextRef.current = null
       setCurrentAudioUrl(null)
       setIsAudioPlaying(false)
       currentAudioRef.current = null
@@ -292,8 +321,12 @@ export function useConversation(options: UseConversationOptions) {
     const audioUrl = URL.createObjectURL(audioBlob)
     setCurrentAudioUrl(audioUrl) // expose URL so the replay button always reflects current sentence
 
-    // Reveal accumulated text up to and including this sentence
-    if (ttsActiveRef.current && currentRequestIdRef.current) {
+    // Reveal accumulated text up to and including this sentence.
+    // Use ttsRequestIdRef as fallback so text still updates after onConversationEnd
+    // clears currentRequestIdRef. Skip if fullText already received (streamCompleted
+    // fired) — we don't want partial accumulated text to overwrite the complete text.
+    const reqId = currentRequestIdRef.current ?? ttsRequestIdRef.current
+    if (ttsActiveRef.current && reqId && streamCompletedTextRef.current === null) {
       const accumulatedText = Array.from(
         { length: idx + 1 },
         (_, i) => sentenceTextsRef.current.get(i) ?? ''
@@ -301,7 +334,6 @@ export function useConversation(options: UseConversationOptions) {
         .filter(Boolean)
         .join(' ')
       if (accumulatedText) {
-        const reqId = currentRequestIdRef.current
         upsertAssistantMessage(reqId, (current) => ({
           id: reqId,
           role: 'assistant',
@@ -472,8 +504,12 @@ export function useConversation(options: UseConversationOptions) {
         if (envelope.requestId !== currentRequestIdRef.current) return
 
         const { sentenceIndex, audio, contentType, sentenceText } = envelope.payload
-        // First audio chunk activates TTS-controlled text reveal
+        // First audio chunk activates TTS-controlled text reveal.
+        // Capture requestId now — currentRequestIdRef may be cleared by END before audio finishes.
         ttsActiveRef.current = true
+        if (!ttsRequestIdRef.current) {
+          ttsRequestIdRef.current = currentRequestIdRef.current
+        }
         if (sentenceText) {
           sentenceTextsRef.current.set(sentenceIndex, sentenceText)
         }
@@ -812,9 +848,35 @@ export function useConversation(options: UseConversationOptions) {
     (
       nextMessages: Array<
         Pick<ConversationMessage, 'id' | 'role' | 'text' | 'timestamp' | 'usage' | 'audioUrl'>
-      >
+      >,
+      options?: {
+        autoPlayLatestAudio?: boolean
+      }
     ) => {
       revokeAudioUrls()
+      const latestAssistantAudioUrl =
+        [...nextMessages]
+          .reverse()
+          .find(
+            (message) =>
+              message.role === 'assistant' &&
+              typeof message.audioUrl === 'string' &&
+              message.audioUrl.length > 0
+          )?.audioUrl ?? null
+
+      const activeAudio = currentAudioRef.current
+      if (activeAudio) {
+        activeAudio.pause()
+        activeAudio.currentTime = 0
+        activeAudio.onended = null
+        activeAudio.onerror = null
+        activeAudio.onplay = null
+        currentAudioRef.current = null
+      }
+      pendingPlaybackRef.current = null
+      setIsAudioPlaying(false)
+      setCurrentAudioUrl(latestAssistantAudioUrl)
+
       setMessages(
         nextMessages.map((message) => ({
           ...message,
@@ -822,8 +884,17 @@ export function useConversation(options: UseConversationOptions) {
             message.timestamp instanceof Date ? message.timestamp : new Date(message.timestamp),
         }))
       )
+
+      if (options?.autoPlayLatestAudio && audioOutput === 'browser' && latestAssistantAudioUrl) {
+        // Defer past the connect-lifecycle useEffect cleanup, which calls stopAudio()
+        // synchronously in the same render batch. Without the delay, stopAudio() kills
+        // the audio element before it starts because currentAudioRef is set synchronously
+        // inside playAudio before its first await.
+        const url = latestAssistantAudioUrl
+        setTimeout(() => void playAudio(url), 0)
+      }
     },
-    [revokeAudioUrls]
+    [audioOutput, playAudio, revokeAudioUrls]
   )
 
   const clearHangupRequest = useCallback(() => {
