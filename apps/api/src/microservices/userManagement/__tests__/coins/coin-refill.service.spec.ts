@@ -24,6 +24,7 @@ describe('CoinRefillService', () => {
   } as any;
   const teamRepository = {
     findUserTeams: jest.fn(),
+    createTeam: jest.fn(),
   } as any;
   const notificationService = {
     createOne: jest.fn(),
@@ -349,32 +350,114 @@ describe('CoinRefillService', () => {
     expect(result.teamId).toBe('team-personal');
   });
 
-  it('can skip admin notifications for auto-approved admin refill requests', async () => {
-    userRepository.findById.mockResolvedValue({
-      id: 'user-1',
-      email: 'admin@example.com',
-      name: 'Admin User',
-      settings: {
-        studioAccess: { teamId: 'team-personal' },
-      },
-    });
+  it('auto-approves admin refill requests immediately without notifying other admins', async () => {
+    userRepository.findById
+      .mockResolvedValueOnce({
+        id: 'user-1',
+        email: 'admin@example.com',
+        name: 'Admin User',
+        settings: {
+          studioAccess: {
+            teamId: 'team-personal',
+            status: 'approved',
+            role: 'ADMIN',
+          },
+        },
+      })
+      .mockResolvedValueOnce({
+        id: 'user-1',
+        email: 'admin@example.com',
+        name: 'Admin User',
+        settings: {
+          studioAccess: {
+            teamId: 'team-personal',
+            status: 'approved',
+            role: 'ADMIN',
+          },
+          coinRefillRequest: {
+            requestedCoins: 2000,
+            requestedAt: '2026-03-29T12:00:00.000Z',
+            status: 'pending',
+            teamId: 'team-personal',
+          },
+        },
+      });
     teamRepository.findUserTeams.mockResolvedValue([personalTeam]);
+    coinBalanceRepo.getSnapshot.mockResolvedValue({
+      allowance: 100,
+      remaining: 40,
+    });
+    coinRedis.getRemaining.mockResolvedValue(40);
+    coinRedis.applyDeltaIdempotent.mockResolvedValue({
+      applied: true,
+      remainingAfter: 2040,
+      reason: 'APPLIED',
+    });
     userRepository.updateSettings.mockResolvedValue({
       coinRefillRequest: {
         requestedCoins: 2000,
-        requestedAt: '2026-03-29T00:00:00.000Z',
-        status: 'pending',
+        requestedAt: '2026-03-29T12:00:00.000Z',
+        status: 'approved',
         teamId: 'team-personal',
+        approvedCoins: 2000,
+        reviewedBy: 'admin@example.com',
       },
     });
 
-    await service.requestRefill({
+    const result = await service.requestRefill({
       userId: 'user-1',
       teamId: 'team-personal',
       requestedCoins: 2000,
-      notifyAdmins: false,
     });
 
     expect(notificationService.createBatch).not.toHaveBeenCalled();
+    expect(result.status).toBe('approved');
+    expect(result.approvedCoins).toBe(2000);
+  });
+
+  it('auto-provisions a personal workspace for refill requests when none exists yet', async () => {
+    userRepository.findById.mockResolvedValue({
+      id: 'user-1',
+      email: 'user@example.com',
+      name: 'Pitch Nova',
+      settings: {
+        studioAccess: { status: 'approved', role: 'MEMBER' },
+      },
+    });
+    teamRepository.findUserTeams.mockResolvedValue([]);
+    teamRepository.createTeam.mockResolvedValue({ id: 'team-new-personal' });
+
+    const result = await service.requestRefill({
+      userId: 'user-1',
+      requestedCoins: 1200,
+    });
+
+    expect(teamRepository.createTeam).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: "Pitch Nova's Workspace",
+        billingEmail: 'user@example.com',
+      }),
+      'user-1',
+    );
+    expect(userRepository.updateSettings).toHaveBeenNthCalledWith(
+      1,
+      'user-1',
+      expect.objectContaining({
+        studioAccess: expect.objectContaining({
+          teamId: 'team-new-personal',
+        }),
+      }),
+    );
+    expect(userRepository.updateSettings).toHaveBeenNthCalledWith(
+      2,
+      'user-1',
+      expect.objectContaining({
+        coinRefillRequest: expect.objectContaining({
+          teamId: 'team-new-personal',
+          status: 'pending',
+        }),
+      }),
+    );
+    expect(result.teamId).toBe('team-new-personal');
   });
 });

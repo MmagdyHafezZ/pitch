@@ -1036,6 +1036,11 @@
     inset 0 1px 0 color-mix(in srgb, var(--pitch-surface-text) 4%, transparent);
 }
 
+.logDetailPane.logDetailSection {
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
 .logDetailHeader {
   position: sticky;
   top: 0;

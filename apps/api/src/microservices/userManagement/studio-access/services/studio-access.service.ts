@@ -290,6 +290,7 @@ export class StudioAccessService {
           },
         },
         user.id,
+        { systemProvisioned: true },
       );
 
       teamId = createdTeam.id;

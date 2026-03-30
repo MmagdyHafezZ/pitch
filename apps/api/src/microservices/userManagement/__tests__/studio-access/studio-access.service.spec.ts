@@ -127,7 +127,14 @@ describe('StudioAccessService', () => {
       { id: 'admin-1', email: 'admin@example.com' },
     );
 
-    expect(teamService.createTeam).toHaveBeenCalled();
+    expect(teamService.createTeam).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: "Test User's Workspace",
+        billingEmail: 'user@example.com',
+      }),
+      'user-1',
+      { systemProvisioned: true },
+    );
     expect(teamRepository.updateMember).toHaveBeenCalledWith(
       expect.objectContaining({
         teamId: 'team-1',

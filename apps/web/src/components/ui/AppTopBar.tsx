@@ -58,6 +58,9 @@ const getStudioAccessRequesterId = (notification: NotificationItem) => {
   return typeof notification.sourceUserId === 'string' ? notification.sourceUserId : null
 }
 
+const isTeamApprovalRequestNotification = (notification: NotificationItem) =>
+  notification.type === 'team_approval_request'
+
 const isCoinRefillRequestNotification = (notification: NotificationItem) =>
   notification.type === 'coin_refill_request'
 
@@ -578,6 +581,8 @@ export function AppTopBar({
   const storedTeams = useTeamsStore((state) => state.teams)
   const surfacedCoinDecisionIdsRef = useRef<Set<string>>(new Set())
   const teams = useMemo(() => storedTeams ?? [], [storedTeams])
+  const canAcceptTeamInviteDirectly =
+    currentUser?.hasStudioAccess === true || currentUser?.isSystemAdmin === true
   const refreshUserTeams = useTeamsStore((state) => state.fetchUserTeams)
   const sessionQuery = useMemo(() => searchParams.get('q') ?? '', [searchParams])
   const handleSessionSearch = (next: string) => {
@@ -844,6 +849,12 @@ export function AppTopBar({
         : null
 
     if (teamId) {
+      if (!canAcceptTeamInviteDirectly) {
+        closeNotificationsModal()
+        router.push('/access/request')
+        return
+      }
+
       if (acceptedInviteIds.includes(notification.id)) return
 
       setAcceptingInviteIds((previous) =>
@@ -881,6 +892,12 @@ export function AppTopBar({
       return
     }
 
+    if (isTeamApprovalRequestNotification(notification)) {
+      closeNotificationsModal()
+      router.push('/studio/admin/teams/requests')
+      return
+    }
+
     if (notification.type === 'STUDIO_ACCESS_REVIEWED') {
       closeNotificationsModal()
       router.push(decision === 'denied' ? '/access/request' : '/studio/home')
@@ -889,7 +906,7 @@ export function AppTopBar({
 
     if (notification.type === 'plan_change_request') {
       closeNotificationsModal()
-      router.push('/studio/admin/plans')
+      router.push('/studio/admin/plans/requests')
       return
     }
 
@@ -994,7 +1011,12 @@ export function AppTopBar({
 
     if (teamId) {
       return {
-        label: isAccepted || isAlreadyTeamMember ? 'Accepted' : 'Accept invitation',
+        label:
+          isAccepted || isAlreadyTeamMember
+            ? 'Accepted'
+            : canAcceptTeamInviteDirectly
+              ? 'Accept invitation'
+              : 'Request access',
         disabled: isAccepted || isAlreadyTeamMember,
         loading: isAccepting,
       }
@@ -1003,6 +1025,14 @@ export function AppTopBar({
     if (selectedNotification.type === 'STUDIO_ACCESS_REQUEST') {
       return {
         label: studioAccessRequesterId ? 'Open requester' : 'Open access review',
+        disabled: false,
+        loading: false,
+      }
+    }
+
+    if (isTeamApprovalRequestNotification(selectedNotification)) {
+      return {
+        label: 'Open team reviews',
         disabled: false,
         loading: false,
       }
@@ -1059,6 +1089,7 @@ export function AppTopBar({
   }, [
     acceptedInviteIds,
     acceptingInviteIds,
+    canAcceptTeamInviteDirectly,
     currentUser?.id,
     markReadMutation.isPending,
     selectedNotification,
@@ -1377,6 +1408,12 @@ export function AppTopBar({
                           membership.userId === currentUser.id && membership.isActive !== false
                       )
                   const disableAcceptButton = isAccepting || isAccepted || isAlreadyTeamMember
+                  const teamInviteActionLabel =
+                    isAccepted || isAlreadyTeamMember
+                      ? 'Accepted'
+                      : canAcceptTeamInviteDirectly
+                        ? 'Accept invitation'
+                        : 'Request access'
                   return (
                     <Paper
                       key={notification.id}
@@ -1386,6 +1423,7 @@ export function AppTopBar({
                       onClick={() => {
                         if (
                           notification.type === 'STUDIO_ACCESS_REQUEST' ||
+                          isTeamApprovalRequestNotification(notification) ||
                           isCoinRefillRequestNotification(notification) ||
                           isCoinRefillDecisionNotification(notification)
                         ) {
@@ -1451,7 +1489,7 @@ export function AppTopBar({
                               void handleNotificationAction(notification)
                             }}
                           >
-                            {isAccepted || isAlreadyTeamMember ? 'Accepted' : 'Accept invitation'}
+                            {teamInviteActionLabel}
                           </Button>
                         </Group>
                       ) : null}

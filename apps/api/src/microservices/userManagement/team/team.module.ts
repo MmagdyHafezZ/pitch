@@ -12,10 +12,12 @@ import { ElevatedAccessGuard } from '../guards/elevated-access.guard';
 import { TeamInviteEmailService } from './services/team-invite-email.service';
 import { NotificationModule } from '../notifications/notification.module';
 import { TeamInviteExpiryCronService } from './services/team-invite-expiry-cron.service';
+import { UserModule } from '../user/user.module';
 
 @Module({
   imports: [
     NotificationModule,
+    UserModule,
     ClientsModule.register([
       {
         name: 'SUPPORT_SERVICE',

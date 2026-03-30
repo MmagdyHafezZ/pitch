@@ -132,6 +132,11 @@ export default function SubscriptionPage() {
     !subscriptionTeam || !subscriptionTeam.memberships || subscriptionTeam.memberships.length <= 1
   const teamDisplayName = isPersonal ? null : (subscriptionTeam?.name ?? null)
   const teamBalance = useCoinsBalance(isPersonal ? null : subscriptionTeamId)
+  const adminTopupsApplyImmediately =
+    user?.isSystemAdmin === true ||
+    (user?.settings?.studioAccess?.status === 'approved' &&
+      (user?.settings?.studioAccess?.role === 'ADMIN' ||
+        user?.settings?.studioAccess?.role === 'OWNER'))
 
   const [subscription, setSubscription] = useState<Subscription | null>(null)
   const [plans, setPlans] = useState<Plan[]>([])
@@ -290,7 +295,7 @@ export default function SubscriptionPage() {
 
   useEffect(() => {
     const nextStatus = refillRequest?.status ?? null
-    if (previousRefillStatusRef.current === 'pending' && nextStatus && nextStatus !== 'pending') {
+    if (nextStatus && nextStatus !== 'pending' && previousRefillStatusRef.current !== nextStatus) {
       void queryClient.invalidateQueries({ queryKey: ['coins', 'my-balance'] })
     }
     previousRefillStatusRef.current = nextStatus
@@ -360,15 +365,12 @@ export default function SubscriptionPage() {
   const handleRefillRequest = async () => {
     setSubmittingRefill(true)
     try {
-      const teamId = (await ensureSubscriptionTeamId()) ?? subscription?.teamId ?? null
-      if (!teamId) {
-        throw new Error('Choose a plan first to activate your personal workspace.')
-      }
       const result = await api.coins.refillRequest({ requestedCoins })
       if (user?.id) {
         queryClient.setQueryData(['coins', 'my-refill-request', user.id], result)
       }
       setTopupOpen(false)
+      await fetchUserTeams()
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['coins', 'my-balance'] }),
         queryClient.invalidateQueries({ queryKey: ['coins', 'balance'] }),
@@ -698,7 +700,9 @@ export default function SubscriptionPage() {
                 Request additional credits
               </Text>
               <Text size="xs" c="dimmed" mb="sm">
-                An admin will review and may approve a different amount.
+                {adminTopupsApplyImmediately
+                  ? 'Admin requests are applied immediately to your personal credits.'
+                  : 'An admin will review and may approve a different amount.'}
               </Text>
               <Group align="flex-end" gap="sm">
                 <NumberInput

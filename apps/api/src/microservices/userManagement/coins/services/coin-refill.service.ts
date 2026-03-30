@@ -24,6 +24,7 @@ import {
   NotificationSeverity,
   NotificationSourceType,
 } from '../../mongo/schemas/notification.schema';
+import { isSystemAdminEmail } from '../../../../gateway/utils/system-admin-access';
 
 type RequestingUser = Pick<PrismaUser, 'id' | 'email' | 'name'>;
 type StoredUser = Pick<PrismaUser, 'id' | 'email' | 'name' | 'settings'>;
@@ -94,6 +95,26 @@ export class CoinRefillService {
       : 0;
   }
 
+  private getStudioAccess(
+    settings: UserSettings,
+  ): NonNullable<UserSettings['studioAccess']> {
+    return settings.studioAccess && typeof settings.studioAccess === 'object'
+      ? settings.studioAccess
+      : {};
+  }
+
+  private shouldAutoApproveRequester(user: StoredUser): boolean {
+    if (isSystemAdminEmail(user.email)) {
+      return true;
+    }
+
+    const access = this.getStudioAccess(this.toSettings(user.settings));
+    return (
+      access.status === 'approved' &&
+      (access.role === 'ADMIN' || access.role === 'OWNER')
+    );
+  }
+
   private async resolvePersonalWorkspaceTeamId(
     user: StoredUser,
     fallbackTeamId?: string,
@@ -121,7 +142,30 @@ export class CoinRefillService {
       return personalWorkspace.id;
     }
 
-    throw new NotFoundException('No personal workspace found for this user');
+    const createdWorkspace = await this.teamRepository.createTeam(
+      {
+        name: `${(user.name || 'My').trim()}'s Workspace`,
+        billingEmail: user.email,
+        metadata: {
+          notes: 'Auto-provisioned personal workspace for coin refill access.',
+        },
+      },
+      user.id,
+    );
+
+    await this.userRepository.updateSettings(user.id, {
+      ...settings,
+      studioAccess: {
+        ...this.getStudioAccess(settings),
+        teamId: createdWorkspace.id,
+      },
+    });
+
+    this.logger.log(
+      `resolvePersonalWorkspaceTeamId: auto-provisioned workspace ${createdWorkspace.id} for user=${user.id}`,
+    );
+
+    return createdWorkspace.id;
   }
 
   private async getPersonalBalanceState(userId: string): Promise<{
@@ -343,6 +387,7 @@ export class CoinRefillService {
     if (!user) throw new NotFoundException('User not found');
 
     const settings = this.toSettings(user.settings);
+    const shouldAutoApprove = this.shouldAutoApproveRequester(user);
     const existingRequest = settings.coinRefillRequest;
     if (existingRequest?.status === 'pending') {
       const resolvedTeamId = await this.resolvePersonalWorkspaceTeamId(
@@ -350,7 +395,14 @@ export class CoinRefillService {
         existingRequest.teamId ?? dto.teamId,
       );
       if (existingRequest.teamId === resolvedTeamId) {
-        return existingRequest;
+        return shouldAutoApprove
+          ? this.approveRefill({
+              userId: dto.userId,
+              approvedCoins: existingRequest.requestedCoins,
+              reviewer: user.email,
+              notifyRequester: false,
+            })
+          : existingRequest;
       }
 
       const normalizedRequest: CoinRefillRequest = {
@@ -361,7 +413,14 @@ export class CoinRefillService {
         ...settings,
         coinRefillRequest: normalizedRequest,
       });
-      return normalizedRequest;
+      return shouldAutoApprove
+        ? this.approveRefill({
+            userId: dto.userId,
+            approvedCoins: normalizedRequest.requestedCoins,
+            reviewer: user.email,
+            notifyRequester: false,
+          })
+        : normalizedRequest;
     }
 
     const teamId = await this.resolvePersonalWorkspaceTeamId(user, dto.teamId);
@@ -378,6 +437,15 @@ export class CoinRefillService {
       ...settings,
       coinRefillRequest: refillRequest,
     });
+
+    if (shouldAutoApprove) {
+      return this.approveRefill({
+        userId: dto.userId,
+        approvedCoins: requestedCoins,
+        reviewer: user.email,
+        notifyRequester: false,
+      });
+    }
 
     if (dto.notifyAdmins !== false) {
       await this.notifySuperAdminsOfRefillRequest(user, refillRequest);
@@ -549,6 +617,15 @@ export class CoinRefillService {
     }
 
     try {
+      if (this.shouldAutoApproveRequester(user)) {
+        return this.approveRefill({
+          userId,
+          approvedCoins: request.requestedCoins,
+          reviewer: user.email,
+          notifyRequester: false,
+        });
+      }
+
       const resolvedTeamId = await this.resolvePersonalWorkspaceTeamId(
         user,
         request.teamId,

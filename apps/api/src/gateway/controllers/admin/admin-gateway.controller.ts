@@ -279,7 +279,7 @@ export class AdminGatewayController {
   async getTeams(@UserClaims() userClaims: UserClaimsType) {
     return this.sendUserRequest(
       USER_SERVICE_PATTERNS.GET_TEAMS,
-      { userClaims },
+      { isAdmin: true, userClaims },
       'Failed to get teams',
     );
   }
@@ -293,7 +293,13 @@ export class AdminGatewayController {
   ) {
     return this.sendUserRequest(
       USER_SERVICE_PATTERNS.CREATE_TEAM,
-      { ...body, ownerId: userClaims.id, createdBy: userClaims.id, userClaims },
+      {
+        ...body,
+        ownerId: userClaims.id,
+        createdBy: userClaims.id,
+        isSystemProvisioned: true,
+        userClaims,
+      },
       'Failed to create team',
     );
   }
@@ -307,7 +313,7 @@ export class AdminGatewayController {
   ) {
     return this.sendUserRequest(
       USER_SERVICE_PATTERNS.GET_TEAM,
-      { teamId, userClaims },
+      { teamId, isAdmin: true, userClaims },
       'Failed to get team',
     );
   }
@@ -322,7 +328,7 @@ export class AdminGatewayController {
   ) {
     return this.sendUserRequest(
       USER_SERVICE_PATTERNS.UPDATE_TEAM,
-      { teamId, ...body, userClaims },
+      { teamId, ...body, isAdmin: true, userClaims },
       'Failed to update team',
     );
   }
@@ -336,7 +342,7 @@ export class AdminGatewayController {
   ) {
     return this.sendUserRequest(
       USER_SERVICE_PATTERNS.DELETE_TEAM,
-      { teamId, userClaims },
+      { teamId, isAdmin: true, userClaims },
       'Failed to delete team',
     );
   }
@@ -358,7 +364,7 @@ export class AdminGatewayController {
   ) {
     return this.sendUserRequest(
       USER_SERVICE_PATTERNS.ADD_TEAM_MEMBER,
-      { teamId, ...body, userClaims },
+      { teamId, ...body, isAdmin: true, userClaims },
       'Failed to add team member',
     );
   }
@@ -374,7 +380,7 @@ export class AdminGatewayController {
   ) {
     return this.sendUserRequest(
       USER_SERVICE_PATTERNS.UPDATE_TEAM_MEMBER,
-      { teamId, userId, ...body, userClaims },
+      { teamId, userId, ...body, isAdmin: true, userClaims },
       'Failed to update team member',
     );
   }
@@ -400,7 +406,7 @@ export class AdminGatewayController {
   ) {
     return this.sendUserRequest(
       USER_SERVICE_PATTERNS.SEND_TEAM_SIGNUP_INVITE,
-      { teamId, ...body, userClaims },
+      { teamId, ...body, isAdmin: true, userClaims },
       'Failed to send signup invite',
     );
   }

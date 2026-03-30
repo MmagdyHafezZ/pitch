@@ -35,6 +35,7 @@ import {
   IconChevronDown,
   IconClock,
   IconFileText,
+  IconFilter,
   IconListDetails,
   IconPlus,
   IconRefresh,
@@ -405,6 +406,12 @@ const truncateMiddle = (value: string | null, max = 68) => {
   const head = Math.ceil((max - 1) / 2)
   const tail = Math.floor((max - 1) / 2)
   return `${value.slice(0, head)}…${value.slice(-tail)}`
+}
+
+const isPersonalWorkspaceTeam = (team: JsonRecord) => {
+  const metadata = isRecord(team.metadata) ? team.metadata : EMPTY_RECORD
+  const notes = readString(metadata.notes)
+  return notes?.toLowerCase().includes('personal workspace') === true
 }
 
 const extractArray = (value: unknown): JsonRecord[] => {
@@ -2259,6 +2266,7 @@ export function AdminWorkspacePage({ view }: { view: AdminWorkspaceView }) {
   const [userFilter, setUserFilter] = useState('')
   const [userListMode, setUserListMode] = useState<'all' | 'access-requests'>('all')
   const [teamFilter, setTeamFilter] = useState('')
+  const [hidePersonalWorkspaces, setHidePersonalWorkspaces] = useState(false)
   const [planFilter, setPlanFilter] = useState('')
   const [sessionFilter, setSessionFilter] = useState('')
   const [isCreatingUser, setIsCreatingUser] = useState(false)
@@ -4016,11 +4024,19 @@ export function AdminWorkspacePage({ view }: { view: AdminWorkspaceView }) {
   )
   const filteredTeams = useMemo(() => {
     const needle = teamFilter.trim().toLowerCase()
-    if (!needle) return teams
-    return teams.filter((team) =>
-      [team.name, team.slug, team.id, team.billingEmail].join(' ').toLowerCase().includes(needle)
-    )
-  }, [teamFilter, teams])
+    return teams.filter((team) => {
+      if (hidePersonalWorkspaces && isPersonalWorkspaceTeam(team)) {
+        return false
+      }
+
+      if (!needle) return true
+
+      return [team.name, team.slug, team.id, team.billingEmail]
+        .join(' ')
+        .toLowerCase()
+        .includes(needle)
+    })
+  }, [hidePersonalWorkspaces, teamFilter, teams])
   const filteredPlans = useMemo(() => {
     const needle = planFilter.trim().toLowerCase()
     if (!needle) return plans
@@ -7811,7 +7827,7 @@ export function AdminWorkspacePage({ view }: { view: AdminWorkspaceView }) {
                     </Box>
                     <Group gap="sm">
                       <Badge color="selected" variant="light">
-                        {teamFilter.trim()
+                        {teamFilter.trim() || hidePersonalWorkspaces
                           ? `${filteredTeams.length} of ${teams.length} teams`
                           : `${filteredTeams.length} teams`}
                       </Badge>
@@ -7842,6 +7858,16 @@ export function AdminWorkspacePage({ view }: { view: AdminWorkspaceView }) {
                         placeholder="Search teams by name, slug, id, or billing email"
                         leftSection={<IconSearch size={16} />}
                       />
+                      <Button
+                        size="xs"
+                        variant={hidePersonalWorkspaces ? 'filled' : 'light'}
+                        color={hidePersonalWorkspaces ? 'selected' : 'gray'}
+                        leftSection={<IconFilter size={14} />}
+                        aria-pressed={hidePersonalWorkspaces}
+                        onClick={() => setHidePersonalWorkspaces((current) => !current)}
+                      >
+                        {hidePersonalWorkspaces ? 'Personal hidden' : 'Hide personal'}
+                      </Button>
                     </div>
 
                     <div
@@ -7856,7 +7882,9 @@ export function AdminWorkspacePage({ view }: { view: AdminWorkspaceView }) {
                           <div className={classes.logEmptyState}>
                             <Text fw={700}>No teams matched this filter</Text>
                             <Text size="sm" className={classes.mutedText}>
-                              Try a broader search by name, slug, billing email, or id.
+                              {hidePersonalWorkspaces
+                                ? 'Try a broader search or show personal workspaces again.'
+                                : 'Try a broader search by name, slug, billing email, or id.'}
                             </Text>
                           </div>
                         ) : (
@@ -7993,6 +8021,11 @@ export function AdminWorkspacePage({ view }: { view: AdminWorkspaceView }) {
                                         >
                                           {teamStatus}
                                         </Badge>
+                                        {isPersonalWorkspaceTeam(team) ? (
+                                          <Badge color="gray" variant="light">
+                                            personal
+                                          </Badge>
+                                        ) : null}
                                         {readString(team.billingEmail) ? (
                                           <Badge color="gray" variant="light">
                                             billing

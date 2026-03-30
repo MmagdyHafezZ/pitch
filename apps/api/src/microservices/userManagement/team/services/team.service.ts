@@ -19,6 +19,7 @@ import {
 import { TeamRepository } from '../repositories/team.repository';
 import { TeamInviteEmailService } from './team-invite-email.service';
 import { NotificationService } from '../../notifications/service/notification.service';
+import { UserRepository } from '../../user/repositories/user.repository';
 import {
   NotificationSeverity,
   NotificationSourceType,
@@ -34,6 +35,7 @@ export class TeamService {
     private readonly teamRepository: TeamRepository,
     private readonly teamInviteEmailService: TeamInviteEmailService,
     private readonly notificationService: NotificationService,
+    private readonly userRepository: UserRepository,
   ) {}
 
   async createTeam(
@@ -50,7 +52,7 @@ export class TeamService {
       requesterId,
     );
 
-    return this.teamRepository.createTeam(
+    const createdTeam = await this.teamRepository.createTeam(
       {
         ...createTeamDto,
         slug,
@@ -60,6 +62,12 @@ export class TeamService {
       },
       requesterId,
     );
+
+    if (!options?.systemProvisioned) {
+      await this.notifySuperAdminsOfTeamRequest(createdTeam, requesterId);
+    }
+
+    return createdTeam;
   }
 
   async updateTeam(
@@ -769,7 +777,9 @@ export class TeamService {
     if (team.approvalStatus !== 'PENDING') {
       throw new BadRequestException(`Team is not in PENDING state`);
     }
-    return this.teamRepository.approveTeam(teamId);
+    const approvedTeam = await this.teamRepository.approveTeam(teamId);
+    await this.clearPendingTeamRequestNotifications(teamId);
+    return approvedTeam;
   }
 
   async rejectTeam(teamId: string, note?: string): Promise<Team> {
@@ -778,6 +788,83 @@ export class TeamService {
     if (team.approvalStatus !== 'PENDING') {
       throw new BadRequestException(`Team is not in PENDING state`);
     }
-    return this.teamRepository.rejectTeam(teamId, note);
+    const rejectedTeam = await this.teamRepository.rejectTeam(teamId, note);
+    await this.clearPendingTeamRequestNotifications(teamId);
+    return rejectedTeam;
+  }
+
+  private getSuperAdminEmails(): string[] {
+    return (process.env.SUPER_ADMIN_EMAILS ?? '')
+      .split(',')
+      .map((value) => value.trim().toLowerCase())
+      .filter(Boolean);
+  }
+
+  private async notifySuperAdminsOfTeamRequest(
+    team: Team,
+    requesterId: string,
+  ): Promise<void> {
+    const adminEmails = this.getSuperAdminEmails();
+    if (adminEmails.length === 0) {
+      return;
+    }
+
+    try {
+      const [users, requester] = await Promise.all([
+        this.userRepository.findMany(),
+        this.userRepository.findById(requesterId).catch(() => null),
+      ]);
+
+      const recipientUserIds = users
+        .filter((user) => {
+          const email = this.normalizeEmail(user.email);
+          return Boolean(email && adminEmails.includes(email));
+        })
+        .map((user) => user.id)
+        .filter((id) => id !== requesterId);
+
+      if (recipientUserIds.length === 0) {
+        return;
+      }
+
+      await this.notificationService.createBatch({
+        recipientUserIds,
+        title: 'New team request',
+        message: `${requester?.name || requester?.email || 'A user'} requested a new team: ${team.name}.`,
+        type: 'team_approval_request',
+        severity: NotificationSeverity.INFO,
+        sourceType: NotificationSourceType.USER,
+        sourceUserId: requesterId,
+        metadata: {
+          teamId: team.id,
+          teamName: team.name,
+          requesterUserId: requesterId,
+          requesterEmail: requester?.email,
+        },
+      });
+    } catch (error) {
+      this.logger.error(
+        `Failed to notify super admins about team request ${team.id}`,
+        error as Error,
+      );
+    }
+  }
+
+  private async clearPendingTeamRequestNotifications(
+    teamId: string,
+  ): Promise<void> {
+    try {
+      await this.notificationService.markMatchingRead({
+        type: 'team_approval_request',
+        metadata: {
+          teamId,
+        },
+      });
+    } catch (error) {
+      this.logger.error(
+        `Failed to mark team request notifications as read for ${teamId}`,
+        error as Error,
+      );
+    }
   }
 }

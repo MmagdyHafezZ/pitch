@@ -147,24 +147,7 @@ export class CoinsGatewayController {
           catchError((err) => throwError(() => normalizeError(err))),
         ),
     );
-
-    if (!this.isSystemAdmin(claims)) {
-      return refillRequest;
-    }
-
-    return lastValueFrom(
-      this.userService
-        .send<unknown>(USER_SERVICE_COIN_PATTERNS.COIN_REFILL_REQUEST_APPROVE, {
-          userId: claims.id,
-          approvedCoins: requestedCoins,
-          reviewer: claims.email,
-          notifyRequester: false,
-        })
-        .pipe(
-          timeout(10000),
-          catchError((err) => throwError(() => normalizeError(err))),
-        ),
-    );
+    return refillRequest;
   }
 
   @Get('refill/my-request')

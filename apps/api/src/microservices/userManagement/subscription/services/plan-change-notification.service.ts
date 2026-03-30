@@ -51,7 +51,7 @@ export class PlanChangeNotificationService {
     const requesterName = requester?.name ?? requester?.email ?? undefined;
     const requesterEmail = requester?.email ?? undefined;
 
-    const reviewUrl = `${process.env.APP_URL ?? ''}/studio/admin/plans`;
+    const reviewUrl = `${process.env.APP_URL ?? ''}/studio/admin/plans/requests`;
 
     // Email all admins in one shot
     await this.sendEmail<SupportPlanChangeRequestTemplateData>(
