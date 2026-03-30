@@ -3,6 +3,7 @@
 import { AppShell, Box, rem } from '@mantine/core'
 import { ReactNode } from 'react'
 import { useDisclosure, useMediaQuery } from '@mantine/hooks'
+import Grainient from '@/components/Grainient'
 import classes from './app-layout.module.css'
 
 type ShellControls = {
@@ -68,9 +69,32 @@ export function AppLayout({ header, navbar, children }: Props) {
       <AppShell.Navbar>{navbarNode}</AppShell.Navbar>
       <AppShell.Main>
         <Box className={classes.surface} style={{ ['--studio-shell-radius' as any]: curveRadius }}>
-          <div className={classes.mesh} />
-          <div className={`${classes.glowOrb} ${classes.orbA}`} />
-          <div className={`${classes.glowOrb} ${classes.orbB}`} />
+          <div className={classes.grainientLayer} aria-hidden="true">
+            <Grainient
+              color1="var(--pitch-info, #4d5a8a)"
+              color2="var(--pitch-selected, #2e3a67)"
+              color3="var(--pitch-app-bg, #060c1e)"
+              timeSpeed={0.45}
+              colorBalance={0}
+              warpStrength={1}
+              warpFrequency={5}
+              warpSpeed={4}
+              warpAmplitude={50}
+              blendAngle={0}
+              blendSoftness={0.05}
+              rotationAmount={500}
+              noiseScale={2}
+              grainAmount={0.1}
+              grainScale={2}
+              grainAnimated={false}
+              contrast={1.5}
+              gamma={1}
+              saturation={1}
+              centerX={0}
+              centerY={0}
+              zoom={0.5}
+            />
+          </div>
           <Box className={classes.content}>{children}</Box>
         </Box>
       </AppShell.Main>
