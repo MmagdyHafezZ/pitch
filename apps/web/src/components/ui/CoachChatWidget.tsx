@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useState, useEffect, useCallback } from 'react'
+import { useRef, useState, useEffect, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import Image from 'next/image'
 import {
@@ -120,6 +120,7 @@ interface PersistedCoachChatState {
   includeRecentTurns: boolean
   messages: Message[]
   savedContextAttachments: SavedContextAttachment[]
+  lastInteractionAt?: number
 }
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -137,6 +138,81 @@ const WELCOME: Message = {
 
 const ACCEPTED_FILE_TYPES = '.txt,.md,.csv,.pdf,.png,.jpg,.jpeg,.webp'
 const COACH_CHAT_STORAGE_PREFIX = 'pitch.coach-chat.v1'
+const PABLO_SLEEPY_AFTER_MS = 60 * 60 * 1000
+const PABLO_IDLE_TICK_MS = 60 * 1000
+
+type PabloState =
+  | 'happy'
+  | 'listening'
+  | 'love'
+  | 'reading'
+  | 'surprised'
+  | 'thinking'
+  | 'question'
+  | 'sleepy'
+
+const PABLO_STATE_ASSETS: Record<
+  PabloState,
+  {
+    src: string
+    alt: string
+    status: string
+    headerObjectFit?: 'contain' | 'cover'
+    headerObjectPosition?: string
+    headerScale?: number
+    triggerObjectFit?: 'contain' | 'cover'
+    triggerObjectPosition?: string
+    triggerScale?: number
+  }
+> = {
+  happy: {
+    src: '/pablo_happy.png',
+    alt: 'Pablo is happy',
+    status: 'Ready',
+  },
+  listening: {
+    src: '/pablo_listening.png',
+    alt: 'Pablo is listening',
+    status: 'Listening',
+    // The headset + notes icon shifts the visual center, so nudge and crop.
+    headerObjectFit: 'cover',
+    headerObjectPosition: '60% center',
+    headerScale: 1.16,
+    triggerObjectFit: 'cover',
+    triggerObjectPosition: '58% center',
+    triggerScale: 1.12,
+  },
+  love: {
+    src: '/pablo_love.png',
+    alt: 'Pablo is delighted',
+    status: 'Delighted',
+  },
+  reading: {
+    src: '/pablo_reading.png',
+    alt: 'Pablo is reading',
+    status: 'Reviewing',
+  },
+  surprised: {
+    src: '/pablo_surprised.png',
+    alt: 'Pablo is surprised',
+    status: 'Alert',
+  },
+  thinking: {
+    src: '/pablo_thinking.png',
+    alt: 'Pablo is thinking',
+    status: 'Thinking',
+  },
+  question: {
+    src: '/pablo_wink_question.png',
+    alt: 'Pablo is asking a question',
+    status: 'Question',
+  },
+  sleepy: {
+    src: '/sleepy_pablo.png',
+    alt: 'Pablo is sleepy',
+    status: 'Sleepy',
+  },
+}
 
 const formatAttachmentSize = (size: number) => {
   if (size < 1024) return `${size} B`
@@ -339,7 +415,10 @@ export function CoachChatWidget({ context, starter }: CoachChatWidgetProps) {
   const [hasRestoredPersistedState, setHasRestoredPersistedState] = useState(false)
   const [messages, setMessages] = useState<Message[]>([WELCOME])
   const [input, setInput] = useState('')
+  const [isInputFocused, setIsInputFocused] = useState(false)
   const [streaming, setStreaming] = useState(false)
+  const [lastInteractionAt, setLastInteractionAt] = useState<number>(() => Date.now())
+  const [currentTime, setCurrentTime] = useState<number>(() => Date.now())
   const [pos, setPos] = useState<Pos | null>(null)
   const [attachments, setAttachments] = useState<Attachment[]>([])
   const [filePickerTarget, setFilePickerTarget] = useState<FilePickerTarget>('draft')
@@ -361,6 +440,18 @@ export function CoachChatWidget({ context, starter }: CoachChatWidgetProps) {
         ? `page:${context.page}`
         : 'global'
   const persistenceKey = `${COACH_CHAT_STORAGE_PREFIX}:${userId ?? 'anonymous'}:${contextScope}`
+
+  const markInteraction = useCallback(() => {
+    const now = Date.now()
+    setLastInteractionAt(now)
+    setCurrentTime(now)
+  }, [])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const intervalId = window.setInterval(() => setCurrentTime(Date.now()), PABLO_IDLE_TICK_MS)
+    return () => window.clearInterval(intervalId)
+  }, [])
 
   const getAttachmentKey = useCallback(
     (attachment: Pick<Attachment, 'name' | 'mimeType' | 'size' | 's3Url'>) =>
@@ -1049,6 +1140,8 @@ export function CoachChatWidget({ context, starter }: CoachChatWidgetProps) {
         setMessages([WELCOME])
         setSavedContextAttachments([])
         setIncludeRecentTurns(true)
+        setLastInteractionAt(Date.now())
+        setCurrentTime(Date.now())
         setPos(defaultPos)
         setHasRestoredPersistedState(true)
         return
@@ -1069,6 +1162,12 @@ export function CoachChatWidget({ context, starter }: CoachChatWidgetProps) {
             )
           : []
       )
+      const restoredLastInteraction =
+        typeof parsed.lastInteractionAt === 'number' && Number.isFinite(parsed.lastInteractionAt)
+          ? parsed.lastInteractionAt
+          : Date.now()
+      setLastInteractionAt(restoredLastInteraction)
+      setCurrentTime(Date.now())
       setPos(
         parsed.pos && Number.isFinite(parsed.pos.x) && Number.isFinite(parsed.pos.y)
           ? clampPos(parsed.pos.x, parsed.pos.y)
@@ -1082,6 +1181,8 @@ export function CoachChatWidget({ context, starter }: CoachChatWidgetProps) {
       setMessages([WELCOME])
       setSavedContextAttachments([])
       setIncludeRecentTurns(true)
+      setLastInteractionAt(Date.now())
+      setCurrentTime(Date.now())
       setPos(defaultPos)
     } finally {
       setAttachments([])
@@ -1111,6 +1212,7 @@ export function CoachChatWidget({ context, starter }: CoachChatWidgetProps) {
       includeRecentTurns,
       messages: sanitizeMessagesForPersistence(messages),
       savedContextAttachments: sanitizeSavedContextAttachments(savedContextAttachments),
+      lastInteractionAt,
     }
 
     try {
@@ -1134,15 +1236,20 @@ export function CoachChatWidget({ context, starter }: CoachChatWidgetProps) {
     persistenceKey,
     pos,
     savedContextAttachments,
+    lastInteractionAt,
   ])
 
-  const startDrag = useCallback((e: React.PointerEvent, currentPos: Pos) => {
-    e.preventDefault()
-    isDragging.current = true
-    hasMoved.current = false
-    dragOrigin.current = { px: e.clientX, py: e.clientY, wx: currentPos.x, wy: currentPos.y }
-    ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
-  }, [])
+  const startDrag = useCallback(
+    (e: React.PointerEvent, currentPos: Pos) => {
+      e.preventDefault()
+      markInteraction()
+      isDragging.current = true
+      hasMoved.current = false
+      dragOrigin.current = { px: e.clientX, py: e.clientY, wx: currentPos.x, wy: currentPos.y }
+      ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
+    },
+    [markInteraction]
+  )
 
   const onPointerMove = useCallback(
     (e: React.PointerEvent) => {
@@ -1158,8 +1265,11 @@ export function CoachChatWidget({ context, starter }: CoachChatWidgetProps) {
   const onMascotPointerUp = useCallback(() => {
     if (!isDragging.current) return
     isDragging.current = false
-    if (!hasMoved.current) setOpen((v) => !v)
-  }, [])
+    if (!hasMoved.current) {
+      markInteraction()
+      setOpen((v) => !v)
+    }
+  }, [markInteraction])
 
   const onHeaderPointerUp = useCallback(() => {
     if (!isDragging.current) return
@@ -1212,6 +1322,7 @@ export function CoachChatWidget({ context, starter }: CoachChatWidgetProps) {
       const text = (overrideText ?? input).trim()
       const readyAttachments = attachments.filter((attachment) => !attachment.uploading)
       if ((!text && readyAttachments.length === 0) || streaming || hasUploading) return
+      markInteraction()
 
       const nextSavedContextAttachments = mergeSavedContextAttachments(
         savedContextAttachments.filter((attachment) => !attachment.uploading),
@@ -1362,6 +1473,7 @@ export function CoachChatWidget({ context, starter }: CoachChatWidgetProps) {
       savedContextAttachments,
       serializeContextAttachments,
       streaming,
+      markInteraction,
     ]
   )
 
@@ -1408,6 +1520,7 @@ export function CoachChatWidget({ context, starter }: CoachChatWidgetProps) {
   }
 
   const handleClose = () => {
+    markInteraction()
     abortRef.current?.abort()
     setContextModalOpen(false)
     setOpen(false)
@@ -1415,6 +1528,7 @@ export function CoachChatWidget({ context, starter }: CoachChatWidgetProps) {
   }
 
   const handleClear = () => {
+    markInteraction()
     abortRef.current?.abort()
     setStreaming(false)
     setMessages([WELCOME])
@@ -1429,6 +1543,54 @@ export function CoachChatWidget({ context, starter }: CoachChatWidgetProps) {
   const recentTurns = includeRecentTurns ? sourceRecentTurns : []
   const lastMsg = messages[messages.length - 1]
   const isLastStreaming = streaming && lastMsg?.role === 'assistant'
+  const lastUserMessage = useMemo(
+    () =>
+      [...messages]
+        .reverse()
+        .find((message) => message.role === 'user' && Boolean(message.content.trim())),
+    [messages]
+  )
+  const lastAssistantMessage = useMemo(
+    () =>
+      [...messages]
+        .reverse()
+        .find((message) => message.role === 'assistant' && Boolean(message.content.trim())),
+    [messages]
+  )
+  const inactivityMs = currentTime - lastInteractionAt
+  const isSleepy = inactivityMs >= PABLO_SLEEPY_AFTER_MS
+  const hasPendingAction = Boolean(
+    lastAssistantMessage?.action &&
+      (!lastAssistantMessage.actionState || lastAssistantMessage.actionState === 'pending')
+  )
+  const askedQuestion =
+    Boolean(lastAssistantMessage?.quickReplies?.length) ||
+    Boolean(lastAssistantMessage?.content && /[?]/.test(lastAssistantMessage.content))
+  const thankedCoach = /\b(thanks?|thank you|appreciate|love this|great help)\b/i.test(
+    lastUserMessage?.content ?? ''
+  )
+  const readingLongReply = Boolean(
+    open &&
+      !streaming &&
+      lastAssistantMessage?.content &&
+      lastAssistantMessage.content.trim().length >= 180
+  )
+  const pabloState: PabloState = isSleepy
+    ? 'sleepy'
+    : streaming || executionStatus
+      ? 'thinking'
+      : hasPendingAction
+        ? 'surprised'
+        : open && (isInputFocused || Boolean(input.trim()))
+          ? 'listening'
+          : thankedCoach
+            ? 'love'
+            : askedQuestion
+              ? 'question'
+              : readingLongReply
+                ? 'reading'
+                : 'happy'
+  const pabloAsset = PABLO_STATE_ASSETS[pabloState]
   const conversationTurns = messages.filter((msg) => msg.role === 'user').length
   const readyDraftAttachmentCount = attachments.filter((attachment) => !attachment.uploading).length
   const isReadyForRender =
@@ -1789,16 +1951,24 @@ export function CoachChatWidget({ context, starter }: CoachChatWidgetProps) {
               <Group gap={10}>
                 <div className="coach-header-avatar">
                   <Image
-                    src="/pitchMascotMobile.png"
-                    alt="PITCH Coach"
+                    src={pabloAsset.src}
+                    alt={pabloAsset.alt}
                     width={32}
                     height={32}
-                    style={{ objectFit: 'contain', marginTop: -2 }}
+                    style={{
+                      objectFit: pabloAsset.headerObjectFit ?? 'contain',
+                      objectPosition: pabloAsset.headerObjectPosition ?? 'center',
+                      transform: `scale(${pabloAsset.headerScale ?? 1})`,
+                      marginTop: -2,
+                    }}
                   />
                 </div>
                 <Stack gap={0}>
                   <Text fw={800} size="sm" c="white" style={{ letterSpacing: 0.3 }}>
                     Pablo - Your PITCH Coach
+                  </Text>
+                  <Text size="xs" c="blue.2">
+                    {pabloAsset.status}
                   </Text>
                 </Stack>
               </Group>
@@ -1809,7 +1979,10 @@ export function CoachChatWidget({ context, starter }: CoachChatWidgetProps) {
                   color="blue"
                   size="sm"
                   className="coach-header-btn"
-                  onClick={() => setContextModalOpen(true)}
+                  onClick={() => {
+                    markInteraction()
+                    setContextModalOpen(true)
+                  }}
                   aria-label="Open coach context"
                   title="Open coach context"
                 >
@@ -1820,7 +1993,10 @@ export function CoachChatWidget({ context, starter }: CoachChatWidgetProps) {
                   color="blue"
                   size="sm"
                   className="coach-header-btn"
-                  onClick={() => setIsFullscreen((v) => !v)}
+                  onClick={() => {
+                    markInteraction()
+                    setIsFullscreen((v) => !v)
+                  }}
                   aria-label={isFullscreen ? 'Restore panel' : 'Expand to fullscreen'}
                   title={isFullscreen ? 'Restore panel' : 'Expand to fullscreen'}
                 >
@@ -2316,6 +2492,7 @@ export function CoachChatWidget({ context, starter }: CoachChatWidgetProps) {
                 size="md"
                 className="coach-footer-icon"
                 onClick={() => {
+                  markInteraction()
                   setFilePickerTarget('draft')
                   fileInputRef.current?.click()
                 }}
@@ -2330,7 +2507,16 @@ export function CoachChatWidget({ context, starter }: CoachChatWidgetProps) {
                 size="sm"
                 placeholder="Ask the coach..."
                 value={input}
-                onChange={(e) => setInput(e.currentTarget.value)}
+                onChange={(e) => {
+                  markInteraction()
+                  setInput(e.currentTarget.value)
+                }}
+                onFocus={() => {
+                  markInteraction()
+                  setIsInputFocused(true)
+                }}
+                onBlur={() => setIsInputFocused(false)}
+                onClick={markInteraction}
                 onKeyDown={handleKeyDown}
                 disabled={streaming}
                 styles={{
@@ -2396,7 +2582,10 @@ export function CoachChatWidget({ context, starter }: CoachChatWidgetProps) {
         tabIndex={0}
         aria-label={open ? 'Close PITCH Coach' : 'Open PITCH Coach'}
         onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') setOpen((v) => !v)
+          if (e.key === 'Enter' || e.key === ' ') {
+            markInteraction()
+            setOpen((v) => !v)
+          }
         }}
         style={{
           position: 'fixed',
@@ -2411,23 +2600,9 @@ export function CoachChatWidget({ context, starter }: CoachChatWidgetProps) {
           animation: open ? 'none' : 'coach-float 2.8s cubic-bezier(0.45,0,0.55,1) infinite',
         }}
       >
-        <div className="coach-trigger-orbit" />
-        <div
-          className="coach-trigger-core"
-          style={{
-            position: 'absolute',
-            inset: 0,
-            borderRadius: '50%',
-            background: 'radial-gradient(circle at 45% 30%, #2f7df2 0%, #1e3f6e 38%, #0c1b34 100%)',
-            boxShadow: open
-              ? `0 0 0 3px rgba(75,177,255,0.92), 0 0 0 8px rgba(76,145,255,0.26), 0 14px 44px rgba(48,122,255,0.78)`
-              : `0 0 0 2.5px rgba(75,177,255,0.7), 0 0 0 6px rgba(76,145,255,0.16), 0 10px 28px rgba(43,105,255,0.52), 0 6px 16px rgba(0,0,0,0.65)`,
-            transition: 'box-shadow 0.3s ease',
-          }}
-        />
         <Image
-          src="/pitchMascotMobile.png"
-          alt="PITCH Coach"
+          src={pabloAsset.src}
+          alt={pabloAsset.alt}
           width={IMG}
           height={IMG}
           draggable={false}
@@ -2436,7 +2611,9 @@ export function CoachChatWidget({ context, starter }: CoachChatWidgetProps) {
             position: 'absolute',
             left: (BTN - IMG) / 2,
             top: (BTN - IMG) / 2 - 6,
-            objectFit: 'contain',
+            objectFit: pabloAsset.triggerObjectFit ?? 'contain',
+            objectPosition: pabloAsset.triggerObjectPosition ?? 'center',
+            transform: `scale(${pabloAsset.triggerScale ?? 1})`,
             pointerEvents: 'none',
             filter: open
               ? 'drop-shadow(0 2px 8px rgba(34,139,230,0.5))'
@@ -2444,23 +2621,6 @@ export function CoachChatWidget({ context, starter }: CoachChatWidgetProps) {
             transition: 'filter 0.3s ease',
           }}
         />
-        {!open && (
-          <div
-            style={{
-              position: 'absolute',
-              top: 2,
-              right: 2,
-              width: 11,
-              height: 11,
-              borderRadius: '50%',
-              backgroundColor: '#22c55e',
-              border: '2px solid #0c1b34',
-              animation: 'coach-pulse 2.2s ease-in-out infinite',
-              pointerEvents: 'none',
-              zIndex: 1,
-            }}
-          />
-        )}
       </div>
 
       {/* ── Keyframes ────────────────────────────────────────────────── */}
