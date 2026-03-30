@@ -90,6 +90,18 @@ describe('microservices.config', () => {
     ]);
   });
 
+  it('falls back to RABBITMQ_URL_SECONDARY alias in prod when cloud secondary is unset', () => {
+    process.env.DEP_MODE = 'production';
+    process.env.CLOUDAMQP_URL = 'amqp://cloud-primary';
+    delete process.env.CLOUDAMQP_URL_SECONDARY;
+    process.env.RABBITMQ_URL_SECONDARY = 'amqp://rabbit-secondary';
+
+    expect(getRabbitMQUrls()).toEqual([
+      'amqp://cloud-primary',
+      'amqp://rabbit-secondary',
+    ]);
+  });
+
   it('returns only primary URL when no secondary URL is configured', () => {
     process.env.DEP_MODE = 'local';
     process.env.RABBITMQ_URL = 'amqp://primary-only';
