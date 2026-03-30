@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { TtsProvider, TtsOptions, TtsResult } from './tts.provider';
+import { inferLanguageCode } from '../../utils/voice-accent';
 
 @Injectable()
 export class MeloTtsProvider implements TtsProvider {
@@ -61,6 +62,14 @@ export class MeloTtsProvider implements TtsProvider {
         }
       } else if (options?.language) {
         lang = this.validateLanguage(options.language);
+      } else if (options?.accent) {
+        const inferredAccentLanguage = inferLanguageCode(options.accent);
+        if (
+          inferredAccentLanguage &&
+          this.supportedLanguages.includes(inferredAccentLanguage)
+        ) {
+          lang = inferredAccentLanguage;
+        }
       }
 
       const response = await fetch(this.baseUrl, {
@@ -127,7 +136,8 @@ export class MeloTtsProvider implements TtsProvider {
   }
 
   private validateLanguage(lang: string): string {
-    const normalizedLang = lang.toLowerCase().split('-')[0];
+    const normalizedLang =
+      inferLanguageCode(lang) ?? lang.toLowerCase().split('-')[0];
     if (this.supportedLanguages.includes(normalizedLang)) {
       return normalizedLang;
     }

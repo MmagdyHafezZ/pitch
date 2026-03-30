@@ -60,6 +60,7 @@ type ProcessSentenceTtsFn = (
   provider: string,
   voice: string | undefined,
   language: string | undefined,
+  accent: string | undefined,
   model: string | undefined,
   format: 'mp3' | 'wav' | 'ogg' | 'pcm' | undefined,
   sampleRate: number | undefined,
@@ -75,6 +76,7 @@ function invokeProcessSentenceTts(
   provider: string,
   voice: string | undefined,
   language: string | undefined,
+  accent: string | undefined,
   model: string | undefined,
   format: 'mp3' | 'wav' | 'ogg' | 'pcm' | undefined,
   sampleRate: number | undefined,
@@ -90,6 +92,7 @@ function invokeProcessSentenceTts(
     provider,
     voice,
     language,
+    accent,
     model,
     format,
     sampleRate,
@@ -136,6 +139,7 @@ describe('ConversationOrchestrationService.processSentenceTts (private)', () => 
       provider = 'elevenlabs',
       voice = 'Bella',
       language = 'en',
+      accent = undefined,
       model = undefined,
       format = undefined,
       sampleRate = undefined,
@@ -148,6 +152,7 @@ describe('ConversationOrchestrationService.processSentenceTts (private)', () => 
       provider?: string;
       voice?: string | undefined;
       language?: string | undefined;
+      accent?: string | undefined;
       model?: string | undefined;
       format?: 'mp3' | 'wav' | 'ogg' | 'pcm' | undefined;
       sampleRate?: number | undefined;
@@ -163,6 +168,7 @@ describe('ConversationOrchestrationService.processSentenceTts (private)', () => 
       provider,
       voice,
       language,
+      accent,
       model,
       format,
       sampleRate,
@@ -431,6 +437,7 @@ describe('Semaphore (internal class)', () => {
           idx,
           `Sentence ${idx}`,
           'elevenlabs',
+          undefined,
           undefined,
           undefined,
           undefined,

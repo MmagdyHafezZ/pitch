@@ -12,6 +12,7 @@ import {
   TtsResult,
   TtsStreamResult,
 } from './tts.provider';
+import { inferLanguageCode } from '../../utils/voice-accent';
 
 type ElevenVoice = { voice_id: string; name: string };
 type ElevenLabsContext = { apiKey: string; client: ElevenLabsClient };
@@ -74,15 +75,23 @@ export class ElevenLabsTtsProvider implements TtsProvider {
         ElevenLabsClient['textToSpeech']['convert']
       >[1]['outputFormat'];
       const contentType = this.resolveContentType(resolvedOutputFormat);
+      const languageCode = this.resolveLanguageCode(options);
 
       const audioBuffer = await this.withApiKeyFailover(
         async ({ apiKey, client }) => {
           const voiceId = await this.resolveVoiceIdForApiKey(apiKey, options);
-          const audioStream = await client.textToSpeech.convert(voiceId, {
+          const request: Parameters<
+            ElevenLabsClient['textToSpeech']['convert']
+          >[1] = {
             text,
             modelId: this.modelId,
             outputFormat,
-          });
+            ...(languageCode ? { languageCode } : {}),
+          };
+          const audioStream = await client.textToSpeech.convert(
+            voiceId,
+            request,
+          );
 
           return this.readWebStreamToBuffer(audioStream);
         },
@@ -112,15 +121,20 @@ export class ElevenLabsTtsProvider implements TtsProvider {
         ElevenLabsClient['textToSpeech']['stream']
       >[1]['outputFormat'];
       const contentType = this.resolveContentType(resolvedOutputFormat);
+      const languageCode = this.resolveLanguageCode(options);
 
       const audioSource = await this.withApiKeyFailover(
         async ({ apiKey, client }) => {
           const voiceId = await this.resolveVoiceIdForApiKey(apiKey, options);
-          return client.textToSpeech.stream(voiceId, {
+          const request: Parameters<
+            ElevenLabsClient['textToSpeech']['stream']
+          >[1] = {
             text,
             modelId: this.modelId,
             outputFormat,
-          });
+            ...(languageCode ? { languageCode } : {}),
+          };
+          return client.textToSpeech.stream(voiceId, request);
         },
       );
 
@@ -318,6 +332,15 @@ export class ElevenLabsTtsProvider implements TtsProvider {
     }
 
     throw new Error(ELEVENLABS_KEY_ERROR);
+  }
+
+  private resolveLanguageCode(options?: TtsOptions): string | undefined {
+    const fromLanguage = inferLanguageCode(options?.language);
+    if (fromLanguage) {
+      return fromLanguage;
+    }
+
+    return inferLanguageCode(options?.accent);
   }
 
   private async resolveVoiceIdForApiKey(

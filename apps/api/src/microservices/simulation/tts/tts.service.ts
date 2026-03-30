@@ -101,6 +101,9 @@ export class TtsService {
     if (options.language) {
       meloOptions.language = options.language;
     }
+    if (options.accent) {
+      meloOptions.accent = options.accent;
+    }
 
     return Object.keys(meloOptions).length > 0 ? meloOptions : undefined;
   }
