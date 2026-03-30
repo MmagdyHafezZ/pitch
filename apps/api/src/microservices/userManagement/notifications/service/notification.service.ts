@@ -35,6 +35,14 @@ type NotificationRecord = {
   updatedAt?: Date;
 };
 
+type MarkMatchingReadOptions = {
+  recipientUserId?: string;
+  recipientUserIds?: string[];
+  type?: string;
+  sourceUserId?: string;
+  metadata?: Record<string, unknown>;
+};
+
 @Injectable()
 export class NotificationService {
   constructor(private readonly mongo: MongoConnectionService) {}
@@ -180,6 +188,44 @@ export class NotificationService {
     };
   }
 
+  async markMatchingRead(
+    options: MarkMatchingReadOptions,
+  ): Promise<MarkReadResponseDto> {
+    const model = await this.getModel();
+    const filter: Record<string, unknown> = { readAt: null };
+
+    if (options.recipientUserId) {
+      filter.recipientUserId = options.recipientUserId;
+    } else if (options.recipientUserIds?.length) {
+      filter.recipientUserId = { $in: options.recipientUserIds };
+    }
+
+    if (options.type) {
+      filter.type = options.type;
+    }
+
+    if (options.sourceUserId) {
+      filter.sourceUserId = options.sourceUserId;
+    }
+
+    if (options.metadata) {
+      this.appendMetadataFilter(filter, options.metadata);
+    }
+
+    if (Object.keys(filter).length === 1) {
+      return { matched: 0, modified: 0 };
+    }
+
+    const result = await model.updateMany(filter, {
+      $set: { readAt: new Date() },
+    });
+
+    return {
+      matched: result.matchedCount ?? 0,
+      modified: result.modifiedCount ?? 0,
+    };
+  }
+
   async markAllRead(recipientUserId: string): Promise<MarkReadResponseDto> {
     const model = await this.getModel();
     const result = await model.updateMany(
@@ -190,5 +236,29 @@ export class NotificationService {
       matched: result.matchedCount ?? 0,
       modified: result.modifiedCount ?? 0,
     };
+  }
+
+  private appendMetadataFilter(
+    filter: Record<string, unknown>,
+    metadata: Record<string, unknown>,
+    path = 'metadata',
+  ): void {
+    for (const [key, value] of Object.entries(metadata)) {
+      if (value === undefined) {
+        continue;
+      }
+
+      const nextPath = `${path}.${key}`;
+      if (this.isPlainObject(value)) {
+        this.appendMetadataFilter(filter, value, nextPath);
+        continue;
+      }
+
+      filter[nextPath] = value;
+    }
+  }
+
+  private isPlainObject(value: unknown): value is Record<string, unknown> {
+    return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
   }
 }

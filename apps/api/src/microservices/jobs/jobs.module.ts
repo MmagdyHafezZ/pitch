@@ -15,7 +15,7 @@ import {
       {
         name: 'SIMULATION_SERVICE',
         imports: [ConfigModule],
-        useFactory: (_configService: ConfigService) => ({
+        useFactory: () => ({
           transport: Transport.RMQ,
           options: {
             urls: getRabbitMQUrls(),
@@ -28,7 +28,7 @@ import {
       {
         name: 'CRM_SERVICE',
         imports: [ConfigModule],
-        useFactory: (_configService: ConfigService) => ({
+        useFactory: () => ({
           transport: Transport.RMQ,
           options: {
             urls: getRabbitMQUrls(),
@@ -41,7 +41,7 @@ import {
       {
         name: 'USER_SERVICE',
         imports: [ConfigModule],
-        useFactory: (_configService: ConfigService) => ({
+        useFactory: () => ({
           transport: Transport.RMQ,
           options: {
             urls: getRabbitMQUrls(),

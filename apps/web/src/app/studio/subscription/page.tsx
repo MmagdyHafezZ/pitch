@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   Badge,
   Box,
@@ -27,6 +27,7 @@ import {
   IconTrendingUp,
   IconX,
 } from '@tabler/icons-react'
+import { useQuery } from '@tanstack/react-query'
 import Link from 'next/link'
 import { api, queryClient } from '@/lib/client'
 import { useTeams } from '@/features/teams/hooks/useTeams'
@@ -131,17 +132,32 @@ export default function SubscriptionPage() {
     !subscriptionTeam || !subscriptionTeam.memberships || subscriptionTeam.memberships.length <= 1
   const teamDisplayName = isPersonal ? null : (subscriptionTeam?.name ?? null)
   const teamBalance = useCoinsBalance(isPersonal ? null : subscriptionTeamId)
+  const adminTopupsApplyImmediately =
+    user?.isSystemAdmin === true ||
+    (user?.settings?.studioAccess?.status === 'approved' &&
+      (user?.settings?.studioAccess?.role === 'ADMIN' ||
+        user?.settings?.studioAccess?.role === 'OWNER'))
 
   const [subscription, setSubscription] = useState<Subscription | null>(null)
   const [plans, setPlans] = useState<Plan[]>([])
   const [ledger, setLedger] = useState<LedgerEntry[]>([])
-  const [refillRequest, setRefillRequest] = useState<RefillRequest | null>(null)
   const [requestedCoins, setRequestedCoins] = useState<number>(500)
   const [loadingPage, setLoadingPage] = useState(true)
   const [switchingPlan, setSwitchingPlan] = useState<string | null>(null)
   const [submittingRefill, setSubmittingRefill] = useState(false)
   const [topupOpen, setTopupOpen] = useState(false)
   const [mounted, setMounted] = useState(false)
+  const previousRefillStatusRef = useRef<RefillStatus | null>(null)
+
+  const refillRequestQuery = useQuery<RefillRequest | null>({
+    queryKey: ['coins', 'my-refill-request', user?.id],
+    queryFn: () => api.coins.myRefillRequest().catch(() => null),
+    enabled: !!user?.id,
+    refetchOnWindowFocus: true,
+    refetchInterval: (query) =>
+      (query.state.data as RefillRequest | null | undefined)?.status === 'pending' ? 15_000 : false,
+  })
+  const refillRequest = refillRequestQuery.data ?? null
 
   const balance = isPersonal
     ? (personalBalance.data ?? null)
@@ -244,12 +260,11 @@ export default function SubscriptionPage() {
     void (async () => {
       setLoadingPage(true)
       try {
-        const [sub, allPlans, myRequest] = await Promise.all([
+        const [sub, allPlans] = await Promise.all([
           subscriptionTeamId
             ? api.subscriptions.getByTeamId(subscriptionTeamId).catch(() => null)
             : null,
           api.plans.getAll().catch(() => []),
-          api.coins.myRefillRequest().catch(() => null),
         ])
         if (!active) return
         setSubscription(sub)
@@ -263,7 +278,6 @@ export default function SubscriptionPage() {
             return true
           })
         )
-        setRefillRequest(myRequest)
         if (sub && subscriptionTeamId) {
           const history = await api.coins.ledgerHistory(subscriptionTeamId).catch(() => [])
           if (active) setLedger(history as LedgerEntry[])
@@ -278,6 +292,14 @@ export default function SubscriptionPage() {
       active = false
     }
   }, [subscriptionTeamId])
+
+  useEffect(() => {
+    const nextStatus = refillRequest?.status ?? null
+    if (nextStatus && nextStatus !== 'pending' && previousRefillStatusRef.current !== nextStatus) {
+      void queryClient.invalidateQueries({ queryKey: ['coins', 'my-balance'] })
+    }
+    previousRefillStatusRef.current = nextStatus
+  }, [refillRequest?.status])
 
   const handleSwitchPlan = async (plan: Plan) => {
     setSwitchingPlan(plan.id)
@@ -343,16 +365,22 @@ export default function SubscriptionPage() {
   const handleRefillRequest = async () => {
     setSubmittingRefill(true)
     try {
-      const teamId = (await ensureSubscriptionTeamId()) ?? subscription?.teamId ?? null
-      if (!teamId) {
-        throw new Error('Choose a plan first to activate your personal workspace.')
+      const result = await api.coins.refillRequest({ requestedCoins })
+      if (user?.id) {
+        queryClient.setQueryData(['coins', 'my-refill-request', user.id], result)
       }
-      const result = await api.coins.refillRequest({ requestedCoins, teamId })
-      setRefillRequest(result)
       setTopupOpen(false)
+      await fetchUserTeams()
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['coins', 'my-balance'] }),
+        queryClient.invalidateQueries({ queryKey: ['coins', 'balance'] }),
+      ])
       notifications.show({
-        title: 'Request submitted',
-        message: `${requestedCoins.toLocaleString()} credits requested — admin will review shortly.`,
+        title: result?.status === 'approved' ? 'Credits applied' : 'Request submitted',
+        message:
+          result?.status === 'approved'
+            ? `${(result.approvedCoins ?? requestedCoins).toLocaleString()} credits were applied immediately.`
+            : `${requestedCoins.toLocaleString()} credits requested — admin will review shortly.`,
         color: 'teal',
         icon: <IconCheck size={16} />,
       })
@@ -672,7 +700,9 @@ export default function SubscriptionPage() {
                 Request additional credits
               </Text>
               <Text size="xs" c="dimmed" mb="sm">
-                An admin will review and may approve a different amount.
+                {adminTopupsApplyImmediately
+                  ? 'Admin requests are applied immediately to your personal credits.'
+                  : 'An admin will review and may approve a different amount.'}
               </Text>
               <Group align="flex-end" gap="sm">
                 <NumberInput
@@ -775,7 +805,6 @@ export default function SubscriptionPage() {
                     variant="subtle"
                     onClick={() => {
                       setTopupOpen(true)
-                      setRefillRequest(null)
                     }}
                   >
                     Request again
@@ -976,11 +1005,14 @@ export default function SubscriptionPage() {
                       const raw =
                         entry.type === 'RESERVE' && entry.estimatedCoins != null
                           ? -entry.estimatedCoins
-                          : entry.type === 'ADJUST' && entry.deltaCoins != null
+                          : (entry.type === 'ADJUST' || entry.type === 'UPGRADE') &&
+                              entry.deltaCoins != null
                             ? entry.deltaCoins
-                            : entry.type === 'REFILL' && entry.allowance != null
-                              ? entry.allowance
-                              : null
+                            : entry.type === 'REFILL' && entry.deltaCoins != null
+                              ? entry.deltaCoins
+                              : entry.type === 'REFILL' && entry.allowance != null
+                                ? entry.allowance
+                                : null
 
                       const amountStr =
                         raw === null ? '—' : `${raw > 0 ? '+' : ''}${raw.toLocaleString()}`

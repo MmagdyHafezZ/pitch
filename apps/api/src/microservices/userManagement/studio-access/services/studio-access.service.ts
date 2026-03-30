@@ -142,6 +142,7 @@ export class StudioAccessService {
       studioAccess: nextAccess,
     });
 
+    await this.clearPendingRequestNotifications(user.id);
     await this.notifyRequesterReviewed(user, reviewer, nextAccess, 'approved');
 
     return this.toSummary(user, nextAccess);
@@ -179,6 +180,7 @@ export class StudioAccessService {
       studioAccess: nextAccess,
     });
 
+    await this.clearPendingRequestNotifications(user.id);
     await this.notifyRequesterReviewed(user, reviewer, nextAccess, 'denied');
 
     return this.toSummary(user, nextAccess);
@@ -288,6 +290,7 @@ export class StudioAccessService {
           },
         },
         user.id,
+        { systemProvisioned: true },
       );
 
       teamId = createdTeam.id;
@@ -490,5 +493,23 @@ export class StudioAccessService {
             ? 'MEMBER'
             : undefined,
     });
+  }
+
+  private async clearPendingRequestNotifications(
+    requesterUserId: string,
+  ): Promise<void> {
+    try {
+      await this.notificationService.markMatchingRead({
+        type: 'STUDIO_ACCESS_REQUEST',
+        metadata: {
+          requesterUserId,
+        },
+      });
+    } catch (error) {
+      this.logger.error(
+        `Failed to mark Studio access request notifications as read for ${requesterUserId}`,
+        error as Error,
+      );
+    }
   }
 }

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Modal,
   Box,
@@ -147,14 +147,11 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
   const [name, setName] = useState(user?.name ?? '')
   const [email, setEmail] = useState(user?.email ?? '')
   const [timezone, setTimezone] = useState('(GMT-5:00) Eastern Time')
-  const initialPhoneParts = splitPhoneNumber(
-    (user as { phoneNumber?: string | null } | null)?.phoneNumber ?? ''
-  )
+  const storedPhoneNumber = (user as { phoneNumber?: string | null } | null)?.phoneNumber ?? ''
+  const initialPhoneParts = splitPhoneNumber(storedPhoneNumber)
   const [phoneCountryCode, setPhoneCountryCode] = useState(initialPhoneParts.countryCode)
   const [phoneLocalNumber, setPhoneLocalNumber] = useState(initialPhoneParts.localNumber)
-  const [phoneNumber, setPhoneNumber] = useState(
-    (user as { phoneNumber?: string | null } | null)?.phoneNumber ?? ''
-  )
+  const [phoneNumber, setPhoneNumber] = useState(storedPhoneNumber)
   const [verificationCode, setVerificationCode] = useState('')
   const [phoneVerification, setPhoneVerification] = useState<PhoneVerificationState | null>(null)
   const [phoneStatusLoading, setPhoneStatusLoading] = useState(false)
@@ -328,12 +325,12 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
   const [vvSaving, setVvSaving] = useState(false)
   const [vvSaved, setVvSaved] = useState(false)
 
-  const syncPhoneInputState = (rawPhoneNumber: string | null | undefined) => {
+  const syncPhoneInputState = useCallback((rawPhoneNumber: string | null | undefined) => {
     const parts = splitPhoneNumber(rawPhoneNumber)
     setPhoneCountryCode(parts.countryCode)
     setPhoneLocalNumber(parts.localNumber)
     setPhoneNumber(rawPhoneNumber?.trim() ?? '')
-  }
+  }, [])
 
   const buildPhoneNumber = (countryCode: string, localNumber: string) => {
     const digits = localNumber.replace(/\D/g, '')
@@ -349,8 +346,8 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
   useEffect(() => {
     setName(user?.name ?? '')
     setEmail(user?.email ?? '')
-    syncPhoneInputState((user as { phoneNumber?: string | null } | null)?.phoneNumber ?? '')
-  }, [user?.name, user?.email, (user as { phoneNumber?: string | null } | null)?.phoneNumber])
+    syncPhoneInputState(storedPhoneNumber)
+  }, [storedPhoneNumber, syncPhoneInputState, user?.email, user?.name])
 
   useEffect(() => {
     if (!opened) return
@@ -388,7 +385,7 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
     return () => {
       cancelled = true
     }
-  }, [opened])
+  }, [opened, syncPhoneInputState])
 
   useEffect(() => {
     if (!opened) {

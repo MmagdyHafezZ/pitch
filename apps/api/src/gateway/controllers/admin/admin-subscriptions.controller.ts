@@ -27,7 +27,7 @@ export class AdminSubscriptionsController {
     @Inject('USER_SERVICE') private readonly userService: ClientProxy,
   ) {}
 
-  @Get('plan-changes')
+  @Get('requests/plan-changes')
   listPendingPlanChanges(@UserClaims() userClaims?: UserClaimsType) {
     return this.userService
       .send(USER_SERVICE_PATTERNS.LIST_PENDING_PLAN_CHANGES, { userClaims })
@@ -46,7 +46,7 @@ export class AdminSubscriptionsController {
       );
   }
 
-  @Post(':id/approve-plan-change')
+  @Post('requests/:id/approve-plan-change')
   approvePlanChange(
     @Param('id') id: string,
     @UserClaims() userClaims: UserClaimsType,
@@ -68,7 +68,7 @@ export class AdminSubscriptionsController {
       );
   }
 
-  @Post(':id/reject-plan-change')
+  @Post('requests/:id/reject-plan-change')
   rejectPlanChange(
     @Param('id') id: string,
     @UserClaims() userClaims: UserClaimsType,

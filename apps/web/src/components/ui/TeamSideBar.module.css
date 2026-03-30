@@ -47,6 +47,17 @@
     box-shadow 140ms ease;
 }
 
+.teamButtonDragging {
+  opacity: 0.62;
+  transform: scale(0.94);
+}
+
+.teamButtonDropTarget {
+  border-color: color-mix(in srgb, var(--pitch-accent-strong) 62%, transparent);
+  background: color-mix(in srgb, var(--pitch-accent-strong) 18%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--pitch-accent-strong) 24%, transparent);
+}
+
 .teamButton:hover {
   background: color-mix(in srgb, var(--pitch-nav-accent-hover) 86%, transparent);
   border-color: color-mix(in srgb, var(--pitch-nav-text) 28%, transparent);

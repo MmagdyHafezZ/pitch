@@ -309,7 +309,6 @@ export function buildConversationFallbackResponse(
     roleContext.aiRole ??
     pickString(personaTraits.role) ??
     pickString(input.persona?.name);
-  const userRole = roleContext.userRole ?? 'the participant';
   const userSnapshot = input.sessionConfig.userSnapshot as
     | Record<string, unknown>
     | undefined;

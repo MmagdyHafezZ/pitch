@@ -1,7 +1,7 @@
 'use client'
 
 import { create } from 'zustand'
-import { api } from '@/lib/client'
+import { api, queryClient } from '@/lib/client'
 
 type BillingInterval = 'MONTH' | 'YEAR'
 
@@ -180,6 +180,7 @@ export const useTeamConfigStore = create<TeamConfigStore>()((set, get) => ({
         subscriptionsByTeam: { ...state.subscriptionsByTeam, [teamId]: nextSubscription },
         subscriptionLoadingByTeam: { ...state.subscriptionLoadingByTeam, [teamId]: false },
       }))
+      void queryClient.invalidateQueries({ queryKey: ['coins'] })
 
       return nextSubscription
     } catch (error) {

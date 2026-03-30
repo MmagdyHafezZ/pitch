@@ -30,6 +30,7 @@ export class PlanChangeNotificationService {
   // ── Notify admins when a user requests a plan change ──────────────────────
 
   async notifyAdminsOfRequest(opts: {
+    subscriptionId: string;
     requesterId: string;
     currentPlanName?: string;
     requestedPlanName: string;
@@ -50,7 +51,7 @@ export class PlanChangeNotificationService {
     const requesterName = requester?.name ?? requester?.email ?? undefined;
     const requesterEmail = requester?.email ?? undefined;
 
-    const reviewUrl = `${process.env.APP_URL ?? ''}/studio/admin/subscriptions/plan-changes`;
+    const reviewUrl = `${process.env.APP_URL ?? ''}/studio/admin/plans/requests`;
 
     // Email all admins in one shot
     await this.sendEmail<SupportPlanChangeRequestTemplateData>(
@@ -86,6 +87,7 @@ export class PlanChangeNotificationService {
           sourceType: NotificationSourceType.USER,
           sourceUserId: opts.requesterId,
           metadata: {
+            subscriptionId: opts.subscriptionId,
             requestedPlanName: opts.requestedPlanName,
             requestedInterval: opts.requestedInterval,
           },

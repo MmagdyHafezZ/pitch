@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -52,10 +53,31 @@ export class CoinsGatewayController {
     private readonly simulationService: ClientProxy,
   ) {}
 
+  private isSystemAdmin(userClaims: UserClaimsType): boolean {
+    const normalizedEmail = userClaims.email.trim().toLowerCase();
+    return (process.env.SUPER_ADMIN_EMAILS ?? '')
+      .split(',')
+      .map((email) => email.trim().toLowerCase())
+      .filter(Boolean)
+      .includes(normalizedEmail);
+  }
+
+  private normalizePositiveCoins(value: number, fieldName: string): number {
+    const normalized = Math.floor(Number(value));
+    if (!Number.isFinite(normalized) || normalized <= 0) {
+      throw new BadRequestException(`${fieldName} must be greater than zero`);
+    }
+
+    return normalized;
+  }
+
   @Get('balance')
   @ApiOperation({ summary: "Get the active team's current coin balance" })
   @ApiQuery({ name: 'teamId', required: true, type: String })
-  async getBalance(@Query('teamId') teamId: string) {
+  async getBalance(
+    @Query('teamId') teamId: string,
+    @UserClaims() claims: UserClaimsType,
+  ) {
     return lastValueFrom(
       this.userService
         .send<
@@ -67,7 +89,11 @@ export class CoinsGatewayController {
               allowance: number;
               remaining: number;
             }
-        >(USER_SERVICE_COIN_PATTERNS.COIN_BALANCE_GET, { teamId })
+        >(USER_SERVICE_COIN_PATTERNS.COIN_BALANCE_GET, {
+          teamId,
+          userClaims: claims,
+          isAdmin: this.isSystemAdmin(claims),
+        })
         .pipe(
           timeout(5000),
           catchError((err) => throwError(() => normalizeError(err))),
@@ -102,20 +128,26 @@ export class CoinsGatewayController {
   @ApiOperation({ summary: 'Submit a credit refill request' })
   async requestRefill(
     @UserClaims() claims: UserClaimsType,
-    @Body() body: { requestedCoins: number; teamId: string },
+    @Body() body: { requestedCoins: number; teamId?: string },
   ): Promise<unknown> {
-    return lastValueFrom(
+    const requestedCoins = this.normalizePositiveCoins(
+      body.requestedCoins,
+      'requestedCoins',
+    );
+    const refillRequest = await lastValueFrom(
       this.userService
         .send<unknown>(USER_SERVICE_COIN_PATTERNS.COIN_REFILL_REQUEST, {
           userId: claims.id,
           teamId: body.teamId,
-          requestedCoins: body.requestedCoins,
+          requestedCoins,
+          notifyAdmins: !this.isSystemAdmin(claims),
         })
         .pipe(
           timeout(5000),
           catchError((err) => throwError(() => normalizeError(err))),
         ),
     );
+    return refillRequest;
   }
 
   @Get('refill/my-request')
@@ -157,11 +189,15 @@ export class CoinsGatewayController {
     @Body() body: { approvedCoins: number },
     @UserClaims() claims: UserClaimsType,
   ): Promise<unknown> {
+    const approvedCoins = this.normalizePositiveCoins(
+      body.approvedCoins,
+      'approvedCoins',
+    );
     return lastValueFrom(
       this.userService
         .send<unknown>(USER_SERVICE_COIN_PATTERNS.COIN_REFILL_REQUEST_APPROVE, {
           userId,
-          approvedCoins: body.approvedCoins,
+          approvedCoins,
           reviewer: claims.email,
         })
         .pipe(
@@ -212,12 +248,15 @@ export class CoinsGatewayController {
   async getLedgerHistory(
     @Query('teamId') teamId: string,
     @Query('periodKey') periodKey?: string,
+    @UserClaims() claims?: UserClaimsType,
   ): Promise<unknown> {
     return lastValueFrom(
       this.userService
         .send<unknown>(USER_SERVICE_COIN_PATTERNS.COIN_LEDGER_HISTORY, {
           teamId,
           periodKey,
+          userClaims: claims,
+          isAdmin: claims ? this.isSystemAdmin(claims) : false,
         })
         .pipe(
           timeout(8000),

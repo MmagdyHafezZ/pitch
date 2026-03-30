@@ -13,8 +13,43 @@ import type {
   UpdateMemberInput,
 } from '../types/teams.types'
 
+function orderTeamsByIds(teams: Team[], orderedIds: string[]): Team[] {
+  if (teams.length <= 1 || orderedIds.length === 0) return teams
+
+  const remainingTeams = new Map(teams.map((team) => [team.id, team]))
+  const orderedTeams: Team[] = []
+
+  orderedIds.forEach((teamId) => {
+    const team = remainingTeams.get(teamId)
+    if (!team) return
+
+    orderedTeams.push(team)
+    remainingTeams.delete(teamId)
+  })
+
+  remainingTeams.forEach((team) => {
+    orderedTeams.push(team)
+  })
+
+  return orderedTeams
+}
+
+const getTeamOrderIds = (teams: Team[]) => teams.map((team) => team.id)
+
+const syncCurrentTeam = (teams: Team[], currentTeam: Team | null) =>
+  currentTeam ? (teams.find((team) => team.id === currentTeam.id) ?? currentTeam) : null
+
+const upsertAndOrderTeams = (teams: Team[], team: Team, orderedIds: string[]) =>
+  orderTeamsByIds(
+    teams.some((existingTeam) => existingTeam.id === team.id)
+      ? teams.map((existingTeam) => (existingTeam.id === team.id ? team : existingTeam))
+      : [...teams, team],
+    orderedIds
+  )
+
 type TeamsState = {
   teams: Team[]
+  teamOrderIds: string[]
   activeTeamId: string | null
   currentTeam: Team | null
   loading: boolean
@@ -35,6 +70,7 @@ type TeamsState = {
   deleteMember: (teamId: string, userId: string) => Promise<void>
   leaveTeam: (teamId: string, userId: string) => Promise<void>
 
+  reorderTeams: (teamIds: string[]) => void
   setActiveTeamId: (id: string | null) => void
   resetStore: () => void
 }
@@ -43,15 +79,27 @@ export const useTeamsStore = create<TeamsState>()(
   persist(
     (set, get) => ({
       teams: [],
+      teamOrderIds: [],
       activeTeamId: null,
       currentTeam: null,
       loading: false,
       error: null,
 
       setActiveTeamId: (id) => set({ activeTeamId: id }),
+      reorderTeams: (teamIds) =>
+        set((state) => {
+          const orderedTeams = orderTeamsByIds(state.teams, teamIds)
+
+          return {
+            teams: orderedTeams,
+            teamOrderIds: getTeamOrderIds(orderedTeams),
+            currentTeam: syncCurrentTeam(orderedTeams, state.currentTeam),
+          }
+        }),
       resetStore: () =>
         set({
           teams: [],
+          teamOrderIds: [],
           activeTeamId: null,
           currentTeam: null,
           loading: false,
@@ -59,16 +107,19 @@ export const useTeamsStore = create<TeamsState>()(
         }),
 
       fetchTeams: async () => {
-        const { loading, teams } = get()
+        const { loading, teams, teamOrderIds } = get()
         if (loading || teams.length > 0) return
 
         set({ loading: true, error: null })
         try {
           const data = await TeamService.getAll()
+          const orderedTeams = orderTeamsByIds(data, teamOrderIds)
+
           set({
-            teams: data,
-            activeTeamId: data[0]?.id ?? null,
-            currentTeam: data[0] ?? null,
+            teams: orderedTeams,
+            teamOrderIds: getTeamOrderIds(orderedTeams),
+            activeTeamId: orderedTeams[0]?.id ?? null,
+            currentTeam: orderedTeams[0] ?? null,
             loading: false,
           })
         } catch (err) {
@@ -80,7 +131,11 @@ export const useTeamsStore = create<TeamsState>()(
       },
 
       fetchUserTeams: async () => {
-        const { loading, activeTeamId: previousActiveTeamId } = get()
+        const {
+          loading,
+          activeTeamId: previousActiveTeamId,
+          teamOrderIds: previousTeamOrderIds,
+        } = get()
         if (loading) return
 
         // Always refresh from the user-scoped endpoint to avoid stale persisted team lists
@@ -94,13 +149,17 @@ export const useTeamsStore = create<TeamsState>()(
         })
         try {
           const data = await TeamService.getUserTeams()
+          const orderedTeams = orderTeamsByIds(data, previousTeamOrderIds)
           const nextActiveTeam =
-            (previousActiveTeamId ? data.find((team) => team.id === previousActiveTeamId) : null) ??
-            data[0] ??
+            (previousActiveTeamId
+              ? orderedTeams.find((team) => team.id === previousActiveTeamId)
+              : null) ??
+            orderedTeams[0] ??
             null
 
           set({
-            teams: data,
+            teams: orderedTeams,
+            teamOrderIds: getTeamOrderIds(orderedTeams),
             activeTeamId: nextActiveTeam?.id ?? null,
             currentTeam: nextActiveTeam,
             loading: false,
@@ -117,14 +176,17 @@ export const useTeamsStore = create<TeamsState>()(
         set({ loading: true, error: null })
         try {
           const team = await TeamService.getById(id)
-          set((state) => ({
-            loading: false,
-            currentTeam: team,
-            activeTeamId: id,
-            teams: state.teams.some((t) => t.id === id)
-              ? state.teams.map((t) => (t.id === id ? team : t))
-              : [...state.teams.filter((t) => t.id !== team.id), team],
-          }))
+          set((state) => {
+            const orderedTeams = upsertAndOrderTeams(state.teams, team, state.teamOrderIds)
+
+            return {
+              loading: false,
+              currentTeam: team,
+              activeTeamId: id,
+              teams: orderedTeams,
+              teamOrderIds: getTeamOrderIds(orderedTeams),
+            }
+          })
         } catch (err) {
           set({
             loading: false,
@@ -147,14 +209,17 @@ export const useTeamsStore = create<TeamsState>()(
             name,
           })
 
-          set((state) => ({
-            loading: false,
-            currentTeam: newTeam,
-            activeTeamId: newTeam.id,
-            teams: state.teams.some((t) => t.id === newTeam.id)
-              ? state.teams
-              : [...state.teams, newTeam],
-          }))
+          set((state) => {
+            const orderedTeams = upsertAndOrderTeams(state.teams, newTeam, state.teamOrderIds)
+
+            return {
+              loading: false,
+              currentTeam: newTeam,
+              activeTeamId: newTeam.id,
+              teams: orderedTeams,
+              teamOrderIds: getTeamOrderIds(orderedTeams),
+            }
+          })
         } catch (err) {
           set({
             loading: false,
@@ -169,12 +234,20 @@ export const useTeamsStore = create<TeamsState>()(
         try {
           const updated = await TeamService.update(id, input)
 
-          set((state) => ({
-            loading: false,
-            currentTeam: updated,
-            activeTeamId: id,
-            teams: state.teams.map((t) => (t.id === id ? updated : t)),
-          }))
+          set((state) => {
+            const orderedTeams = orderTeamsByIds(
+              state.teams.map((team) => (team.id === id ? updated : team)),
+              state.teamOrderIds
+            )
+
+            return {
+              loading: false,
+              currentTeam: updated,
+              activeTeamId: id,
+              teams: orderedTeams,
+              teamOrderIds: getTeamOrderIds(orderedTeams),
+            }
+          })
         } catch (err) {
           set({
             loading: false,
@@ -190,12 +263,13 @@ export const useTeamsStore = create<TeamsState>()(
           await TeamService.delete(id)
 
           set((state) => {
-            const remaining = state.teams.filter((t) => t.id !== id)
+            const remaining = state.teams.filter((team) => team.id !== id)
             const nextActive = remaining[0] ?? null
 
             return {
               loading: false,
               teams: remaining,
+              teamOrderIds: getTeamOrderIds(remaining),
               currentTeam: nextActive,
               activeTeamId: nextActive?.id ?? null,
             }
@@ -216,14 +290,17 @@ export const useTeamsStore = create<TeamsState>()(
 
           const team = await TeamService.getById(teamId)
 
-          set((state) => ({
-            loading: false,
-            currentTeam:
-              state.currentTeam && state.currentTeam.id === teamId ? team : state.currentTeam,
-            teams: state.teams.some((t) => t.id === teamId)
-              ? state.teams.map((t) => (t.id === teamId ? team : t))
-              : [...state.teams, team],
-          }))
+          set((state) => {
+            const orderedTeams = upsertAndOrderTeams(state.teams, team, state.teamOrderIds)
+
+            return {
+              loading: false,
+              currentTeam:
+                state.currentTeam && state.currentTeam.id === teamId ? team : state.currentTeam,
+              teams: orderedTeams,
+              teamOrderIds: getTeamOrderIds(orderedTeams),
+            }
+          })
         } catch (err) {
           set({
             loading: false,
@@ -240,14 +317,17 @@ export const useTeamsStore = create<TeamsState>()(
 
           const team = await TeamService.getById(teamId)
 
-          set((state) => ({
-            loading: false,
-            currentTeam:
-              state.currentTeam && state.currentTeam.id === teamId ? team : state.currentTeam,
-            teams: state.teams.some((t) => t.id === teamId)
-              ? state.teams.map((t) => (t.id === teamId ? team : t))
-              : [...state.teams, team],
-          }))
+          set((state) => {
+            const orderedTeams = upsertAndOrderTeams(state.teams, team, state.teamOrderIds)
+
+            return {
+              loading: false,
+              currentTeam:
+                state.currentTeam && state.currentTeam.id === teamId ? team : state.currentTeam,
+              teams: orderedTeams,
+              teamOrderIds: getTeamOrderIds(orderedTeams),
+            }
+          })
         } catch (err) {
           set({
             loading: false,
@@ -276,14 +356,18 @@ export const useTeamsStore = create<TeamsState>()(
         try {
           await TeamService.acceptInvite(teamId)
           const team = await TeamService.getById(teamId)
-          set((state) => ({
-            loading: false,
-            currentTeam:
-              state.currentTeam && state.currentTeam.id === teamId ? team : state.currentTeam,
-            teams: state.teams.some((t) => t.id === teamId)
-              ? state.teams.map((t) => (t.id === teamId ? team : t))
-              : [...state.teams, team],
-          }))
+
+          set((state) => {
+            const orderedTeams = upsertAndOrderTeams(state.teams, team, state.teamOrderIds)
+
+            return {
+              loading: false,
+              currentTeam:
+                state.currentTeam && state.currentTeam.id === teamId ? team : state.currentTeam,
+              teams: orderedTeams,
+              teamOrderIds: getTeamOrderIds(orderedTeams),
+            }
+          })
         } catch (err) {
           set({
             loading: false,
@@ -300,14 +384,17 @@ export const useTeamsStore = create<TeamsState>()(
 
           const team = await TeamService.getById(teamId)
 
-          set((state) => ({
-            loading: false,
-            currentTeam:
-              state.currentTeam && state.currentTeam.id === teamId ? team : state.currentTeam,
-            teams: state.teams.some((t) => t.id === teamId)
-              ? state.teams.map((t) => (t.id === teamId ? team : t))
-              : [...state.teams, team],
-          }))
+          set((state) => {
+            const orderedTeams = upsertAndOrderTeams(state.teams, team, state.teamOrderIds)
+
+            return {
+              loading: false,
+              currentTeam:
+                state.currentTeam && state.currentTeam.id === teamId ? team : state.currentTeam,
+              teams: orderedTeams,
+              teamOrderIds: getTeamOrderIds(orderedTeams),
+            }
+          })
         } catch (err) {
           set({
             loading: false,
@@ -324,14 +411,17 @@ export const useTeamsStore = create<TeamsState>()(
 
           const team = await TeamService.getById(teamId)
 
-          set((state) => ({
-            loading: false,
-            currentTeam:
-              state.currentTeam && state.currentTeam.id === teamId ? team : state.currentTeam,
-            teams: state.teams.some((t) => t.id === teamId)
-              ? state.teams.map((t) => (t.id === teamId ? team : t))
-              : [...state.teams, team],
-          }))
+          set((state) => {
+            const orderedTeams = upsertAndOrderTeams(state.teams, team, state.teamOrderIds)
+
+            return {
+              loading: false,
+              currentTeam:
+                state.currentTeam && state.currentTeam.id === teamId ? team : state.currentTeam,
+              teams: orderedTeams,
+              teamOrderIds: getTeamOrderIds(orderedTeams),
+            }
+          })
         } catch (err) {
           set({
             loading: false,
@@ -347,17 +437,18 @@ export const useTeamsStore = create<TeamsState>()(
           await TeamService.removeMember(teamId, userId)
 
           set((state) => {
-            const remaining = state.teams.filter((t) => t.id !== teamId)
+            const remaining = state.teams.filter((team) => team.id !== teamId)
             const nextActiveId =
               state.activeTeamId === teamId ? (remaining[0]?.id ?? null) : state.activeTeamId
             const nextCurrentTeam =
               state.currentTeam?.id === teamId
-                ? (remaining.find((t) => t.id === nextActiveId) ?? null)
+                ? (remaining.find((team) => team.id === nextActiveId) ?? null)
                 : state.currentTeam
 
             return {
               loading: false,
               teams: remaining,
+              teamOrderIds: getTeamOrderIds(remaining),
               activeTeamId: nextActiveId,
               currentTeam: nextCurrentTeam,
             }
@@ -376,6 +467,7 @@ export const useTeamsStore = create<TeamsState>()(
       storage: createJSONStorage(() => window.localStorage),
       partialize: (state) => ({
         teams: state.teams,
+        teamOrderIds: state.teamOrderIds,
         activeTeamId: state.activeTeamId,
         currentTeam: state.currentTeam,
       }),

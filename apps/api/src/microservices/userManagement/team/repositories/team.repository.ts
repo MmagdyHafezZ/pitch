@@ -456,6 +456,30 @@ export class TeamRepository {
     return m.role;
   }
 
+  async confirmActiveMembershipOrThrow(
+    userId: string,
+    teamId: string,
+  ): Promise<Role> {
+    const membership = await this.prisma.teamMembership.findUnique({
+      where: { userId_teamId: { userId, teamId } },
+      select: {
+        role: true,
+        isActive: true,
+        team: { select: { id: true, isActive: true, deletedAt: true } },
+      },
+    });
+
+    if (!membership) throw new NotFoundException('Membership not found');
+    if (!membership.team.isActive || membership.team.deletedAt !== null) {
+      throw new NotFoundException('Team not found');
+    }
+    if (!membership.isActive) {
+      throw new ForbiddenException('Membership inactive');
+    }
+
+    return membership.role;
+  }
+
   async confirmSubscriptionAuthorityOrThrow(
     userId: string,
     teamId: string,

@@ -120,6 +120,62 @@ describe('TeamsStore', () => {
     expect(useTeamsStore.getState().currentTeam).toEqual(team2)
   })
 
+  it('persists a custom team order across refreshes', async () => {
+    const team1 = {
+      id: 'team-1',
+      name: 'Team 1',
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-01T00:00:00.000Z',
+    } as any
+    const team2 = {
+      id: 'team-2',
+      name: 'Team 2',
+      createdAt: '2024-02-01T00:00:00.000Z',
+      updatedAt: '2024-02-01T00:00:00.000Z',
+    } as any
+    const team3 = {
+      id: 'team-3',
+      name: 'Team 3',
+      createdAt: '2024-03-01T00:00:00.000Z',
+      updatedAt: '2024-03-01T00:00:00.000Z',
+    } as any
+
+    act(() => {
+      useTeamsStore.setState({
+        teams: [team1, team2, team3],
+        teamOrderIds: ['team-1', 'team-2', 'team-3'],
+        activeTeamId: 'team-1',
+        currentTeam: team1,
+        loading: false,
+        error: null,
+      })
+    })
+
+    act(() => {
+      useTeamsStore.getState().reorderTeams(['team-3', 'team-1', 'team-2'])
+    })
+
+    expect(useTeamsStore.getState().teams.map((team) => team.id)).toEqual([
+      'team-3',
+      'team-1',
+      'team-2',
+    ])
+    expect(useTeamsStore.getState().teamOrderIds).toEqual(['team-3', 'team-1', 'team-2'])
+
+    jest.spyOn(TeamService, 'getUserTeams').mockResolvedValue([team1, team2, team3])
+
+    await act(async () => {
+      await useTeamsStore.getState().fetchUserTeams()
+    })
+
+    expect(useTeamsStore.getState().teams.map((team) => team.id)).toEqual([
+      'team-3',
+      'team-1',
+      'team-2',
+    ])
+    expect(useTeamsStore.getState().teamOrderIds).toEqual(['team-3', 'team-1', 'team-2'])
+  })
+
   it('sendSignupInvite clears loading on success', async () => {
     jest.spyOn(TeamService, 'sendSignupInvite').mockResolvedValue({
       message: 'Signup invite sent to new@example.com',

@@ -1,10 +1,13 @@
 import { Transport } from '@nestjs/microservices';
 import {
   MICROSERVICES_CONFIG,
+  RABBITMQ_DEAD_LETTER_EXCHANGE,
   createMicroserviceOptions,
+  getDeadLetterQueueOptions,
   getQueueOptions,
   getRabbitMQUrl,
   getRabbitMQUrls,
+  usesRabbitMqPolicyDeadLettering,
 } from '../microservices.config';
 
 describe('microservices.config', () => {
@@ -58,19 +61,24 @@ describe('microservices.config', () => {
 
   it('builds microservice options using the queue name', () => {
     process.env.DEP_MODE = 'local';
-    process.env.RABBITMQ_URL = 'amqp://custom-primary';
-    process.env.RABBITMQ_URL_SECONDARY = 'amqp://custom-secondary';
+    process.env.RABBITMQ_URL = 'amqp://custom-primary/pitch_local';
+    process.env.RABBITMQ_URL_SECONDARY = 'amqp://custom-secondary/pitch_local';
 
     const options = createMicroserviceOptions('sample_queue');
 
     expect(options).toEqual({
       transport: Transport.RMQ,
       options: {
-        urls: ['amqp://custom-primary', 'amqp://custom-secondary'],
+        urls: [
+          'amqp://custom-primary/pitch_local',
+          'amqp://custom-secondary/pitch_local',
+        ],
         queue: 'sample_queue',
         noAck: true,
         prefetchCount: 10,
-        queueOptions: { durable: true },
+        queueOptions: {
+          durable: true,
+        },
         socketOptions: {
           heartbeatIntervalInSeconds: 60,
         },
@@ -127,6 +135,43 @@ describe('microservices.config', () => {
   });
 
   it('returns queue options with durable queue', () => {
-    expect(getQueueOptions()).toEqual({ durable: true });
+    expect(
+      getQueueOptions('amqp://admin:admin123@localhost:5672/pitch_local'),
+    ).toEqual({
+      durable: true,
+    });
+  });
+
+  it('returns explicit dead-letter queue options outside the local definitions vhost', () => {
+    expect(
+      getQueueOptions('amqp://admin:admin123@localhost:5672/pitch_prod'),
+    ).toEqual({
+      durable: true,
+      arguments: {
+        'x-dead-letter-exchange': RABBITMQ_DEAD_LETTER_EXCHANGE,
+      },
+    });
+  });
+
+  it('detects when the local RabbitMQ policy should supply dead-letter routing', () => {
+    expect(
+      usesRabbitMqPolicyDeadLettering(
+        'amqp://admin:admin123@localhost:5672/pitch_local',
+      ),
+    ).toBe(true);
+    expect(
+      usesRabbitMqPolicyDeadLettering(
+        'amqp://admin:admin123@localhost:5672/pitch_prod',
+      ),
+    ).toBe(false);
+  });
+
+  it('returns topology queue options with dead-letter routing', () => {
+    expect(getDeadLetterQueueOptions()).toEqual({
+      durable: true,
+      arguments: {
+        'x-dead-letter-exchange': RABBITMQ_DEAD_LETTER_EXCHANGE,
+      },
+    });
   });
 });

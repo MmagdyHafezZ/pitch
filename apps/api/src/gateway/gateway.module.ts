@@ -8,6 +8,7 @@ import { TeamGatewayController } from './controllers/userManagement/team-gateway
 import { PlanGatewayController } from './controllers/userManagement/plans.controller';
 import { SubscriptionGatewayController } from './controllers/userManagement/subscription.controller';
 import { StudioAccessGatewayController } from './controllers/userManagement/studio-access-gateway.controller';
+import { AdminGatewayController } from './controllers/admin/admin-gateway.controller';
 import { SalesforceGatewayController } from './controllers/crm/salesforce-gateway.controller';
 import { SessionGatewayController } from './controllers/simulation/session-gateway.controller';
 import { ScenarioGatewayController } from './controllers/simulation/scenario-gateway.controller';
@@ -32,7 +33,7 @@ import {
   getJwtSecret,
   getJwtAccessExpiration,
 } from '@pitch/shared-backend/config/jwt.config';
-import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
+import { APP_GUARD } from '@nestjs/core';
 import { SimulationWsGateway } from './controllers/simulation/simulation-ws.gateway';
 import { SimulationModule } from '@microservices/simulation/simulation.module';
 import { RagController } from '@microservices/simulation/rag/rag.controller';
@@ -41,20 +42,17 @@ import { CalendarGatewayController } from './controllers/calendar/calendar-gatew
 import { SupportChatGatewayController } from './controllers/support/support-chat-gateway.controller';
 import { SupportAttachmentGatewayController } from './controllers/support/support-attachment-gateway.controller';
 import { CoachStreamService } from './controllers/support/coach-stream.service';
-import { AdminGatewayController } from './controllers/admin/admin-gateway.controller';
+import { CheckSystemAdmin } from './guards/check-system-admin.guard';
+import { AdminGatewayService } from './controllers/admin/admin-gateway.service';
+import { RabbitMqAdminService } from './controllers/admin/rabbitmq-admin.service';
+import { PhoneCallWebhookService } from './controllers/simulation/phone-call-webhook.service';
 import { AdminUsersController } from './controllers/admin/admin-users.controller';
 import { AdminTeamsController } from './controllers/admin/admin-teams.controller';
 import { AdminSubscriptionsController } from './controllers/admin/admin-subscriptions.controller';
 import { AdminSessionsController } from './controllers/admin/admin-sessions.controller';
 import { AdminMonitoringController } from './controllers/admin/admin-monitoring.controller';
 import { AdminFeatureFlagsService } from './services/admin/admin-feature-flags.service';
-import { AdminRequestLogInterceptor } from './interceptors/admin-request-log.interceptor';
 import { AdminImpersonationService } from './services/admin/admin-impersonation.service';
-import { AdminRequestLogService } from './services/admin/admin-request-log.service';
-import {
-  AdminRequestLogSchema,
-  AdminRequestLogModel,
-} from './schemas/admin-request-log.schema';
 import {
   EventLogSchema,
   EventLogModel,
@@ -104,7 +102,6 @@ import { CoinsGatewayController } from './controllers/userManagement/coins-gatew
     ),
     MongooseModule.forFeature(
       [
-        { name: AdminRequestLogModel, schema: AdminRequestLogSchema },
         { name: EventLogModel, schema: EventLogSchema },
         { name: EnrichedTranscriptModel, schema: EnrichedTranscriptSchema },
         { name: LLMTraceModel, schema: LLMTraceSchema },
@@ -114,6 +111,7 @@ import { CoinsGatewayController } from './controllers/userManagement/coins-gatew
     ),
   ],
   controllers: [
+    AdminGatewayController,
     UserGatewayController,
     AuthGatewayController,
     TeamGatewayController,
@@ -150,13 +148,15 @@ import { CoinsGatewayController } from './controllers/userManagement/coins-gatew
   ],
   providers: [
     { provide: APP_GUARD, useClass: GlobalJwtAuthGuard },
+    CheckSystemAdmin,
     UserClaimsInterceptor,
     SimulationWsGateway,
     CoachStreamService,
+    AdminGatewayService,
+    RabbitMqAdminService,
+    PhoneCallWebhookService,
     AdminFeatureFlagsService,
     AdminImpersonationService,
-    AdminRequestLogService,
-    { provide: APP_INTERCEPTOR, useClass: AdminRequestLogInterceptor },
     SupportAttachmentStorageService,
   ],
 })

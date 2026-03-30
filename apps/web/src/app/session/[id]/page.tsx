@@ -2678,7 +2678,6 @@ export default function LiveSessionPage() {
     clearCoachingTip,
     clearToolEvents,
     disconnect,
-    hintsEnabled,
     interrupt,
     loadedSessionRecord,
     requestConversationConnect,

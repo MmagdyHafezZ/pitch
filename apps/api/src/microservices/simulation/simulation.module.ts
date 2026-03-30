@@ -77,7 +77,7 @@ import {
       {
         name: 'CRM_SERVICE',
         imports: [ConfigModule],
-        useFactory: (_configService: ConfigService) => ({
+        useFactory: () => ({
           transport: Transport.RMQ,
           options: {
             urls: getRabbitMQUrls(),
@@ -90,7 +90,7 @@ import {
       {
         name: 'USER_SERVICE',
         imports: [ConfigModule],
-        useFactory: (_configService: ConfigService) => ({
+        useFactory: () => ({
           transport: Transport.RMQ,
           options: {
             urls: getRabbitMQUrls(),
@@ -179,6 +179,7 @@ import {
     PhoneModule,
     TtsModule,
     LLMService,
+    LLMRoutingConfigService,
     StreamingConversationService,
     ConversationOrchestrationService,
     SessionService,
@@ -188,8 +189,11 @@ import {
     PersonaMediaService,
     HintsService,
     SimulationPrismaService,
+    SimulationRedisService,
     MongoConnectionService,
     VideoGenerationService,
+    AssessmentModule,
+    PhoneModule,
     RagModule,
   ],
 })

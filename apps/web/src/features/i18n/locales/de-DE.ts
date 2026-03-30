@@ -25,6 +25,7 @@ export const deDE: LocaleDictionary = {
     'nav.sessions': 'Sitzungen',
     'nav.analytics': 'Analysen',
     'nav.teamConfig': 'Team-Konfiguration',
+    'nav.admin': 'Admin',
     'nav.challenges': 'Herausforderungen',
     'nav.calendar': 'Kalender',
     'nav.settings': 'Einstellungen',

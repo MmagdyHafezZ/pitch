@@ -1,4 +1,9 @@
-import { Controller, UsePipes, ValidationPipe } from '@nestjs/common';
+import {
+  Controller,
+  UseGuards,
+  UsePipes,
+  ValidationPipe,
+} from '@nestjs/common';
 import { EventPattern, MessagePattern, Payload } from '@nestjs/microservices';
 import { CoinAccountingService } from '../services/coin-accounting.service';
 import { CoinSessionService } from '../services/coin-session.service';
@@ -9,6 +14,7 @@ import {
   ReserveCoinsResponseDto,
 } from '../dto/coin-reserve.dto';
 import { CoinSessionReserveResponseDto } from '../dto/coin-session.dto';
+import { TeamMembershipAccessGuard } from '../../guards/team-membership-access.guard';
 
 @Controller()
 export class CoinsConsumer {
@@ -46,6 +52,7 @@ export class CoinsConsumer {
   }
 
   @MessagePattern('coin.balance.get')
+  @UseGuards(TeamMembershipAccessGuard)
   async onGetBalance(@Payload() { teamId }: { teamId: string }) {
     return this.coins.getRemainingCoins(teamId, { initIfMissing: true });
   }
@@ -63,7 +70,13 @@ export class CoinsConsumer {
 
   @MessagePattern('coin.refill.request')
   async onRefillRequest(
-    @Payload() dto: { userId: string; teamId: string; requestedCoins: number },
+    @Payload()
+    dto: {
+      userId: string;
+      teamId?: string;
+      requestedCoins: number;
+      notifyAdmins?: boolean;
+    },
   ) {
     return this.coinRefill.requestRefill(dto);
   }
@@ -85,6 +98,7 @@ export class CoinsConsumer {
       userId: string;
       approvedCoins: number;
       reviewer: string;
+      notifyRequester?: boolean;
     },
   ) {
     return this.coinRefill.approveRefill(dto);
@@ -101,6 +115,7 @@ export class CoinsConsumer {
   }
 
   @MessagePattern('coin.ledger.history')
+  @UseGuards(TeamMembershipAccessGuard)
   async onLedgerHistory(
     @Payload() { teamId, periodKey }: { teamId: string; periodKey?: string },
   ) {

@@ -39,17 +39,27 @@ describe('TeamService', () => {
     findMany: jest.fn(),
     findUserTeams: jest.fn(),
     findById: jest.fn(),
+    findPendingTeams: jest.fn(),
     findUserById: jest.fn(),
     ensureUniqueSlug: jest.fn(),
     confirmAuthorityOrThrow: jest.fn(),
+    approveTeam: jest.fn(),
+    rejectTeam: jest.fn(),
   };
 
   const teamInviteEmailService = {
     sendSignupInvite: jest.fn(),
   };
 
+  const userRepository = {
+    findMany: jest.fn(),
+    findById: jest.fn(),
+  };
+
   const notificationService = {
     createOne: jest.fn(),
+    createBatch: jest.fn(),
+    markMatchingRead: jest.fn(),
   };
 
   beforeEach(() => {
@@ -58,6 +68,7 @@ describe('TeamService', () => {
       repo as any,
       teamInviteEmailService as any,
       notificationService as any,
+      userRepository as any,
     );
   });
 
@@ -88,6 +99,12 @@ describe('TeamService', () => {
 
     repo.ensureUniqueSlug.mockResolvedValue('my-team');
     repo.createTeam.mockResolvedValue(baseTeam);
+    userRepository.findMany.mockResolvedValue([]);
+    userRepository.findById.mockResolvedValue({
+      id: 'user-1',
+      email: 'creator@example.com',
+      name: 'Creator User',
+    });
 
     const result = await service.createTeam(dto, 'user-1');
 
@@ -111,6 +128,56 @@ describe('TeamService', () => {
     );
 
     expect(result).toEqual(baseTeam);
+  });
+
+  it('notifies super admins when a user requests a team', async () => {
+    process.env.SUPER_ADMIN_EMAILS = 'admin@example.com,reviewer@example.com';
+    repo.ensureUniqueSlug.mockResolvedValue('my-team');
+    repo.createTeam.mockResolvedValue({
+      ...baseTeam,
+      id: 'team-pending-1',
+      name: 'My Team',
+      approvalStatus: 'PENDING',
+      isActive: false,
+    });
+    userRepository.findById.mockResolvedValue({
+      id: 'user-1',
+      email: 'creator@example.com',
+      name: 'Creator User',
+    });
+    userRepository.findMany.mockResolvedValue([
+      { id: 'admin-1', email: 'admin@example.com' },
+      { id: 'admin-2', email: 'reviewer@example.com' },
+      { id: 'user-1', email: 'creator@example.com' },
+    ]);
+
+    await service.createTeam({ name: 'My Team' }, 'user-1');
+
+    expect(notificationService.createBatch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        recipientUserIds: ['admin-1', 'admin-2'],
+        title: 'New team request',
+        type: 'team_approval_request',
+        sourceUserId: 'user-1',
+        metadata: expect.objectContaining({
+          teamId: 'team-pending-1',
+          teamName: 'My Team',
+          requesterUserId: 'user-1',
+          requesterEmail: 'creator@example.com',
+        }),
+      }),
+    );
+  });
+
+  it('does not notify super admins for system-provisioned teams', async () => {
+    repo.ensureUniqueSlug.mockResolvedValue('my-team');
+    repo.createTeam.mockResolvedValue(baseTeam);
+
+    await service.createTeam({ name: 'My Team' }, 'user-1', {
+      systemProvisioned: true,
+    });
+
+    expect(notificationService.createBatch).not.toHaveBeenCalled();
   });
 
   // --------------------
@@ -305,8 +372,34 @@ describe('TeamService', () => {
     const result = await service.acceptInvite('team-1', 'user-2');
 
     expect(repo.acceptInvite).toHaveBeenCalledWith('team-1', 'user-2');
+    expect(notificationService.markMatchingRead).toHaveBeenCalledWith({
+      recipientUserId: 'user-2',
+      type: 'TEAM_INVITE',
+      metadata: { teamId: 'team-1' },
+    });
     expect(result.message).toBe('Invitation accepted');
     expect(result.membership.isActive).toBe(true);
+  });
+
+  it('clears pending team request notifications after approval', async () => {
+    repo.findById.mockResolvedValue({
+      ...baseTeam,
+      id: 'team-1',
+      approvalStatus: 'PENDING',
+    });
+    repo.approveTeam.mockResolvedValue({
+      ...baseTeam,
+      id: 'team-1',
+      approvalStatus: 'APPROVED',
+      isActive: true,
+    });
+
+    await service.approveTeam('team-1');
+
+    expect(notificationService.markMatchingRead).toHaveBeenCalledWith({
+      type: 'team_approval_request',
+      metadata: { teamId: 'team-1' },
+    });
   });
 
   it('rejects accepting an invitation that was already accepted', async () => {
