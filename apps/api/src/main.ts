@@ -23,9 +23,9 @@ import { PrismaClientExceptionFilter } from '@pitch/shared-backend/filters/prism
 import { runStartupHealthChecks } from '@pitch/shared-backend/utils/startup-health-checks';
 import {
   createMicroserviceOptions,
-  getRabbitMQUrl,
+  getRabbitMQUrls,
   MICROSERVICES_CONFIG,
-} from './config/microservices.config';
+} from '@pitch/shared-backend/config/microservices.config';
 import { PrismaClient } from '@prisma/user-client';
 import { withAccelerate } from '@prisma/extension-accelerate';
 import { resolvePrismaRuntimeConfig } from './config/prisma-runtime.config';
@@ -76,7 +76,7 @@ async function bootstrap() {
   const logger = new Logger('Bootstrap');
 
   try {
-    const rabbitmqUrl = getRabbitMQUrl();
+    const rabbitmqUrls = getRabbitMQUrls();
     const { url, useAccelerate } = resolvePrismaRuntimeConfig(
       process.env.USER_DATABASE_URL,
       process.env.USER_DIRECT_URL,
@@ -95,7 +95,7 @@ async function bootstrap() {
     const prisma = useAccelerate
       ? (basePrisma.$extends(withAccelerate()) as unknown as PrismaClient)
       : basePrisma;
-    await runStartupHealthChecks(rabbitmqUrl, prisma);
+    await runStartupHealthChecks(rabbitmqUrls, prisma);
   } catch {
     logger.error('Startup health checks failed. Exiting...');
     process.exit(1);
@@ -225,7 +225,7 @@ async function bootstrap() {
   logger.log(
     `📘 Swagger UI at ${baseUrl}/${process.env.SWAGGER_PATH ?? 'docs'}`,
   );
-  logger.log(`🌐 RabbitMQ URL: ${getRabbitMQUrl()}`);
+  logger.log(`🌐 RabbitMQ URLs: ${getRabbitMQUrls().join(', ')}`);
   logger.log(
     `📦 Microservice: ${microserviceName || 'ALL'} started successfully`,
   );

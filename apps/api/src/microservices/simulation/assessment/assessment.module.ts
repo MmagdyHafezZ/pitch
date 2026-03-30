@@ -10,7 +10,7 @@ import { AssessmentGraphRunner } from './langgraph/assessment-graph';
 import { AssessmentQueuePublisher } from './assessment.queue';
 import { SimulationModule } from '../simulation.module';
 import { RagModule } from '../rag/rag.module';
-import { getQueueOptions, getRabbitMQUrl } from '../config/rabbitmq.config';
+import { getQueueOptions, getRabbitMQUrls } from '../config/rabbitmq.config';
 
 @Module({
   imports: [
@@ -21,7 +21,7 @@ import { getQueueOptions, getRabbitMQUrl } from '../config/rabbitmq.config';
         name: 'SIMULATION_QUEUE_CLIENT',
         transport: Transport.RMQ,
         options: {
-          urls: [getRabbitMQUrl()],
+          urls: getRabbitMQUrls(),
           queue: 'simulation_queue',
           queueOptions: getQueueOptions(),
         },

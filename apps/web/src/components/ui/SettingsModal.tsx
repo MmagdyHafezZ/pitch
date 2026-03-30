@@ -25,6 +25,9 @@ import {
   useComputedColorScheme,
   Alert,
   PinInput,
+  Switch,
+  Badge,
+  Loader,
 } from '@mantine/core'
 import {
   IconUser,
@@ -43,6 +46,10 @@ import {
   IconAlertCircle,
   IconChevronDown,
   IconLogout2,
+  IconVideo,
+  IconSpeakerphone,
+  IconCheck,
+  IconRefresh,
 } from '@tabler/icons-react'
 import { CalendarConnectCards } from '@/features/calendar/components/CalendarConnectCards'
 import { modals } from '@mantine/modals'
@@ -217,6 +224,110 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
   const [activePicker, setActivePicker] = useState<keyof ThemeTokens | null>(null)
   const [draggingPicker, setDraggingPicker] = useState(false)
 
+  // ── Notifications state ──────────────────────────────────────────────────
+  const [notifEmail, setNotifEmail] = useState(
+    () =>
+      (user?.settings as Record<string, unknown> | undefined)?.notifications as
+        | Record<string, unknown>
+        | undefined
+  )
+  const [notifEmailEnabled, setNotifEmailEnabled] = useState(
+    () =>
+      (
+        (user?.settings as Record<string, unknown> | undefined)?.notifications as
+          | Record<string, unknown>
+          | undefined
+      )?.emailNotifications !== false
+  )
+  const [notifDesktop, setNotifDesktop] = useState(
+    () =>
+      (
+        (user?.settings as Record<string, unknown> | undefined)?.notifications as
+          | Record<string, unknown>
+          | undefined
+      )?.desktopNotifications === true
+  )
+  const [notifProductUpdates, setNotifProductUpdates] = useState(
+    () =>
+      (
+        (user?.settings as Record<string, unknown> | undefined)?.notifications as
+          | Record<string, unknown>
+          | undefined
+      )?.productUpdates !== false
+  )
+  const [notifSessionReminders, setNotifSessionReminders] = useState(
+    () =>
+      (
+        (user?.settings as Record<string, unknown> | undefined)?.notifications as
+          | Record<string, unknown>
+          | undefined
+      )?.sessionReminders !== false
+  )
+  const [notifSaving, setNotifSaving] = useState(false)
+  const [notifSaved, setNotifSaved] = useState(false)
+  const [desktopPermission, setDesktopPermission] = useState<
+    NotificationPermission | 'unsupported'
+  >('default')
+
+  // ── Voice & Video state ──────────────────────────────────────────────────
+  const [mediaDevices, setMediaDevices] = useState<{
+    microphones: MediaDeviceInfo[]
+    speakers: MediaDeviceInfo[]
+    cameras: MediaDeviceInfo[]
+  }>({ microphones: [], speakers: [], cameras: [] })
+  const [devicesLoading, setDevicesLoading] = useState(false)
+  const [devicesError, setDevicesError] = useState<string | null>(null)
+  const [prefMic, setPrefMic] = useState(
+    () =>
+      (
+        (user?.settings as Record<string, unknown> | undefined)?.voiceVideo as
+          | Record<string, unknown>
+          | undefined
+      )?.preferredMicrophone as string | undefined
+  )
+  const [prefSpeaker, setPrefSpeaker] = useState(
+    () =>
+      (
+        (user?.settings as Record<string, unknown> | undefined)?.voiceVideo as
+          | Record<string, unknown>
+          | undefined
+      )?.preferredSpeaker as string | undefined
+  )
+  const [prefCamera, setPrefCamera] = useState(
+    () =>
+      (
+        (user?.settings as Record<string, unknown> | undefined)?.voiceVideo as
+          | Record<string, unknown>
+          | undefined
+      )?.preferredCamera as string | undefined
+  )
+  const [noiseSuppression, setNoiseSuppression] = useState(
+    () =>
+      (
+        (user?.settings as Record<string, unknown> | undefined)?.voiceVideo as
+          | Record<string, unknown>
+          | undefined
+      )?.noiseSuppression !== false
+  )
+  const [echoCancellation, setEchoCancellation] = useState(
+    () =>
+      (
+        (user?.settings as Record<string, unknown> | undefined)?.voiceVideo as
+          | Record<string, unknown>
+          | undefined
+      )?.echoCancellation !== false
+  )
+  const [autoJoinMuted, setAutoJoinMuted] = useState(
+    () =>
+      (
+        (user?.settings as Record<string, unknown> | undefined)?.voiceVideo as
+          | Record<string, unknown>
+          | undefined
+      )?.autoJoinMuted === true
+  )
+  const [vvSaving, setVvSaving] = useState(false)
+  const [vvSaved, setVvSaved] = useState(false)
+
   const syncPhoneInputState = (rawPhoneNumber: string | null | undefined) => {
     const parts = splitPhoneNumber(rawPhoneNumber)
     setPhoneCountryCode(parts.countryCode)
@@ -294,6 +405,117 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
       window.removeEventListener('mouseup', handlePointerUp)
     }
   }, [])
+
+  // Check desktop notification permission whenever Notifications tab is opened
+  useEffect(() => {
+    if (activeSection !== 'Notifications') return
+    if (typeof Notification === 'undefined') {
+      setDesktopPermission('unsupported')
+    } else {
+      setDesktopPermission(Notification.permission)
+    }
+  }, [activeSection])
+
+  // Enumerate media devices when Voice & Video tab is opened
+  useEffect(() => {
+    if (activeSection !== 'Voice & Video') return
+    let cancelled = false
+
+    const load = async () => {
+      setDevicesLoading(true)
+      setDevicesError(null)
+      try {
+        // Request permission first so device labels are populated
+        await navigator.mediaDevices
+          .getUserMedia({ audio: true, video: true })
+          .catch(() => navigator.mediaDevices.getUserMedia({ audio: true }))
+        if (cancelled) return
+        const all = await navigator.mediaDevices.enumerateDevices()
+        if (cancelled) return
+        setMediaDevices({
+          microphones: all.filter((d) => d.kind === 'audioinput'),
+          speakers: all.filter((d) => d.kind === 'audiooutput'),
+          cameras: all.filter((d) => d.kind === 'videoinput'),
+        })
+      } catch {
+        if (!cancelled)
+          setDevicesError('Could not access your devices. Please check browser permissions.')
+      } finally {
+        if (!cancelled) setDevicesLoading(false)
+      }
+    }
+
+    void load()
+    return () => {
+      cancelled = true
+    }
+  }, [activeSection])
+
+  const saveNotifications = async (patch: {
+    emailNotifications?: boolean
+    desktopNotifications?: boolean
+    productUpdates?: boolean
+    sessionReminders?: boolean
+  }) => {
+    setNotifSaving(true)
+    setNotifSaved(false)
+    try {
+      const existing = user?.settings ?? {}
+      const updated = await api.users.updateMySettings({
+        ...existing,
+        notifications: {
+          ...((existing as Record<string, unknown>).notifications as object),
+          ...patch,
+        },
+      })
+      if (user) setUser({ ...user, settings: updated })
+      setNotifSaved(true)
+      setTimeout(() => setNotifSaved(false), 2000)
+    } catch {
+      /* silent */
+    } finally {
+      setNotifSaving(false)
+    }
+  }
+
+  const saveVoiceVideo = async (patch: {
+    preferredMicrophone?: string
+    preferredSpeaker?: string
+    preferredCamera?: string
+    noiseSuppression?: boolean
+    echoCancellation?: boolean
+    autoJoinMuted?: boolean
+  }) => {
+    setVvSaving(true)
+    setVvSaved(false)
+    try {
+      const existing = user?.settings ?? {}
+      const updated = await api.users.updateMySettings({
+        ...existing,
+        voiceVideo: {
+          ...((existing as Record<string, unknown>).voiceVideo as object),
+          ...patch,
+        },
+      })
+      if (user) setUser({ ...user, settings: updated })
+      setVvSaved(true)
+      setTimeout(() => setVvSaved(false), 2000)
+    } catch {
+      /* silent */
+    } finally {
+      setVvSaving(false)
+    }
+  }
+
+  const requestDesktopPermission = async () => {
+    if (typeof Notification === 'undefined') return
+    const result = await Notification.requestPermission()
+    setDesktopPermission(result)
+    if (result === 'granted') {
+      setNotifDesktop(true)
+      void saveNotifications({ desktopNotifications: true })
+    }
+  }
 
   const customRows: { key: keyof ThemeTokens; label: string; helper?: string }[] = [
     { key: 'navBg', label: 'System navigation' },
@@ -925,20 +1147,311 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
             )}
 
             {activeSection === 'Notifications' && (
-              <Stack gap="md">
-                <Text size="xl" fw={600} mb="md" c="var(--pitch-surface-text)">
-                  {t('topbar.notifications')}
-                </Text>
-                <Text c="var(--pitch-surface-text-dim)">Notification settings coming soon...</Text>
+              <Stack gap="lg">
+                <Group justify="space-between" align="flex-end">
+                  <Stack gap={4}>
+                    <Text size="xl" fw={600} c="var(--pitch-surface-text)">
+                      {t('topbar.notifications')}
+                    </Text>
+                    <Text size="sm" c="var(--pitch-surface-text-dim)">
+                      Control how and when PITCH notifies you.
+                    </Text>
+                  </Stack>
+                  {notifSaved && (
+                    <Badge color="teal" leftSection={<IconCheck size={12} />} variant="light">
+                      Saved
+                    </Badge>
+                  )}
+                </Group>
+
+                {/* Email notifications */}
+                <Card
+                  padding="md"
+                  radius="md"
+                  withBorder
+                  style={{ borderColor: 'var(--mantine-color-gray-3)' }}
+                >
+                  <Stack gap="md">
+                    <Text fw={600} size="sm" c="var(--pitch-surface-text)">
+                      Email
+                    </Text>
+                    <Switch
+                      label="Session summaries & feedback"
+                      description="Receive a recap email after each practice session."
+                      checked={notifEmailEnabled}
+                      disabled={notifSaving}
+                      onChange={(e) => {
+                        setNotifEmailEnabled(e.currentTarget.checked)
+                        void saveNotifications({ emailNotifications: e.currentTarget.checked })
+                      }}
+                    />
+                    <Switch
+                      label="Product updates & announcements"
+                      description="New features, improvements, and important news."
+                      checked={notifProductUpdates}
+                      disabled={notifSaving}
+                      onChange={(e) => {
+                        setNotifProductUpdates(e.currentTarget.checked)
+                        void saveNotifications({ productUpdates: e.currentTarget.checked })
+                      }}
+                    />
+                    <Switch
+                      label="Session reminders"
+                      description="Remind me before a scheduled or suggested session."
+                      checked={notifSessionReminders}
+                      disabled={notifSaving}
+                      onChange={(e) => {
+                        setNotifSessionReminders(e.currentTarget.checked)
+                        void saveNotifications({ sessionReminders: e.currentTarget.checked })
+                      }}
+                    />
+                  </Stack>
+                </Card>
+
+                {/* Desktop / push notifications */}
+                <Card
+                  padding="md"
+                  radius="md"
+                  withBorder
+                  style={{ borderColor: 'var(--mantine-color-gray-3)' }}
+                >
+                  <Stack gap="md">
+                    <Group justify="space-between" wrap="nowrap">
+                      <Text fw={600} size="sm" c="var(--pitch-surface-text)">
+                        Desktop Notifications
+                      </Text>
+                      {desktopPermission === 'granted' && (
+                        <Badge color="teal" size="sm" variant="light">
+                          Allowed
+                        </Badge>
+                      )}
+                      {desktopPermission === 'denied' && (
+                        <Badge color="red" size="sm" variant="light">
+                          Blocked
+                        </Badge>
+                      )}
+                      {desktopPermission === 'unsupported' && (
+                        <Badge color="gray" size="sm" variant="light">
+                          Not supported
+                        </Badge>
+                      )}
+                    </Group>
+
+                    {desktopPermission === 'denied' && (
+                      <Alert color="orange" variant="light" radius="md">
+                        Desktop notifications are blocked in your browser. To enable them, click the
+                        lock icon in your address bar and allow notifications for this site.
+                      </Alert>
+                    )}
+
+                    {desktopPermission === 'default' && (
+                      <Group gap="sm" align="flex-start">
+                        <Text size="sm" c="var(--pitch-surface-text-dim)" style={{ flex: 1 }}>
+                          Allow PITCH to show browser notifications for real-time alerts.
+                        </Text>
+                        <Button
+                          size="xs"
+                          variant="light"
+                          onClick={() => void requestDesktopPermission()}
+                        >
+                          Enable
+                        </Button>
+                      </Group>
+                    )}
+
+                    {(desktopPermission === 'granted' || desktopPermission === 'unsupported') && (
+                      <Switch
+                        label="Enable desktop notifications"
+                        description="Show browser alerts for session updates and reminders."
+                        checked={notifDesktop && desktopPermission === 'granted'}
+                        disabled={notifSaving || desktopPermission !== 'granted'}
+                        onChange={(e) => {
+                          setNotifDesktop(e.currentTarget.checked)
+                          void saveNotifications({ desktopNotifications: e.currentTarget.checked })
+                        }}
+                      />
+                    )}
+                  </Stack>
+                </Card>
               </Stack>
             )}
 
             {activeSection === 'Voice & Video' && (
-              <Stack gap="md">
-                <Text size="xl" fw={600} mb="md" c="var(--pitch-surface-text)">
-                  Voice & Video
-                </Text>
-                <Text c="var(--pitch-surface-text-dim)">Voice & Video settings coming soon...</Text>
+              <Stack gap="lg">
+                <Group justify="space-between" align="flex-end">
+                  <Stack gap={4}>
+                    <Text size="xl" fw={600} c="var(--pitch-surface-text)">
+                      Voice &amp; Video
+                    </Text>
+                    <Text size="sm" c="var(--pitch-surface-text-dim)">
+                      Configure your microphone, camera, and audio processing for sessions.
+                    </Text>
+                  </Stack>
+                  {vvSaved && (
+                    <Badge color="teal" leftSection={<IconCheck size={12} />} variant="light">
+                      Saved
+                    </Badge>
+                  )}
+                </Group>
+
+                {devicesError && (
+                  <Alert
+                    color="orange"
+                    variant="light"
+                    radius="md"
+                    icon={<IconAlertCircle size={16} />}
+                  >
+                    {devicesError}
+                  </Alert>
+                )}
+
+                {/* Devices */}
+                <Card
+                  padding="md"
+                  radius="md"
+                  withBorder
+                  style={{ borderColor: 'var(--mantine-color-gray-3)' }}
+                >
+                  <Stack gap="md">
+                    <Group justify="space-between">
+                      <Text fw={600} size="sm" c="var(--pitch-surface-text)">
+                        Devices
+                      </Text>
+                      {devicesLoading && <Loader size="xs" />}
+                      {!devicesLoading &&
+                        mediaDevices.microphones.length === 0 &&
+                        !devicesError && (
+                          <Button
+                            size="xs"
+                            variant="subtle"
+                            leftSection={<IconRefresh size={14} />}
+                            onClick={() => setActiveSection('Voice & Video')}
+                          >
+                            Detect devices
+                          </Button>
+                        )}
+                    </Group>
+
+                    <Select
+                      label="Microphone"
+                      leftSection={<IconMicrophone size={16} />}
+                      placeholder={devicesLoading ? 'Loading…' : 'Select microphone'}
+                      data={
+                        mediaDevices.microphones.length > 0
+                          ? mediaDevices.microphones.map((d) => ({
+                              value: d.deviceId,
+                              label: d.label || `Microphone ${d.deviceId.slice(0, 8)}`,
+                            }))
+                          : []
+                      }
+                      value={prefMic ?? null}
+                      disabled={devicesLoading || mediaDevices.microphones.length === 0}
+                      onChange={(val) => {
+                        setPrefMic(val ?? undefined)
+                        void saveVoiceVideo({ preferredMicrophone: val ?? undefined })
+                      }}
+                      classNames={settingsInputClassNames}
+                    />
+
+                    {mediaDevices.speakers.length > 0 && (
+                      <Select
+                        label="Speaker"
+                        leftSection={<IconSpeakerphone size={16} />}
+                        placeholder="Select speaker"
+                        data={mediaDevices.speakers.map((d) => ({
+                          value: d.deviceId,
+                          label: d.label || `Speaker ${d.deviceId.slice(0, 8)}`,
+                        }))}
+                        value={prefSpeaker ?? null}
+                        disabled={devicesLoading}
+                        onChange={(val) => {
+                          setPrefSpeaker(val ?? undefined)
+                          void saveVoiceVideo({ preferredSpeaker: val ?? undefined })
+                        }}
+                        classNames={settingsInputClassNames}
+                      />
+                    )}
+
+                    <Select
+                      label="Camera"
+                      leftSection={<IconVideo size={16} />}
+                      placeholder={devicesLoading ? 'Loading…' : 'Select camera'}
+                      data={
+                        mediaDevices.cameras.length > 0
+                          ? mediaDevices.cameras.map((d) => ({
+                              value: d.deviceId,
+                              label: d.label || `Camera ${d.deviceId.slice(0, 8)}`,
+                            }))
+                          : []
+                      }
+                      value={prefCamera ?? null}
+                      disabled={devicesLoading || mediaDevices.cameras.length === 0}
+                      onChange={(val) => {
+                        setPrefCamera(val ?? undefined)
+                        void saveVoiceVideo({ preferredCamera: val ?? undefined })
+                      }}
+                      classNames={settingsInputClassNames}
+                    />
+                  </Stack>
+                </Card>
+
+                {/* Audio processing */}
+                <Card
+                  padding="md"
+                  radius="md"
+                  withBorder
+                  style={{ borderColor: 'var(--mantine-color-gray-3)' }}
+                >
+                  <Stack gap="md">
+                    <Text fw={600} size="sm" c="var(--pitch-surface-text)">
+                      Audio Processing
+                    </Text>
+                    <Switch
+                      label="Noise suppression"
+                      description="Filter out background noise during sessions."
+                      checked={noiseSuppression}
+                      disabled={vvSaving}
+                      onChange={(e) => {
+                        setNoiseSuppression(e.currentTarget.checked)
+                        void saveVoiceVideo({ noiseSuppression: e.currentTarget.checked })
+                      }}
+                    />
+                    <Switch
+                      label="Echo cancellation"
+                      description="Prevent your microphone from picking up speaker audio."
+                      checked={echoCancellation}
+                      disabled={vvSaving}
+                      onChange={(e) => {
+                        setEchoCancellation(e.currentTarget.checked)
+                        void saveVoiceVideo({ echoCancellation: e.currentTarget.checked })
+                      }}
+                    />
+                  </Stack>
+                </Card>
+
+                {/* Session defaults */}
+                <Card
+                  padding="md"
+                  radius="md"
+                  withBorder
+                  style={{ borderColor: 'var(--mantine-color-gray-3)' }}
+                >
+                  <Stack gap="md">
+                    <Text fw={600} size="sm" c="var(--pitch-surface-text)">
+                      Session Defaults
+                    </Text>
+                    <Switch
+                      label="Join sessions muted"
+                      description="Start every session with your microphone off."
+                      checked={autoJoinMuted}
+                      disabled={vvSaving}
+                      onChange={(e) => {
+                        setAutoJoinMuted(e.currentTarget.checked)
+                        void saveVoiceVideo({ autoJoinMuted: e.currentTarget.checked })
+                      }}
+                    />
+                  </Stack>
+                </Card>
               </Stack>
             )}
 

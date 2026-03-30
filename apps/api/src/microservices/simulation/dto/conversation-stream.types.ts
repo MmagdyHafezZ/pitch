@@ -41,6 +41,7 @@ export type ConversationStreamEvent =
         sentenceIndex: number;
         audio: Buffer;
         contentType: string;
+        sentenceText?: string;
       };
     }
   | {

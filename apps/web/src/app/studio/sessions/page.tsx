@@ -84,6 +84,14 @@ const themedIconStyle = {
     '1px solid var(--pitch-card-border, var(--pitch-border, var(--mantine-color-default-border)))',
 }
 
+const groupHeaderStyle = {
+  ...elevatedCardStyle,
+  width: '100%',
+  padding: '16px 20px',
+  borderRadius: 'var(--mantine-radius-lg)',
+  marginBottom: '16px',
+}
+
 function SessionCard({ session, onClick }: { session: Session; onClick: () => void }) {
   const { tp } = useI18n()
   const displayStatus = session.status as Status
@@ -95,22 +103,32 @@ function SessionCard({ session, onClick }: { session: Session; onClick: () => vo
   return (
     <Card
       withBorder
-      radius="md"
-      padding="md"
-      shadow="sm"
+      radius="lg"
+      padding="lg"
       onClick={onClick}
       style={{
+        ...themedCardStyle,
         cursor: 'pointer',
-        transition: 'border-color 0.15s, box-shadow 0.15s',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+        transition: 'transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease',
       }}
       onMouseEnter={(e) => {
-        e.currentTarget.style.borderColor = 'var(--mantine-color-brand-6)'
-        e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.2)'
+        e.currentTarget.style.transform = 'translateY(-2px)'
+        e.currentTarget.style.borderColor =
+          'var(--pitch-card-border-strong, var(--pitch-card-border, var(--pitch-border, var(--mantine-color-default-border))))'
+        e.currentTarget.style.boxShadow = `0 14px 30px color-mix(
+          in srgb,
+          var(--pitch-card-shadow, var(--pitch-accent-strong)) 18%,
+          transparent
+        )`
       }}
       onMouseLeave={(e) => {
+        e.currentTarget.style.transform = ''
         e.currentTarget.style.borderColor = ''
-        e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.1)'
+        e.currentTarget.style.boxShadow = `0 10px 24px color-mix(
+          in srgb,
+          var(--pitch-card-shadow, var(--pitch-surface-bg, #000)) 16%,
+          transparent
+        )`
       }}
     >
       <Stack gap="xs">
@@ -121,9 +139,6 @@ function SessionCard({ session, onClick }: { session: Session; onClick: () => vo
           >
             {displayName}
           </Title>
-          <Badge color={statusColor[displayStatus]} radius="sm" variant="light">
-            {statusLabel}
-          </Badge>
         </Group>
         <Text size="xs" c="dimmed">
           {new Date(session.createdAt).toLocaleDateString()}
@@ -304,23 +319,17 @@ function SessionsPageInner() {
                 onClick={() =>
                   setExpandedCategories((prev) => ({ ...prev, [groupName]: !prev[groupName] }))
                 }
-                style={{
-                  width: '100%',
-                  padding: '16px 20px',
-                  backgroundColor: 'var(--mantine-color-dark-8)',
-                  borderRadius: '8px',
-                  marginBottom: '16px',
-                }}
+                style={groupHeaderStyle}
               >
                 <Group justify="space-between" wrap="nowrap">
-                  <Title order={3} c="white" style={{ fontWeight: 600 }}>
+                  <Title order={3} style={{ fontWeight: 600 }}>
                     {groupName === personalGroupKey ? tp('Personal') : groupName} (
                     {groupSessions.length})
                   </Title>
                   {expandedCategories[groupName] ? (
-                    <IconChevronDown size={24} color="white" />
+                    <IconChevronDown size={24} />
                   ) : (
-                    <IconChevronUp size={24} color="white" />
+                    <IconChevronUp size={24} />
                   )}
                 </Group>
               </UnstyledButton>

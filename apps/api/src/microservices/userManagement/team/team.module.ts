@@ -2,8 +2,8 @@ import { Module } from '@nestjs/common';
 import { ClientsModule, Transport } from '@nestjs/microservices';
 import {
   getQueueOptions,
-  getRabbitMQUrl,
-} from '../../../config/microservices.config';
+  getRabbitMQUrls,
+} from '@pitch/shared-backend/config/microservices.config';
 
 import { TeamService } from './services/team.service';
 import { TeamRepository } from './repositories/team.repository';
@@ -21,7 +21,7 @@ import { TeamInviteExpiryCronService } from './services/team-invite-expiry-cron.
         name: 'SUPPORT_SERVICE',
         transport: Transport.RMQ,
         options: {
-          urls: [getRabbitMQUrl()],
+          urls: getRabbitMQUrls(),
           queue: process.env.SUPPORT_RMQ_QUEUE || 'support_queue',
           queueOptions: getQueueOptions(),
         },

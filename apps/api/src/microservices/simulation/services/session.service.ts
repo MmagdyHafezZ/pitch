@@ -217,6 +217,7 @@ export class SessionService {
       string,
       unknown
     >;
+
     const llmCfg = (rawConfig.llm ?? rawConfig.llmConfig ?? {}) as Record<
       string,
       unknown

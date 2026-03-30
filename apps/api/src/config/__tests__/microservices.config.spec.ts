@@ -4,11 +4,14 @@ import {
   createMicroserviceOptions,
   getQueueOptions,
   getRabbitMQUrl,
+  getRabbitMQUrls,
 } from '../microservices.config';
 
 describe('microservices.config', () => {
   const originalEnv = process.env.RABBITMQ_URL;
+  const originalSecondaryEnv = process.env.RABBITMQ_URL_SECONDARY;
   const originalCloudEnv = process.env.CLOUDAMQP_URL;
+  const originalCloudSecondaryEnv = process.env.CLOUDAMQP_URL_SECONDARY;
   const originalDepMode = process.env.DEP_MODE;
 
   afterEach(() => {
@@ -17,10 +20,20 @@ describe('microservices.config', () => {
     } else {
       process.env.RABBITMQ_URL = originalEnv;
     }
+    if (originalSecondaryEnv === undefined) {
+      delete process.env.RABBITMQ_URL_SECONDARY;
+    } else {
+      process.env.RABBITMQ_URL_SECONDARY = originalSecondaryEnv;
+    }
     if (originalCloudEnv === undefined) {
       delete process.env.CLOUDAMQP_URL;
     } else {
       process.env.CLOUDAMQP_URL = originalCloudEnv;
+    }
+    if (originalCloudSecondaryEnv === undefined) {
+      delete process.env.CLOUDAMQP_URL_SECONDARY;
+    } else {
+      process.env.CLOUDAMQP_URL_SECONDARY = originalCloudSecondaryEnv;
     }
     if (originalDepMode === undefined) {
       delete process.env.DEP_MODE;
@@ -45,14 +58,15 @@ describe('microservices.config', () => {
 
   it('builds microservice options using the queue name', () => {
     process.env.DEP_MODE = 'local';
-    process.env.RABBITMQ_URL = 'amqp://custom';
+    process.env.RABBITMQ_URL = 'amqp://custom-primary';
+    process.env.RABBITMQ_URL_SECONDARY = 'amqp://custom-secondary';
 
     const options = createMicroserviceOptions('sample_queue');
 
     expect(options).toEqual({
       transport: Transport.RMQ,
       options: {
-        urls: ['amqp://custom'],
+        urls: ['amqp://custom-primary', 'amqp://custom-secondary'],
         queue: 'sample_queue',
         noAck: true,
         prefetchCount: 10,
@@ -67,8 +81,21 @@ describe('microservices.config', () => {
   it('uses CloudAMQP when DEP_MODE is prod', () => {
     process.env.DEP_MODE = 'prod';
     process.env.CLOUDAMQP_URL = 'amqp://cloud';
+    process.env.CLOUDAMQP_URL_SECONDARY = 'amqp://cloud-secondary';
 
     expect(getRabbitMQUrl()).toBe('amqp://cloud');
+    expect(getRabbitMQUrls()).toEqual([
+      'amqp://cloud',
+      'amqp://cloud-secondary',
+    ]);
+  });
+
+  it('returns only primary URL when no secondary URL is configured', () => {
+    process.env.DEP_MODE = 'local';
+    process.env.RABBITMQ_URL = 'amqp://primary-only';
+    delete process.env.RABBITMQ_URL_SECONDARY;
+
+    expect(getRabbitMQUrls()).toEqual(['amqp://primary-only']);
   });
 
   it('throws error when RABBITMQ_URL environment variable is missing', () => {

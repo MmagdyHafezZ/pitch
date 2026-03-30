@@ -7,6 +7,7 @@ export type OnboardingStep =
   | 'manager-invite'
   | 'employee-career'
   | 'connect-calendar'
+  | 'setup'
   | 'tutorial'
 
 export interface CareerInfo {

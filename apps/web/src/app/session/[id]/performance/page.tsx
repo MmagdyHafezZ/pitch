@@ -1644,6 +1644,7 @@ export default function SessionPerformancePage() {
                 key: `post-session-coach:${assessment?.runId ?? sessionId}`,
                 message: coachStarterMessage,
                 open: true,
+                hidden: true,
               }
             : undefined
         }

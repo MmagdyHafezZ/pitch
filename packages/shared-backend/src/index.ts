@@ -21,5 +21,6 @@ export * from './filters/prisma-exception.filter'
 export * from './filters/rpc-exception.filter'
 
 export * from './config/jwt.config'
+export * from './config/microservices.config'
 
 export * from './utils/startup-health-checks'

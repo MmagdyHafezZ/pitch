@@ -144,7 +144,7 @@ export function buildConversationSystemPrompt(
   );
 
   const sections = [
-    'You are running a roleplay simulation. Follow these instructions precisely.',
+    'You are the character described below. This is the live conversation — be fully in character from your first word.',
     '',
     '[IDENTITY]',
     buildIdentitySection(aiRole, personaName, userRole, userName),
@@ -250,17 +250,15 @@ export function buildConversationStarterPrompt(
   );
 
   return [
-    'This is the very first turn of a newly started simulation session.',
+    'This is the opening of the session. Begin the conversation immediately, fully in character — no introduction to the app or the simulation.',
     userName
-      ? `Open with the exact greeting "Hi ${userName}," before anything else.`
-      : 'Open with a warm "Hi" greeting before anything else.',
-    'In the next sentence, give a short introduction to Pitch as the app hosting this practice simulation.',
+      ? `Address ${userName} naturally, as ${aiRole} would in this scenario.`
+      : `Open as ${aiRole} would naturally start this conversation.`,
     scenarioSummary
-      ? `Then explain the scenario briefly in plain language. ${scenarioSummary}`
-      : 'Then explain the scenario briefly in plain language so the user understands who they are speaking with and what they need to do.',
-    `After that short introduction, fully transition into character as ${aiRole} and continue the live scenario.`,
-    'Lead with one concrete concern, decision, or question from your role so the conversation starts immediately.',
-    'Keep the full opening natural, concise, and under 5 sentences.',
+      ? `Use this context to ground your opening: ${scenarioSummary}`
+      : `Open as ${aiRole}, making it clear from context who you are and why you are speaking.`,
+    'Immediately surface one concrete concern, question, or decision point from your role.',
+    'Keep it under 4 sentences. Sound natural — not scripted.',
   ].join(' ');
 }
 
@@ -323,28 +321,22 @@ export function buildConversationFallbackResponse(
   );
 
   if (input.startAsAssistant) {
-    const greeting = userName
-      ? `Hi ${userName}, welcome to Pitch.`
-      : 'Hi, welcome to Pitch.';
-    const roleIntro = aiRole
-      ? `I'm ${aiRole} for this simulation.`
-      : 'I am your counterpart for this simulation.';
-    const scenarioIntro =
+    const greeting = userName ? `Hi ${userName}.` : 'Hi.';
+    const roleIntro = aiRole ? ` I'm ${aiRole}.` : '';
+    const contextLine =
       context || objective
-        ? `This scenario has you working as ${userRole}${objective ? ` with the goal to ${objective}` : ''}${context ? `. Context: ${context}` : '.'}`
-        : `This scenario has you working as ${userRole}.`;
-    const transition = aiRole
-      ? `Let's begin: as ${aiRole}, I need one concrete point, risk, number, or next step from you so we can move forward.`
-      : "Let's begin: give me one concrete point, risk, number, or next step so we can move the conversation forward.";
+        ? ` I want to talk about ${context || objective} — let's get right into it.`
+        : ` I want to get right into it.`;
+    const ask = ` Give me one concrete point to start: a specific number, timeline, or decision.`;
 
-    return `${greeting} ${roleIntro} ${scenarioIntro} ${transition}`;
+    return `${greeting}${roleIntro}${contextLine}${ask}`;
   }
 
-  const rolePrefix = aiRole ? `As ${aiRole},` : 'In this roleplay,';
-  const objectiveSentence = objective
-    ? ` Objective to address: ${objective}.`
-    : '';
-  return `${rolePrefix} I need a concrete response to continue.${objectiveSentence} Share one specific detail (number, timeline, or decision) and your next step.`;
+  const rolePrefix = aiRole ? `${aiRole}:` : '';
+  const push = objective
+    ? ` What specifically is your plan for ${objective}? I need one concrete detail — a number, timeline, or decision.`
+    : ` I need something more concrete from you. Give me one specific number, timeline, or decision.`;
+  return `${rolePrefix}${push}`.trim();
 }
 
 export function isDisallowedGenericFallbackReply(
@@ -385,11 +377,10 @@ function buildStarterScenarioSummary(
   );
 
   return [
-    `Mention that the user is playing ${userRole}.`,
-    `Mention that you are playing ${aiRole}.`,
-    title ? `Mention the scenario title: ${title}.` : '',
-    objective ? `Mention the user's goal: ${objective}.` : '',
-    context ? `Mention the relevant context: ${context}.` : '',
+    title ? `Scenario: "${title}".` : '',
+    `You are ${aiRole}; the other person is ${userRole}.`,
+    objective ? `Their goal in this conversation: ${objective}.` : '',
+    context ? `Context: ${context}.` : '',
   ]
     .filter(Boolean)
     .join(' ');
@@ -725,7 +716,13 @@ function buildEmotionalSection(
 
 function buildStyleSection(sessionConfig: SessionConfig): string {
   const tone = pickString(sessionConfig.tone);
-  const accent = pickString(sessionConfig.accent);
+  const accentRaw = pickString(sessionConfig.accent);
+  const accent =
+    accentRaw &&
+    !/persona[-\s]?based/i.test(accentRaw) &&
+    !accentRaw.includes('/')
+      ? accentRaw
+      : undefined;
   const speechRate = formatValue(sessionConfig.speechRate);
   const responseLength = pickString(sessionConfig.responseLength);
   const patienceLevel = pickString(sessionConfig.patienceLevel);

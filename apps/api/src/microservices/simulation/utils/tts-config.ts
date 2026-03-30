@@ -1,3 +1,5 @@
+import { normalizeAccent } from './voice-accent';
+
 type JsonRecord = Record<string, unknown>;
 
 export interface ResolvedTtsConfig {
@@ -5,6 +7,7 @@ export interface ResolvedTtsConfig {
   voice?: string;
   language?: string;
   model?: string;
+  accent?: string;
 }
 
 export interface TtsConfigOverride {
@@ -12,6 +15,7 @@ export interface TtsConfigOverride {
   voice?: string;
   language?: string;
   model?: string;
+  accent?: string;
 }
 
 const isRecord = (value: unknown): value is JsonRecord =>
@@ -46,6 +50,7 @@ export const extractTtsConfig = (
     voice: pickFirstString(voice?.voiceName, voice?.voice, source.ttsVoice),
     language: pickFirstString(voice?.language, source.language),
     model: pickFirstString(voice?.model, source.ttsModel),
+    accent: pickFirstString(voice?.accent, source.accent),
   };
 };
 
@@ -62,6 +67,9 @@ export const resolveTtsConfig = ({
 }): ResolvedTtsConfig => {
   const sessionVoice = extractTtsConfig(sessionConfig);
   const personaVoice = extractTtsConfig(personaTraits);
+  const accent = normalizeAccent(
+    override?.accent ?? sessionVoice.accent ?? personaVoice.accent,
+  );
 
   return {
     provider:
@@ -73,5 +81,6 @@ export const resolveTtsConfig = ({
     language:
       override?.language ?? sessionVoice.language ?? personaVoice.language,
     model: override?.model ?? sessionVoice.model ?? personaVoice.model,
+    accent,
   };
 };

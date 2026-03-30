@@ -374,10 +374,20 @@ export default function ChallengesPage() {
         </Center>
       ) : challenges.length === 0 ? (
         <Center p="xl">
-          <Stack align="center" gap="sm">
-            <IconTrophy size={48} color="var(--mantine-color-dimmed)" />
-            <Text c="dimmed">No active challenges right now. Check back soon!</Text>
-          </Stack>
+          <Card
+            withBorder
+            radius="lg"
+            p="xl"
+            style={{ maxWidth: 420, width: '100%', textAlign: 'center' }}
+          >
+            <Stack align="center" gap="sm">
+              <IconTrophy size={48} color="var(--mantine-color-dimmed)" />
+              <Text fw={600}>No active challenges right now.</Text>
+              <Text size="sm" c="dimmed">
+                Check back soon — new challenges drop regularly.
+              </Text>
+            </Stack>
+          </Card>
         </Center>
       ) : (
         <Stack data-tour-id="challenges-list" gap="xl">
