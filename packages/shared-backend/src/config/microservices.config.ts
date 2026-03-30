@@ -61,11 +61,26 @@ function getRabbitMQEnvConfig(): {
   const primaryVar = isProd ? 'CLOUDAMQP_URL' : 'RABBITMQ_URL'
   const secondaryVar = isProd ? 'CLOUDAMQP_URL_SECONDARY' : 'RABBITMQ_URL_SECONDARY'
 
+  const primaryAliases = isProd
+    ? [primaryVar, 'RABBITMQ_URL' as const]
+    : [primaryVar, 'CLOUDAMQP_URL' as const]
+  const secondaryAliases = isProd
+    ? [secondaryVar, 'RABBITMQ_URL_SECONDARY' as const]
+    : [secondaryVar, 'CLOUDAMQP_URL_SECONDARY' as const]
+
+  const readFirstSet = (vars: readonly string[]): string | undefined => {
+    for (const varName of vars) {
+      const value = process.env[varName]?.trim()
+      if (value) return value
+    }
+    return undefined
+  }
+
   return {
     primaryVar,
     secondaryVar,
-    primaryUrl: process.env[primaryVar],
-    secondaryUrl: process.env[secondaryVar],
+    primaryUrl: readFirstSet(primaryAliases),
+    secondaryUrl: readFirstSet(secondaryAliases),
   }
 }
 
@@ -87,6 +102,7 @@ export function getRabbitMQUrl(): string {
  *
  * - DEP_MODE=local -> RABBITMQ_URL, RABBITMQ_URL_SECONDARY
  * - DEP_MODE=prod -> CLOUDAMQP_URL, CLOUDAMQP_URL_SECONDARY
+ *   (cross-env aliases are also accepted for compatibility)
  */
 export function getRabbitMQUrls(): string[] {
   const { primaryVar, primaryUrl, secondaryUrl } = getRabbitMQEnvConfig()
