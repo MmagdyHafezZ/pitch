@@ -50,7 +50,7 @@ import { UploadSection } from './components/UploadSection'
 import { ReviewStep } from './components/ReviewStep'
 import { SessionConfigForm, Persona, PersonaTraits } from './lib/types'
 import { DEFAULT_ACCENT, deriveAccentFromPersonaTraits } from './lib/accent'
-import { buildPabloVideoPresenterConfig } from './lib/videoPresenter'
+import { buildPabloVideoPresenterConfig, PABLO_VIDEO_PRESENTER_VOICE } from './lib/videoPresenter'
 import type { SessionAttachment } from '@/features/sessions/types/sessions.types'
 import { getBrainCompatibleModels, getPreferredBrainModel } from './lib/brain-models'
 import { useCrm } from '@/features/crm'
@@ -592,9 +592,12 @@ export default function CreateSessionPage() {
 
   useEffect(() => {
     const previousSessionType = previousSessionTypeRef.current
-    if (previousSessionType && previousSessionType !== 'video' && sessionType === 'video') {
+    if (previousSessionType !== 'video' && sessionType === 'video') {
       setSelectedPersona(null)
       setPersonaSearch('')
+      setTtsProvider(PABLO_VIDEO_PRESENTER_VOICE.provider)
+      setTtsVoice(PABLO_VIDEO_PRESENTER_VOICE.voiceName)
+      setTtsModel(PABLO_VIDEO_PRESENTER_VOICE.model ?? null)
     }
     previousSessionTypeRef.current = sessionType
   }, [sessionType])
@@ -1396,6 +1399,11 @@ export default function CreateSessionPage() {
           setSelectedPersona={setSelectedPersona}
           errors={errors}
           selectedPersonaData={selectedPersonaData}
+          ttsProvider={ttsProvider}
+          setTtsProvider={setTtsProvider}
+          ttsVoice={ttsVoice}
+          setTtsVoice={setTtsVoice}
+          ttsModel={ttsModel}
           ttsProviders={ttsProviders}
           onCreatePersona={handleCreatePersona}
           createDisabledReason={

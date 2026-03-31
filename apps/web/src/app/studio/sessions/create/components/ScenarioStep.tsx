@@ -291,8 +291,11 @@ export function ScenarioStep({
                           role="button"
                           tabIndex={0}
                           onKeyDown={(e) => {
-                            if (e.key === 'Enter' || e.key === ' ')
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault()
+                              e.stopPropagation()
                               handleSelectSavedScenario(scenario.id)
+                            }
                           }}
                           {...(isFirstNonSelected
                             ? { 'data-tour-id': 'create-session-scenario-item' }

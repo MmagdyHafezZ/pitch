@@ -23,6 +23,11 @@ describe('PersonaStep', () => {
         setSelectedPersona={() => undefined}
         errors={{}}
         selectedPersonaData={null}
+        ttsProvider="elevenlabs"
+        setTtsProvider={() => undefined}
+        ttsVoice="George - Warm, Captivating Storyteller"
+        setTtsVoice={() => undefined}
+        ttsModel={null}
         ttsProviders={[]}
         onCreatePersona={async () => {
           throw new Error('not used in video mode')
@@ -38,11 +43,14 @@ describe('PersonaStep', () => {
     expect(screen.getByText(/match the persona to your training scenario/i)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /select persona pablo/i })).toBeInTheDocument()
     expect(screen.getAllByText('Pablo').length).toBeGreaterThan(0)
-    expect(screen.getAllByText(/fixed pablo presenter/i).length).toBeGreaterThan(0)
+    expect(
+      screen.getAllByText(/elevenlabs \/ george - warm, captivating storyteller/i).length
+    ).toBeGreaterThan(0)
     expect(
       screen.queryByPlaceholderText(/search personas by name, role, or archetype/i)
     ).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /create persona here/i })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /test voice/i })).toBeInTheDocument()
   })
 
   it('keeps the video presenter locked instead of changing persona selection', () => {

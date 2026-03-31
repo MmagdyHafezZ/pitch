@@ -15,6 +15,8 @@ const nextConfig = {
       '@/hooks': path.resolve(process.cwd(), 'src/hooks'),
       '@pitch/shared': path.resolve(process.cwd(), '../../packages/shared/src'),
     }
+    // Required for onnxruntime-web WASM execution (used by @huggingface/transformers)
+    config.experiments = { ...config.experiments, asyncWebAssembly: true }
     return config
   },
 }

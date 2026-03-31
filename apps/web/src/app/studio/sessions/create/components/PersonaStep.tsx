@@ -16,6 +16,7 @@ import {
   ThemeIcon,
   Progress,
   Paper,
+  Select,
 } from '@mantine/core'
 import {
   IconChevronLeft,
@@ -98,6 +99,11 @@ interface PersonaStepProps {
   setSelectedPersona: (id: string | null) => void
   errors: Record<string, string>
   selectedPersonaData: Persona | null
+  ttsProvider: string
+  setTtsProvider: (value: string) => void
+  ttsVoice: string
+  setTtsVoice: (value: string) => void
+  ttsModel?: string | null
   ttsProviders: TtsProvider[]
   onCreatePersona: (input: { name: string; traits: PersonaTraits }) => Promise<Persona>
   createDisabledReason?: string | null
@@ -116,6 +122,11 @@ export function PersonaStep({
   setSelectedPersona,
   errors,
   selectedPersonaData,
+  ttsProvider,
+  setTtsProvider,
+  ttsVoice,
+  setTtsVoice,
+  ttsModel = null,
   ttsProviders,
   onCreatePersona,
   createDisabledReason,
@@ -128,6 +139,15 @@ export function PersonaStep({
   const previewUrlRef = useRef<string | null>(null)
   const visiblePersonas = filteredPersonas.filter((persona) => persona.id !== selectedPersona)
   const isVideoSession = sessionType === 'video'
+
+  const formatProviderLabel = (providerName: string) => {
+    const normalized = providerName.trim().toLowerCase()
+    if (normalized === 'elevenlabs') return 'ElevenLabs'
+    if (normalized === 'openai') return 'OpenAI'
+    if (normalized === 'melotts') return 'MeloTTS'
+    if (!normalized) return 'Voice'
+    return normalized.charAt(0).toUpperCase() + normalized.slice(1)
+  }
 
   const clearPreviewUrl = () => {
     if (previewUrlRef.current) {
@@ -162,10 +182,31 @@ export function PersonaStep({
 
   if (isVideoSession) {
     const presenter = PABLO_VIDEO_PRESENTER_PERSONA
+    const pabloVoicePreviewId = 'video-presenter-pablo-preview'
     const presenterTraits = (presenter.traits ?? {}) as PersonaTraits
     const presenterMetrics = normalizeMetrics(presenterTraits)
     const presenterSignatureTraits = resolveSignatureTraits(presenterTraits)
-    const presenterVoiceProfile = getVoiceProfile(presenterTraits)
+    const selectedProvider =
+      ttsProviders.find((provider) => provider.name === ttsProvider) ?? ttsProviders[0] ?? null
+    const providerOptions = ttsProviders.map((provider) => ({
+      value: provider.name,
+      label: formatProviderLabel(provider.name),
+    }))
+    const voiceOptions = (selectedProvider?.voices ?? []).map((voice) => ({
+      value: voice,
+      label: voice,
+    }))
+    const selectedVoice =
+      selectedProvider?.voices.includes(ttsVoice) === true
+        ? ttsVoice
+        : (selectedProvider?.voices[0] ?? ttsVoice)
+    const canPreviewPabloVoice = Boolean(selectedProvider?.name && selectedVoice)
+    const isPreviewLoading = previewLoadingPersonaId === pabloVoicePreviewId
+    const isPreviewPlaying = playingPersonaId === pabloVoicePreviewId
+    const presenterVoiceProfile =
+      selectedProvider?.name && selectedVoice
+        ? `${formatProviderLabel(selectedProvider.name)} / ${selectedVoice}`
+        : getVoiceProfile(presenterTraits)
     const presenterArchetype = presenterTraits.archetype ?? presenterTraits.role ?? 'Persona'
     const presenterRarity = presenterTraits.rarity ?? 'Locked'
     const presenterRarityColor = getRarityColor(presenterRarity, presenterTraits.rarityColor)
@@ -275,14 +316,14 @@ export function PersonaStep({
                       <Text size="sm" c="dimmed">
                         {presenterVoiceProfile}
                       </Text>
-                      {presenterTraits.voice?.provider && (
+                      {selectedProvider?.name && (
                         <Text size="xs" c="dimmed">
-                          Provider: {presenterTraits.voice.provider}
+                          Provider: {selectedProvider.name}
                         </Text>
                       )}
-                      {presenterTraits.voice?.voiceName && (
+                      {selectedVoice && (
                         <Text size="xs" c="dimmed">
-                          Voice: {presenterTraits.voice.voiceName}
+                          Voice: {selectedVoice}
                         </Text>
                       )}
                       {presenterTraits.voice?.language && (
@@ -290,6 +331,107 @@ export function PersonaStep({
                           Accent: {presenterTraits.voice.language}
                         </Text>
                       )}
+                      <Stack gap={8} mt="sm">
+                        <Text size="xs" c="dimmed">
+                          Pablo is locked as the persona, but you can change his voice for this
+                          session.
+                        </Text>
+                        <Button
+                          size="xs"
+                          variant={isPreviewPlaying ? 'filled' : 'light'}
+                          color={isPreviewPlaying ? 'red' : 'brand'}
+                          loading={isPreviewLoading}
+                          leftSection={
+                            isPreviewPlaying ? (
+                              <IconPlayerPause size={14} />
+                            ) : (
+                              <IconPlayerPlay size={14} />
+                            )
+                          }
+                          disabled={!canPreviewPabloVoice}
+                          onClick={async () => {
+                            if (!canPreviewPabloVoice || !selectedProvider?.name || !selectedVoice)
+                              return
+
+                            if (isPreviewPlaying) {
+                              stopPreviewAudio()
+                              return
+                            }
+
+                            setPreviewLoadingPersonaId(pabloVoicePreviewId)
+                            stopPreviewAudio()
+
+                            try {
+                              const audioBlob = await api.tts.speak({
+                                text: "Let's start the session. Tell me your opening pitch in one minute.",
+                                provider: selectedProvider.name,
+                                voice: selectedVoice,
+                                ...(ttsModel ? { model: ttsModel } : {}),
+                              })
+                              const objectUrl = URL.createObjectURL(audioBlob)
+                              previewUrlRef.current = objectUrl
+
+                              const audio = new Audio(objectUrl)
+                              previewAudioRef.current = audio
+                              audio.onended = () => {
+                                setPlayingPersonaId(null)
+                                clearPreviewUrl()
+                              }
+                              audio.onerror = () => {
+                                setPlayingPersonaId(null)
+                                clearPreviewUrl()
+                              }
+
+                              await audio.play()
+                              setPlayingPersonaId(pabloVoicePreviewId)
+                            } catch (error) {
+                              notifications.show({
+                                title: 'Voice preview unavailable',
+                                message:
+                                  error instanceof Error
+                                    ? error.message
+                                    : 'Unable to generate Pablo voice preview.',
+                                color: 'red',
+                              })
+                            } finally {
+                              setPreviewLoadingPersonaId((current) =>
+                                current === pabloVoicePreviewId ? null : current
+                              )
+                            }
+                          }}
+                        >
+                          {isPreviewPlaying ? 'Stop voice' : 'Test voice'}
+                        </Button>
+                        <Select
+                          label="Voice provider"
+                          data={providerOptions}
+                          value={selectedProvider?.name ?? null}
+                          onChange={(value) => {
+                            if (!value) return
+                            setTtsProvider(value)
+                            const provider = ttsProviders.find((entry) => entry.name === value)
+                            if (!provider || provider.voices.length === 0) return
+                            if (!provider.voices.includes(ttsVoice)) {
+                              setTtsVoice(provider.voices[0] ?? '')
+                            }
+                          }}
+                          disabled={providerOptions.length === 0}
+                          searchable
+                          nothingFoundMessage="No providers"
+                        />
+                        <Select
+                          label="Voice"
+                          data={voiceOptions}
+                          value={selectedVoice || null}
+                          onChange={(value) => {
+                            if (!value) return
+                            setTtsVoice(value)
+                          }}
+                          disabled={voiceOptions.length === 0}
+                          searchable
+                          nothingFoundMessage="No voices"
+                        />
+                      </Stack>
                     </Box>
 
                     <Box className={classes.personaPreviewBlock}>

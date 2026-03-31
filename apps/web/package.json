@@ -20,6 +20,7 @@
     "@emotion/cache": "^11.14.0",
     "@emotion/react": "^11.14.0",
     "@emotion/server": "^11.11.0",
+    "@huggingface/transformers": "^4.0.0",
     "@mantine/carousel": "^8.3.5",
     "@mantine/charts": "^8.3.5",
     "@mantine/code-highlight": "^8.3.5",

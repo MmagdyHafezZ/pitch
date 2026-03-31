@@ -20,6 +20,8 @@ import type {
   TeamMembership,
 } from '@pitch/shared-backend/interfaces/user.interface';
 import { ScenarioRepository } from '../repositories/scenario.repository';
+import { SimulationPrismaService } from '../prisma/simulation-prisma.service';
+import { SimulationRedisService } from './redis/redis.service';
 import {
   CreateScenarioDto,
   GenerateScenarioBatchRequestDto,
@@ -188,6 +190,8 @@ export class ScenarioService {
     private readonly scenarioRepository: ScenarioRepository,
     private readonly llmService: LLMService,
     private readonly routingConfigService: LLMRoutingConfigService,
+    private readonly prisma: SimulationPrismaService,
+    private readonly redis: SimulationRedisService,
     @Inject('USER_SERVICE') private readonly userClient: ClientProxy,
   ) {}
 
@@ -291,6 +295,7 @@ export class ScenarioService {
           ? (this.normalizeConfig(payload.config) as Prisma.InputJsonValue)
           : undefined,
     });
+    await this.invalidateSessionFullCachesForScenario(id);
 
     return this.mapToResponseDto(updated, access, userClaims.id);
   }
@@ -309,6 +314,32 @@ export class ScenarioService {
     }
 
     await this.scenarioRepository.delete(id);
+    await this.invalidateSessionFullCachesForScenario(id);
+  }
+
+  private async invalidateSessionFullCachesForScenario(
+    scenarioId: string,
+  ): Promise<void> {
+    try {
+      const sessions = await this.prisma.client.session.findMany({
+        where: { scenarioId },
+        select: { id: true },
+      });
+
+      if (sessions.length === 0) {
+        return;
+      }
+
+      await Promise.all(
+        sessions.map((session) => this.redis.deleteSessionFull(session.id)),
+      );
+    } catch (error) {
+      this.logger.warn(
+        `Failed to invalidate session full cache for scenario ${scenarioId}: ${
+          (error as Error)?.message ?? error
+        }`,
+      );
+    }
   }
 
   async findAll(
