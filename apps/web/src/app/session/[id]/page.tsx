@@ -101,6 +101,13 @@ interface TranscriptMessage {
   audioUrl?: string
 }
 
+interface CoachStarterPrompt {
+  key: string
+  message: string
+  open?: boolean
+  hidden?: boolean
+}
+
 const EMPTY_PHONE_CALL_RUNTIME: PhoneCallRuntimeState = {
   callId: null,
   provider: null,
@@ -1878,12 +1885,14 @@ export default function LiveSessionPage() {
   const speechFinalizeTickerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const sendMessageRef = useRef<(text: string) => void>(() => {})
   const resetTranscriptRef = useRef<() => void>(() => {})
-  const previousAudioPlayingRef = useRef(false)
+  const autoMicTurnIdRef = useRef<string | null>(null)
   const speechBufferRef = useRef<string>('')
   const assistantInterruptTriggeredRef = useRef(false)
   const hasUserEnabledMicRef = useRef(false)
+  const coachHelpPromptSeqRef = useRef(0)
   const timeoutEndTriggeredRef = useRef(false)
   const [isMultiTurn, setIsMultiTurn] = useState(false)
+  const [coachStarter, setCoachStarter] = useState<CoachStarterPrompt | null>(null)
   const assistantStartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const lastAssistantMessageIdRef = useRef<string | null>(null)
@@ -2080,6 +2089,10 @@ export default function LiveSessionPage() {
 
   const isPhoneSession = sessionType === 'phone'
   const activeConversationMessages = isPhoneSession ? phoneTranscriptMessages : messages
+  const latestAssistantTurn = [...activeConversationMessages]
+    .reverse()
+    .find((message) => message.role === 'assistant')
+  const latestAssistantTurnId = latestAssistantTurn?.id ?? null
 
   const syncSessionClock = useCallback(
     (session: unknown, history: TranscriptMessage[] = []) => {
@@ -3042,6 +3055,44 @@ export default function LiveSessionPage() {
     interrupt,
   ])
 
+  const handleTurnHelp = useCallback(
+    (turn: TranscriptMessage) => {
+      const trimmedTurnText = turn.text.trim()
+      if (!trimmedTurnText) {
+        return
+      }
+
+      const isAssistantTurn = turn.role === 'assistant'
+
+      const recentWindow = activeConversationMessages
+        .slice(-6)
+        .map((message) => `${message.role === 'assistant' ? 'AI' : 'Me'}: ${message.text.trim()}`)
+        .filter((line) => line.length > 0)
+        .join('\n')
+
+      const promptParts = [
+        isAssistantTurn
+          ? 'Help me answer this simulation turn clearly and persuasively.'
+          : 'Help me improve and follow up on this simulation turn clearly and persuasively.',
+        `${isAssistantTurn ? 'AI turn' : 'My last turn'}: "${trimmedTurnText}"`,
+        'Give me:',
+        '1) one short response I can say right now,',
+        '2) one stronger response with concrete detail,',
+        '3) one follow-up question I can ask back.',
+        recentWindow ? `Recent turns:\n${recentWindow}` : '',
+      ]
+
+      const keySuffix = ++coachHelpPromptSeqRef.current
+      setCoachStarter({
+        key: `turn-help:${turn.id}:${keySuffix}`,
+        message: promptParts.filter(Boolean).join('\n\n'),
+        open: true,
+        hidden: true,
+      })
+    },
+    [activeConversationMessages]
+  )
+
   useEffect(() => {
     latestMessagesRef.current = activeConversationMessages.map((msg) => ({
       role: msg.role,
@@ -3189,36 +3240,41 @@ export default function LiveSessionPage() {
 
   useEffect(() => {
     const isVoiceOrVideo = sessionType === 'voice' || sessionType === 'video'
-    const canAttemptAutoResumeMic =
-      hasUserEnabledMicRef.current || microphonePermission !== 'denied'
-    if (
-      previousAudioPlayingRef.current &&
-      !assistantSpeaking &&
+    const isAwaitingUserReply =
       isVoiceOrVideo &&
-      canAttemptAutoResumeMic &&
-      isSttSupported &&
-      !isSttPermissionBlocked &&
       isConnected &&
       sessionStatus !== 'ended' &&
-      !isListening
-    ) {
-      const resumeMicForUserTurn = async () => {
-        if (!hasUserEnabledMicRef.current && microphonePermission !== 'granted') {
-          const permissionGranted = await requestMicrophoneAccess()
-          if (!permissionGranted) {
-            return
-          }
-        }
+      latestAssistantTurnId !== null &&
+      !assistantSpeaking &&
+      !isProcessing
 
-        hasUserEnabledMicRef.current = true
-        await startListening()
+    if (!isAwaitingUserReply || !isSttSupported || isSttPermissionBlocked || isListening) {
+      return
+    }
+
+    if (autoMicTurnIdRef.current === latestAssistantTurnId) {
+      return
+    }
+
+    autoMicTurnIdRef.current = latestAssistantTurnId
+
+    const handMicToUser = async () => {
+      if (!hasUserEnabledMicRef.current && microphonePermission !== 'granted') {
+        const permissionGranted = await requestMicrophoneAccess()
+        if (!permissionGranted) {
+          return
+        }
       }
 
-      void resumeMicForUserTurn()
+      hasUserEnabledMicRef.current = true
+      await startListening()
     }
-    previousAudioPlayingRef.current = assistantSpeaking
+
+    void handMicToUser()
   }, [
     assistantSpeaking,
+    isProcessing,
+    latestAssistantTurnId,
     sessionType,
     microphonePermission,
     isSttSupported,
@@ -4302,6 +4358,7 @@ export default function LiveSessionPage() {
                 onSendText={handleSendText}
                 onTextInputChange={setTextInput}
                 onScheduleIdleHints={scheduleIdleHints}
+                onTurnHelp={handleTurnHelp}
                 isVideoSession={isVideoSession}
                 avatarVideoUrl={avatarVideoUrl}
                 avatarVideoJobId={avatarVideoJobId}
@@ -4565,6 +4622,7 @@ export default function LiveSessionPage() {
             .slice(-6)
             .map((message) => ({ role: message.role, text: message.text })),
         }}
+        starter={coachStarter ?? undefined}
       />
     </Box>
   )

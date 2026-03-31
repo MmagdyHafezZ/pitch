@@ -1484,8 +1484,7 @@ export function CoachChatWidget({ context, starter }: CoachChatWidgetProps) {
       !starter.message.trim() ||
       !hasRestoredPersistedState ||
       restoredPersistenceKeyRef.current !== persistenceKey ||
-      streaming ||
-      messages.some((message) => message.role === 'user')
+      streaming
     ) {
       return
     }
@@ -1510,7 +1509,7 @@ export function CoachChatWidget({ context, starter }: CoachChatWidgetProps) {
       setOpen(true)
     }
     void send(starter.message, { visibleUserMessage: !starter.hidden })
-  }, [hasRestoredPersistedState, messages, persistenceKey, send, starter, streaming])
+  }, [hasRestoredPersistedState, persistenceKey, send, starter, streaming])
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {

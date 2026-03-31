@@ -43,6 +43,7 @@ interface VoiceOrbSessionProps {
   onSendText: () => void
   onTextInputChange: (v: string) => void
   onScheduleIdleHints: () => void
+  onTurnHelp?: (turn: Message) => void
   analyserRef?: React.RefObject<AnalyserNode | null>
   onPauseReplay?: () => void
   currentAudioUrl?: string | null
@@ -365,6 +366,28 @@ const CSS = `
   transform: translateY(10px);
   display: inline-block;
   animation: vos-chat 1s calc(var(--delay,0) * 1s + var(--word,0) * .1s) both cubic-bezier(.175,.885,.32,1.275);
+}
+.vos-turn-help-btn {
+  margin-top: 4px;
+  border: none;
+  background: rgba(59, 130, 246, 0.12);
+  color: #2563eb;
+  font-size: 11px;
+  line-height: 1;
+  padding: 6px 8px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background .15s ease, color .15s ease;
+}
+.vos-turn-help-btn:hover {
+  background: rgba(59, 130, 246, 0.2);
+  color: #1d4ed8;
+}
+.chat-user .vos-turn-help-btn {
+  margin-left: auto;
+}
+.chat-ia .vos-turn-help-btn {
+  margin-right: auto;
 }
 @keyframes vos-chat {
   100% { opacity: 1; transform: translateY(0); }
@@ -690,6 +713,14 @@ html.dark .chat-user p {
   color: rgba(240,249,255,.96);
 }
 html.dark .chat-ia p { color: rgba(244,244,245,.94); }
+html.dark .vos-turn-help-btn {
+  background: rgba(96, 165, 250, 0.2);
+  color: #bfdbfe;
+}
+html.dark .vos-turn-help-btn:hover {
+  background: rgba(96, 165, 250, 0.3);
+  color: #dbeafe;
+}
 
 /* title bar */
 html.dark .vos-panel-name  { color: #d4d4d8; }
@@ -968,6 +999,7 @@ export default function VoiceOrbSession({
   onSendText,
   onTextInputChange,
   onScheduleIdleHints,
+  onTurnHelp,
   analyserRef,
   onPauseReplay,
   currentAudioUrl,
@@ -995,6 +1027,7 @@ export default function VoiceOrbSession({
   const isRetakePrompt = entryPromptMode === 'retake'
   const [isOpen, setIsOpen] = useState(false)
   const [latestMsgId, setLatestMsgId] = useState<string | null>(null)
+  const latestMessage = messages[messages.length - 1]
   const lastMessageId = messages[messages.length - 1]?.id ?? null
   const userClosedRef = useRef(false)
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -1168,27 +1201,42 @@ export default function VoiceOrbSession({
         ? 'listening'
         : 'idle'
 
+  const isAwaitingUserTurn =
+    sessionStatus !== 'ended' &&
+    isConnected &&
+    !assistantSpeaking &&
+    !isProcessing &&
+    latestMessage?.role === 'assistant'
+
   const statusLabel = assistantSpeaking
     ? isListening
       ? 'Interrupted'
       : 'AI Speaking'
     : isProcessing
       ? 'Thinking…'
-      : sessionStatus === 'ended'
-        ? entryPromptMode === 'retake'
-          ? 'Session ended'
-          : 'Ended'
-        : isListening
-          ? 'Your Turn'
-          : isConnected
-            ? 'Ready'
-            : connectionError
-              ? 'Connection error'
-              : 'Connecting…'
+      : isAwaitingUserTurn
+        ? 'Your Turn'
+        : sessionStatus === 'ended'
+          ? entryPromptMode === 'retake'
+            ? 'Session ended'
+            : 'Ended'
+          : isListening
+            ? 'Your Turn'
+            : isConnected
+              ? 'Ready'
+              : connectionError
+                ? 'Connection error'
+                : 'Connecting…'
 
   // In-panel status shows interrupt hint when AI is talking and user hasn't cut in yet
   const panelStatusLabel =
-    assistantSpeaking && !isListening ? 'AI Speaking — tap mic to interrupt' : statusLabel
+    assistantSpeaking && !isListening
+      ? 'AI Speaking — tap mic to interrupt'
+      : isAwaitingUserTurn
+        ? isListening
+          ? 'Your Turn — mic is on'
+          : 'Your Turn — enabling mic…'
+        : statusLabel
 
   const canSend = !!textInput.trim() && isConnected && sessionStatus !== 'ended'
   const promptHeading = isRetakePrompt ? 'Start a new attempt?' : 'Resume where you left off?'
@@ -1347,6 +1395,16 @@ export default function VoiceOrbSession({
                         </span>
                       ))}
                     </p>
+                    {onTurnHelp && (
+                      <button
+                        className="vos-turn-help-btn"
+                        type="button"
+                        onClick={() => onTurnHelp(msg)}
+                        title="Ask coach for a suggested response"
+                      >
+                        Ask Coach
+                      </button>
+                    )}
                   </div>
                 )
               })
@@ -1517,6 +1575,16 @@ export default function VoiceOrbSession({
                             </span>
                           ))}
                         </p>
+                        {onTurnHelp && (
+                          <button
+                            className="vos-turn-help-btn"
+                            type="button"
+                            onClick={() => onTurnHelp(msg)}
+                            title="Ask coach for a suggested response"
+                          >
+                            Ask Coach
+                          </button>
+                        )}
                       </div>
                     )
                   })}

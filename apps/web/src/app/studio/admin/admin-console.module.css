@@ -1,33 +1,30 @@
 .page {
-  --admin-card-bg:
-    linear-gradient(
-      180deg,
-      var(--pitch-card-bg, var(--pitch-surface-bg, var(--mantine-color-body))) 0%,
-      color-mix(
+  --admin-card-bg: linear-gradient(
+    180deg,
+    var(--pitch-card-bg, var(--pitch-surface-bg, var(--mantine-color-body))) 0%,
+    color-mix(
         in srgb,
-        var(--pitch-card-bg-subtle, var(--pitch-card-bg, var(--pitch-surface-bg)))
-          84%,
+        var(--pitch-card-bg-subtle, var(--pitch-card-bg, var(--pitch-surface-bg))) 84%,
         transparent
       )
       100%
-    );
-  --admin-card-bg-strong:
-    linear-gradient(
-      180deg,
-      var(
-          --pitch-card-hero-start,
+  );
+  --admin-card-bg-strong: linear-gradient(
+    180deg,
+    var(
+        --pitch-card-hero-start,
+        var(--pitch-card-bg, var(--pitch-surface-bg, var(--mantine-color-body)))
+      )
+      0%,
+    var(
+        --pitch-card-hero-end,
+        var(
+          --pitch-card-bg-strong,
           var(--pitch-card-bg, var(--pitch-surface-bg, var(--mantine-color-body)))
         )
-        0%,
-      var(
-          --pitch-card-hero-end,
-          var(
-              --pitch-card-bg-strong,
-              var(--pitch-card-bg, var(--pitch-surface-bg, var(--mantine-color-body)))
-            )
-        )
-        100%
-    );
+      )
+      100%
+  );
   --admin-card-bg-subtle: var(
     --pitch-card-bg-subtle,
     var(--pitch-card-bg, var(--pitch-surface-bg, var(--mantine-color-body)))
@@ -71,11 +68,7 @@
       color-mix(in srgb, var(--pitch-card-hero-start, var(--pitch-info)) 10%, transparent),
       transparent 30%
     ),
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--pitch-app-bg) 96%, transparent),
-      transparent
-    );
+    linear-gradient(180deg, color-mix(in srgb, var(--pitch-app-bg) 96%, transparent), transparent);
 }
 
 .page::after {

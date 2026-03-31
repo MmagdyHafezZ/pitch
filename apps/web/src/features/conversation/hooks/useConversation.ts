@@ -39,7 +39,6 @@ interface ConversationMessage {
 interface QueuedAudioChunk {
   audio: ArrayBuffer
   contentType: string
-  sentenceText?: string
 }
 
 interface UseConversationOptions {
@@ -101,14 +100,6 @@ export function useConversation(options: UseConversationOptions) {
   const audioQueueVersionRef = useRef(0)
   // Set once the 'completed' event arrives so gap detection can skip failed sentences
   const totalSentencesRef = useRef<number | null>(null)
-  // Text/audio sync: maps sentenceIndex → sentence text; ttsActiveRef gates delta updates
-  const sentenceTextsRef = useRef<Map<number, string>>(new Map())
-  const ttsActiveRef = useRef(false)
-  // Separate from currentRequestIdRef — survives onConversationEnd so tryPlayNext
-  // can still reveal text and streamCompleted can still set fullText after END fires.
-  const ttsRequestIdRef = useRef<string | null>(null)
-  // Full text from streamCompleted; once set, tryPlayNext stops overwriting with partial accumulated text.
-  const streamCompletedTextRef = useRef<string | null>(null)
 
   useEffect(() => {
     onErrorRef.current = onError
@@ -229,10 +220,6 @@ export function useConversation(options: UseConversationOptions) {
     totalSentencesRef.current = null
     isPlayingChunkRef.current = false
     pendingPlaybackRef.current = null
-    sentenceTextsRef.current.clear()
-    ttsActiveRef.current = false
-    ttsRequestIdRef.current = null
-    streamCompletedTextRef.current = null
   }, [])
 
   const tryPlayNext = useCallback(() => {
@@ -241,30 +228,8 @@ export function useConversation(options: UseConversationOptions) {
     const total = totalSentencesRef.current
     const idx = nextPlayIndexRef.current
 
-    // All sentences have played — finalize text and reset audio state
+    // All sentences have played — reset audio state
     if (total !== null && idx >= total) {
-      const reqId = currentRequestIdRef.current ?? ttsRequestIdRef.current
-      if (ttsActiveRef.current && reqId) {
-        // Use fullText from streamCompleted if available; otherwise join all accumulated sentences.
-        const finalText =
-          streamCompletedTextRef.current ??
-          Array.from({ length: total }, (_, i) => sentenceTextsRef.current.get(i) ?? '')
-            .filter(Boolean)
-            .join(' ')
-        if (finalText) {
-          upsertAssistantMessage(reqId, (current) => ({
-            id: reqId,
-            role: 'assistant',
-            text: finalText,
-            timestamp: current?.timestamp ?? new Date(),
-            usage: current?.usage,
-            audioUrl: current?.audioUrl,
-          }))
-        }
-      }
-      ttsActiveRef.current = false
-      ttsRequestIdRef.current = null
-      streamCompletedTextRef.current = null
       setCurrentAudioUrl(null)
       setIsAudioPlaying(false)
       currentAudioRef.current = null
@@ -321,30 +286,6 @@ export function useConversation(options: UseConversationOptions) {
     const audioUrl = URL.createObjectURL(audioBlob)
     setCurrentAudioUrl(audioUrl) // expose URL so the replay button always reflects current sentence
 
-    // Reveal accumulated text up to and including this sentence.
-    // Use ttsRequestIdRef as fallback so text still updates after onConversationEnd
-    // clears currentRequestIdRef. Skip if fullText already received (streamCompleted
-    // fired) — we don't want partial accumulated text to overwrite the complete text.
-    const reqId = currentRequestIdRef.current ?? ttsRequestIdRef.current
-    if (ttsActiveRef.current && reqId && streamCompletedTextRef.current === null) {
-      const accumulatedText = Array.from(
-        { length: idx + 1 },
-        (_, i) => sentenceTextsRef.current.get(i) ?? ''
-      )
-        .filter(Boolean)
-        .join(' ')
-      if (accumulatedText) {
-        upsertAssistantMessage(reqId, (current) => ({
-          id: reqId,
-          role: 'assistant',
-          text: accumulatedText,
-          timestamp: current?.timestamp ?? new Date(),
-          usage: current?.usage,
-          audioUrl: current?.audioUrl,
-        }))
-      }
-    }
-
     void playAudio(audioUrl, () => {
       if (audioQueueVersionRef.current !== playbackVersion) {
         isPlayingChunkRef.current = false
@@ -359,7 +300,7 @@ export function useConversation(options: UseConversationOptions) {
       isPlayingChunkRef.current = false
       tryPlayNext()
     })
-  }, [audioOutput, playAudio, upsertAssistantMessage])
+  }, [audioOutput, playAudio])
 
   const disconnect = useCallback(() => {
     // Cancel any scheduled reconnect timer and reset the attempt counter so
@@ -429,9 +370,6 @@ export function useConversation(options: UseConversationOptions) {
       (data: WsEnvelope<ConversationStreamDeltaPayload>) => {
         if (isHungUpRef.current) return
         if (data.requestId !== currentRequestIdRef.current) return
-        // When TTS is active, text is revealed sentence-by-sentence in tryPlayNext.
-        // Skip delta updates so text doesn't race ahead of audio.
-        if (ttsActiveRef.current) return
 
         upsertAssistantMessage(data.requestId, (current) => ({
           id: data.requestId,
@@ -503,20 +441,10 @@ export function useConversation(options: UseConversationOptions) {
         if (isHungUpRef.current) return
         if (envelope.requestId !== currentRequestIdRef.current) return
 
-        const { sentenceIndex, audio, contentType, sentenceText } = envelope.payload
-        // First audio chunk activates TTS-controlled text reveal.
-        // Capture requestId now — currentRequestIdRef may be cleared by END before audio finishes.
-        ttsActiveRef.current = true
-        if (!ttsRequestIdRef.current) {
-          ttsRequestIdRef.current = currentRequestIdRef.current
-        }
-        if (sentenceText) {
-          sentenceTextsRef.current.set(sentenceIndex, sentenceText)
-        }
+        const { sentenceIndex, audio, contentType } = envelope.payload
         audioQueueRef.current.set(sentenceIndex, {
           audio: normalizeAudioChunk(audio),
           contentType,
-          sentenceText,
         })
         tryPlayNext()
       }
