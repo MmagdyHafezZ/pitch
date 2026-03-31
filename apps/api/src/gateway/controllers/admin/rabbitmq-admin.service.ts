@@ -4,7 +4,7 @@ import { connect, type Channel, type ChannelModel } from 'amqplib';
 import {
   MICROSERVICES_CONFIG,
   getRabbitMQUrl,
-} from '../../../config/microservices.config';
+} from '@pitch/shared-backend/config/microservices.config';
 import { getDeadLetterQueueName } from '../../../config/rabbitmq-topology';
 
 export interface AdminQueueStats {

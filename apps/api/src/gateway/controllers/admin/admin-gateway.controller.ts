@@ -740,7 +740,8 @@ export class AdminGatewayController {
   @ApiQuery({ name: 'sessionMemberId', required: false, type: String })
   @ApiResponse({
     status: 200,
-    description: 'Latest session assessment returned',
+    description:
+      'Latest session assessment returned. Returns null when no completed assessment exists yet.',
   })
   async getLatestSessionAssessment(
     @Param('id') id: string,

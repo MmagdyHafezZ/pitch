@@ -75,6 +75,7 @@ type SettingsSection =
 interface SettingsModalProps {
   opened: boolean
   onClose: () => void
+  initialSection?: SettingsSection
 }
 
 type PhoneVerificationState = {
@@ -106,8 +107,76 @@ const PHONE_COUNTRY_OPTIONS = [
 ]
 
 const DEFAULT_PHONE_COUNTRY_CODE = '+1'
+const DEFAULT_SPEECH_SEND_DELAY_MS = 500
+const MIN_SPEECH_SEND_DELAY_MS = 200
+const MAX_SPEECH_SEND_DELAY_MS = 4000
 
-export function SettingsModal({ opened, onClose }: SettingsModalProps) {
+const SPEECH_SEND_DELAY_OPTIONS = [
+  { value: '300', label: '0.3s (Fast)' },
+  { value: '500', label: '0.5s (Balanced)' },
+  { value: '800', label: '0.8s' },
+  { value: '1000', label: '1.0s' },
+  { value: '1500', label: '1.5s' },
+  { value: '2000', label: '2.0s (Slow)' },
+]
+
+const withPromiseTimeout = <T,>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  timeoutMessage: string
+): Promise<T> =>
+  new Promise<T>((resolve, reject) => {
+    const timeoutId = window.setTimeout(() => {
+      reject(new Error(timeoutMessage))
+    }, timeoutMs)
+
+    promise
+      .then((value) => {
+        window.clearTimeout(timeoutId)
+        resolve(value)
+      })
+      .catch((error) => {
+        window.clearTimeout(timeoutId)
+        reject(error)
+      })
+  })
+
+const toDeviceErrorMessage = (
+  error: unknown,
+  fallback = 'Could not access your devices. Please check browser permissions.'
+) => {
+  if (error instanceof DOMException) {
+    if (error.name === 'NotAllowedError' || error.name === 'SecurityError') {
+      return 'Microphone access is blocked. Allow this site to use your microphone, then try again.'
+    }
+    if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
+      return 'Requested device not found. Check your microphone connection and OS input settings.'
+    }
+    if (error.name === 'NotReadableError') {
+      return 'Your microphone is currently in use by another app. Close other apps using it and retry.'
+    }
+    return error.message || fallback
+  }
+
+  if (error instanceof Error) {
+    if (/requested device not found/i.test(error.message)) {
+      return 'Requested device not found. Check your microphone connection and OS input settings.'
+    }
+    return error.message || fallback
+  }
+
+  return fallback
+}
+
+const normalizeSpeechSendDelayMs = (value: unknown): number | null => {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return null
+  }
+
+  return Math.max(MIN_SPEECH_SEND_DELAY_MS, Math.min(MAX_SPEECH_SEND_DELAY_MS, Math.round(value)))
+}
+
+export function SettingsModal({ opened, onClose, initialSection }: SettingsModalProps) {
   const splitPhoneNumber = (
     rawPhoneNumber: string | null | undefined
   ): { countryCode: string; localNumber: string } => {
@@ -143,7 +212,7 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
   const computedColorScheme = useComputedColorScheme('light')
   const isMobile = useMediaQuery('(max-width: 48em)')
   const isDark = computedColorScheme === 'dark'
-  const [activeSection, setActiveSection] = useState<SettingsSection>('Account')
+  const [activeSection, setActiveSection] = useState<SettingsSection>(initialSection ?? 'Account')
   const [name, setName] = useState(user?.name ?? '')
   const [email, setEmail] = useState(user?.email ?? '')
   const [timezone, setTimezone] = useState('(GMT-5:00) Eastern Time')
@@ -274,6 +343,7 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
   }>({ microphones: [], speakers: [], cameras: [] })
   const [devicesLoading, setDevicesLoading] = useState(false)
   const [devicesError, setDevicesError] = useState<string | null>(null)
+  const [voiceVideoRefreshNonce, setVoiceVideoRefreshNonce] = useState(0)
   const [prefMic, setPrefMic] = useState(
     () =>
       (
@@ -321,6 +391,16 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
           | Record<string, unknown>
           | undefined
       )?.autoJoinMuted === true
+  )
+  const [speechSendDelayMs, setSpeechSendDelayMs] = useState(
+    () =>
+      normalizeSpeechSendDelayMs(
+        (
+          (user?.settings as Record<string, unknown> | undefined)?.voiceVideo as
+            | Record<string, unknown>
+            | undefined
+        )?.speechSendDelayMs
+      ) ?? DEFAULT_SPEECH_SEND_DELAY_MS
   )
   const [vvSaving, setVvSaving] = useState(false)
   const [vvSaved, setVvSaved] = useState(false)
@@ -390,8 +470,15 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
   useEffect(() => {
     if (!opened) {
       setMobileSectionsOpened(false)
+      setDevicesLoading(false)
     }
   }, [opened])
+
+  useEffect(() => {
+    if (opened && initialSection) {
+      setActiveSection(initialSection)
+    }
+  }, [opened, initialSection])
 
   useEffect(() => {
     const handlePointerUp = () => setDraggingPicker(false)
@@ -415,29 +502,65 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
 
   // Enumerate media devices when Voice & Video tab is opened
   useEffect(() => {
-    if (activeSection !== 'Voice & Video') return
+    if (!opened || activeSection !== 'Voice & Video') return
     let cancelled = false
+    let permissionStream: MediaStream | null = null
 
     const load = async () => {
       setDevicesLoading(true)
       setDevicesError(null)
+
+      if (!navigator.mediaDevices?.enumerateDevices) {
+        setDevicesError('Your browser does not support media device detection.')
+        setDevicesLoading(false)
+        return
+      }
+
+      let permissionError: string | null = null
+
       try {
-        // Request permission first so device labels are populated
-        await navigator.mediaDevices
-          .getUserMedia({ audio: true, video: true })
-          .catch(() => navigator.mediaDevices.getUserMedia({ audio: true }))
+        // Request microphone permission first so the app can capture voice
+        // and device labels are available.
+        if (navigator.mediaDevices.getUserMedia) {
+          try {
+            permissionStream = await withPromiseTimeout(
+              navigator.mediaDevices.getUserMedia({ audio: true }),
+              7000,
+              'Timed out while requesting microphone permission.'
+            )
+          } catch (error) {
+            permissionError = toDeviceErrorMessage(
+              error,
+              'Could not access your microphone. Please check browser permissions.'
+            )
+          }
+        }
+
+        const all = await withPromiseTimeout(
+          navigator.mediaDevices.enumerateDevices(),
+          5000,
+          'Timed out while loading media devices.'
+        )
         if (cancelled) return
-        const all = await navigator.mediaDevices.enumerateDevices()
-        if (cancelled) return
-        setMediaDevices({
-          microphones: all.filter((d) => d.kind === 'audioinput'),
-          speakers: all.filter((d) => d.kind === 'audiooutput'),
-          cameras: all.filter((d) => d.kind === 'videoinput'),
-        })
-      } catch {
-        if (!cancelled)
-          setDevicesError('Could not access your devices. Please check browser permissions.')
+
+        const microphones = all.filter((d) => d.kind === 'audioinput')
+        const speakers = all.filter((d) => d.kind === 'audiooutput')
+        const cameras = all.filter((d) => d.kind === 'videoinput')
+        setMediaDevices({ microphones, speakers, cameras })
+
+        if (permissionError) {
+          setDevicesError(permissionError)
+        } else if (microphones.length === 0) {
+          setDevicesError(
+            'No microphone was detected. Connect a microphone and click Detect devices.'
+          )
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setDevicesError(toDeviceErrorMessage(error))
+        }
       } finally {
+        permissionStream?.getTracks().forEach((track) => track.stop())
         if (!cancelled) setDevicesLoading(false)
       }
     }
@@ -445,8 +568,9 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
     void load()
     return () => {
       cancelled = true
+      permissionStream?.getTracks().forEach((track) => track.stop())
     }
-  }, [activeSection])
+  }, [activeSection, opened, voiceVideoRefreshNonce])
 
   const saveNotifications = async (patch: {
     emailNotifications?: boolean
@@ -482,6 +606,7 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
     noiseSuppression?: boolean
     echoCancellation?: boolean
     autoJoinMuted?: boolean
+    speechSendDelayMs?: number
   }) => {
     setVvSaving(true)
     setVvSaved(false)
@@ -1322,7 +1447,7 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
                             size="xs"
                             variant="subtle"
                             leftSection={<IconRefresh size={14} />}
-                            onClick={() => setActiveSection('Voice & Video')}
+                            onClick={() => setVoiceVideoRefreshNonce((current) => current + 1)}
                           >
                             Detect devices
                           </Button>
@@ -1446,6 +1571,23 @@ export function SettingsModal({ opened, onClose }: SettingsModalProps) {
                         setAutoJoinMuted(e.currentTarget.checked)
                         void saveVoiceVideo({ autoJoinMuted: e.currentTarget.checked })
                       }}
+                    />
+
+                    <Select
+                      label="Speech send delay"
+                      description="How long to wait after you stop speaking before sending your turn."
+                      data={SPEECH_SEND_DELAY_OPTIONS}
+                      value={String(speechSendDelayMs)}
+                      disabled={vvSaving}
+                      allowDeselect={false}
+                      onChange={(val) => {
+                        if (!val) return
+                        const nextDelay = normalizeSpeechSendDelayMs(Number(val))
+                        if (nextDelay === null) return
+                        setSpeechSendDelayMs(nextDelay)
+                        void saveVoiceVideo({ speechSendDelayMs: nextDelay })
+                      }}
+                      classNames={settingsInputClassNames}
                     />
                   </Stack>
                 </Card>
