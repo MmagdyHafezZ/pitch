@@ -3,13 +3,15 @@
 import { Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { RefObject } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
-import { Center, Html, useAnimations, useGLTF } from '@react-three/drei'
+import { Html, useAnimations, useGLTF } from '@react-three/drei'
+import { Quaternion } from 'three'
 import type { AnimationAction, AnimationClip, Group as ThreeGroup, Object3D } from 'three'
 import type { CharacterAlignmentPayload } from '../types/conversation.types'
 
 type PlaybackMode = 'idle' | 'speaking' | 'listening'
 type RequiredTargetName = 'mad' | 'open_mouth' | 'open' | 'open_mad'
 type ControlledFeatureName = 'body' | 'Mouth'
+type Vector3Tuple = [number, number, number]
 
 interface WordTiming {
   text: string
@@ -54,9 +56,44 @@ interface GltfJsonDefinition {
 interface GltfAsset {
   scene: ThreeGroup
   animations: AnimationClip[]
+  cameras?: SceneCamera[]
   parser?: {
     json?: GltfJsonDefinition
   }
+}
+
+interface SceneCamera extends Object3D {
+  isCamera: boolean
+  isPerspectiveCamera?: boolean
+  isOrthographicCamera?: boolean
+  fov?: number
+  near?: number
+  far?: number
+  zoom?: number
+  left?: number
+  right?: number
+  top?: number
+  bottom?: number
+  updateProjectionMatrix?: () => void
+}
+
+interface PerspectiveSceneCamera extends SceneCamera {
+  isPerspectiveCamera: true
+  fov: number
+  near: number
+  far: number
+  zoom: number
+}
+
+interface OrthographicSceneCamera extends SceneCamera {
+  isOrthographicCamera: true
+  near: number
+  far: number
+  zoom: number
+  left: number
+  right: number
+  top: number
+  bottom: number
 }
 
 interface PabloModelProps {
@@ -84,11 +121,6 @@ const LISTEN_LOOP_START_FRAME = 2
 const LISTEN_FRAME_DURATION = 1 / LISTEN_FPS
 const DEFAULT_MODEL_PATH = '/models/Pablo.glb'
 const DEFAULT_BACKGROUND_IMAGE = '/pablo_session_background.png'
-const PABLO_VIEW_SCALE = 1.56
-const PABLO_VIEW_OFFSET_X = 0
-const PABLO_VIEW_OFFSET_Y = -0.74
-const PABLO_VIEW_ROTATION_X = 0
-const PABLO_VIEW_ROTATION_Y = 0
 const PABLO_CAMERA_FOV = 24
 const PABLO_CAMERA_POSITION = [0, 1.48, 4.18] as const
 const PABLO_CAMERA_TARGET = [0, 0.36, 0] as const
@@ -96,6 +128,45 @@ const PABLO_CAMERA_TARGET = [0, 0.36, 0] as const
 const CONTROLLED_FEATURE_TARGETS: Record<ControlledFeatureName, readonly RequiredTargetName[]> = {
   body: ['mad', 'open_mouth'],
   Mouth: ['open', 'open_mad'],
+}
+
+function isSceneCamera(object: Object3D): object is SceneCamera {
+  return (object as SceneCamera).isCamera === true
+}
+
+function isPerspectiveCamera(camera: SceneCamera): camera is PerspectiveSceneCamera {
+  return 'isPerspectiveCamera' in camera && camera.isPerspectiveCamera === true
+}
+
+function isOrthographicCamera(camera: SceneCamera): camera is OrthographicSceneCamera {
+  return 'isOrthographicCamera' in camera && camera.isOrthographicCamera === true
+}
+
+function findEmbeddedCamera(scene: Object3D): SceneCamera | null {
+  let embeddedCamera: SceneCamera | null = null
+
+  scene.traverse((object) => {
+    if (embeddedCamera || !isSceneCamera(object)) {
+      return
+    }
+
+    embeddedCamera = object
+  })
+
+  return embeddedCamera
+}
+
+function getPrimaryEmbeddedCamera(gltf: GltfAsset): SceneCamera | null {
+  const exportedCamera = gltf.cameras?.find(isSceneCamera)
+  if (exportedCamera) {
+    return exportedCamera
+  }
+
+  return findEmbeddedCamera(gltf.scene)
+}
+
+function updateSceneCameraProjection(camera: SceneCamera) {
+  camera.updateProjectionMatrix?.()
 }
 
 function getPreferredAlignment({
@@ -258,6 +329,50 @@ function applyAnimationTime(
 
 function getListenLoopStartFrame(totalFrames: number) {
   return Math.min(Math.max(LISTEN_LOOP_START_FRAME, 1), totalFrames)
+}
+
+function applyEmbeddedCameraProjection(sourceCamera: SceneCamera, targetCamera: SceneCamera) {
+  if (isPerspectiveCamera(targetCamera)) {
+    if (sourceCamera.isPerspectiveCamera && typeof sourceCamera.fov === 'number') {
+      targetCamera.fov = sourceCamera.fov
+    }
+    if (typeof sourceCamera.near === 'number') {
+      targetCamera.near = sourceCamera.near
+    }
+    if (typeof sourceCamera.far === 'number') {
+      targetCamera.far = sourceCamera.far
+    }
+    if (typeof sourceCamera.zoom === 'number') {
+      targetCamera.zoom = sourceCamera.zoom
+    }
+  }
+
+  if (isOrthographicCamera(targetCamera) && sourceCamera.isOrthographicCamera) {
+    if (typeof sourceCamera.left === 'number') targetCamera.left = sourceCamera.left
+    if (typeof sourceCamera.right === 'number') targetCamera.right = sourceCamera.right
+    if (typeof sourceCamera.top === 'number') targetCamera.top = sourceCamera.top
+    if (typeof sourceCamera.bottom === 'number') targetCamera.bottom = sourceCamera.bottom
+    if (typeof sourceCamera.near === 'number') targetCamera.near = sourceCamera.near
+    if (typeof sourceCamera.far === 'number') targetCamera.far = sourceCamera.far
+    if (typeof sourceCamera.zoom === 'number') targetCamera.zoom = sourceCamera.zoom
+  }
+}
+
+function syncLockedCamera(sourceCamera: SceneCamera | null, targetCamera: SceneCamera) {
+  if (sourceCamera) {
+    sourceCamera.updateWorldMatrix(true, true)
+    targetCamera.position.copy(sourceCamera.getWorldPosition(targetCamera.position))
+    targetCamera.quaternion.copy(sourceCamera.getWorldQuaternion(new Quaternion()))
+    applyEmbeddedCameraProjection(sourceCamera, targetCamera)
+    targetCamera.updateMatrixWorld(true)
+    updateSceneCameraProjection(targetCamera)
+    return
+  }
+
+  targetCamera.position.set(...PABLO_CAMERA_POSITION)
+  targetCamera.lookAt(...PABLO_CAMERA_TARGET)
+  targetCamera.updateMatrixWorld(true)
+  updateSceneCameraProjection(targetCamera)
 }
 
 function PabloModel({ modelPath, mouthOpen, playbackMode }: PabloModelProps) {
@@ -464,26 +579,21 @@ function PabloModel({ modelPath, mouthOpen, playbackMode }: PabloModelProps) {
     }
   })
 
-  return (
-    <Center>
-      <primitive
-        object={model}
-        position={[PABLO_VIEW_OFFSET_X, PABLO_VIEW_OFFSET_Y, 0]}
-        rotation={[PABLO_VIEW_ROTATION_X, PABLO_VIEW_ROTATION_Y, 0]}
-        scale={PABLO_VIEW_SCALE}
-      />
-    </Center>
-  )
+  return <primitive object={model} />
 }
 
-function PabloCameraRig() {
+function PabloCameraRig({ modelPath }: { modelPath: string }) {
   const { camera } = useThree()
+  const gltf = useGLTF(modelPath) as GltfAsset
+  const embeddedCamera = useMemo(() => getPrimaryEmbeddedCamera(gltf), [gltf])
 
   useLayoutEffect(() => {
-    camera.position.set(...PABLO_CAMERA_POSITION)
-    camera.lookAt(...PABLO_CAMERA_TARGET)
-    camera.updateProjectionMatrix()
-  }, [camera])
+    syncLockedCamera(embeddedCamera, camera as SceneCamera)
+  }, [camera, embeddedCamera])
+
+  useFrame(() => {
+    syncLockedCamera(embeddedCamera, camera as SceneCamera)
+  })
 
   return null
 }
@@ -522,6 +632,15 @@ export function PabloPresenter({
     [alignment, normalizedAlignment]
   )
   const words = useMemo(() => deriveWordTimings(preferredAlignment), [preferredAlignment])
+  const canvasCamera = useMemo(
+    () => ({
+      position: [...PABLO_CAMERA_POSITION] as Vector3Tuple,
+      fov: PABLO_CAMERA_FOV,
+    }),
+    []
+  )
+  const canvasDpr = useMemo(() => [1, 2] as [number, number], [])
+  const canvasGl = useMemo(() => ({ alpha: true, antialias: true }), [])
   const [currentTime, setCurrentTime] = useState(0)
 
   useEffect(() => {
@@ -590,12 +709,12 @@ export function PabloPresenter({
         }}
       />
       <Canvas
-        dpr={[1, 2]}
-        gl={{ alpha: true, antialias: true }}
+        dpr={canvasDpr}
+        gl={canvasGl}
         style={{ pointerEvents: 'none', position: 'relative', zIndex: 1 }}
-        camera={{ position: [...PABLO_CAMERA_POSITION], fov: PABLO_CAMERA_FOV }}
+        camera={canvasCamera}
       >
-        <PabloCameraRig />
+        <PabloCameraRig modelPath={modelPath} />
         <ambientLight intensity={0.72} />
         <hemisphereLight args={['#edf7ff', '#0f172a', 1.2]} />
         <directionalLight position={[4.8, 5.4, 5.8]} intensity={2.1} color="#fff2d9" />

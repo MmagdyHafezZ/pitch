@@ -1032,7 +1032,7 @@ export default function VoiceLipSyncTest({
     }),
     []
   )
-  const canvasDpr = useMemo(() => [1, 2] as const, [])
+  const canvasDpr = useMemo(() => [1, 2] as [number, number], [])
   const canvasGl = useMemo(() => ({ alpha: true, antialias: true }), [])
 
   const [mood, setMood] = useState<MoodState>('normal')
