@@ -118,7 +118,11 @@ export class AssessmentGatewayController {
   @ApiOperation({ summary: 'Get latest completed assessment for a session' })
   @ApiQuery({ name: 'iterationId', required: false, type: String })
   @ApiQuery({ name: 'sessionMemberId', required: false, type: String })
-  @ApiResponse({ status: 200, description: 'Latest assessment retrieved' })
+  @ApiResponse({
+    status: 200,
+    description:
+      'Latest assessment retrieved. Returns null when no completed assessment exists yet.',
+  })
   getLatest(
     @Param('id') sessionId: string,
     @Query('iterationId') iterationId?: string,

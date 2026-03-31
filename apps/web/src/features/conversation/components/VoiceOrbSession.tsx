@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import {
+  IconChevronCompactDown,
   IconMicrophone,
   IconMicrophoneOff,
   IconPhone,
@@ -192,7 +193,6 @@ const CSS = `
   padding: 4px 6px;
   border-radius: 6px;
   color: #d4d4d8;
-  font-size: 13px;
   line-height: 1;
   transition: color .2s, background .2s;
   flex-shrink: 0;
@@ -201,6 +201,9 @@ const CSS = `
 
 /* ─── status bar ─── */
 .vos-status-bar {
+  --vos-status-bg: rgba(107,114,128,.07);
+  --vos-status-color: #9ca3af;
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -210,15 +213,24 @@ const CSS = `
   margin-left: auto;
   margin-right: auto;
   border-radius: 100px;
+  border: 1px solid transparent;
   font-size: 13px;
   font-weight: 600;
-  transition: background 0.4s ease, color 0.4s ease;
+  background: var(--vos-status-bg);
+  color: var(--vos-status-color);
+  transition: background 0.4s ease, color 0.4s ease, border-color 0.4s ease;
   flex-shrink: 0;
 }
-.vos-status-bar.status-speaking  { background: rgba(59,130,246,.10); color: #3b82f6; }
-.vos-status-bar.status-thinking  { background: rgba(139,92,246,.10); color: #8b5cf6; }
-.vos-status-bar.status-listening { background: rgba(16,185,129,.10); color: #10b981; }
-.vos-status-bar.status-idle      { background: rgba(107,114,128,.07); color: #9ca3af; }
+.vos-status-bar.status-speaking  { --vos-status-bg: rgba(59,130,246,.10); --vos-status-color: #3b82f6; }
+.vos-status-bar.status-thinking  { --vos-status-bg: rgba(139,92,246,.10); --vos-status-color: #8b5cf6; }
+.vos-status-bar.status-listening { --vos-status-bg: rgba(16,185,129,.10); --vos-status-color: #10b981; }
+.vos-status-bar.status-idle      { --vos-status-bg: rgba(107,114,128,.07); --vos-status-color: #9ca3af; }
+.vos-status-bar.vos-turn-timer {
+  border-color: rgba(52, 211, 153, 0.9);
+  box-shadow:
+    inset 0 0 0 calc(var(--vos-turn-progress, 0) * 2px) rgba(52, 211, 153, 0.9),
+    0 0 calc(var(--vos-turn-progress, 0) * 6px) rgba(16, 185, 129, 0.18);
+}
 
 /* thinking dots */
 .vos-dots { display: flex; gap: 2px; align-items: center; }
@@ -325,7 +337,11 @@ const CSS = `
 }
 
 /* ─── messages ─── */
-.chat-user { display: flex; justify-content: flex-end; }
+.chat-user {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
 .chat-user p {
   opacity: 0;
   transform: translateY(10px);
@@ -347,7 +363,11 @@ const CSS = `
   display: inline-block;
   animation: vos-chat 1s calc(var(--delay,0) * 1s + var(--word,0) * .1s) both cubic-bezier(.175,.885,.32,1.275);
 }
-.chat-ia { display: flex; }
+.chat-ia {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
 .chat-ia p {
   opacity: 0;
   transform: translateY(10px);
@@ -362,32 +382,42 @@ const CSS = `
 }
 .chat-ia p span {
   opacity: 0;
-  color: #111827 !important
+  color: rgba(244, 244, 245, 0.96) !important;
   transform: translateY(10px);
   display: inline-block;
   animation: vos-chat 1s calc(var(--delay,0) * 1s + var(--word,0) * .1s) both cubic-bezier(.175,.885,.32,1.275);
 }
 .vos-turn-help-btn {
-  margin-top: 4px;
-  border: none;
-  background: rgba(59, 130, 246, 0.12);
-  color: #2563eb;
-  font-size: 11px;
-  line-height: 1;
-  padding: 6px 8px;
+  margin-top: 7px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: rgba(15, 23, 42, 0.14);
+  color: rgba(226, 232, 240, 0.95);
+  font-size: 12px;
+  line-height: 1.2;
+  font-weight: 500;
+  padding: 5px 11px;
   border-radius: 999px;
   cursor: pointer;
-  transition: background .15s ease, color .15s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: background .15s ease, color .15s ease, border-color .15s ease;
+}
+.vos-turn-help-btn::before {
+  content: '✦';
+  font-size: 10px;
+  opacity: .85;
 }
 .vos-turn-help-btn:hover {
   background: rgba(59, 130, 246, 0.2);
-  color: #1d4ed8;
+  border-color: rgba(96, 165, 250, 0.55);
+  color: #dbeafe;
 }
 .chat-user .vos-turn-help-btn {
-  margin-left: auto;
+  align-self: flex-end;
 }
 .chat-ia .vos-turn-help-btn {
-  margin-right: auto;
+  align-self: flex-start;
 }
 @keyframes vos-chat {
   100% { opacity: 1; transform: translateY(0); }
@@ -714,11 +744,13 @@ html.dark .chat-user p {
 }
 html.dark .chat-ia p { color: rgba(244,244,245,.94); }
 html.dark .vos-turn-help-btn {
-  background: rgba(96, 165, 250, 0.2);
-  color: #bfdbfe;
+  background: rgba(96, 165, 250, 0.12);
+  border-color: rgba(125, 211, 252, 0.3);
+  color: rgba(219, 234, 254, 0.96);
 }
 html.dark .vos-turn-help-btn:hover {
-  background: rgba(96, 165, 250, 0.3);
+  background: rgba(96, 165, 250, 0.24);
+  border-color: rgba(125, 211, 252, 0.55);
   color: #dbeafe;
 }
 
@@ -993,6 +1025,8 @@ export default function VoiceOrbSession({
   isSttPermissionBlocked,
   interimTranscript,
   sttError,
+  sttCommitRemainingMs,
+  sttCommitProgress,
   textInput,
   onHangUp,
   onMicrophoneClick,
@@ -1237,6 +1271,8 @@ export default function VoiceOrbSession({
           ? 'Your Turn — mic is on'
           : 'Your Turn — enabling mic…'
         : statusLabel
+  const showTurnCommitTimer = isAwaitingUserTurn && isListening && sttCommitRemainingMs > 0
+  const turnCommitProgress = Math.max(0, Math.min(1, sttCommitProgress))
 
   const canSend = !!textInput.trim() && isConnected && sessionStatus !== 'ended'
   const promptHeading = isRetakePrompt ? 'Start a new attempt?' : 'Resume where you left off?'
@@ -1395,7 +1431,7 @@ export default function VoiceOrbSession({
                         </span>
                       ))}
                     </p>
-                    {onTurnHelp && (
+                    {!isUser && onTurnHelp && (
                       <button
                         className="vos-turn-help-btn"
                         type="button"
@@ -1524,21 +1560,27 @@ export default function VoiceOrbSession({
           <div className="container-chat-ia">
             {/* Title row */}
             <div className="container-title">
-              <span className="vos-panel-name">Conversation</span>
+              {/* Status bar */}
+              <div
+                className={`vos-status-bar status-${statusState}${showTurnCommitTimer ? ' vos-turn-timer' : ''}`}
+                style={
+                  showTurnCommitTimer
+                    ? ({ '--vos-turn-progress': turnCommitProgress } as React.CSSProperties)
+                    : undefined
+                }
+              >
+                <StatusIcon state={statusState} />
+                <span>{panelStatusLabel}</span>
+              </div>
+
               <button
                 className="vos-collapse-btn"
                 onClick={handleCollapse}
                 title="Collapse panel — mic stays active"
                 aria-label="Collapse panel"
               >
-                ╱╲
+                <IconChevronCompactDown size={20} />
               </button>
-            </div>
-
-            {/* Status bar */}
-            <div className={`vos-status-bar status-${statusState}`}>
-              <StatusIcon state={statusState} />
-              <span>{panelStatusLabel}</span>
             </div>
 
             {/* Chat body */}
@@ -1575,7 +1617,7 @@ export default function VoiceOrbSession({
                             </span>
                           ))}
                         </p>
-                        {onTurnHelp && (
+                        {!isUser && onTurnHelp && (
                           <button
                             className="vos-turn-help-btn"
                             type="button"

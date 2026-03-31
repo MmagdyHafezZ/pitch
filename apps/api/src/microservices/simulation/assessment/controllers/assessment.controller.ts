@@ -85,16 +85,16 @@ export class AssessmentController {
   @ApiOperation({ summary: 'Get latest completed assessment for a session' })
   @ApiQuery({ name: 'iterationId', required: false, type: String })
   @ApiQuery({ name: 'sessionMemberId', required: false, type: String })
-  @ApiOkResponse({ type: AssessmentLatestResponseDto })
-  @ApiNotFoundResponse({
-    type: HttpErrorResponseDto,
-    description: 'No completed assessments found.',
+  @ApiOkResponse({
+    type: AssessmentLatestResponseDto,
+    description:
+      'Latest completed assessment. Returns null when no completed assessment exists yet.',
   })
   async getLatestForSession(
     @Param('id') sessionId: string,
     @Query('iterationId') iterationId?: string,
     @Query('sessionMemberId') sessionMemberId?: string,
-  ): Promise<AssessmentLatestResponseDto> {
+  ): Promise<AssessmentLatestResponseDto | null> {
     return await this.assessmentService.getLatest(
       sessionId,
       iterationId,

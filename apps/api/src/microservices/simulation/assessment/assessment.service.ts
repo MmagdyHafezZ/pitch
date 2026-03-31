@@ -209,7 +209,7 @@ export class AssessmentService {
         select: { id: true },
       });
       if (!iteration) {
-        throw new NotFoundException('No iterations found for session member');
+        return null;
       }
       run = await this.assessmentRepository.findLatestCompletedForIteration(
         iteration.id,
@@ -221,7 +221,7 @@ export class AssessmentService {
         select: { id: true, sessionMemberId: true },
       });
       if (!latestIteration) {
-        throw new NotFoundException('No iterations found for session');
+        return null;
       }
       resolvedSessionMemberId = latestIteration.sessionMemberId;
       run = await this.assessmentRepository.findLatestCompletedForIteration(
@@ -230,7 +230,7 @@ export class AssessmentService {
     }
 
     if (!run) {
-      throw new NotFoundException('No completed assessments found');
+      return null;
     }
 
     return {

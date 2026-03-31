@@ -5,9 +5,9 @@ import {
   RABBITMQ_DEAD_LETTER_EXCHANGE,
   getQueueOptions,
   getRabbitMQUrl,
-} from './microservices.config';
+} from '@pitch/shared-backend/config/microservices.config';
 
-export { RABBITMQ_DEAD_LETTER_EXCHANGE } from './microservices.config';
+export { RABBITMQ_DEAD_LETTER_EXCHANGE } from '@pitch/shared-backend/config/microservices.config';
 
 export interface RabbitMqQueueTopology {
   queue: string;
