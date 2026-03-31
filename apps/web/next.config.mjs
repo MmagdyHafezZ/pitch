@@ -2,6 +2,7 @@ import path from 'path'
 
 const nextConfig = {
   output: 'standalone',
+  reactStrictMode: false,
   experimental: {
     optimizePackageImports: ['@mantine/core', '@mantine/hooks'],
   },

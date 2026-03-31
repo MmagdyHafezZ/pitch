@@ -1,6 +1,6 @@
 'use client'
 
-import { Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import {
   Alert,
   Badge,
@@ -23,7 +23,8 @@ import {
   IconRotateClockwise,
 } from '@tabler/icons-react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
-import { Center, Html, useAnimations, useGLTF } from '@react-three/drei'
+import { Html, useAnimations, useGLTF } from '@react-three/drei'
+import { Quaternion } from 'three'
 import type { AnimationAction, AnimationClip, Group as ThreeGroup, Object3D } from 'three'
 
 type MoodState = 'normal' | 'mad'
@@ -31,6 +32,7 @@ type PlaybackMode = 'idle' | 'speaking' | 'listening'
 type RequiredTargetName = 'mad' | 'open_mouth' | 'open' | 'open_mad'
 type ControlledFeatureName = 'body' | 'Mouth'
 type InspectedNodeName = ControlledFeatureName | 'eyeL' | 'eyeR' | 'browL' | 'browR'
+type Vector3Tuple = [number, number, number]
 
 interface CharacterAlignmentPayload {
   characters?: string[]
@@ -166,9 +168,53 @@ interface GltfJsonDefinition {
 interface GltfAsset {
   scene: ThreeGroup
   animations: AnimationClip[]
+  cameras?: SceneCamera[]
   parser?: {
     json?: GltfJsonDefinition
   }
+}
+
+interface SceneCamera extends Object3D {
+  isCamera: boolean
+  isPerspectiveCamera?: boolean
+  isOrthographicCamera?: boolean
+  fov?: number
+  near?: number
+  far?: number
+  zoom?: number
+  left?: number
+  right?: number
+  top?: number
+  bottom?: number
+  updateProjectionMatrix?: () => void
+}
+
+interface PerspectiveSceneCamera extends SceneCamera {
+  isPerspectiveCamera: true
+  fov: number
+  near: number
+  far: number
+  zoom: number
+}
+
+interface OrthographicSceneCamera extends SceneCamera {
+  isOrthographicCamera: true
+  near: number
+  far: number
+  zoom: number
+  left: number
+  right: number
+  top: number
+  bottom: number
+}
+
+interface CameraSnapshot {
+  position: Vector3Tuple
+  rotation: Vector3Tuple
+  near: number | null
+  far: number | null
+  zoom: number | null
+  fov: number | null
 }
 
 const REQUIRED_TARGETS = ['mad', 'open_mouth', 'open', 'open_mad'] as const
@@ -179,11 +225,6 @@ const IDLE_ANIMATION_NAME = 'idle'
 const LISTEN_FPS = 24
 const LISTEN_LOOP_START_FRAME = 2
 const LISTEN_FRAME_DURATION = 1 / LISTEN_FPS
-const PABLO_VIEW_SCALE = 1.56
-const PABLO_VIEW_OFFSET_X = 0
-const PABLO_VIEW_OFFSET_Y = -0.74
-const PABLO_VIEW_ROTATION_X = 0
-const PABLO_VIEW_ROTATION_Y = 0
 const PABLO_CAMERA_FOV = 24
 const PABLO_CAMERA_POSITION = [0, 1.48, 4.18] as const
 const PABLO_CAMERA_TARGET = [0, 0.36, 0] as const
@@ -192,6 +233,94 @@ const PABLO_BACKGROUND_IMAGE = '/pablo_session_background.png'
 const CONTROLLED_FEATURE_TARGETS: Record<ControlledFeatureName, readonly RequiredTargetName[]> = {
   body: ['mad', 'open_mouth'],
   Mouth: ['open', 'open_mad'],
+}
+
+function isSceneCamera(object: Object3D): object is SceneCamera {
+  return (object as SceneCamera).isCamera === true
+}
+
+function isPerspectiveCamera(camera: SceneCamera): camera is PerspectiveSceneCamera {
+  return 'isPerspectiveCamera' in camera && camera.isPerspectiveCamera === true
+}
+
+function isOrthographicCamera(camera: SceneCamera): camera is OrthographicSceneCamera {
+  return 'isOrthographicCamera' in camera && camera.isOrthographicCamera === true
+}
+
+function findEmbeddedCamera(scene: Object3D): SceneCamera | null {
+  let embeddedCamera: SceneCamera | null = null
+
+  scene.traverse((object) => {
+    if (embeddedCamera || !isSceneCamera(object)) {
+      return
+    }
+
+    embeddedCamera = object
+  })
+
+  return embeddedCamera
+}
+
+function getPrimaryEmbeddedCamera(gltf: GltfAsset): SceneCamera | null {
+  const exportedCamera = gltf.cameras?.find(isSceneCamera)
+  if (exportedCamera) {
+    return exportedCamera
+  }
+
+  return findEmbeddedCamera(gltf.scene)
+}
+
+function updateSceneCameraProjection(camera: SceneCamera) {
+  camera.updateProjectionMatrix?.()
+}
+
+function toVector3Tuple(x: number, y: number, z: number): Vector3Tuple {
+  return [x, y, z]
+}
+
+function areNumbersClose(left: number, right: number, epsilon = 0.0001): boolean {
+  return Math.abs(left - right) <= epsilon
+}
+
+function areVectorTuplesEqual(left: Vector3Tuple, right: Vector3Tuple): boolean {
+  return left.every((value, index) => areNumbersClose(value, right[index]))
+}
+
+function areCameraSnapshotsEqual(
+  left: CameraSnapshot | null,
+  right: CameraSnapshot | null
+): boolean {
+  if (!left || !right) {
+    return left === right
+  }
+
+  return (
+    areVectorTuplesEqual(left.position, right.position) &&
+    areVectorTuplesEqual(left.rotation, right.rotation) &&
+    areNumbersClose(left.near ?? 0, right.near ?? 0) &&
+    areNumbersClose(left.far ?? 0, right.far ?? 0) &&
+    areNumbersClose(left.zoom ?? 0, right.zoom ?? 0) &&
+    areNumbersClose(left.fov ?? 0, right.fov ?? 0)
+  )
+}
+
+function createCameraSnapshot(camera: SceneCamera): CameraSnapshot {
+  return {
+    position: toVector3Tuple(camera.position.x, camera.position.y, camera.position.z),
+    rotation: toVector3Tuple(camera.rotation.x, camera.rotation.y, camera.rotation.z),
+    near: typeof camera.near === 'number' ? camera.near : null,
+    far: typeof camera.far === 'number' ? camera.far : null,
+    zoom: typeof camera.zoom === 'number' ? camera.zoom : null,
+    fov: isPerspectiveCamera(camera) && typeof camera.fov === 'number' ? camera.fov : null,
+  }
+}
+
+function formatVector3Tuple(value: Vector3Tuple | null): string {
+  if (!value) {
+    return '—'
+  }
+
+  return value.map((entry) => entry.toFixed(2)).join(', ')
 }
 
 function getPreferredAlignment(
@@ -353,8 +482,14 @@ function getControlledFeatureName(object: Object3D): ControlledFeatureName | nul
   return null
 }
 
-function featureAcceptsTarget(featureName: ControlledFeatureName, targetName: RequiredTargetName) {
-  return CONTROLLED_FEATURE_TARGETS[featureName].includes(targetName)
+function normalizeControlledTargetName(targetName: string): RequiredTargetName | null {
+  if (targetName === 'open_mouth_mad') {
+    return 'open_mad'
+  }
+
+  return REQUIRED_TARGETS.includes(targetName as RequiredTargetName)
+    ? (targetName as RequiredTargetName)
+    : null
 }
 
 function getTargetNamesFromDictionary(
@@ -563,33 +698,31 @@ function PabloModel({
       if (!hasMorphInfluences(nextObject)) return
 
       const featureName = getControlledFeatureName(nextObject)
-      if (!featureName) return
-
       if (!dictionary) return
 
       for (const [targetName, targetIndex] of Object.entries(dictionary)) {
         availableTargets.add(targetName)
+        const normalizedTargetName = normalizeControlledTargetName(targetName)
 
-        if (
-          !REQUIRED_TARGETS.includes(targetName as RequiredTargetName) ||
-          !featureAcceptsTarget(featureName, targetName as RequiredTargetName)
-        ) {
+        if (!normalizedTargetName) {
           continue
         }
 
-        nextBindings[targetName as RequiredTargetName].push({
+        nextBindings[normalizedTargetName].push({
           influences: nextObject.morphTargetInfluences ?? [],
           index: targetIndex,
           meshName: nextObject.name ?? 'unnamed-mesh',
           objectName: nextObject.name ?? 'unnamed-node',
         })
-        featureBindingCounts[featureName][targetName as RequiredTargetName] += 1
-        bindingDetails[targetName as RequiredTargetName].push({
-          featureName,
-          objectName: nextObject.name ?? 'unnamed-node',
-          meshName: nextObject.name ?? 'unnamed-mesh',
-          index: targetIndex,
-        })
+        if (featureName) {
+          featureBindingCounts[featureName][normalizedTargetName] += 1
+          bindingDetails[normalizedTargetName].push({
+            featureName,
+            objectName: nextObject.name ?? 'unnamed-node',
+            meshName: nextObject.name ?? 'unnamed-mesh',
+            index: targetIndex,
+          })
+        }
       }
     })
 
@@ -782,38 +915,102 @@ function PabloModel({
     }
   })
 
-  return (
-    <Center>
-      <primitive
-        object={model}
-        position={[PABLO_VIEW_OFFSET_X, PABLO_VIEW_OFFSET_Y, 0]}
-        rotation={[PABLO_VIEW_ROTATION_X, PABLO_VIEW_ROTATION_Y, 0]}
-        scale={PABLO_VIEW_SCALE}
-      />
-    </Center>
-  )
+  return <primitive object={model} />
 }
 
 function LoadingModelFallback() {
   return (
     <Html center>
-      <Paper radius="md" p="sm" shadow="sm" bg="rgba(15, 23, 42, 0.84)">
-        <Text c="white" size="sm">
-          Loading Pablo.glb…
-        </Text>
-      </Paper>
+      <div
+        style={{
+          borderRadius: 14,
+          padding: '0.65rem 0.9rem',
+          background: 'rgba(15, 23, 42, 0.84)',
+          color: 'white',
+          fontSize: 14,
+          fontWeight: 600,
+          letterSpacing: '0.01em',
+        }}
+      >
+        Loading Pablo.glb...
+      </div>
     </Html>
   )
 }
 
-function PabloCameraRig() {
+function applyEmbeddedCameraProjection(sourceCamera: SceneCamera, targetCamera: SceneCamera) {
+  if (isPerspectiveCamera(targetCamera)) {
+    if (sourceCamera.isPerspectiveCamera && typeof sourceCamera.fov === 'number') {
+      targetCamera.fov = sourceCamera.fov
+    }
+    if (typeof sourceCamera.near === 'number') {
+      targetCamera.near = sourceCamera.near
+    }
+    if (typeof sourceCamera.far === 'number') {
+      targetCamera.far = sourceCamera.far
+    }
+    if (typeof sourceCamera.zoom === 'number') {
+      targetCamera.zoom = sourceCamera.zoom
+    }
+  }
+
+  if (isOrthographicCamera(targetCamera)) {
+    if (sourceCamera.isOrthographicCamera) {
+      if (typeof sourceCamera.left === 'number') targetCamera.left = sourceCamera.left
+      if (typeof sourceCamera.right === 'number') targetCamera.right = sourceCamera.right
+      if (typeof sourceCamera.top === 'number') targetCamera.top = sourceCamera.top
+      if (typeof sourceCamera.bottom === 'number') targetCamera.bottom = sourceCamera.bottom
+      if (typeof sourceCamera.near === 'number') targetCamera.near = sourceCamera.near
+      if (typeof sourceCamera.far === 'number') targetCamera.far = sourceCamera.far
+      if (typeof sourceCamera.zoom === 'number') targetCamera.zoom = sourceCamera.zoom
+    }
+  }
+}
+
+function syncLockedCamera(sourceCamera: SceneCamera | null, targetCamera: SceneCamera) {
+  if (sourceCamera) {
+    sourceCamera.updateWorldMatrix(true, true)
+    targetCamera.position.copy(sourceCamera.getWorldPosition(targetCamera.position))
+    targetCamera.quaternion.copy(sourceCamera.getWorldQuaternion(new Quaternion()))
+    applyEmbeddedCameraProjection(sourceCamera, targetCamera)
+    targetCamera.updateMatrixWorld(true)
+    updateSceneCameraProjection(targetCamera)
+    return
+  }
+
+  targetCamera.position.set(...PABLO_CAMERA_POSITION)
+  targetCamera.lookAt(...PABLO_CAMERA_TARGET)
+  targetCamera.updateMatrixWorld(true)
+  updateSceneCameraProjection(targetCamera)
+}
+
+function PabloCameraRig({
+  modelPath,
+  onCameraChange,
+}: {
+  modelPath: string
+  onCameraChange: (snapshot: CameraSnapshot) => void
+}) {
   const { camera } = useThree()
+  const gltf = useGLTF(modelPath) as GltfAsset
+  const embeddedCamera = useMemo(() => getPrimaryEmbeddedCamera(gltf), [gltf])
+  const lastCameraSnapshotRef = useRef<CameraSnapshot | null>(null)
 
   useLayoutEffect(() => {
-    camera.position.set(...PABLO_CAMERA_POSITION)
-    camera.lookAt(...PABLO_CAMERA_TARGET)
-    camera.updateProjectionMatrix()
-  }, [camera])
+    syncLockedCamera(embeddedCamera, camera as SceneCamera)
+  }, [camera, embeddedCamera])
+
+  useFrame(() => {
+    syncLockedCamera(embeddedCamera, camera as SceneCamera)
+
+    const nextSnapshot = createCameraSnapshot(camera as SceneCamera)
+    if (areCameraSnapshotsEqual(lastCameraSnapshotRef.current, nextSnapshot)) {
+      return
+    }
+
+    lastCameraSnapshotRef.current = nextSnapshot
+    onCameraChange(nextSnapshot)
+  })
 
   return null
 }
@@ -828,6 +1025,15 @@ export default function VoiceLipSyncTest({
   const alignment = useMemo(() => getPreferredAlignment(fixture), [fixture])
   const fullText = useMemo(() => extractFullText(alignment), [alignment])
   const words = useMemo(() => deriveWordTimings(alignment), [alignment])
+  const canvasCamera = useMemo(
+    () => ({
+      position: [...PABLO_CAMERA_POSITION] as Vector3Tuple,
+      fov: PABLO_CAMERA_FOV,
+    }),
+    []
+  )
+  const canvasDpr = useMemo(() => [1, 2] as const, [])
+  const canvasGl = useMemo(() => ({ alpha: true, antialias: true }), [])
 
   const [mood, setMood] = useState<MoodState>('normal')
   const [playbackMode, setPlaybackMode] = useState<PlaybackMode>('idle')
@@ -835,6 +1041,7 @@ export default function VoiceLipSyncTest({
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
   const [playbackError, setPlaybackError] = useState<string | null>(null)
+  const [cameraSnapshot, setCameraSnapshot] = useState<CameraSnapshot | null>(null)
   const [morphDiagnostics, setMorphDiagnostics] = useState<MorphDiagnostics>({
     warnings: [],
     bindingCounts: createEmptyBindingCounts(),
@@ -881,6 +1088,11 @@ export default function VoiceLipSyncTest({
       ),
     [morphDiagnostics]
   )
+  const handleCameraChange = useCallback((nextSnapshot: CameraSnapshot) => {
+    setCameraSnapshot((previousSnapshot) =>
+      areCameraSnapshotsEqual(previousSnapshot, nextSnapshot) ? previousSnapshot : nextSnapshot
+    )
+  }, [])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -1152,14 +1364,16 @@ export default function VoiceLipSyncTest({
                 </Button>
               </Group>
 
-              <SegmentedControl
-                value={mood}
-                onChange={(value) => setMood(value as MoodState)}
-                data={[
-                  { label: 'Normal', value: 'normal' },
-                  { label: 'Mad', value: 'mad' },
-                ]}
-              />
+              <Group gap="sm" wrap="wrap">
+                <SegmentedControl
+                  value={mood}
+                  onChange={(value) => setMood(value as MoodState)}
+                  data={[
+                    { label: 'Normal', value: 'normal' },
+                    { label: 'Mad', value: 'mad' },
+                  ]}
+                />
+              </Group>
             </Group>
 
             <Box
@@ -1188,13 +1402,17 @@ export default function VoiceLipSyncTest({
                 }}
               />
               <Canvas
-                shadows
-                dpr={[1, 2]}
-                gl={{ alpha: true, antialias: true }}
-                style={{ pointerEvents: 'none', position: 'relative', zIndex: 1 }}
-                camera={{ position: [...PABLO_CAMERA_POSITION], fov: PABLO_CAMERA_FOV }}
+                shadows="percentage"
+                dpr={canvasDpr}
+                gl={canvasGl}
+                style={{
+                  pointerEvents: 'none',
+                  position: 'relative',
+                  zIndex: 1,
+                }}
+                camera={canvasCamera}
               >
-                <PabloCameraRig />
+                <PabloCameraRig modelPath={modelPath} onCameraChange={handleCameraChange} />
                 <ambientLight intensity={0.72} />
                 <hemisphereLight args={['#edf7ff', '#0f172a', 1.2]} />
                 <directionalLight
@@ -1254,7 +1472,7 @@ export default function VoiceLipSyncTest({
                         : 'Mouth Closed'}
                   </Badge>
                 </Group>
-                <SimpleGrid cols={{ base: 2, md: 5 }} spacing="sm">
+                <SimpleGrid cols={{ base: 2, md: 4, xl: 8 }} spacing="sm">
                   <Paper radius="md" p="sm" bg="var(--mantine-color-dark-8)">
                     <Text size="xs" c="dimmed">
                       Mode
@@ -1287,7 +1505,18 @@ export default function VoiceLipSyncTest({
                     </Text>
                     <Text fw={600}>{words.length}</Text>
                   </Paper>
+                  <Paper radius="md" p="sm" bg="var(--mantine-color-dark-8)">
+                    <Text size="xs" c="dimmed">
+                      Camera Position
+                    </Text>
+                    <Text fw={600} size="sm">
+                      {formatVector3Tuple(cameraSnapshot?.position ?? null)}
+                    </Text>
+                  </Paper>
                 </SimpleGrid>
+                <Text size="xs" c="dimmed">
+                  Camera rotation: {formatVector3Tuple(cameraSnapshot?.rotation ?? null)}
+                </Text>
               </Stack>
             </Paper>
 
