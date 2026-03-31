@@ -83,7 +83,7 @@ describe('AuthGatewayController', () => {
 
     const response = {
       cookie: jest.fn(),
-    } as never;
+    };
 
     const result = await lastValueFrom(
       controller.login(
@@ -91,7 +91,7 @@ describe('AuthGatewayController', () => {
           email: 'dev-admin@example.com',
           password: 'password123',
         } as never,
-        response,
+        response as never,
       ),
     );
 

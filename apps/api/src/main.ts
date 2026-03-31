@@ -26,7 +26,7 @@ import {
   getRabbitMQUrl,
   getRabbitMQUrls,
   MICROSERVICES_CONFIG,
-} from './config/microservices.config';
+} from '@pitch/shared-backend/config/microservices.config';
 import { provisionRabbitMqTopology } from './config/rabbitmq-topology';
 import { PrismaClient } from '@prisma/user-client';
 import { withAccelerate } from '@prisma/extension-accelerate';

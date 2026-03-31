@@ -587,6 +587,7 @@ describe('SubscriptionService', () => {
       },
     });
     planRepository.findById.mockResolvedValue({
+      ...basePlan,
       id: 'plan-2',
       name: 'Pro',
       maxCoins: 500,

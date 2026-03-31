@@ -421,6 +421,60 @@ describe('audio queue', () => {
     expect(audioInstances[0].play).toHaveBeenCalled()
   })
 
+  it('plays chunk audio when payload arrives as Buffer JSON shape', async () => {
+    const { result } = await setup()
+    act(() => {
+      result.current.sendMessage('hello')
+    })
+
+    act(() => {
+      cbs.audioChunk!({
+        requestId: REQ_ID,
+        sessionId: SESSION_ID,
+        payload: {
+          sentenceIndex: 0,
+          audio: { type: 'Buffer', data: [1, 2, 3] },
+          contentType: 'audio/mpeg',
+        },
+      })
+    })
+
+    await waitFor(() => expect(audioInstances).toHaveLength(1))
+    expect(audioInstances[0].play).toHaveBeenCalled()
+
+    const createObjectUrlMock = URL.createObjectURL as jest.Mock
+    const latestBlob = createObjectUrlMock.mock.calls[createObjectUrlMock.mock.calls.length - 1][0]
+    expect(latestBlob).toBeInstanceOf(Blob)
+    expect((latestBlob as Blob).size).toBe(3)
+  })
+
+  it('plays chunk audio when payload arrives as base64 string', async () => {
+    const { result } = await setup()
+    act(() => {
+      result.current.sendMessage('hello')
+    })
+
+    act(() => {
+      cbs.audioChunk!({
+        requestId: REQ_ID,
+        sessionId: SESSION_ID,
+        payload: {
+          sentenceIndex: 0,
+          audio: 'AQID',
+          contentType: 'audio/mpeg',
+        },
+      })
+    })
+
+    await waitFor(() => expect(audioInstances).toHaveLength(1))
+    expect(audioInstances[0].play).toHaveBeenCalled()
+
+    const createObjectUrlMock = URL.createObjectURL as jest.Mock
+    const latestBlob = createObjectUrlMock.mock.calls[createObjectUrlMock.mock.calls.length - 1][0]
+    expect(latestBlob).toBeInstanceOf(Blob)
+    expect((latestBlob as Blob).size).toBe(3)
+  })
+
   it('plays chunks in index order when they arrive out of order', async () => {
     const { result } = await setup()
     act(() => {
@@ -727,86 +781,26 @@ describe('text/audio sync', () => {
     await waitFor(() => expect(result.current.messages.at(-1)?.text).toBe('Hello there!'))
   })
 
-  it('suppresses delta updates once the first audio chunk arrives', async () => {
+  it('keeps streaming delta text after audio chunks arrive', async () => {
     const { result } = await setup()
     act(() => {
       result.current.sendMessage('hello')
     })
 
-    // Deltas flow before audio
     act(() => {
       cbs.delta!(mkEnv({ delta: 'Hello' }))
     })
     expect(result.current.messages.at(-1)?.text).toBe('Hello')
 
-    // Audio chunk arrives → ttsActive = true → deltas suppressed
     act(() => {
       cbs.audioChunk!(mkChunk(0, 'Audio sentence.'))
     })
 
     act(() => {
-      cbs.delta!(mkEnv({ delta: ' suppressed' }))
+      cbs.delta!(mkEnv({ delta: ' there' }))
     })
 
-    // Text reflects the sentenceText reveal, not the suppressed delta
-    await waitFor(() => expect(result.current.messages.at(-1)?.text).toBe('Audio sentence.'))
-  })
-
-  it('reveals sentence 0 text when chunk 0 arrives (text set in tryPlayNext)', async () => {
-    const { result } = await setup()
-    act(() => {
-      result.current.sendMessage('hello')
-    })
-
-    act(() => {
-      cbs.audioChunk!(mkChunk(0, 'First sentence.'))
-    })
-
-    await waitFor(() => expect(result.current.messages.at(-1)?.text).toBe('First sentence.'))
-  })
-
-  it('accumulates sentences as each one starts playing', async () => {
-    const { result } = await setup()
-    act(() => {
-      result.current.sendMessage('hello')
-    })
-
-    // Chunk 0 → text = "First."
-    act(() => {
-      cbs.audioChunk!(mkChunk(0, 'First.'))
-    })
-    await waitFor(() => expect(result.current.messages.at(-1)?.text).toBe('First.'))
-
-    // Queue chunk 1, finish chunk 0 → tryPlayNext runs → text = "First. Second."
-    act(() => {
-      cbs.audioChunk!(mkChunk(1, 'Second.'))
-    })
-    act(() => {
-      audioInstances[0].onended?.()
-    })
-
-    await waitFor(() => expect(result.current.messages.at(-1)?.text).toBe('First. Second.'))
-  })
-
-  it('skips missing sentence texts gracefully', async () => {
-    const { result } = await setup()
-    act(() => {
-      result.current.sendMessage('hello')
-    })
-
-    // Chunk 0 has no sentenceText, chunk 1 has text
-    act(() => {
-      cbs.audioChunk!(mkChunk(0))
-    })
-    act(() => {
-      cbs.audioChunk!(mkChunk(1, 'Second.'))
-    })
-    act(() => {
-      audioInstances[0].onended?.()
-    })
-
-    // Only "Second." appears (idx=0 empty → filtered out)
-    await waitFor(() => expect(result.current.messages.at(-1)?.text).toBe('Second.'))
+    await waitFor(() => expect(result.current.messages.at(-1)?.text).toBe('Hello there'))
   })
 
   it('always shows fullText from StreamCompleted regardless of TTS state', async () => {
@@ -825,27 +819,22 @@ describe('text/audio sync', () => {
     await waitFor(() => expect(result.current.messages.at(-1)?.text).toBe('Partial. Complete!'))
   })
 
-  it('resets ttsActive on clearAudioQueue so deltas flow again', async () => {
+  it('continues streaming deltas after interrupt and a new request', async () => {
     const { result } = await setup()
     act(() => {
       result.current.sendMessage('hello')
     })
 
     act(() => {
-      cbs.audioChunk!(mkChunk(0, 'Hello.'))
-    })
-    await waitFor(() => expect(result.current.messages.at(-1)?.text).toBe('Hello.'))
-
-    // Interrupt clears queue → ttsActive = false
-    svc.sendConversation.mockReturnValue('req-2')
-    act(() => {
+      cbs.audioChunk!(mkChunk(0))
       result.current.interrupt()
     })
+
+    svc.sendConversation.mockReturnValue('req-2')
     act(() => {
       result.current.sendMessage('new message')
     })
 
-    // Deltas should stream again
     act(() => {
       cbs.delta!(mkEnv({ delta: 'Streaming again' }, 'req-2'))
     })

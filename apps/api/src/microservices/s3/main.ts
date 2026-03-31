@@ -11,7 +11,7 @@ import {
   getQueueOptions,
   getRabbitMQUrl,
   getRabbitMQUrls,
-} from '../../config/microservices.config';
+} from '@pitch/shared-backend/config/microservices.config';
 import {
   buildRabbitMqQueueTopology,
   provisionRabbitMqTopology,

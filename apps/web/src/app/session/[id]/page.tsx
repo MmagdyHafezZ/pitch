@@ -33,6 +33,7 @@ import {
   IconMessage2,
   IconPhone,
   IconSparkles,
+  IconSettings,
   IconX,
   IconTarget,
   IconTrophy,
@@ -45,6 +46,8 @@ import { type GlobeState } from '@/features/conversation/components/GlobeVisuali
 import VoiceOrbSession from '@/features/conversation/components/VoiceOrbSession'
 import { useAudioLevel } from '@/features/conversation/hooks/useAudioLevel'
 import { CoachChatWidget } from '@/components/ui/CoachChatWidget'
+import { SettingsModal } from '@/components/ui/SettingsModal'
+import { useAuthStore } from '@/features/auth'
 import { useSpeechToText } from '@/features/stt'
 import { API_CONFIG, api } from '@/lib/client'
 import { notifications } from '@mantine/notifications'
@@ -101,6 +104,13 @@ interface TranscriptMessage {
   audioUrl?: string
 }
 
+interface CoachStarterPrompt {
+  key: string
+  message: string
+  open?: boolean
+  hidden?: boolean
+}
+
 const EMPTY_PHONE_CALL_RUNTIME: PhoneCallRuntimeState = {
   callId: null,
   provider: null,
@@ -115,7 +125,9 @@ const EMPTY_PHONE_CALL_RUNTIME: PhoneCallRuntimeState = {
 }
 
 const SESSION_TIMER_STORAGE_PREFIX = 'pitch-live-session-timer:'
-const ASSISTANT_FIRST_TURN_DELAY_MS = 5000
+const ASSISTANT_FIRST_TURN_DELAY_MS = 3000
+const VOICE_SILENCE_COMMIT_WINDOW_MS = 3000
+const DEFAULT_NON_VOICE_SPEECH_SEND_DELAY_MS = 3000
 
 const PHONE_TERMINAL_STATUSES = new Set(['ended', 'failed', 'busy', 'no-answer', 'canceled'])
 
@@ -420,16 +432,21 @@ const parseTimestampMs = (value: unknown): number | null => {
   return Number.isNaN(parsed) ? null : parsed
 }
 
-const getSessionTimerStorageKey = (sessionId: string) =>
-  `${SESSION_TIMER_STORAGE_PREFIX}${sessionId}`
+const getSessionTimerStorageKey = (sessionId: string, iterationId: string | null) =>
+  `${SESSION_TIMER_STORAGE_PREFIX}${sessionId}:${iterationId ?? 'session'}`
 
-const readPersistedSessionStartMs = (sessionId: string): number | null => {
+const readPersistedSessionStartMs = (
+  sessionId: string,
+  iterationId: string | null
+): number | null => {
   if (typeof window === 'undefined') {
     return null
   }
 
   try {
-    const rawValue = window.sessionStorage.getItem(getSessionTimerStorageKey(sessionId))
+    const rawValue = window.sessionStorage.getItem(
+      getSessionTimerStorageKey(sessionId, iterationId)
+    )
     if (!rawValue) {
       return null
     }
@@ -441,25 +458,34 @@ const readPersistedSessionStartMs = (sessionId: string): number | null => {
   }
 }
 
-const writePersistedSessionStartMs = (sessionId: string, startedAtMs: number) => {
+const writePersistedSessionStartMs = (
+  sessionId: string,
+  iterationId: string | null,
+  startedAtMs: number
+) => {
   if (typeof window === 'undefined') {
     return
   }
 
   try {
-    window.sessionStorage.setItem(getSessionTimerStorageKey(sessionId), String(startedAtMs))
+    window.sessionStorage.setItem(
+      getSessionTimerStorageKey(sessionId, iterationId),
+      String(startedAtMs)
+    )
   } catch {
     // Ignore storage failures and fall back to in-memory state
   }
 }
 
-const clearPersistedSessionStartMs = (sessionId: string) => {
+const clearPersistedSessionStartMs = (sessionId: string, iterationId: string | null) => {
   if (typeof window === 'undefined') {
     return
   }
 
   try {
-    window.sessionStorage.removeItem(getSessionTimerStorageKey(sessionId))
+    window.sessionStorage.removeItem(getSessionTimerStorageKey(sessionId, iterationId))
+    // Legacy key cleanup from the old session-only timer implementation.
+    window.sessionStorage.removeItem(`${SESSION_TIMER_STORAGE_PREFIX}${sessionId}`)
   } catch {
     // Ignore storage failures
   }
@@ -480,7 +506,7 @@ const resolveSessionStartMs = (
   session: unknown,
   history: TranscriptMessage[] = []
 ): number | null => {
-  const persistedStartMs = readPersistedSessionStartMs(sessionId)
+  const persistedStartMs = readPersistedSessionStartMs(sessionId, readCurrentIterationId(session))
   const historyStartMs = history.length > 0 ? (history[0]?.timestamp.getTime() ?? null) : null
   const phoneStartMs = parseTimestampMs(readPhoneCallRuntime(session).startedAt)
   const candidates = [persistedStartMs, historyStartMs, phoneStartMs].filter(
@@ -1801,6 +1827,7 @@ export default function LiveSessionPage() {
   const entrySource = searchParams.get('entry')
   const isMobile = useMediaQuery('(max-width: 768px)')
   const invalidateCoinsBalance = useInvalidateCoinsBalance()
+  const userSettings = useAuthStore((state) => state.user?.settings)
   const [time, setTime] = useState(0)
   const [sessionStartMs, setSessionStartMs] = useState<number | null>(null)
   const [sessionEndMs, setSessionEndMs] = useState<number | null>(null)
@@ -1864,6 +1891,7 @@ export default function LiveSessionPage() {
   const loadedSessionRecordRef = useRef<Record<string, unknown> | null>(null)
   loadedSessionRecordRef.current = loadedSessionRecord
   const [sessionAttachments, setSessionAttachments] = useState<SessionAttachment[]>([])
+  const [sessionSettingsOpen, setSessionSettingsOpen] = useState(false)
   const [launchAttachments, setLaunchAttachments] = useState<SessionAttachment[]>([])
   const [launchAttachmentsUploading, setLaunchAttachmentsUploading] = useState(false)
   const [launchAttachmentErrors, setLaunchAttachmentErrors] = useState(false)
@@ -1878,12 +1906,14 @@ export default function LiveSessionPage() {
   const speechFinalizeTickerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const sendMessageRef = useRef<(text: string) => void>(() => {})
   const resetTranscriptRef = useRef<() => void>(() => {})
-  const previousAudioPlayingRef = useRef(false)
+  const autoMicTurnIdRef = useRef<string | null>(null)
   const speechBufferRef = useRef<string>('')
   const assistantInterruptTriggeredRef = useRef(false)
   const hasUserEnabledMicRef = useRef(false)
+  const coachHelpPromptSeqRef = useRef(0)
   const timeoutEndTriggeredRef = useRef(false)
   const [isMultiTurn, setIsMultiTurn] = useState(false)
+  const [coachStarter, setCoachStarter] = useState<CoachStarterPrompt | null>(null)
   const assistantStartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const lastAssistantMessageIdRef = useRef<string | null>(null)
@@ -1893,7 +1923,10 @@ export default function LiveSessionPage() {
   const userPipVideoRef = useRef<HTMLVideoElement | null>(null)
   const poseCameraStreamRef = useRef<MediaStream | null>(null)
   const [visualEnabled, setVisualEnabled] = useState(true)
-  const speechFinalizeDelayMs = sessionType === 'voice' || sessionType === 'video' ? 250 : 1500
+  const speechCommitWindowMs =
+    sessionType === 'voice' || sessionType === 'video'
+      ? VOICE_SILENCE_COMMIT_WINDOW_MS
+      : DEFAULT_NON_VOICE_SPEECH_SEND_DELAY_MS
   const isVideoSession = sessionType === 'video'
 
   const scheduleIdleHints = useCallback(
@@ -1942,6 +1975,36 @@ export default function LiveSessionPage() {
     setSttCommitRemainingMs(0)
   }, [])
 
+  const startSpeechFinalizeCountdown = useCallback(
+    (durationMs: number, onComplete?: () => void) => {
+      clearSpeechFinalizeState()
+      if (durationMs <= 0) return
+
+      setSttCommitRemainingMs(durationMs)
+      const startedAt = Date.now()
+      speechFinalizeTickerRef.current = setInterval(() => {
+        const elapsed = Date.now() - startedAt
+        const remaining = Math.max(0, durationMs - elapsed)
+        setSttCommitRemainingMs(remaining)
+        if (remaining === 0 && speechFinalizeTickerRef.current) {
+          clearInterval(speechFinalizeTickerRef.current)
+          speechFinalizeTickerRef.current = null
+        }
+      }, 50)
+
+      speechFinalizeTimerRef.current = setTimeout(() => {
+        if (speechFinalizeTickerRef.current) {
+          clearInterval(speechFinalizeTickerRef.current)
+          speechFinalizeTickerRef.current = null
+        }
+        speechFinalizeTimerRef.current = null
+        setSttCommitRemainingMs(0)
+        onComplete?.()
+      }, durationMs)
+    },
+    [clearSpeechFinalizeState]
+  )
+
   const flushSpeechBuffer = useCallback(() => {
     clearSpeechFinalizeState()
     const buffered = speechBufferRef.current.trim()
@@ -1954,13 +2017,9 @@ export default function LiveSessionPage() {
   }, [clearSpeechFinalizeState, scheduleIdleHints, sessionStatus])
 
   const handleSpeechEnd = useCallback(() => {
-    // speechend fires when the user stops speaking — accelerate commit if there's buffered content
-    if (speechFinalizeTimerRef.current && speechBufferRef.current.trim()) {
-      clearTimeout(speechFinalizeTimerRef.current)
-      speechFinalizeTimerRef.current = setTimeout(flushSpeechBuffer, 80)
-    }
-    // If no buffer yet, speechend fired before isFinal — the normal isFinal→250ms path handles it
-  }, [flushSpeechBuffer])
+    // We intentionally don't flush on speechend because browsers can emit this
+    // before recognition finalizes the transcript.
+  }, [])
 
   const {
     isConnected,
@@ -2018,12 +2077,21 @@ export default function LiveSessionPage() {
       const cleaned = text.trim()
       if (!cleaned) return
 
+      const isVoiceOrVideoSession = sessionType === 'voice' || sessionType === 'video'
       const canBargeIn =
-        (sessionType === 'voice' || sessionType === 'video') &&
-        hasUserEnabledMicRef.current &&
-        (assistantSpeaking || isProcessing)
+        isVoiceOrVideoSession && hasUserEnabledMicRef.current && (assistantSpeaking || isProcessing)
 
       if (!isFinal) {
+        if (
+          isVoiceOrVideoSession &&
+          hasUserEnabledMicRef.current &&
+          !assistantSpeaking &&
+          !isProcessing &&
+          isListening
+        ) {
+          startSpeechFinalizeCountdown(speechCommitWindowMs)
+        }
+
         const wordCount = cleaned.split(/\s+/u).filter(Boolean).length
         if (
           canBargeIn &&
@@ -2046,21 +2114,12 @@ export default function LiveSessionPage() {
         ? `${speechBufferRef.current.trim()} ${cleaned}`
         : cleaned
 
-      clearSpeechFinalizeState()
-      setSttCommitRemainingMs(speechFinalizeDelayMs)
-      const startedAt = Date.now()
-      speechFinalizeTickerRef.current = setInterval(() => {
-        const elapsed = Date.now() - startedAt
-        const remaining = Math.max(0, speechFinalizeDelayMs - elapsed)
-        setSttCommitRemainingMs(remaining)
-        if (remaining === 0 && speechFinalizeTickerRef.current) {
-          clearInterval(speechFinalizeTickerRef.current)
-          speechFinalizeTickerRef.current = null
-        }
-      }, 50)
-      speechFinalizeTimerRef.current = setTimeout(() => {
+      if (isVoiceOrVideoSession) {
         flushSpeechBuffer()
-      }, speechFinalizeDelayMs)
+        return
+      }
+
+      startSpeechFinalizeCountdown(speechCommitWindowMs, flushSpeechBuffer)
     },
     onError: () => {
       clearSpeechFinalizeState()
@@ -2080,15 +2139,20 @@ export default function LiveSessionPage() {
 
   const isPhoneSession = sessionType === 'phone'
   const activeConversationMessages = isPhoneSession ? phoneTranscriptMessages : messages
+  const latestAssistantTurn = [...activeConversationMessages]
+    .reverse()
+    .find((message) => message.role === 'assistant')
+  const latestAssistantTurnId = latestAssistantTurn?.id ?? null
 
   const syncSessionClock = useCallback(
     (session: unknown, history: TranscriptMessage[] = []) => {
       const nextSessionStartMs = resolveSessionStartMs(sessionId, session, history)
       const nextSessionEndMs = readSessionEndedAtMs(session)
+      const iterationId = readCurrentIterationId(session)
 
       if (nextSessionStartMs !== null) {
         setSessionStartMs(nextSessionStartMs)
-        writePersistedSessionStartMs(sessionId, nextSessionStartMs)
+        writePersistedSessionStartMs(sessionId, iterationId, nextSessionStartMs)
       } else {
         setSessionStartMs(null)
       }
@@ -2100,12 +2164,13 @@ export default function LiveSessionPage() {
 
   const ensureSessionClockStarted = useCallback(
     (startedAtMs = Date.now()) => {
+      const iterationId = readCurrentIterationId(loadedSessionRecordRef.current)
       setSessionStartMs((current) => {
         if (current !== null) {
           return current
         }
 
-        writePersistedSessionStartMs(sessionId, startedAtMs)
+        writePersistedSessionStartMs(sessionId, iterationId, startedAtMs)
         return startedAtMs
       })
       setSessionEndMs(null)
@@ -2114,9 +2179,10 @@ export default function LiveSessionPage() {
   )
 
   const resetSessionClock = useCallback(() => {
+    const iterationId = readCurrentIterationId(loadedSessionRecordRef.current)
     setSessionStartMs(null)
     setSessionEndMs(null)
-    clearPersistedSessionStartMs(sessionId)
+    clearPersistedSessionStartMs(sessionId, iterationId)
   }, [sessionId])
 
   const syncSessionState = useCallback(
@@ -2375,7 +2441,6 @@ export default function LiveSessionPage() {
     if (!sessionId) return
 
     let cancelled = false
-    const persistedSessionStartMs = readPersistedSessionStartMs(sessionId)
     pauseConversationConnect()
     hydrateMessages([])
     setResumePromptOpen(false)
@@ -2408,7 +2473,7 @@ export default function LiveSessionPage() {
     setPhoneTranscriptMessages([])
     setPhoneTranscriptError(null)
     setPhoneNumber('')
-    setSessionStartMs(persistedSessionStartMs)
+    setSessionStartMs(null)
     setSessionEndMs(null)
 
     const loadSession = async () => {
@@ -2420,7 +2485,10 @@ export default function LiveSessionPage() {
         let effectiveSessionRecord = isRecord(session) ? session : {}
         let effectiveStatus = normalizeSessionStatus(session)
         let isPhoneSession = effectiveSessionRecord.type === 'phone'
-        let effectivePersistedSessionStartMs = persistedSessionStartMs
+        let effectivePersistedSessionStartMs = readPersistedSessionStartMs(
+          sessionId,
+          readCurrentIterationId(effectiveSessionRecord)
+        )
 
         setLoadedSessionRecord(effectiveSessionRecord)
         setSessionAttachments(readSessionAttachments(effectiveSessionRecord))
@@ -2438,7 +2506,7 @@ export default function LiveSessionPage() {
             isPhoneSession = effectiveSessionRecord.type === 'phone'
             effectivePersistedSessionStartMs = null
 
-            clearPersistedSessionStartMs(sessionId)
+            clearPersistedSessionStartMs(sessionId, readCurrentIterationId(session))
             setSessionStartMs(null)
             setSessionEndMs(null)
             setLoadedSessionRecord(effectiveSessionRecord)
@@ -3042,6 +3110,44 @@ export default function LiveSessionPage() {
     interrupt,
   ])
 
+  const handleTurnHelp = useCallback(
+    (turn: TranscriptMessage) => {
+      const trimmedTurnText = turn.text.trim()
+      if (!trimmedTurnText) {
+        return
+      }
+
+      const isAssistantTurn = turn.role === 'assistant'
+
+      const recentWindow = activeConversationMessages
+        .slice(-6)
+        .map((message) => `${message.role === 'assistant' ? 'AI' : 'Me'}: ${message.text.trim()}`)
+        .filter((line) => line.length > 0)
+        .join('\n')
+
+      const promptParts = [
+        isAssistantTurn
+          ? 'Help me answer this simulation turn clearly and persuasively.'
+          : 'Help me improve and follow up on this simulation turn clearly and persuasively.',
+        `${isAssistantTurn ? 'AI turn' : 'My last turn'}: "${trimmedTurnText}"`,
+        'Give me:',
+        '1) one short response I can say right now,',
+        '2) one stronger response with concrete detail,',
+        '3) one follow-up question I can ask back.',
+        recentWindow ? `Recent turns:\n${recentWindow}` : '',
+      ]
+
+      const keySuffix = ++coachHelpPromptSeqRef.current
+      setCoachStarter({
+        key: `turn-help:${turn.id}:${keySuffix}`,
+        message: promptParts.filter(Boolean).join('\n\n'),
+        open: true,
+        hidden: true,
+      })
+    },
+    [activeConversationMessages]
+  )
+
   useEffect(() => {
     latestMessagesRef.current = activeConversationMessages.map((msg) => ({
       role: msg.role,
@@ -3189,36 +3295,41 @@ export default function LiveSessionPage() {
 
   useEffect(() => {
     const isVoiceOrVideo = sessionType === 'voice' || sessionType === 'video'
-    const canAttemptAutoResumeMic =
-      hasUserEnabledMicRef.current || microphonePermission !== 'denied'
-    if (
-      previousAudioPlayingRef.current &&
-      !assistantSpeaking &&
+    const isAwaitingUserReply =
       isVoiceOrVideo &&
-      canAttemptAutoResumeMic &&
-      isSttSupported &&
-      !isSttPermissionBlocked &&
       isConnected &&
       sessionStatus !== 'ended' &&
-      !isListening
-    ) {
-      const resumeMicForUserTurn = async () => {
-        if (!hasUserEnabledMicRef.current && microphonePermission !== 'granted') {
-          const permissionGranted = await requestMicrophoneAccess()
-          if (!permissionGranted) {
-            return
-          }
-        }
+      latestAssistantTurnId !== null &&
+      !assistantSpeaking &&
+      !isProcessing
 
-        hasUserEnabledMicRef.current = true
-        await startListening()
+    if (!isAwaitingUserReply || !isSttSupported || isSttPermissionBlocked || isListening) {
+      return
+    }
+
+    if (autoMicTurnIdRef.current === latestAssistantTurnId) {
+      return
+    }
+
+    autoMicTurnIdRef.current = latestAssistantTurnId
+
+    const handMicToUser = async () => {
+      if (!hasUserEnabledMicRef.current && microphonePermission !== 'granted') {
+        const permissionGranted = await requestMicrophoneAccess()
+        if (!permissionGranted) {
+          return
+        }
       }
 
-      void resumeMicForUserTurn()
+      hasUserEnabledMicRef.current = true
+      await startListening()
     }
-    previousAudioPlayingRef.current = assistantSpeaking
+
+    void handMicToUser()
   }, [
     assistantSpeaking,
+    isProcessing,
+    latestAssistantTurnId,
     sessionType,
     microphonePermission,
     isSttSupported,
@@ -3445,7 +3556,10 @@ export default function LiveSessionPage() {
     }
   }, [entryPromptMode, sessionType, sessionStatus, sessionId, router])
 
-  const sttCommitProgress = Math.min(1, Math.max(0, sttCommitRemainingMs / speechFinalizeDelayMs))
+  const sttCommitProgress =
+    speechCommitWindowMs > 0
+      ? Math.min(1, Math.max(0, sttCommitRemainingMs / speechCommitWindowMs))
+      : 0
 
   const todayStr = new Date().toLocaleDateString('en-US', {
     weekday: 'short',
@@ -4031,6 +4145,12 @@ export default function LiveSessionPage() {
         </Stack>
       </Modal>
 
+      <SettingsModal
+        opened={sessionSettingsOpen}
+        onClose={() => setSessionSettingsOpen(false)}
+        initialSection="Voice & Video"
+      />
+
       {/* Top Bar */}
       <Box
         style={{
@@ -4151,6 +4271,17 @@ export default function LiveSessionPage() {
                   Timeline
                 </Button>
               )}
+              <Tooltip label="Audio & video settings">
+                <ActionIcon
+                  size="lg"
+                  variant="subtle"
+                  color="white"
+                  onClick={() => setSessionSettingsOpen(true)}
+                  title="Open voice and video settings"
+                >
+                  <IconSettings size={20} />
+                </ActionIcon>
+              </Tooltip>
               <ActionIcon
                 size="lg"
                 variant="subtle"
@@ -4302,6 +4433,7 @@ export default function LiveSessionPage() {
                 onSendText={handleSendText}
                 onTextInputChange={setTextInput}
                 onScheduleIdleHints={scheduleIdleHints}
+                onTurnHelp={handleTurnHelp}
                 isVideoSession={isVideoSession}
                 avatarVideoUrl={avatarVideoUrl}
                 avatarVideoJobId={avatarVideoJobId}
@@ -4565,6 +4697,7 @@ export default function LiveSessionPage() {
             .slice(-6)
             .map((message) => ({ role: message.role, text: message.text })),
         }}
+        starter={coachStarter ?? undefined}
       />
     </Box>
   )
