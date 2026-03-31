@@ -1,4 +1,5 @@
 import { pipeline, env } from '@huggingface/transformers'
+import type { AllTasks } from '@huggingface/transformers'
 
 // Use Origin Private File System for model caching (persists across sessions)
 env.useBrowserCache = true
@@ -12,7 +13,7 @@ type WorkerResponse =
   | { type: 'result'; text: string }
   | { type: 'error'; message: string }
 
-let transcriber: Awaited<ReturnType<typeof pipeline>> | null = null
+let transcriber: AllTasks['automatic-speech-recognition'] | null = null
 let isLoading = false
 
 async function loadModel() {
