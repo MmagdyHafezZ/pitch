@@ -1,6 +1,12 @@
 'use client'
 
-import type { ComponentPropsWithoutRef, CSSProperties, ElementType, ReactNode } from 'react'
+import {
+  createElement,
+  type ComponentPropsWithoutRef,
+  type CSSProperties,
+  type ElementType,
+  type ReactNode,
+} from 'react'
 import styles from './StarBorder.module.css'
 
 type StarBorderProps<T extends ElementType> = ComponentPropsWithoutRef<T> & {
@@ -28,30 +34,34 @@ export function StarBorder<T extends ElementType = 'button'>({
 }: StarBorderProps<T>) {
   const Component = (as ?? 'button') as ElementType
 
-  return (
-    <Component
-      className={joinClasses(styles.container, className)}
-      style={{
+  return createElement(
+    Component,
+    {
+      ...rest,
+      className: joinClasses(styles.container, className),
+      style: {
         padding: `${thickness}px 0`,
         ...(style as CSSProperties | undefined),
+      },
+    },
+    <div
+      key="gradient-bottom"
+      className={styles.gradientBottom}
+      style={{
+        background: `radial-gradient(circle, ${color}, transparent 10%)`,
+        animationDuration: speed,
       }}
-      {...rest}
-    >
-      <div
-        className={styles.gradientBottom}
-        style={{
-          background: `radial-gradient(circle, ${color}, transparent 10%)`,
-          animationDuration: speed,
-        }}
-      />
-      <div
-        className={styles.gradientTop}
-        style={{
-          background: `radial-gradient(circle, ${color}, transparent 10%)`,
-          animationDuration: speed,
-        }}
-      />
-      <div className={joinClasses(styles.inner, innerClassName)}>{children}</div>
-    </Component>
+    />,
+    <div
+      key="gradient-top"
+      className={styles.gradientTop}
+      style={{
+        background: `radial-gradient(circle, ${color}, transparent 10%)`,
+        animationDuration: speed,
+      }}
+    />,
+    <div key="inner" className={joinClasses(styles.inner, innerClassName)}>
+      {children}
+    </div>
   )
 }

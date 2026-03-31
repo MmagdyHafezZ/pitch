@@ -73,6 +73,7 @@ export default function ClientLayerComponent({ children }: { children: React.Rea
     | 'Team Config'
     | 'Challenges'
     | 'Subscription'
+    | 'Admin'
   >('Home')
   const [selectedDate, setSelectedDate] = useState<Date | null>(new Date())
   const {
@@ -334,7 +335,6 @@ export default function ClientLayerComponent({ children }: { children: React.Rea
           isAdminRoute ? (
             <AppSidebar
               active={adminSidebarLabel}
-              setActive={setActive}
               selectedDate={selectedDate}
               setSelectedDate={setSelectedDate}
               showTeamConfig={false}
@@ -357,7 +357,7 @@ export default function ClientLayerComponent({ children }: { children: React.Rea
               />
               <AppSidebar
                 active={active}
-                setActive={setActive}
+                setActive={(label) => setActive(label as typeof active)}
                 selectedDate={selectedDate}
                 setSelectedDate={setSelectedDate}
                 showTeamConfig={canAccessTeamConfig}
