@@ -4,6 +4,7 @@ import { useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Box, Container, Text, Title } from '@mantine/core'
 import { LoginForm } from '@/features/auth/components/LoginForm'
+import { AppWordmark } from '@/components/ui/AppWordmark'
 import SoftAurora from '@/components/SoftAurora'
 import {
   persistTeamInviteContext,
@@ -45,7 +46,9 @@ export function LoginPageClient() {
         />
       </Box>
       <Box className={styles.auroraOverlay} aria-hidden="true" />
-      <Box className={styles.brand}>P.IT.C.H.</Box>
+      <Box className={styles.brand}>
+        <AppWordmark align="left" />
+      </Box>
       <Box className={`${styles.column} ${styles.columnLeft}`}>
         <Box className={styles.hero}>
           <Box className={styles.mascotWrap}>

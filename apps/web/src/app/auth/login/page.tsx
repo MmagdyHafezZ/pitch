@@ -1,8 +1,9 @@
 import { Metadata } from 'next'
+import { formatPageTitle } from '@/lib/branding'
 import { LoginPageClient } from './LoginPageClient'
 
 export const metadata: Metadata = {
-  title: 'Sign In | PITCH',
+  title: formatPageTitle('Sign In'),
   description: 'Sign in to your account',
 }
 

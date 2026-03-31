@@ -34,11 +34,7 @@
   position: absolute;
   top: 24px;
   left: 32px;
-  color: #ffffff;
-  font-weight: 700;
-  letter-spacing: 2px;
-  font-size: 14px;
-  text-transform: uppercase;
+  z-index: 2;
 }
 
 .page::before {
@@ -239,8 +235,6 @@
   .brand {
     top: 16px;
     left: 20px;
-    font-size: 12px;
-    letter-spacing: 1.6px;
   }
 
   .column {

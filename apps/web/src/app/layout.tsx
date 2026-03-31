@@ -4,11 +4,12 @@ import '@mantine/core/styles.css'
 import 'driver.js/dist/driver.css'
 import { ColorSchemeScript, mantineHtmlProps } from '@mantine/core'
 import { DEFAULT_LOCALE } from '@/features/i18n/constants'
+import { APP_TAGLINE, APP_TITLE } from '@/lib/branding'
 import { Providers } from '@/lib/providers'
 import { AuthGate } from './auth-gate'
 
 export const metadata: Metadata = {
-  title: 'PITCH - Your Business Platform',
+  title: `${APP_TITLE} - ${APP_TAGLINE}`,
   description: 'A modern business management platform',
 }
 

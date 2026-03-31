@@ -1,6 +1,7 @@
 'use client'
 
 import Image from 'next/image'
+import { AppWordmark } from '@/components/ui/AppWordmark'
 
 export function LoadingScreen() {
   return (
@@ -129,35 +130,7 @@ export function LoadingScreen() {
             zIndex: 1,
           }}
         >
-          <div
-            style={{
-              fontSize: 32,
-              fontWeight: 800,
-              letterSpacing: '-0.05em',
-              background:
-                'linear-gradient(135deg, rgba(255,255,255,0.95) 0%, rgba(34,139,230,0.85) 100%)',
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent',
-              backgroundClip: 'text',
-              fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, sans-serif',
-              lineHeight: 1,
-            }}
-          >
-            PITCH
-          </div>
-          <div
-            style={{
-              marginTop: 8,
-              fontSize: 11.5,
-              fontWeight: 500,
-              letterSpacing: '0.18em',
-              textTransform: 'uppercase',
-              color: 'rgba(255,255,255,0.28)',
-              fontFamily: 'system-ui, -apple-system, sans-serif',
-            }}
-          >
-            Preparing your workspace
-          </div>
+          <AppWordmark subtitle="Preparing your workspace" />
         </div>
 
         {/* Bouncing dots */}
