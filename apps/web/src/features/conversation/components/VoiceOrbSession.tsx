@@ -66,6 +66,8 @@ interface VoiceOrbSessionProps {
   onToggleCamera?: () => void
   userVideoRef?: React.RefObject<HTMLVideoElement | null>
   personaAvatarImageUrl?: string | null
+  presenterTone?: string | null
+  presenterIsFrustrated?: boolean
   // page-level props forwarded but not consumed here
   globeState?: unknown
   onTextInputKeyPress?: unknown
@@ -990,6 +992,8 @@ export default function VoiceOrbSession({
   cameraEnabled,
   onToggleCamera,
   userVideoRef,
+  presenterTone,
+  presenterIsFrustrated = false,
   visualState,
 }: VoiceOrbSessionProps) {
   const isVideoMode = mode === 'video'
@@ -1250,6 +1254,8 @@ export default function VoiceOrbSession({
               <PabloPresenter
                 playbackMode={presenterPlaybackMode}
                 audioElementRef={audioElementRef ?? emptyAudioElementRef}
+                presenterTone={presenterTone}
+                presenterIsFrustrated={presenterIsFrustrated}
               />
             </div>
 

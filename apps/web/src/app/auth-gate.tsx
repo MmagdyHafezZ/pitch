@@ -13,7 +13,7 @@ const ACCESS_REQUEST_PATH = '/access/request'
 const AUTH_REDIRECT = '/auth/login'
 const AUTHENTICATED_REDIRECT = '/studio/home'
 const ONBOARDING_PATH = '/onboarding'
-const PUBLIC_PATHS = new Set(['/', '/studio/test'])
+const PUBLIC_PATHS = new Set(['/'])
 const REFRESH_CHECK_INTERVAL_MS = 60 * 1000
 const REFRESH_WINDOW_MS = 2 * 60 * 1000
 

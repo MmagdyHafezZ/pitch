@@ -7,6 +7,11 @@ import { Html, useAnimations, useGLTF } from '@react-three/drei'
 import { Quaternion } from 'three'
 import type { AnimationAction, AnimationClip, Group as ThreeGroup, Object3D } from 'three'
 import type { CharacterAlignmentPayload } from '../types/conversation.types'
+import {
+  getPabloExpressionMode,
+  getPabloMorphState,
+  type PabloExpressionMode,
+} from './pablo-expression'
 
 type PlaybackMode = 'idle' | 'speaking' | 'listening'
 type RequiredTargetName = 'mad' | 'open_mouth' | 'open' | 'open_mad'
@@ -100,6 +105,7 @@ interface PabloModelProps {
   modelPath: string
   mouthOpen: boolean
   playbackMode: PlaybackMode
+  expressionMode: PabloExpressionMode
 }
 
 export interface PabloPresenterProps {
@@ -110,6 +116,8 @@ export interface PabloPresenterProps {
   modelPath?: string
   backgroundImage?: string
   minHeight?: string
+  presenterTone?: string | null
+  presenterIsFrustrated?: boolean
 }
 
 const REQUIRED_TARGETS = ['mad', 'open_mouth', 'open', 'open_mad'] as const
@@ -311,11 +319,17 @@ function featureAcceptsTarget(featureName: ControlledFeatureName, targetName: Re
   return CONTROLLED_FEATURE_TARGETS[featureName].includes(targetName)
 }
 
-function syncMorphState(bindings: Record<RequiredTargetName, MorphBinding[]>, mouthOpen: boolean) {
-  applyMorphBindings(bindings.mad, 0)
-  applyMorphBindings(bindings.open_mouth, mouthOpen ? 1 : 0)
-  applyMorphBindings(bindings.open, mouthOpen ? 1 : 0)
-  applyMorphBindings(bindings.open_mad, 0)
+function syncMorphState(
+  bindings: Record<RequiredTargetName, MorphBinding[]>,
+  mouthOpen: boolean,
+  expressionMode: PabloExpressionMode
+) {
+  const morphState = getPabloMorphState(expressionMode, mouthOpen)
+
+  applyMorphBindings(bindings.mad, morphState.mad)
+  applyMorphBindings(bindings.open_mouth, morphState.open_mouth)
+  applyMorphBindings(bindings.open, morphState.open)
+  applyMorphBindings(bindings.open_mad, morphState.open_mad)
 }
 
 function applyAnimationTime(
@@ -375,7 +389,7 @@ function syncLockedCamera(sourceCamera: SceneCamera | null, targetCamera: SceneC
   updateSceneCameraProjection(targetCamera)
 }
 
-function PabloModel({ modelPath, mouthOpen, playbackMode }: PabloModelProps) {
+function PabloModel({ modelPath, mouthOpen, playbackMode, expressionMode }: PabloModelProps) {
   const gltf = useGLTF(modelPath) as GltfAsset
   const model = useMemo(() => gltf.scene as ThreeGroup & MorphDictionaryHost, [gltf.scene])
   const exportedTargetNamesByNodeName = useMemo(() => {
@@ -459,12 +473,12 @@ function PabloModel({ modelPath, mouthOpen, playbackMode }: PabloModelProps) {
     })
 
     bindingsRef.current = nextBindings
-    syncMorphState(nextBindings, mouthOpen)
-  }, [exportedTargetNamesByNodeName, model, mouthOpen])
+    syncMorphState(nextBindings, mouthOpen, expressionMode)
+  }, [exportedTargetNamesByNodeName, expressionMode, model, mouthOpen])
 
   useLayoutEffect(() => {
-    syncMorphState(bindingsRef.current, mouthOpen)
-  }, [mouthOpen])
+    syncMorphState(bindingsRef.current, mouthOpen, expressionMode)
+  }, [expressionMode, mouthOpen])
 
   useEffect(() => {
     for (const action of Object.values(actions) as AnimationAction[]) {
@@ -542,7 +556,7 @@ function PabloModel({ modelPath, mouthOpen, playbackMode }: PabloModelProps) {
   }, [idleAction, listenAction, listenAnimationFrames, mixer, playbackMode])
 
   useFrame((_, delta) => {
-    syncMorphState(bindingsRef.current, mouthOpen)
+    syncMorphState(bindingsRef.current, mouthOpen, expressionMode)
 
     if (!listenAction) {
       return
@@ -626,6 +640,8 @@ export function PabloPresenter({
   modelPath = DEFAULT_MODEL_PATH,
   backgroundImage = DEFAULT_BACKGROUND_IMAGE,
   minHeight = '100%',
+  presenterTone = null,
+  presenterIsFrustrated = false,
 }: PabloPresenterProps) {
   const preferredAlignment = useMemo(
     () => getPreferredAlignment({ alignment, normalizedAlignment }),
@@ -641,6 +657,10 @@ export function PabloPresenter({
   )
   const canvasDpr = useMemo(() => [1, 2] as [number, number], [])
   const canvasGl = useMemo(() => ({ alpha: true, antialias: true }), [])
+  const expressionMode = useMemo(
+    () => getPabloExpressionMode({ tone: presenterTone, isFrustrated: presenterIsFrustrated }),
+    [presenterIsFrustrated, presenterTone]
+  )
   const [currentTime, setCurrentTime] = useState(0)
 
   useEffect(() => {
@@ -728,7 +748,12 @@ export function PabloPresenter({
         />
         <pointLight position={[0.3, 1.8, 2.8]} intensity={0.55} color="#ffffff" />
         <Suspense fallback={<LoadingModelFallback />}>
-          <PabloModel modelPath={modelPath} mouthOpen={mouthOpen} playbackMode={playbackMode} />
+          <PabloModel
+            modelPath={modelPath}
+            mouthOpen={mouthOpen}
+            playbackMode={playbackMode}
+            expressionMode={expressionMode}
+          />
         </Suspense>
       </Canvas>
       <div

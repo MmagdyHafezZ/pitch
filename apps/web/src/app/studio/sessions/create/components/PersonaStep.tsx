@@ -161,65 +161,190 @@ export function PersonaStep({
   }, [])
 
   if (isVideoSession) {
-    const presenterTraits = PABLO_VIDEO_PRESENTER_PERSONA.traits ?? {}
+    const presenter = PABLO_VIDEO_PRESENTER_PERSONA
+    const presenterTraits = (presenter.traits ?? {}) as PersonaTraits
+    const presenterMetrics = normalizeMetrics(presenterTraits)
+    const presenterSignatureTraits = resolveSignatureTraits(presenterTraits)
+    const presenterVoiceProfile = getVoiceProfile(presenterTraits)
+    const presenterArchetype = presenterTraits.archetype ?? presenterTraits.role ?? 'Persona'
+    const presenterRarity = presenterTraits.rarity ?? 'Locked'
+    const presenterRarityColor = getRarityColor(presenterRarity, presenterTraits.rarityColor)
     const presenterImageUrl = resolvePersonaAvatarUrl(presenterTraits)
 
     return (
       <LayoutGroup>
         <Stack gap="md">
-          <Box>
-            <Title order={3}>Select Video Presenter</Title>
-            <Text size="sm" c="dimmed">
-              Video sessions use Pablo as the fixed presenter, so this step is locked to one host.
-            </Text>
-          </Box>
-
-          <Paper
-            withBorder
-            radius="xl"
-            p="lg"
-            className={`${classes.personaPreview} ${classes.personaSelectedCard}`}
-          >
-            <Stack gap="md">
-              <Group align="center" className={classes.personaPreviewHeader}>
-                <Avatar size={72} radius="lg" src={presenterImageUrl}>
-                  <IconUser size={34} />
-                </Avatar>
-                <Stack gap={2}>
-                  <Text fw={700}>{PABLO_VIDEO_PRESENTER_PERSONA.name}</Text>
-                  <Text size="xs" c="dimmed">
-                    {presenterTraits.role ?? 'Video Presenter'} ·{' '}
-                    {presenterTraits.level ?? 'Locked'}
-                  </Text>
-                  <Group gap={6}>
-                    <Badge size="xs" variant="light">
-                      {presenterTraits.archetype ?? 'Studio Host'}
-                    </Badge>
-                    <Badge size="xs" variant="outline" color="yellow">
-                      Locked for video
-                    </Badge>
-                  </Group>
-                </Stack>
-              </Group>
-
-              <Text size="sm" c="dimmed" className={classes.personaPreviewBio}>
-                {presenterTraits.personality ??
-                  'Warm and animated presenter for guided video sessions.'}
+          <Group justify="space-between" align="center">
+            <Box>
+              <Title order={3}>Select AI Persona</Title>
+              <Text size="sm" c="dimmed">
+                Match the persona to your training scenario.
               </Text>
+            </Box>
+          </Group>
 
-              <Box className={classes.personaPreviewBlock}>
-                <Text size="xs" fw={600}>
-                  Presenter Profile
-                </Text>
-                <Text size="sm" c="dimmed">
-                  {getVoiceProfile(presenterTraits)}
-                </Text>
-                <Text size="xs" c="dimmed">
-                  Pablo stays on-camera for every video simulation.
-                </Text>
-              </Box>
-            </Stack>
-          </Paper>
+          <Stack gap="lg">
+            <Box className={classes.personaCarousel}>
+              <motion.div
+                ref={personaScrollRef}
+                className={classes.personaTrack}
+                layoutScroll
+                style={{ justifyContent: 'center' }}
+              >
+                <motion.div
+                  key={presenter.id}
+                  layout="position"
+                  initial={{ opacity: 0, y: 16, scale: 0.98 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 160, scale: 0.88 }}
+                  transition={{ duration: 0.38, ease: [0.4, 0, 0.2, 1] }}
+                  style={{ flexShrink: 0 }}
+                >
+                  <PersonaProfileCard
+                    persona={presenter}
+                    avatarUrl={presenterImageUrl}
+                    archetype={presenterArchetype}
+                    rarity={presenterRarity}
+                    rarityColor={presenterRarityColor}
+                    voiceProfile={presenterVoiceProfile}
+                    metrics={presenterMetrics}
+                    signatureTraits={presenterSignatureTraits}
+                    isPreviewLoading={false}
+                    isPreviewPlaying={false}
+                    infoOpen={infoPersonaId === presenter.id}
+                    onInfoToggle={() => {
+                      setInfoPersonaId((current) =>
+                        current === presenter.id ? null : presenter.id
+                      )
+                    }}
+                    onPreviewAudio={() => undefined}
+                    onSelect={() => {
+                      setInfoPersonaId(null)
+                    }}
+                  />
+                </motion.div>
+              </motion.div>
+            </Box>
+
+            <div className={classes.personaDropzone}>
+              <motion.div
+                key={presenter.id}
+                initial={{ opacity: 0, y: -80, scale: 0.94 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 40, scale: 0.96 }}
+                transition={{ duration: 0.38, ease: [0.4, 0, 0.2, 1] }}
+              >
+                <Paper
+                  withBorder
+                  radius="xl"
+                  p="lg"
+                  className={`${classes.personaPreview} ${classes.personaSelectedCard}`}
+                >
+                  <Stack gap="md">
+                    <Group align="center" className={classes.personaPreviewHeader}>
+                      <Avatar size={72} radius="lg" src={presenterImageUrl}>
+                        <IconUser size={34} />
+                      </Avatar>
+                      <Stack gap={2}>
+                        <Text fw={700}>{presenter.name}</Text>
+                        <Text size="xs" c="dimmed">
+                          {presenterTraits.role ?? 'AI Persona'} ·{' '}
+                          {presenterTraits.level ?? 'Expert'}
+                        </Text>
+                        <Group gap={6}>
+                          <Badge size="xs" variant="light">
+                            {presenterArchetype}
+                          </Badge>
+                          <Badge size="xs" variant="outline" color={presenterRarityColor}>
+                            {presenterRarity}
+                          </Badge>
+                        </Group>
+                      </Stack>
+                    </Group>
+
+                    {presenterTraits.personality && (
+                      <Text size="sm" c="dimmed" className={classes.personaPreviewBio}>
+                        {presenterTraits.personality}
+                      </Text>
+                    )}
+
+                    <Box className={classes.personaPreviewBlock}>
+                      <Text size="xs" fw={600}>
+                        Voice Profile
+                      </Text>
+                      <Text size="sm" c="dimmed">
+                        {presenterVoiceProfile}
+                      </Text>
+                      {presenterTraits.voice?.provider && (
+                        <Text size="xs" c="dimmed">
+                          Provider: {presenterTraits.voice.provider}
+                        </Text>
+                      )}
+                      {presenterTraits.voice?.voiceName && (
+                        <Text size="xs" c="dimmed">
+                          Voice: {presenterTraits.voice.voiceName}
+                        </Text>
+                      )}
+                      {presenterTraits.voice?.language && (
+                        <Text size="xs" c="dimmed">
+                          Accent: {presenterTraits.voice.language}
+                        </Text>
+                      )}
+                    </Box>
+
+                    <Box className={classes.personaPreviewBlock}>
+                      <Text size="xs" fw={600}>
+                        Signature Traits
+                      </Text>
+                      {presenterSignatureTraits.length > 0 ? (
+                        <Group gap={6} mt={6}>
+                          {presenterSignatureTraits.map((trait) => (
+                            <Badge key={trait} size="xs" variant="light" color="gray">
+                              {trait}
+                            </Badge>
+                          ))}
+                        </Group>
+                      ) : (
+                        <Text size="xs" c="dimmed" mt={6}>
+                          No signature traits configured.
+                        </Text>
+                      )}
+                    </Box>
+
+                    <Box className={classes.personaPreviewBlock}>
+                      <Text size="xs" fw={600}>
+                        Comparison Metrics
+                      </Text>
+                      {presenterMetrics.length > 0 ? (
+                        <Stack gap="xs" mt="xs">
+                          {presenterMetrics.map((metric) => (
+                            <Box key={metric.label} className={classes.personaMetric}>
+                              <Group justify="space-between" align="center" mb={4}>
+                                <Group gap={6}>
+                                  <ThemeIcon size="xs" variant="light">
+                                    {getMetricIcon(metric.label) ?? <IconStar size={12} />}
+                                  </ThemeIcon>
+                                  <Text size="xs">{metric.label}</Text>
+                                </Group>
+                                <Text size="xs" c="dimmed">
+                                  {metric.value}
+                                </Text>
+                              </Group>
+                              <Progress value={metric.value} size="xs" radius="xl" />
+                            </Box>
+                          ))}
+                        </Stack>
+                      ) : (
+                        <Text size="xs" c="dimmed" mt={6}>
+                          No metrics configured for this persona yet.
+                        </Text>
+                      )}
+                    </Box>
+                  </Stack>
+                </Paper>
+              </motion.div>
+            </div>
+          </Stack>
 
           {errors.persona && (
             <Text c="red" size="sm">

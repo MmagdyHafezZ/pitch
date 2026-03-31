@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useMediaQuery } from '@mantine/hooks'
 import {
   Box,
@@ -595,6 +595,18 @@ const readReplayAudioConfigFromSession = (
     voice,
     ...(model ? { model } : {}),
   }
+}
+
+const readPresenterTone = (session: Record<string, unknown> | null): string | null => {
+  if (!session) {
+    return null
+  }
+
+  const sessionConfig = isRecord(session.sessionConfig) ? session.sessionConfig : {}
+  const persona = isRecord(session.persona) ? session.persona : {}
+  const personaTraits = isRecord(persona.traits) ? persona.traits : {}
+
+  return readText(sessionConfig.tone, personaTraits.tone) ?? null
 }
 
 const attachReplayAudioToLatestAssistantMessage = async (
@@ -1887,6 +1899,7 @@ export default function LiveSessionPage() {
   // Updated every render — always current when async code reads it.
   const loadedSessionRecordRef = useRef<Record<string, unknown> | null>(null)
   loadedSessionRecordRef.current = loadedSessionRecord
+  const presenterTone = useMemo(() => readPresenterTone(loadedSessionRecord), [loadedSessionRecord])
   const [sessionAttachments, setSessionAttachments] = useState<SessionAttachment[]>([])
   const [launchAttachments, setLaunchAttachments] = useState<SessionAttachment[]>([])
   const [launchAttachmentsUploading, setLaunchAttachmentsUploading] = useState(false)
@@ -3499,6 +3512,7 @@ export default function LiveSessionPage() {
     hasUserTurnInCurrentIteration && latestMoodEvent
       ? (latestMoodEvent.args.emotion as string | undefined)
       : undefined
+  const presenterIsFrustrated = currentMood === 'frustrated' || currentEmotion === 'frustrated'
   const moodDotColor =
     currentMood === 'interested' || currentMood === 'satisfied'
       ? 'green'
@@ -4337,6 +4351,8 @@ export default function LiveSessionPage() {
                 avatarVideoProvider={avatarVideoProvider}
                 avatarVideoError={avatarVideoError}
                 personaAvatarImageUrl={personaAvatarImageUrl}
+                presenterTone={presenterTone}
+                presenterIsFrustrated={presenterIsFrustrated}
                 videoRef={videoRef}
                 visualState={visualState}
                 poseIsReady={poseIsReady}
