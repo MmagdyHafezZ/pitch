@@ -131,9 +131,6 @@
       "js-yaml": "4.1.1",
       "jsonwebtoken@9.0.2": "9.0.3",
       "lodash": "4.17.23"
-    },
-    "patchedDependencies": {
-      "@react-three/fiber@9.5.0": "patches/@react-three__fiber@9.5.0.patch"
     }
   },
   "devDependencies": {
