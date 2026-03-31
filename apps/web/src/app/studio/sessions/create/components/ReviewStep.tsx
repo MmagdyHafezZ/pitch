@@ -10,6 +10,7 @@ import { getVoiceProfile } from '../lib/helpers'
 import { LLMProvider } from '@/features/sessions/hooks/useLLMProviders'
 import { useSessionCoinEstimate } from '@/features/coins/hooks/useCoinsBalance'
 import classes from '../create-session.module.css'
+import { PABLO_VIDEO_PRESENTER_PERSONA } from '../lib/videoPresenter'
 
 interface Team {
   id: string
@@ -113,6 +114,13 @@ export function ReviewStep({
     crmSelections.opportunities.length +
     crmSelections.leads.length +
     crmSelections.contacts.length
+  const reviewPersona =
+    sessionType === 'video'
+      ? PABLO_VIDEO_PRESENTER_PERSONA
+      : (selectedPersonaData ??
+        (selectedPersona
+          ? (personas.find((persona) => persona.id === selectedPersona) ?? null)
+          : null))
   return (
     <Stack gap="lg">
       <Group>
@@ -178,15 +186,11 @@ export function ReviewStep({
           <Stack gap="xs">
             <Group justify="apart" className={classes.reviewRow}>
               <Text fw={600}>Persona</Text>
-              <Text c="dimmed">
-                {selectedPersona
-                  ? personas.find((p) => p.id === selectedPersona)?.name || selectedPersona
-                  : 'Not selected'}
-              </Text>
+              <Text c="dimmed">{reviewPersona?.name ?? 'Not selected'}</Text>
             </Group>
             <Group justify="apart" className={classes.reviewRow}>
               <Text fw={600}>Voice profile</Text>
-              <Text c="dimmed">{getVoiceProfile(selectedPersonaData?.traits ?? null)}</Text>
+              <Text c="dimmed">{getVoiceProfile(reviewPersona?.traits ?? null)}</Text>
             </Group>
             <Group justify="apart" className={classes.reviewRow}>
               <Text fw={600}>Accent</Text>

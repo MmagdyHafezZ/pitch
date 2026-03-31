@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useMediaQuery } from '@mantine/hooks'
 import {
   Box,
@@ -199,6 +199,30 @@ const readAvatarVideoState = (session: unknown): AvatarVideoState => {
     error: typeof runtime.lastError === 'string' ? runtime.lastError : null,
     jobId: typeof runtime.activeJobId === 'string' ? runtime.activeJobId : null,
     playbackToken: typeof runtime.playbackToken === 'string' ? runtime.playbackToken : null,
+  }
+}
+
+const readVideoPresenter = (session: unknown) => {
+  if (!isRecord(session)) {
+    return {
+      name: null,
+      avatarImageUrl: null,
+    }
+  }
+
+  const sessionConfig = isRecord(session.sessionConfig) ? session.sessionConfig : {}
+  const videoConfig = isRecord(sessionConfig.video) ? sessionConfig.video : {}
+  const presenter = isRecord(videoConfig.presenter) ? videoConfig.presenter : null
+
+  return {
+    name:
+      (presenter && typeof presenter.name === 'string' ? presenter.name : null) ??
+      (typeof videoConfig.presenterName === 'string' ? videoConfig.presenterName : null),
+    avatarImageUrl:
+      (presenter && typeof presenter.avatarImageUrl === 'string'
+        ? presenter.avatarImageUrl
+        : null) ??
+      (typeof videoConfig.avatarImageUrl === 'string' ? videoConfig.avatarImageUrl : null),
   }
 }
 
@@ -597,6 +621,18 @@ const readReplayAudioConfigFromSession = (
     voice,
     ...(model ? { model } : {}),
   }
+}
+
+const readPresenterTone = (session: Record<string, unknown> | null): string | null => {
+  if (!session) {
+    return null
+  }
+
+  const sessionConfig = isRecord(session.sessionConfig) ? session.sessionConfig : {}
+  const persona = isRecord(session.persona) ? session.persona : {}
+  const personaTraits = isRecord(persona.traits) ? persona.traits : {}
+
+  return readText(sessionConfig.tone, personaTraits.tone) ?? null
 }
 
 const attachReplayAudioToLatestAssistantMessage = async (
@@ -1890,6 +1926,7 @@ export default function LiveSessionPage() {
   // Updated every render — always current when async code reads it.
   const loadedSessionRecordRef = useRef<Record<string, unknown> | null>(null)
   loadedSessionRecordRef.current = loadedSessionRecord
+  const presenterTone = useMemo(() => readPresenterTone(loadedSessionRecord), [loadedSessionRecord])
   const [sessionAttachments, setSessionAttachments] = useState<SessionAttachment[]>([])
   const [sessionSettingsOpen, setSessionSettingsOpen] = useState(false)
   const [launchAttachments, setLaunchAttachments] = useState<SessionAttachment[]>([])
@@ -2189,6 +2226,7 @@ export default function LiveSessionPage() {
     (session: any, history: TranscriptMessage[] = []) => {
       const config = (session?.sessionConfig as Record<string, any>) ?? {}
       const avatarState = readAvatarVideoState(session)
+      const videoPresenter = readVideoPresenter(session)
       const phoneRuntime = readPhoneCallRuntime(session)
       const normalizedStatus = normalizeSessionStatus(session)
       const nextAvatarVideoUrl =
@@ -2210,8 +2248,10 @@ export default function LiveSessionPage() {
       setSessionType(session?.type ?? null)
       setSessionStatus(normalizedStatus)
       setSessionName((session as any)?.name ?? (session as any)?.scenario?.name ?? '')
-      setPersonaName((session as any)?.persona?.name ?? null)
-      setPersonaAvatarImageUrl((session as any)?.persona?.traits?.avatar?.imageUrl ?? null)
+      setPersonaName((session as any)?.persona?.name ?? videoPresenter.name ?? null)
+      setPersonaAvatarImageUrl(
+        (session as any)?.persona?.traits?.avatar?.imageUrl ?? videoPresenter.avatarImageUrl ?? null
+      )
       setAvatarVideoStatus(avatarState.status)
       setAvatarVideoProvider(avatarState.provider)
       setAvatarVideoError(avatarState.error)
@@ -3586,6 +3626,7 @@ export default function LiveSessionPage() {
     hasUserTurnInCurrentIteration && latestMoodEvent
       ? (latestMoodEvent.args.emotion as string | undefined)
       : undefined
+  const presenterIsFrustrated = currentMood === 'frustrated' || currentEmotion === 'frustrated'
   const moodDotColor =
     currentMood === 'interested' || currentMood === 'satisfied'
       ? 'green'
@@ -4424,6 +4465,7 @@ export default function LiveSessionPage() {
                 sttCommitProgress={sttCommitProgress}
                 textInput={textInput}
                 currentAudioUrl={currentAudioUrl}
+                audioElementRef={audioElementRef}
                 isMobile={!!isMobile}
                 activeObjections={activeObjections}
                 latestNextStep={latestNextStep}
@@ -4441,6 +4483,8 @@ export default function LiveSessionPage() {
                 avatarVideoProvider={avatarVideoProvider}
                 avatarVideoError={avatarVideoError}
                 personaAvatarImageUrl={personaAvatarImageUrl}
+                presenterTone={presenterTone}
+                presenterIsFrustrated={presenterIsFrustrated}
                 videoRef={videoRef}
                 visualState={visualState}
                 poseIsReady={poseIsReady}

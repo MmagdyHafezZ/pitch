@@ -52,6 +52,7 @@ import {
   deriveAccentFromPersonaTraits,
   normalizeAccentSelection,
 } from '../../create/lib/accent'
+import { buildPabloVideoPresenterConfig } from '../../create/lib/videoPresenter'
 import classes from '../../create/create-session.module.css'
 import { useI18n } from '@/features/i18n'
 import type {
@@ -248,6 +249,7 @@ export default function EditSessionPage() {
   const modelScrollRef = useRef<HTMLDivElement | null>(null)
   const languageTouchedRef = useRef(false)
   const scenarioWorkspaceTouchedRef = useRef(false)
+  const previousSessionTypeRef = useRef<SessionType | null>(null)
 
   const session = currentSession?.id === sessionId ? currentSession : null
   const isReadOnlySession = Boolean(session && user?.id && session.userId !== user.id)
@@ -566,6 +568,10 @@ export default function EditSessionPage() {
   }, [ttsLoading, ttsProviders, ttsProvider, ttsVoice, ttsModel])
 
   useEffect(() => {
+    if (sessionType === 'video') {
+      setAccent(DEFAULT_ACCENT)
+      return
+    }
     if (!selectedPersonaData?.traits) {
       setAccent(DEFAULT_ACCENT)
       return
@@ -581,7 +587,7 @@ export default function EditSessionPage() {
       setTtsModel(traits.voice.model)
     }
     setAccent(deriveAccentFromPersonaTraits(traits))
-  }, [selectedPersonaData])
+  }, [selectedPersonaData, sessionType])
 
   useEffect(() => {
     const source = selectedDraft ?? selectedSavedScenario
@@ -648,10 +654,25 @@ export default function EditSessionPage() {
   }, [sessionType, errors.sessionType])
 
   useEffect(() => {
+    const previousSessionType = previousSessionTypeRef.current
+    if (previousSessionType && previousSessionType !== 'video' && sessionType === 'video') {
+      setSelectedPersona(null)
+      setPersonaSearch('')
+    }
+    previousSessionTypeRef.current = sessionType
+  }, [sessionType])
+
+  useEffect(() => {
     if (selectedPersona && errors.persona) {
       setErrors(({ persona: _persona, ...rest }) => rest)
     }
   }, [selectedPersona, errors.persona])
+
+  useEffect(() => {
+    if (sessionType === 'video' && errors.persona) {
+      setErrors(({ persona: _persona, ...rest }) => rest)
+    }
+  }, [sessionType, errors.persona])
 
   useEffect(() => {
     if (llmProvider && errors.llmProvider) {
@@ -691,7 +712,9 @@ export default function EditSessionPage() {
     }
 
     if (step === 2) {
-      if (!selectedPersona) newErrors.persona = 'Please select a persona to continue'
+      if (sessionType !== 'video' && !selectedPersona) {
+        newErrors.persona = 'Please select a persona to continue'
+      }
     }
 
     if (step === 3) {
@@ -921,14 +944,17 @@ export default function EditSessionPage() {
           durationMinutes,
           ...alignPitchRolePair(aiRole, userRole),
         },
-        personaId: selectedPersona || undefined,
-        personaSnapshot: selectedPersonaData
-          ? {
-              id: selectedPersonaData.id,
-              name: selectedPersonaData.name,
-              traits: selectedPersonaData.traits ?? {},
-            }
-          : undefined,
+        personaId: sessionType === 'video' ? undefined : selectedPersona || undefined,
+        personaSnapshot:
+          sessionType === 'video'
+            ? undefined
+            : selectedPersonaData
+              ? {
+                  id: selectedPersonaData.id,
+                  name: selectedPersonaData.name,
+                  traits: selectedPersonaData.traits ?? {},
+                }
+              : undefined,
         crmContextId: session?.crmContextId ?? undefined,
         crmSelections: {
           accounts: selectedAccounts,
@@ -1174,7 +1200,11 @@ export default function EditSessionPage() {
           sessionConfig.video && typeof sessionConfig.video === 'object'
             ? (sessionConfig.video as Record<string, unknown>)
             : {}
-        sessionConfig.video = { ...existingVideoConfig, mode: 'rendered' }
+        sessionConfig.video = {
+          ...existingVideoConfig,
+          mode: 'rendered',
+          presenter: buildPabloVideoPresenterConfig(),
+        }
       }
 
       await updateSession(sessionId, {
@@ -1185,7 +1215,7 @@ export default function EditSessionPage() {
         tags: tags.length > 0 ? tags : undefined,
         language: language || undefined,
         scenarioId: persistedScenarioId ?? undefined,
-        personaId: selectedPersona ?? undefined,
+        personaId: sessionType === 'video' ? undefined : (selectedPersona ?? undefined),
         crmContextId: session.crmContextId ?? undefined,
         sessionConfig,
       })
@@ -1302,6 +1332,7 @@ export default function EditSessionPage() {
       icon: <IconUser size={18} />,
       content: (
         <PersonaStep
+          sessionType={sessionType}
           personasLoading={personasLoading}
           personas={personas}
           filteredPersonas={filteredPersonas}

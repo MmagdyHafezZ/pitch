@@ -13,6 +13,8 @@ import {
   IconVideoOff,
 } from '@tabler/icons-react'
 import type { VisualState } from '@/features/conversation/types/visual-state.types'
+import { PabloPresenter } from './PabloPresenter'
+import { getPresenterPlaybackMode } from './presenter-playback'
 
 interface Message {
   id: string
@@ -46,6 +48,7 @@ interface VoiceOrbSessionProps {
   onScheduleIdleHints: () => void
   onTurnHelp?: (turn: Message) => void
   analyserRef?: React.RefObject<AnalyserNode | null>
+  audioElementRef?: React.RefObject<HTMLAudioElement | null>
   onPauseReplay?: () => void
   currentAudioUrl?: string | null
   // resume prompt (replaces Mantine Modal)
@@ -66,6 +69,8 @@ interface VoiceOrbSessionProps {
   onToggleCamera?: () => void
   userVideoRef?: React.RefObject<HTMLVideoElement | null>
   personaAvatarImageUrl?: string | null
+  presenterTone?: string | null
+  presenterIsFrustrated?: boolean
   // page-level props forwarded but not consumed here
   globeState?: unknown
   onTextInputKeyPress?: unknown
@@ -930,6 +935,11 @@ html.dark .vos-bubble-btn-secondary { background: rgba(255,255,255,.08); color: 
   position: absolute; inset: 0;
   background: linear-gradient(180deg, rgba(0,0,0,.15) 0%, transparent 35%, transparent 65%, rgba(0,0,0,.5) 100%);
 }
+.vos-presenter-shell {
+  position: absolute;
+  inset: 0;
+  padding: 14px;
+}
 
 /* Body detection cue overlay on user PiP */
 .vos-pip-cues {
@@ -1029,6 +1039,7 @@ export default function VoiceOrbSession({
   onScheduleIdleHints,
   onTurnHelp,
   analyserRef,
+  audioElementRef,
   onPauseReplay,
   currentAudioUrl,
   resumePromptOpen,
@@ -1037,14 +1048,11 @@ export default function VoiceOrbSession({
   onStartOver,
   startOverLoading,
   mode = 'voice',
-  avatarVideoUrl,
-  avatarVideoStatus,
-  avatarVideoError,
-  videoRef,
   cameraEnabled,
   onToggleCamera,
   userVideoRef,
-  personaAvatarImageUrl,
+  presenterTone,
+  presenterIsFrustrated = false,
   visualState,
 }: VoiceOrbSessionProps) {
   const isVideoMode = mode === 'video'
@@ -1060,6 +1068,7 @@ export default function VoiceOrbSession({
   const linesRef = useRef<HTMLDivElement>(null)
   const ringsRef = useRef<HTMLDivElement>(null)
   const rafRef = useRef<number>(0)
+  const emptyAudioElementRef = useRef<HTMLAudioElement>(null)
 
   // ── Body cue helpers ────────────────────────────────────────────────────────
   const vs = visualState ?? null
@@ -1253,6 +1262,13 @@ export default function VoiceOrbSession({
               : connectionError
                 ? 'Connection error'
                 : 'Connecting…'
+  const presenterPlaybackMode = getPresenterPlaybackMode({
+    assistantSpeaking,
+    isListening,
+    isProcessing,
+    interimTranscript,
+    sttCommitRemainingMs,
+  })
 
   // In-panel status shows interrupt hint when AI is talking and user hasn't cut in yet
   const panelStatusLabel =
@@ -1316,32 +1332,14 @@ export default function VoiceOrbSession({
         <div className="vos-zoom-layout">
           {/* Video area (top, flex:1) */}
           <div className="vos-zoom-video-area">
-            {avatarVideoUrl ? (
-              <video
-                ref={videoRef as React.RefObject<HTMLVideoElement>}
-                src={avatarVideoUrl}
-                autoPlay
-                playsInline
+            <div className="vos-presenter-shell">
+              <PabloPresenter
+                playbackMode={presenterPlaybackMode}
+                audioElementRef={audioElementRef ?? emptyAudioElementRef}
+                presenterTone={presenterTone}
+                presenterIsFrustrated={presenterIsFrustrated}
               />
-            ) : personaAvatarImageUrl ? (
-              <>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={personaAvatarImageUrl} alt="AI persona" className="vos-persona-img" />
-                <div className="vos-persona-img-overlay" />
-              </>
-            ) : avatarVideoStatus === 'failed' ? (
-              <div className="vos-zoom-overlay" style={{ color: 'rgba(255,255,255,.4)' }}>
-                <span style={{ color: '#f87171' }}>⚠ Render failed</span>
-                {avatarVideoError && (
-                  <span style={{ fontSize: 10, opacity: 0.7 }}>{avatarVideoError}</span>
-                )}
-              </div>
-            ) : (
-              <div className="vos-zoom-overlay" style={{ color: 'rgba(255,255,255,.4)' }}>
-                <div className="vos-zoom-spinner" />
-                <span>Connecting…</span>
-              </div>
-            )}
+            </div>
 
             {/* Status pill */}
             <div className={`vos-zoom-status status-${statusState}`}>

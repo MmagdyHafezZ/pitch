@@ -27,6 +27,8 @@
     "lint": "node scripts/lint.js",
     "lint:fix": "node scripts/lint.js --fix",
     "cache:purge:session-full": "node scripts/purge-session-full-cache.js",
+    "elevenlabs:timestamps:fetch": "node scripts/fetch-elevenlabs-timestamps.js",
+    "elevenlabs:voices:premade-en": "node scripts/fetch-elevenlabs-premade-en-voices.js",
     "pretype-check": "pnpm run build:deps",
     "type-check": "tsc --noEmit",
     "test": "jest",
