@@ -25,7 +25,7 @@ export type SidebarLink = {
 
 type Props = {
   active: string
-  setActive: Dispatch<SetStateAction<string>>
+  setActive?: (label: string) => void
   selectedDate: Date | null
   setSelectedDate: Dispatch<SetStateAction<Date | null>>
   showTeamConfig?: boolean
@@ -77,7 +77,7 @@ export function AppSidebar({
       key={label}
       active={active === label}
       onClick={() => {
-        setActive(label)
+        setActive?.(label)
         router.push(href ?? `/studio/${label.toLowerCase().replace(/\s+/g, '-')}`)
         onNavigate?.()
       }}
