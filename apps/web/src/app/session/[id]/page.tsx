@@ -47,6 +47,7 @@ import VoiceOrbSession from '@/features/conversation/components/VoiceOrbSession'
 import { useAudioLevel } from '@/features/conversation/hooks/useAudioLevel'
 import { CoachChatWidget } from '@/components/ui/CoachChatWidget'
 import { SettingsModal } from '@/components/ui/SettingsModal'
+import { useAuthStore } from '@/features/auth'
 import { useSpeechToText } from '@/features/stt'
 import { API_CONFIG, api } from '@/lib/client'
 import { notifications } from '@mantine/notifications'
@@ -125,11 +126,23 @@ const EMPTY_PHONE_CALL_RUNTIME: PhoneCallRuntimeState = {
 
 const SESSION_TIMER_STORAGE_PREFIX = 'pitch-live-session-timer:'
 const ASSISTANT_FIRST_TURN_DELAY_MS = 3000
+const DEFAULT_SPEECH_SEND_DELAY_MS = 500
+const DEFAULT_NON_VOICE_SPEECH_SEND_DELAY_MS = 3000
+const MIN_SPEECH_SEND_DELAY_MS = 200
+const MAX_SPEECH_SEND_DELAY_MS = 4000
 
 const PHONE_TERMINAL_STATUSES = new Set(['ended', 'failed', 'busy', 'no-answer', 'canceled'])
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
+
+const normalizeSpeechSendDelayMs = (value: unknown): number | null => {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return null
+  }
+
+  return Math.max(MIN_SPEECH_SEND_DELAY_MS, Math.min(MAX_SPEECH_SEND_DELAY_MS, Math.round(value)))
+}
 
 const normalizeSessionStatus = (session: unknown): string | null => {
   if (!isRecord(session)) {
@@ -1824,6 +1837,7 @@ export default function LiveSessionPage() {
   const entrySource = searchParams.get('entry')
   const isMobile = useMediaQuery('(max-width: 768px)')
   const invalidateCoinsBalance = useInvalidateCoinsBalance()
+  const userSettings = useAuthStore((state) => state.user?.settings)
   const [time, setTime] = useState(0)
   const [sessionStartMs, setSessionStartMs] = useState<number | null>(null)
   const [sessionEndMs, setSessionEndMs] = useState<number | null>(null)
@@ -1919,7 +1933,15 @@ export default function LiveSessionPage() {
   const userPipVideoRef = useRef<HTMLVideoElement | null>(null)
   const poseCameraStreamRef = useRef<MediaStream | null>(null)
   const [visualEnabled, setVisualEnabled] = useState(true)
-  const speechFinalizeDelayMs = sessionType === 'voice' || sessionType === 'video' ? 500 : 3000
+  const voiceVideoSettings =
+    isRecord(userSettings) && isRecord(userSettings.voiceVideo) ? userSettings.voiceVideo : null
+  const configuredSpeechSendDelayMs =
+    normalizeSpeechSendDelayMs(voiceVideoSettings?.speechSendDelayMs) ??
+    DEFAULT_SPEECH_SEND_DELAY_MS
+  const speechFinalizeDelayMs =
+    sessionType === 'voice' || sessionType === 'video'
+      ? configuredSpeechSendDelayMs
+      : DEFAULT_NON_VOICE_SPEECH_SEND_DELAY_MS
   const isVideoSession = sessionType === 'video'
 
   const scheduleIdleHints = useCallback(

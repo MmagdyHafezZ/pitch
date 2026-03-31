@@ -107,6 +107,18 @@ const PHONE_COUNTRY_OPTIONS = [
 ]
 
 const DEFAULT_PHONE_COUNTRY_CODE = '+1'
+const DEFAULT_SPEECH_SEND_DELAY_MS = 500
+const MIN_SPEECH_SEND_DELAY_MS = 200
+const MAX_SPEECH_SEND_DELAY_MS = 4000
+
+const SPEECH_SEND_DELAY_OPTIONS = [
+  { value: '300', label: '0.3s (Fast)' },
+  { value: '500', label: '0.5s (Balanced)' },
+  { value: '800', label: '0.8s' },
+  { value: '1000', label: '1.0s' },
+  { value: '1500', label: '1.5s' },
+  { value: '2000', label: '2.0s (Slow)' },
+]
 
 const withPromiseTimeout = <T,>(
   promise: Promise<T>,
@@ -154,6 +166,14 @@ const toDeviceErrorMessage = (
   }
 
   return fallback
+}
+
+const normalizeSpeechSendDelayMs = (value: unknown): number | null => {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return null
+  }
+
+  return Math.max(MIN_SPEECH_SEND_DELAY_MS, Math.min(MAX_SPEECH_SEND_DELAY_MS, Math.round(value)))
 }
 
 export function SettingsModal({ opened, onClose, initialSection }: SettingsModalProps) {
@@ -372,6 +392,16 @@ export function SettingsModal({ opened, onClose, initialSection }: SettingsModal
           | undefined
       )?.autoJoinMuted === true
   )
+  const [speechSendDelayMs, setSpeechSendDelayMs] = useState(
+    () =>
+      normalizeSpeechSendDelayMs(
+        (
+          (user?.settings as Record<string, unknown> | undefined)?.voiceVideo as
+            | Record<string, unknown>
+            | undefined
+        )?.speechSendDelayMs
+      ) ?? DEFAULT_SPEECH_SEND_DELAY_MS
+  )
   const [vvSaving, setVvSaving] = useState(false)
   const [vvSaved, setVvSaved] = useState(false)
 
@@ -576,6 +606,7 @@ export function SettingsModal({ opened, onClose, initialSection }: SettingsModal
     noiseSuppression?: boolean
     echoCancellation?: boolean
     autoJoinMuted?: boolean
+    speechSendDelayMs?: number
   }) => {
     setVvSaving(true)
     setVvSaved(false)
@@ -1540,6 +1571,23 @@ export function SettingsModal({ opened, onClose, initialSection }: SettingsModal
                         setAutoJoinMuted(e.currentTarget.checked)
                         void saveVoiceVideo({ autoJoinMuted: e.currentTarget.checked })
                       }}
+                    />
+
+                    <Select
+                      label="Speech send delay"
+                      description="How long to wait after you stop speaking before sending your turn."
+                      data={SPEECH_SEND_DELAY_OPTIONS}
+                      value={String(speechSendDelayMs)}
+                      disabled={vvSaving}
+                      allowDeselect={false}
+                      onChange={(val) => {
+                        if (!val) return
+                        const nextDelay = normalizeSpeechSendDelayMs(Number(val))
+                        if (nextDelay === null) return
+                        setSpeechSendDelayMs(nextDelay)
+                        void saveVoiceVideo({ speechSendDelayMs: nextDelay })
+                      }}
+                      classNames={settingsInputClassNames}
                     />
                   </Stack>
                 </Card>
