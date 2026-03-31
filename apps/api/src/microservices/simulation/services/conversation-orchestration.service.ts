@@ -676,6 +676,33 @@ export class ConversationOrchestrationService {
 
     requestState.fullText = fullText;
 
+    if (
+      !skipTts &&
+      sentenceIndex === 0 &&
+      sentenceDetector.getBuffer().trim().length === 0
+    ) {
+      const seeded = sentenceDetector.addText(fullText);
+      for (const sentenceChunk of seeded) {
+        const idx = sentenceIndex++;
+        sentenceTtsJobs.push(
+          this.processSentenceTts(
+            idx,
+            sentenceChunk.sentence,
+            resolvedTts.provider,
+            resolvedTts.voice,
+            resolvedTts.language,
+            resolvedTts.accent,
+            resolvedTts.model,
+            undefined,
+            undefined,
+            ttsSemaphore,
+            subscriber,
+            requestState,
+          ),
+        );
+      }
+    }
+
     if (!skipTts) {
       const remaining = sentenceDetector.flush();
       if (remaining?.sentence) {

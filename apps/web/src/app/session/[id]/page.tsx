@@ -126,23 +126,13 @@ const EMPTY_PHONE_CALL_RUNTIME: PhoneCallRuntimeState = {
 
 const SESSION_TIMER_STORAGE_PREFIX = 'pitch-live-session-timer:'
 const ASSISTANT_FIRST_TURN_DELAY_MS = 3000
-const DEFAULT_SPEECH_SEND_DELAY_MS = 500
+const VOICE_SILENCE_COMMIT_WINDOW_MS = 3000
 const DEFAULT_NON_VOICE_SPEECH_SEND_DELAY_MS = 3000
-const MIN_SPEECH_SEND_DELAY_MS = 200
-const MAX_SPEECH_SEND_DELAY_MS = 4000
 
 const PHONE_TERMINAL_STATUSES = new Set(['ended', 'failed', 'busy', 'no-answer', 'canceled'])
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
-
-const normalizeSpeechSendDelayMs = (value: unknown): number | null => {
-  if (typeof value !== 'number' || !Number.isFinite(value)) {
-    return null
-  }
-
-  return Math.max(MIN_SPEECH_SEND_DELAY_MS, Math.min(MAX_SPEECH_SEND_DELAY_MS, Math.round(value)))
-}
 
 const normalizeSessionStatus = (session: unknown): string | null => {
   if (!isRecord(session)) {
@@ -1933,14 +1923,9 @@ export default function LiveSessionPage() {
   const userPipVideoRef = useRef<HTMLVideoElement | null>(null)
   const poseCameraStreamRef = useRef<MediaStream | null>(null)
   const [visualEnabled, setVisualEnabled] = useState(true)
-  const voiceVideoSettings =
-    isRecord(userSettings) && isRecord(userSettings.voiceVideo) ? userSettings.voiceVideo : null
-  const configuredSpeechSendDelayMs =
-    normalizeSpeechSendDelayMs(voiceVideoSettings?.speechSendDelayMs) ??
-    DEFAULT_SPEECH_SEND_DELAY_MS
-  const speechFinalizeDelayMs =
+  const speechCommitWindowMs =
     sessionType === 'voice' || sessionType === 'video'
-      ? configuredSpeechSendDelayMs
+      ? VOICE_SILENCE_COMMIT_WINDOW_MS
       : DEFAULT_NON_VOICE_SPEECH_SEND_DELAY_MS
   const isVideoSession = sessionType === 'video'
 
@@ -1990,6 +1975,36 @@ export default function LiveSessionPage() {
     setSttCommitRemainingMs(0)
   }, [])
 
+  const startSpeechFinalizeCountdown = useCallback(
+    (durationMs: number, onComplete?: () => void) => {
+      clearSpeechFinalizeState()
+      if (durationMs <= 0) return
+
+      setSttCommitRemainingMs(durationMs)
+      const startedAt = Date.now()
+      speechFinalizeTickerRef.current = setInterval(() => {
+        const elapsed = Date.now() - startedAt
+        const remaining = Math.max(0, durationMs - elapsed)
+        setSttCommitRemainingMs(remaining)
+        if (remaining === 0 && speechFinalizeTickerRef.current) {
+          clearInterval(speechFinalizeTickerRef.current)
+          speechFinalizeTickerRef.current = null
+        }
+      }, 50)
+
+      speechFinalizeTimerRef.current = setTimeout(() => {
+        if (speechFinalizeTickerRef.current) {
+          clearInterval(speechFinalizeTickerRef.current)
+          speechFinalizeTickerRef.current = null
+        }
+        speechFinalizeTimerRef.current = null
+        setSttCommitRemainingMs(0)
+        onComplete?.()
+      }, durationMs)
+    },
+    [clearSpeechFinalizeState]
+  )
+
   const flushSpeechBuffer = useCallback(() => {
     clearSpeechFinalizeState()
     const buffered = speechBufferRef.current.trim()
@@ -2002,8 +2017,8 @@ export default function LiveSessionPage() {
   }, [clearSpeechFinalizeState, scheduleIdleHints, sessionStatus])
 
   const handleSpeechEnd = useCallback(() => {
-    // Keep the configured finalize delay. Avoid accelerating send on speechend,
-    // because it can fire earlier than expected and make turns flush too fast.
+    // We intentionally don't flush on speechend because browsers can emit this
+    // before recognition finalizes the transcript.
   }, [])
 
   const {
@@ -2062,12 +2077,21 @@ export default function LiveSessionPage() {
       const cleaned = text.trim()
       if (!cleaned) return
 
+      const isVoiceOrVideoSession = sessionType === 'voice' || sessionType === 'video'
       const canBargeIn =
-        (sessionType === 'voice' || sessionType === 'video') &&
-        hasUserEnabledMicRef.current &&
-        (assistantSpeaking || isProcessing)
+        isVoiceOrVideoSession && hasUserEnabledMicRef.current && (assistantSpeaking || isProcessing)
 
       if (!isFinal) {
+        if (
+          isVoiceOrVideoSession &&
+          hasUserEnabledMicRef.current &&
+          !assistantSpeaking &&
+          !isProcessing &&
+          isListening
+        ) {
+          startSpeechFinalizeCountdown(speechCommitWindowMs)
+        }
+
         const wordCount = cleaned.split(/\s+/u).filter(Boolean).length
         if (
           canBargeIn &&
@@ -2090,21 +2114,12 @@ export default function LiveSessionPage() {
         ? `${speechBufferRef.current.trim()} ${cleaned}`
         : cleaned
 
-      clearSpeechFinalizeState()
-      setSttCommitRemainingMs(speechFinalizeDelayMs)
-      const startedAt = Date.now()
-      speechFinalizeTickerRef.current = setInterval(() => {
-        const elapsed = Date.now() - startedAt
-        const remaining = Math.max(0, speechFinalizeDelayMs - elapsed)
-        setSttCommitRemainingMs(remaining)
-        if (remaining === 0 && speechFinalizeTickerRef.current) {
-          clearInterval(speechFinalizeTickerRef.current)
-          speechFinalizeTickerRef.current = null
-        }
-      }, 50)
-      speechFinalizeTimerRef.current = setTimeout(() => {
+      if (isVoiceOrVideoSession) {
         flushSpeechBuffer()
-      }, speechFinalizeDelayMs)
+        return
+      }
+
+      startSpeechFinalizeCountdown(speechCommitWindowMs, flushSpeechBuffer)
     },
     onError: () => {
       clearSpeechFinalizeState()
@@ -3541,7 +3556,10 @@ export default function LiveSessionPage() {
     }
   }, [entryPromptMode, sessionType, sessionStatus, sessionId, router])
 
-  const sttCommitProgress = Math.min(1, Math.max(0, sttCommitRemainingMs / speechFinalizeDelayMs))
+  const sttCommitProgress =
+    speechCommitWindowMs > 0
+      ? Math.min(1, Math.max(0, sttCommitRemainingMs / speechCommitWindowMs))
+      : 0
 
   const todayStr = new Date().toLocaleDateString('en-US', {
     weekday: 'short',

@@ -923,7 +923,9 @@ function normalizeBase64(value: string): string {
   return `${cleaned}${'='.repeat(4 - remainder)}`
 }
 
-function normalizeAudioChunk(value: ArrayBuffer | Uint8Array): ArrayBuffer {
+function normalizeAudioChunk(
+  value: ArrayBuffer | Uint8Array | { type?: unknown; data?: unknown } | string
+): ArrayBuffer {
   if (value instanceof ArrayBuffer) {
     return value
   }
@@ -934,5 +936,47 @@ function normalizeAudioChunk(value: ArrayBuffer | Uint8Array): ArrayBuffer {
     return normalized.buffer
   }
 
-  return new Uint8Array(value as never).buffer
+  if (typeof value === 'string') {
+    return decodeBase64ToArrayBuffer(value)
+  }
+
+  if (isBufferJson(value)) {
+    const normalized = Uint8Array.from(value.data)
+    return normalized.buffer
+  }
+
+  if (ArrayBuffer.isView(value)) {
+    const normalized = new Uint8Array(value.byteLength)
+    normalized.set(new Uint8Array(value.buffer, value.byteOffset, value.byteLength))
+    return normalized.buffer
+  }
+
+  return new ArrayBuffer(0)
+}
+
+function decodeBase64ToArrayBuffer(value: string): ArrayBuffer {
+  try {
+    const normalizedBase64 = normalizeBase64(value)
+    const byteCharacters = atob(normalizedBase64)
+    const bytes = new Uint8Array(byteCharacters.length)
+    for (let i = 0; i < byteCharacters.length; i++) {
+      bytes[i] = byteCharacters.charCodeAt(i)
+    }
+    return bytes.buffer
+  } catch {
+    return new ArrayBuffer(0)
+  }
+}
+
+function isBufferJson(value: unknown): value is {
+  type: 'Buffer'
+  data: number[]
+} {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    (value as { type?: unknown }).type === 'Buffer' &&
+    Array.isArray((value as { data?: unknown }).data) &&
+    (value as { data: unknown[] }).data.every((entry) => typeof entry === 'number')
+  )
 }

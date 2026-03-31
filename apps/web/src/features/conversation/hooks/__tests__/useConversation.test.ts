@@ -421,6 +421,60 @@ describe('audio queue', () => {
     expect(audioInstances[0].play).toHaveBeenCalled()
   })
 
+  it('plays chunk audio when payload arrives as Buffer JSON shape', async () => {
+    const { result } = await setup()
+    act(() => {
+      result.current.sendMessage('hello')
+    })
+
+    act(() => {
+      cbs.audioChunk!({
+        requestId: REQ_ID,
+        sessionId: SESSION_ID,
+        payload: {
+          sentenceIndex: 0,
+          audio: { type: 'Buffer', data: [1, 2, 3] },
+          contentType: 'audio/mpeg',
+        },
+      })
+    })
+
+    await waitFor(() => expect(audioInstances).toHaveLength(1))
+    expect(audioInstances[0].play).toHaveBeenCalled()
+
+    const createObjectUrlMock = URL.createObjectURL as jest.Mock
+    const latestBlob = createObjectUrlMock.mock.calls[createObjectUrlMock.mock.calls.length - 1][0]
+    expect(latestBlob).toBeInstanceOf(Blob)
+    expect((latestBlob as Blob).size).toBe(3)
+  })
+
+  it('plays chunk audio when payload arrives as base64 string', async () => {
+    const { result } = await setup()
+    act(() => {
+      result.current.sendMessage('hello')
+    })
+
+    act(() => {
+      cbs.audioChunk!({
+        requestId: REQ_ID,
+        sessionId: SESSION_ID,
+        payload: {
+          sentenceIndex: 0,
+          audio: 'AQID',
+          contentType: 'audio/mpeg',
+        },
+      })
+    })
+
+    await waitFor(() => expect(audioInstances).toHaveLength(1))
+    expect(audioInstances[0].play).toHaveBeenCalled()
+
+    const createObjectUrlMock = URL.createObjectURL as jest.Mock
+    const latestBlob = createObjectUrlMock.mock.calls[createObjectUrlMock.mock.calls.length - 1][0]
+    expect(latestBlob).toBeInstanceOf(Blob)
+    expect((latestBlob as Blob).size).toBe(3)
+  })
+
   it('plays chunks in index order when they arrive out of order', async () => {
     const { result } = await setup()
     act(() => {

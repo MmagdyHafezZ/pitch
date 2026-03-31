@@ -226,10 +226,29 @@ const CSS = `
 .vos-status-bar.status-listening { --vos-status-bg: rgba(16,185,129,.10); --vos-status-color: #10b981; }
 .vos-status-bar.status-idle      { --vos-status-bg: rgba(107,114,128,.07); --vos-status-color: #9ca3af; }
 .vos-status-bar.vos-turn-timer {
-  border-color: rgba(52, 211, 153, 0.9);
-  box-shadow:
-    inset 0 0 0 calc(var(--vos-turn-progress, 0) * 2px) rgba(52, 211, 153, 0.9),
-    0 0 calc(var(--vos-turn-progress, 0) * 6px) rgba(16, 185, 129, 0.18);
+  border-color: rgba(52, 211, 153, 0.22);
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.16);
+  isolation: isolate;
+}
+.vos-status-bar.vos-turn-timer::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1px;
+  background: conic-gradient(
+    from -90deg,
+    rgba(52, 211, 153, 0.95) 0turn,
+    rgba(52, 211, 153, 0.95) calc(var(--vos-turn-progress, 0) * 1turn),
+    rgba(52, 211, 153, 0.15) calc(var(--vos-turn-progress, 0) * 1turn),
+    rgba(52, 211, 153, 0.15) 1turn
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
 }
 
 /* thinking dots */
@@ -944,31 +963,6 @@ html.dark .vos-bubble-btn-secondary { background: rgba(255,255,255,.08); color: 
   transition: width .8s ease;
 }
 
-/* ─── objections ─── */
-.vos-objections-wrap {
-  display: flex; flex-direction: column; gap: 3px;
-  padding: 4px 12px 0; flex-shrink: 0; z-index: 2;
-}
-.vos-objection-badge {
-  background: rgba(251,146,60,.12);
-  border: 1px solid rgba(251,146,60,.25);
-  border-radius: 6px; padding: 4px 8px;
-  font-size: 11px; line-height: 1.4;
-}
-.vos-objection-type { color: #fb923c; font-weight: 700; }
-.vos-objection-text { color: #fcd34d; }
-
-/* ─── next step card ─── */
-.vos-next-step-card {
-  display: flex; flex-direction: column; gap: 2px;
-  margin: 4px 12px 0;
-  background: rgba(20,184,166,.1);
-  border-left: 2px solid #14b8a6;
-  border-radius: 4px; padding: 5px 8px;
-  flex-shrink: 0; z-index: 2; font-size: 11px;
-}
-.vos-next-step-title { color: #2dd4bf; font-weight: 700; }
-.vos-next-step-body  { color: rgba(255,255,255,.55); }
 `
 
 // ── Status indicator ───────────────────────────────────────────────────────────
@@ -1047,8 +1041,6 @@ export default function VoiceOrbSession({
   avatarVideoStatus,
   avatarVideoError,
   videoRef,
-  activeObjections,
-  latestNextStep,
   cameraEnabled,
   onToggleCamera,
   userVideoRef,
@@ -1642,32 +1634,6 @@ export default function VoiceOrbSession({
                   )}
                 </div>
               </div>
-
-              {activeObjections && activeObjections.length > 0 && (
-                <div className="vos-objections-wrap">
-                  {activeObjections.slice(-2).map((e) => (
-                    <div key={e.id} className="vos-objection-badge">
-                      <span className="vos-objection-type">
-                        ⚠{' '}
-                        {String(e.args.type ?? 'objection')
-                          .replace(/_/g, ' ')
-                          .toUpperCase()}
-                      </span>
-                      <span className="vos-objection-text"> — {String(e.args.text ?? '')}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {latestNextStep && (
-                <div className="vos-next-step-card">
-                  <span className="vos-next-step-title">📅 Next step proposed</span>
-                  <span className="vos-next-step-body">
-                    {String(latestNextStep.args.action ?? '')} —{' '}
-                    {String(latestNextStep.args.timeframe ?? '')}
-                  </span>
-                </div>
-              )}
 
               {sttError && isSttSupported && (
                 <div
