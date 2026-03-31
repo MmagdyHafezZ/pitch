@@ -13,6 +13,7 @@ import {
 } from '@tabler/icons-react'
 import type { VisualState } from '@/features/conversation/types/visual-state.types'
 import { PabloPresenter } from './PabloPresenter'
+import { getPresenterPlaybackMode } from './presenter-playback'
 
 interface Message {
   id: string
@@ -971,6 +972,7 @@ export default function VoiceOrbSession({
   isSttPermissionBlocked,
   interimTranscript,
   sttError,
+  sttCommitRemainingMs,
   textInput,
   onHangUp,
   onMicrophoneClick,
@@ -1193,8 +1195,13 @@ export default function VoiceOrbSession({
             : connectionError
               ? 'Connection error'
               : 'Connecting…'
-  const presenterPlaybackMode: 'idle' | 'speaking' | 'listening' =
-    statusState === 'thinking' ? 'idle' : statusState
+  const presenterPlaybackMode = getPresenterPlaybackMode({
+    assistantSpeaking,
+    isListening,
+    isProcessing,
+    interimTranscript,
+    sttCommitRemainingMs,
+  })
 
   // In-panel status shows interrupt hint when AI is talking and user hasn't cut in yet
   const panelStatusLabel =
