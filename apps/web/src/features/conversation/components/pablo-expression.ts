@@ -3,6 +3,7 @@ export type PabloExpressionMode = 'normal' | 'mad'
 export type PabloMorphState = {
   mad: number
   open_mouth: number
+  open_mouth_mad: number
   open: number
   open_mad: number
 }
@@ -32,6 +33,7 @@ export function getPabloMorphState(
     return {
       mad: 1,
       open_mouth: 0,
+      open_mouth_mad: mouthOpen ? 1 : 0,
       open: 0,
       open_mad: mouthOpen ? 1 : 0,
     }
@@ -40,6 +42,7 @@ export function getPabloMorphState(
   return {
     mad: 0,
     open_mouth: mouthOpen ? 1 : 0,
+    open_mouth_mad: 0,
     open: mouthOpen ? 1 : 0,
     open_mad: 0,
   }

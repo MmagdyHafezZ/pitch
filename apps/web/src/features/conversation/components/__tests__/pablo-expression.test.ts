@@ -13,6 +13,7 @@ describe('pablo-expression', () => {
     expect(getPabloMorphState('mad', true)).toEqual({
       mad: 1,
       open_mouth: 0,
+      open_mouth_mad: 1,
       open: 0,
       open_mad: 1,
     })
@@ -22,12 +23,14 @@ describe('pablo-expression', () => {
     expect(getPabloMorphState('normal', true)).toEqual({
       mad: 0,
       open_mouth: 1,
+      open_mouth_mad: 0,
       open: 1,
       open_mad: 0,
     })
     expect(getPabloMorphState('normal', false)).toEqual({
       mad: 0,
       open_mouth: 0,
+      open_mouth_mad: 0,
       open: 0,
       open_mad: 0,
     })

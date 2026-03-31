@@ -14,8 +14,7 @@ import {
 } from './pablo-expression'
 
 type PlaybackMode = 'idle' | 'speaking' | 'listening'
-type RequiredTargetName = 'mad' | 'open_mouth' | 'open' | 'open_mad'
-type ControlledFeatureName = 'body' | 'Mouth'
+type RequiredTargetName = 'mad' | 'open_mouth' | 'open_mouth_mad' | 'open' | 'open_mad'
 type Vector3Tuple = [number, number, number]
 
 interface WordTiming {
@@ -120,8 +119,7 @@ export interface PabloPresenterProps {
   presenterIsFrustrated?: boolean
 }
 
-const REQUIRED_TARGETS = ['mad', 'open_mouth', 'open', 'open_mad'] as const
-const CONTROLLED_FEATURE_NAMES = ['body', 'Mouth'] as const
+const REQUIRED_TARGETS = ['mad', 'open_mouth', 'open_mouth_mad', 'open', 'open_mad'] as const
 const LISTEN_ANIMATION_NAME = 'Action'
 const IDLE_ANIMATION_NAME = 'idle'
 const LISTEN_FPS = 24
@@ -132,11 +130,6 @@ const DEFAULT_BACKGROUND_IMAGE = '/pablo_session_background.png'
 const PABLO_CAMERA_FOV = 24
 const PABLO_CAMERA_POSITION = [0, 1.48, 4.18] as const
 const PABLO_CAMERA_TARGET = [0, 0.36, 0] as const
-
-const CONTROLLED_FEATURE_TARGETS: Record<ControlledFeatureName, readonly RequiredTargetName[]> = {
-  body: ['mad', 'open_mouth'],
-  Mouth: ['open', 'open_mad'],
-}
 
 function isSceneCamera(object: Object3D): object is SceneCamera {
   return (object as SceneCamera).isCamera === true
@@ -297,28 +290,6 @@ function hasMorphInfluences(object: MorphDictionaryHost): object is MorphDiction
   return Array.isArray(object.morphTargetInfluences)
 }
 
-function isControlledFeatureName(value: string | undefined): value is ControlledFeatureName {
-  return CONTROLLED_FEATURE_NAMES.includes(value as ControlledFeatureName)
-}
-
-function getControlledFeatureName(object: Object3D): ControlledFeatureName | null {
-  let current: Object3D | null = object
-
-  while (current) {
-    if (isControlledFeatureName(current.name)) {
-      return current.name
-    }
-
-    current = current.parent
-  }
-
-  return null
-}
-
-function featureAcceptsTarget(featureName: ControlledFeatureName, targetName: RequiredTargetName) {
-  return CONTROLLED_FEATURE_TARGETS[featureName].includes(targetName)
-}
-
 function syncMorphState(
   bindings: Record<RequiredTargetName, MorphBinding[]>,
   mouthOpen: boolean,
@@ -328,6 +299,7 @@ function syncMorphState(
 
   applyMorphBindings(bindings.mad, morphState.mad)
   applyMorphBindings(bindings.open_mouth, morphState.open_mouth)
+  applyMorphBindings(bindings.open_mouth_mad, morphState.open_mouth_mad)
   applyMorphBindings(bindings.open, morphState.open)
   applyMorphBindings(bindings.open_mad, morphState.open_mad)
 }
@@ -398,10 +370,10 @@ function PabloModel({ modelPath, mouthOpen, playbackMode, expressionMode }: Pabl
 
     return new Map(
       nodes
-        .filter((node) => isControlledFeatureName(node.name))
+        .filter((node) => node.name && typeof node.mesh === 'number')
         .map((node) => {
           const mesh = typeof node.mesh === 'number' ? meshes[node.mesh] : null
-          return [node.name as ControlledFeatureName, mesh?.extras?.targetNames ?? []] as const
+          return [node.name as string, mesh?.extras?.targetNames ?? []] as const
         })
     )
   }, [gltf.parser?.json?.meshes, gltf.parser?.json?.nodes])
@@ -420,6 +392,7 @@ function PabloModel({ modelPath, mouthOpen, playbackMode, expressionMode }: Pabl
   const bindingsRef = useRef<Record<RequiredTargetName, MorphBinding[]>>({
     mad: [],
     open_mouth: [],
+    open_mouth_mad: [],
     open: [],
     open_mad: [],
   })
@@ -437,6 +410,7 @@ function PabloModel({ modelPath, mouthOpen, playbackMode, expressionMode }: Pabl
     const nextBindings: Record<RequiredTargetName, MorphBinding[]> = {
       mad: [],
       open_mouth: [],
+      open_mouth_mad: [],
       open: [],
       open_mad: [],
     }
@@ -445,23 +419,16 @@ function PabloModel({ modelPath, mouthOpen, playbackMode, expressionMode }: Pabl
       const nextObject = object as Object3D & MorphDictionaryHost
       if (!hasMorphInfluences(nextObject)) return
 
-      const featureName = getControlledFeatureName(nextObject)
-      if (!featureName) return
-
-      const exportedTargetNames =
-        nextObject.name && isControlledFeatureName(nextObject.name)
-          ? (exportedTargetNamesByNodeName.get(nextObject.name) ?? [])
-          : nextObject.parent?.name && isControlledFeatureName(nextObject.parent.name)
-            ? (exportedTargetNamesByNodeName.get(nextObject.parent.name) ?? [])
-            : (nextObject.geometry?.userData?.targetNames ?? [])
+      const exportedTargetNames = nextObject.name
+        ? (exportedTargetNamesByNodeName.get(nextObject.name) ?? [])
+        : nextObject.parent?.name
+          ? (exportedTargetNamesByNodeName.get(nextObject.parent.name) ?? [])
+          : (nextObject.geometry?.userData?.targetNames ?? [])
       const dictionary = getMorphTargetDictionary(nextObject, exportedTargetNames)
       if (!dictionary) return
 
       for (const [targetName, targetIndex] of Object.entries(dictionary)) {
-        if (
-          !REQUIRED_TARGETS.includes(targetName as RequiredTargetName) ||
-          !featureAcceptsTarget(featureName, targetName as RequiredTargetName)
-        ) {
+        if (!REQUIRED_TARGETS.includes(targetName as RequiredTargetName)) {
           continue
         }
 
