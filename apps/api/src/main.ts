@@ -43,14 +43,35 @@ export class LogAllHttpExceptionsFilter implements ExceptionFilter {
     const ctx = host.switchToHttp();
     const res = ctx.getResponse<any>();
     const req = ctx.getRequest<any>();
+    const requestContext = {
+      method: req?.method,
+      url: req?.originalUrl ?? req?.url,
+      params: req?.params,
+      query: req?.query,
+      body: req?.body,
+      requestId:
+        (req?.headers?.['x-request-id'] as string | undefined) ??
+        (req?.headers?.['x-correlation-id'] as string | undefined),
+      userId: req?.user?.id,
+    };
 
     if (exception instanceof HttpException) {
       const rawStatus = exception.getStatus();
       const status = typeof rawStatus === 'number' ? rawStatus : 500;
       const payload = exception.getResponse();
+      const error = normalizeError(exception);
 
       this.logger.error(
-        `${status} ${req.method} ${req.url} -> ${JSON.stringify(payload)}`,
+        `${status} ${req.method} ${req.url} -> ${safeStringify(payload)}`,
+        error.stack,
+      );
+      this.logger.error(
+        `HTTP exception context: ${safeStringify({
+          status,
+          payload,
+          request: requestContext,
+          error,
+        })}`,
       );
 
       return res
@@ -62,14 +83,56 @@ export class LogAllHttpExceptionsFilter implements ExceptionFilter {
         );
     }
 
+    const error = normalizeError(exception);
+    const rawError = exception as
+      | {
+          status?: unknown;
+          statusCode?: unknown;
+          response?: {
+            statusCode?: unknown;
+            message?: unknown;
+            error?: unknown;
+          };
+          message?: unknown;
+          error?: unknown;
+        }
+      | undefined;
+    const extractedStatus =
+      (typeof rawError?.statusCode === 'number' && rawError.statusCode) ||
+      (typeof rawError?.status === 'number' && rawError.status) ||
+      (typeof rawError?.response?.statusCode === 'number' &&
+        rawError.response.statusCode) ||
+      500;
+    const extractedMessage =
+      (typeof rawError?.response?.message === 'string' &&
+        rawError.response.message) ||
+      (Array.isArray(rawError?.response?.message) &&
+        rawError.response?.message
+          .filter((item): item is string => typeof item === 'string')
+          .join(', ')) ||
+      (typeof rawError?.message === 'string' && rawError.message) ||
+      (typeof rawError?.error === 'string' && rawError.error) ||
+      error.message ||
+      'Internal server error';
+
     this.logger.error(
-      `${req.method} ${req.url} -> ${String(exception)}`,
-      (exception as any)?.stack,
+      `${extractedStatus} ${req.method} ${req.url} -> ${extractedMessage}`,
+      error.stack,
+    );
+    this.logger.error(
+      `HTTP unknown exception context: ${safeStringify({
+        status: extractedStatus,
+        message: extractedMessage,
+        request: requestContext,
+        error,
+        raw: exception,
+      })}`,
     );
 
-    return res.status(500).json({
-      statusCode: 500,
-      message: 'Internal server error',
+    return res.status(extractedStatus).json({
+      statusCode: extractedStatus,
+      message: extractedMessage,
+      timestamp: new Date().toISOString(),
     });
   }
 }

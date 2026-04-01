@@ -2,7 +2,6 @@
 
 import { useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { modals } from '@mantine/modals'
 import { api } from '@/lib/client'
 import { useAuthStore } from '@/features/auth/stores/auth.store'
 import {
@@ -143,21 +142,16 @@ export function useTour() {
         showButtons: ['next', 'previous', 'close'],
         steps: availableSteps,
         onCloseClick: (_element, _step, { driver: activeDriver }) => {
-          modals.openConfirmModal({
-            title: 'Stop tutorial?',
-            centered: true,
-            labels: {
-              confirm: 'Stop tutorial',
-              cancel: 'Keep tutorial',
-            },
-            confirmProps: { color: 'red' },
-            children:
-              'You are about to exit the tutorial. You can restart it anytime from the help icon.',
-            onConfirm: () => {
-              activeDriver.destroy()
-              driverRef.current = null
-            },
-          })
+          const shouldStopTour = window.confirm(
+            'Stop tutorial?\n\nYou are about to exit the tutorial. You can restart it anytime from the help icon.'
+          )
+
+          if (!shouldStopTour) {
+            return
+          }
+
+          activeDriver.destroy()
+          driverRef.current = null
         },
         onNextClick: (_element, _step, { driver: activeDriver }) => {
           if (!activeDriver.isLastStep()) {
