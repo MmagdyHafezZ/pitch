@@ -107,17 +107,22 @@ const PHONE_COUNTRY_OPTIONS = [
 ]
 
 const DEFAULT_PHONE_COUNTRY_CODE = '+1'
-const DEFAULT_SPEECH_SEND_DELAY_MS = 500
+const DEFAULT_SPEECH_SEND_DELAY_MS = 2000
 const MIN_SPEECH_SEND_DELAY_MS = 200
-const MAX_SPEECH_SEND_DELAY_MS = 4000
+const MAX_SPEECH_SEND_DELAY_MS = 5000
 
 const SPEECH_SEND_DELAY_OPTIONS = [
-  { value: '300', label: '0.3s (Fast)' },
-  { value: '500', label: '0.5s (Balanced)' },
+  { value: '300', label: '0.3s (Fastest)' },
+  { value: '500', label: '0.5s (Fast)' },
   { value: '800', label: '0.8s' },
   { value: '1000', label: '1.0s' },
   { value: '1500', label: '1.5s' },
-  { value: '2000', label: '2.0s (Slow)' },
+  { value: '2000', label: '2.0s (Balanced)' },
+  { value: '2500', label: '2.5s' },
+  { value: '3000', label: '3.0s' },
+  { value: '3500', label: '3.5s' },
+  { value: '4000', label: '4.0s' },
+  { value: '5000', label: '5.0s (Slowest)' },
 ]
 
 const withPromiseTimeout = <T,>(

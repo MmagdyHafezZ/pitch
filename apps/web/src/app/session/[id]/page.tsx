@@ -41,7 +41,12 @@ import {
   IconCheck,
 } from '@tabler/icons-react'
 import { useRouter, useParams, useSearchParams } from 'next/navigation'
-import { useConversation, useVisualState, CameraEngagementIndicator } from '@/features/conversation'
+import {
+  useConversation,
+  useVisualState,
+  CameraEngagementIndicator,
+  useVoiceTurnController,
+} from '@/features/conversation'
 import { type GlobeState } from '@/features/conversation/components/GlobeVisualizer'
 import VoiceOrbSession from '@/features/conversation/components/VoiceOrbSession'
 import { useAudioLevel } from '@/features/conversation/hooks/useAudioLevel'
@@ -125,9 +130,6 @@ const EMPTY_PHONE_CALL_RUNTIME: PhoneCallRuntimeState = {
 }
 
 const SESSION_TIMER_STORAGE_PREFIX = 'pitch-live-session-timer:'
-const ASSISTANT_FIRST_TURN_DELAY_MS = 3000
-const VOICE_SILENCE_COMMIT_WINDOW_MS = 3000
-const DEFAULT_NON_VOICE_SPEECH_SEND_DELAY_MS = 3000
 
 const PHONE_TERMINAL_STATUSES = new Set(['ended', 'failed', 'busy', 'no-answer', 'canceled'])
 
@@ -1864,6 +1866,12 @@ export default function LiveSessionPage() {
   const isMobile = useMediaQuery('(max-width: 768px)')
   const invalidateCoinsBalance = useInvalidateCoinsBalance()
   const userSettings = useAuthStore((state) => state.user?.settings)
+  const configuredVoiceSendDelayMs =
+    isRecord(userSettings) &&
+    isRecord(userSettings.voiceVideo) &&
+    typeof userSettings.voiceVideo.speechSendDelayMs === 'number'
+      ? userSettings.voiceVideo.speechSendDelayMs
+      : undefined
   const [time, setTime] = useState(0)
   const [sessionStartMs, setSessionStartMs] = useState<number | null>(null)
   const [sessionEndMs, setSessionEndMs] = useState<number | null>(null)
@@ -1935,23 +1943,13 @@ export default function LiveSessionPage() {
   const [prelaunchModalOpen, setPrelaunchModalOpen] = useState(false)
   const [prelaunchSaving, setPrelaunchSaving] = useState(false)
   const [pendingEntryMode, setPendingEntryMode] = useState<EntryFlowMode | null>(null)
-  const [sttCommitRemainingMs, setSttCommitRemainingMs] = useState(0)
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const latestMessagesRef = useRef<Array<{ role: 'user' | 'assistant'; text: string }>>([])
   const hintsRequestSeqRef = useRef(0)
-  const speechFinalizeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const speechFinalizeTickerRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const sendMessageRef = useRef<(text: string) => void>(() => {})
-  const resetTranscriptRef = useRef<() => void>(() => {})
-  const autoMicTurnIdRef = useRef<string | null>(null)
-  const speechBufferRef = useRef<string>('')
-  const assistantInterruptTriggeredRef = useRef(false)
-  const hasUserEnabledMicRef = useRef(false)
   const coachHelpPromptSeqRef = useRef(0)
   const timeoutEndTriggeredRef = useRef(false)
   const [isMultiTurn, setIsMultiTurn] = useState(false)
   const [coachStarter, setCoachStarter] = useState<CoachStarterPrompt | null>(null)
-  const assistantStartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const lastAssistantMessageIdRef = useRef<string | null>(null)
   // Hidden pose camera feed used by MediaPipe across session types.
@@ -1960,10 +1958,6 @@ export default function LiveSessionPage() {
   const userPipVideoRef = useRef<HTMLVideoElement | null>(null)
   const poseCameraStreamRef = useRef<MediaStream | null>(null)
   const [visualEnabled, setVisualEnabled] = useState(true)
-  const speechCommitWindowMs =
-    sessionType === 'voice' || sessionType === 'video'
-      ? VOICE_SILENCE_COMMIT_WINDOW_MS
-      : DEFAULT_NON_VOICE_SPEECH_SEND_DELAY_MS
   const isVideoSession = sessionType === 'video'
 
   const scheduleIdleHints = useCallback(
@@ -2000,64 +1994,6 @@ export default function LiveSessionPage() {
     [hintsEnabled, sessionId, sessionStatus]
   )
 
-  const clearSpeechFinalizeState = useCallback(() => {
-    if (speechFinalizeTimerRef.current) {
-      clearTimeout(speechFinalizeTimerRef.current)
-      speechFinalizeTimerRef.current = null
-    }
-    if (speechFinalizeTickerRef.current) {
-      clearInterval(speechFinalizeTickerRef.current)
-      speechFinalizeTickerRef.current = null
-    }
-    setSttCommitRemainingMs(0)
-  }, [])
-
-  const startSpeechFinalizeCountdown = useCallback(
-    (durationMs: number, onComplete?: () => void) => {
-      clearSpeechFinalizeState()
-      if (durationMs <= 0) return
-
-      setSttCommitRemainingMs(durationMs)
-      const startedAt = Date.now()
-      speechFinalizeTickerRef.current = setInterval(() => {
-        const elapsed = Date.now() - startedAt
-        const remaining = Math.max(0, durationMs - elapsed)
-        setSttCommitRemainingMs(remaining)
-        if (remaining === 0 && speechFinalizeTickerRef.current) {
-          clearInterval(speechFinalizeTickerRef.current)
-          speechFinalizeTickerRef.current = null
-        }
-      }, 50)
-
-      speechFinalizeTimerRef.current = setTimeout(() => {
-        if (speechFinalizeTickerRef.current) {
-          clearInterval(speechFinalizeTickerRef.current)
-          speechFinalizeTickerRef.current = null
-        }
-        speechFinalizeTimerRef.current = null
-        setSttCommitRemainingMs(0)
-        onComplete?.()
-      }, durationMs)
-    },
-    [clearSpeechFinalizeState]
-  )
-
-  const flushSpeechBuffer = useCallback(() => {
-    clearSpeechFinalizeState()
-    const buffered = speechBufferRef.current.trim()
-    if (sessionStatus !== 'ended' && buffered) {
-      sendMessageRef.current(buffered)
-      scheduleIdleHints()
-    }
-    speechBufferRef.current = ''
-    resetTranscriptRef.current()
-  }, [clearSpeechFinalizeState, scheduleIdleHints, sessionStatus])
-
-  const handleSpeechEnd = useCallback(() => {
-    // We intentionally don't flush on speechend because browsers can emit this
-    // before recognition finalizes the transcript.
-  }, [])
-
   const {
     isConnected,
     isConnecting,
@@ -2090,7 +2026,6 @@ export default function LiveSessionPage() {
     onError: () => {},
   })
   const assistantSpeaking = isAudioPlaying
-  sendMessageRef.current = sendMessage
   const currentIterationId = readCurrentIterationId(loadedSessionRecord)
 
   const {
@@ -2108,61 +2043,57 @@ export default function LiveSessionPage() {
   } = useSpeechToText({
     continuous: true,
     interimResults: true,
-    onSpeechEnd: handleSpeechEnd,
-    onResult: (text, isFinal) => {
-      if (sessionStatus === 'ended') return
-      const cleaned = text.trim()
-      if (!cleaned) return
-
-      const isVoiceOrVideoSession = sessionType === 'voice' || sessionType === 'video'
-      const canBargeIn =
-        isVoiceOrVideoSession && hasUserEnabledMicRef.current && (assistantSpeaking || isProcessing)
-
-      if (!isFinal) {
-        if (
-          isVoiceOrVideoSession &&
-          hasUserEnabledMicRef.current &&
-          !assistantSpeaking &&
-          !isProcessing &&
-          isListening
-        ) {
-          startSpeechFinalizeCountdown(speechCommitWindowMs)
-        }
-
-        const wordCount = cleaned.split(/\s+/u).filter(Boolean).length
-        if (
-          canBargeIn &&
-          !assistantInterruptTriggeredRef.current &&
-          wordCount >= 2 &&
-          cleaned.length >= 8
-        ) {
-          assistantInterruptTriggeredRef.current = true
-          void interrupt()
-        }
-        return
-      }
-
-      if (canBargeIn && !assistantInterruptTriggeredRef.current) {
-        assistantInterruptTriggeredRef.current = true
-        void interrupt()
-      }
-
-      speechBufferRef.current = speechBufferRef.current
-        ? `${speechBufferRef.current.trim()} ${cleaned}`
-        : cleaned
-
-      if (isVoiceOrVideoSession) {
-        flushSpeechBuffer()
-        return
-      }
-
-      startSpeechFinalizeCountdown(speechCommitWindowMs, flushSpeechBuffer)
-    },
-    onError: () => {
-      clearSpeechFinalizeState()
-    },
   })
-  resetTranscriptRef.current = resetTranscript
+
+  const handleCommittedVoiceTurn = useCallback(
+    (text: string) => {
+      if (sessionStatus === 'ended') {
+        return
+      }
+
+      sendMessage(text)
+      scheduleIdleHints()
+    },
+    [scheduleIdleHints, sendMessage, sessionStatus]
+  )
+
+  const {
+    phase: voiceTurnPhase,
+    interimDisplayTranscript,
+    pendingTranscript,
+    sttCommitRemainingMs,
+    sttCommitProgress,
+    handleMicrophoneClick,
+    resetController: resetVoiceTurnController,
+  } = useVoiceTurnController({
+    enabled: sessionType === 'voice' || sessionType === 'video',
+    sessionStatus,
+    sessionName,
+    personaName,
+    isConnected,
+    isConnecting,
+    isProcessing,
+    assistantSpeaking,
+    isListening,
+    isSttSupported,
+    isSttPermissionBlocked,
+    microphonePermission,
+    transcript,
+    interimTranscript,
+    messages,
+    entryDecisionLoading,
+    resumePromptOpen,
+    prelaunchModalOpen,
+    postSilenceSendDelayMs: configuredVoiceSendDelayMs,
+    startAssistantTurn,
+    onCommitUserTurn: handleCommittedVoiceTurn,
+    interrupt,
+    stopAudio,
+    requestMicrophoneAccess,
+    startListening,
+    stopListening,
+    resetTranscript,
+  })
 
   const analyserRef = useAudioLevel({ audioElementRef, assistantSpeaking })
 
@@ -2176,10 +2107,6 @@ export default function LiveSessionPage() {
 
   const isPhoneSession = sessionType === 'phone'
   const activeConversationMessages = isPhoneSession ? phoneTranscriptMessages : messages
-  const latestAssistantTurn = [...activeConversationMessages]
-    .reverse()
-    .find((message) => message.role === 'assistant')
-  const latestAssistantTurnId = latestAssistantTurn?.id ?? null
 
   const syncSessionClock = useCallback(
     (session: unknown, history: TranscriptMessage[] = []) => {
@@ -2482,6 +2409,7 @@ export default function LiveSessionPage() {
 
     let cancelled = false
     pauseConversationConnect()
+    resetVoiceTurnController()
     hydrateMessages([])
     setResumePromptOpen(false)
     setEntryPromptMode(null)
@@ -2668,6 +2596,7 @@ export default function LiveSessionPage() {
     hydrateMessages,
     loadTimeline,
     pauseConversationConnect,
+    resetVoiceTurnController,
     requestConversationConnect,
     sessionId,
     syncSessionState,
@@ -2714,7 +2643,6 @@ export default function LiveSessionPage() {
     try {
       await interrupt()
       disconnect()
-      stopListening()
       stopAudio()
 
       const restartedSession = await api.sessions.restart(sessionId, {
@@ -2742,9 +2670,7 @@ export default function LiveSessionPage() {
       setCallStarted(false)
       setCallError(null)
       setForceFreshPhoneEntry(false)
-      speechBufferRef.current = ''
-      assistantInterruptTriggeredRef.current = false
-      resetTranscript()
+      resetVoiceTurnController()
 
       setLoadedSessionRecord(restartedRecord)
       syncSessionState(restartedSession)
@@ -2789,12 +2715,11 @@ export default function LiveSessionPage() {
     interrupt,
     loadedSessionRecord,
     requestConversationConnect,
-    resetTranscript,
+    resetVoiceTurnController,
     resetSessionClock,
     sessionId,
     startOverLoading,
     stopAudio,
-    stopListening,
     syncSessionState,
     loadTimeline,
     timelineEnabled,
@@ -3087,44 +3012,11 @@ export default function LiveSessionPage() {
   const handleSendText = () => {
     if (sessionStatus === 'ended') return
     if (textInput.trim() && isConnected) {
-      clearSpeechFinalizeState()
-      speechBufferRef.current = ''
-      if (isListening) {
-        stopListening()
-      }
+      resetVoiceTurnController()
       sendMessage(textInput.trim())
       setTextInput('')
       scheduleIdleHints()
     }
-  }
-
-  const handleMicrophoneClick = async () => {
-    if (!isSttSupported || !isConnected || sessionStatus === 'ended') {
-      return
-    }
-
-    if (isListening) {
-      stopListening()
-      if (speechBufferRef.current.trim()) {
-        flushSpeechBuffer()
-      } else {
-        clearSpeechFinalizeState()
-      }
-      return
-    }
-
-    if (assistantSpeaking || isProcessing) {
-      interrupt()
-      stopAudio()
-    }
-
-    clearSpeechFinalizeState()
-    const permissionGranted = await requestMicrophoneAccess()
-    if (!permissionGranted) {
-      return
-    }
-    hasUserEnabledMicRef.current = true
-    void startListening()
   }
 
   const handlePauseReplay = useCallback(() => {
@@ -3260,126 +3152,11 @@ export default function LiveSessionPage() {
       if (idleTimerRef.current) {
         clearTimeout(idleTimerRef.current)
       }
-      if (speechFinalizeTimerRef.current) {
-        clearTimeout(speechFinalizeTimerRef.current)
-      }
-      if (speechFinalizeTickerRef.current) {
-        clearInterval(speechFinalizeTickerRef.current)
-      }
-      if (assistantStartTimerRef.current) {
-        clearTimeout(assistantStartTimerRef.current)
-      }
+      resetVoiceTurnController()
       poseCameraStreamRef.current?.getTracks().forEach((t) => t.stop())
       poseCameraStreamRef.current = null
     }
-  }, [])
-
-  useEffect(() => {
-    if (assistantStartTimerRef.current) {
-      clearTimeout(assistantStartTimerRef.current)
-      assistantStartTimerRef.current = null
-    }
-
-    const shouldLetAssistantOpen =
-      sessionStatus !== 'ended' &&
-      sessionType !== 'phone' &&
-      isConnected &&
-      !isConnecting &&
-      !isProcessing &&
-      !entryDecisionLoading &&
-      !resumePromptOpen &&
-      !prelaunchModalOpen &&
-      activeConversationMessages.length === 0
-
-    if (!shouldLetAssistantOpen) {
-      return
-    }
-
-    assistantStartTimerRef.current = setTimeout(() => {
-      assistantStartTimerRef.current = null
-      startAssistantTurn()
-    }, ASSISTANT_FIRST_TURN_DELAY_MS)
-
-    return () => {
-      if (assistantStartTimerRef.current) {
-        clearTimeout(assistantStartTimerRef.current)
-        assistantStartTimerRef.current = null
-      }
-    }
-  }, [
-    isConnected,
-    isConnecting,
-    isProcessing,
-    activeConversationMessages.length,
-    entryDecisionLoading,
-    prelaunchModalOpen,
-    resumePromptOpen,
-    startAssistantTurn,
-    sessionStatus,
-    sessionType,
-  ])
-
-  useEffect(() => {
-    const shouldPauseMicWhileAssistantSpeaks = sessionType !== 'voice' && sessionType !== 'video'
-
-    if (assistantSpeaking && isListening && shouldPauseMicWhileAssistantSpeaks) {
-      stopListening()
-    }
-  }, [assistantSpeaking, isListening, sessionType, stopListening])
-
-  useEffect(() => {
-    if (!assistantSpeaking && !isProcessing) {
-      assistantInterruptTriggeredRef.current = false
-    }
-  }, [assistantSpeaking, isProcessing])
-
-  useEffect(() => {
-    const isVoiceOrVideo = sessionType === 'voice' || sessionType === 'video'
-    const isAwaitingUserReply =
-      isVoiceOrVideo &&
-      isConnected &&
-      sessionStatus !== 'ended' &&
-      latestAssistantTurnId !== null &&
-      !assistantSpeaking &&
-      !isProcessing
-
-    if (!isAwaitingUserReply || !isSttSupported || isSttPermissionBlocked || isListening) {
-      return
-    }
-
-    if (autoMicTurnIdRef.current === latestAssistantTurnId) {
-      return
-    }
-
-    autoMicTurnIdRef.current = latestAssistantTurnId
-
-    const handMicToUser = async () => {
-      if (!hasUserEnabledMicRef.current && microphonePermission !== 'granted') {
-        const permissionGranted = await requestMicrophoneAccess()
-        if (!permissionGranted) {
-          return
-        }
-      }
-
-      hasUserEnabledMicRef.current = true
-      await startListening()
-    }
-
-    void handMicToUser()
-  }, [
-    assistantSpeaking,
-    isProcessing,
-    latestAssistantTurnId,
-    sessionType,
-    microphonePermission,
-    isSttSupported,
-    isSttPermissionBlocked,
-    isConnected,
-    sessionStatus,
-    isListening,
-    requestMicrophoneAccess,
-    startListening,
-  ])
+  }, [resetVoiceTurnController])
 
   useEffect(() => {
     if (sessionType !== 'video') return
@@ -3484,11 +3261,7 @@ export default function LiveSessionPage() {
       const endReason = options?.reason ?? (sessionType === 'phone' ? 'hangup' : 'user_hangup')
       const forcePerformanceRoute = options?.forcePerformanceRoute ?? false
 
-      clearSpeechFinalizeState()
-      speechBufferRef.current = ''
-      if (isListening) {
-        stopListening()
-      }
+      resetVoiceTurnController()
 
       try {
         if (sessionType === 'phone' && phoneCallRuntime.callId) {
@@ -3539,17 +3312,15 @@ export default function LiveSessionPage() {
       }
     },
     [
-      clearSpeechFinalizeState,
       hangUp,
       invalidateCoinsBalance,
-      isListening,
       activeConversationMessages.length,
       loadedSessionRecord,
       phoneCallRuntime.callId,
+      resetVoiceTurnController,
       router,
       sessionId,
       sessionType,
-      stopListening,
       syncSessionState,
     ]
   )
@@ -3595,11 +3366,6 @@ export default function LiveSessionPage() {
       router.push(`/session/${sessionId}/performance`)
     }
   }, [entryPromptMode, sessionType, sessionStatus, sessionId, router])
-
-  const sttCommitProgress =
-    speechCommitWindowMs > 0
-      ? Math.min(1, Math.max(0, sttCommitRemainingMs / speechCommitWindowMs))
-      : 0
 
   const todayStr = new Date().toLocaleDateString('en-US', {
     weekday: 'short',
@@ -4458,8 +4224,10 @@ export default function LiveSessionPage() {
                 sessionStatus={sessionStatus}
                 isSttSupported={isSttSupported}
                 isSttPermissionBlocked={isSttPermissionBlocked}
-                transcript={transcript}
-                interimTranscript={interimTranscript}
+                transcript={interimDisplayTranscript || pendingTranscript}
+                interimTranscript={interimDisplayTranscript}
+                pendingTranscript={pendingTranscript}
+                voiceTurnPhase={voiceTurnPhase}
                 sttError={sttError ?? null}
                 sttCommitRemainingMs={sttCommitRemainingMs}
                 sttCommitProgress={sttCommitProgress}
