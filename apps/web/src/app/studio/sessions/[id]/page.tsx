@@ -11,7 +11,6 @@ import {
   Group,
   Loader,
   Progress,
-  SimpleGrid,
   Skeleton,
   Stack,
   Text,
@@ -19,16 +18,16 @@ import {
   Title,
 } from '@mantine/core'
 import {
+  IconAlertCircle,
   IconArrowLeft,
   IconBrain,
   IconCalendar,
-  IconCalendarEvent,
+  IconCheck,
   IconCoin,
   IconEdit,
   IconFile,
   IconInfoCircle,
   IconLink,
-  IconMicrophone,
   IconPlayerPlay,
   IconRobot,
   IconTag,
@@ -73,20 +72,6 @@ type PersonaTraits = Record<string, unknown> & {
 type SkillFocus = {
   label: string
   reason: string
-}
-
-type SignalCardProps = {
-  label: string
-  value: string
-  description?: string | null
-  icon: ReactNode
-}
-
-type InsightListProps = {
-  title: string
-  items: string[]
-  empty: string
-  color?: string
 }
 
 const statusColor: Record<string, string> = {
@@ -265,38 +250,6 @@ function SurfaceCard({
   )
 }
 
-function SignalCard({ label, value, description, icon }: SignalCardProps) {
-  return (
-    <Card
-      withBorder
-      radius="lg"
-      padding="md"
-      className={classes.signalCard}
-      style={{
-        background: 'rgba(12, 19, 36, 0.86)',
-        borderColor: 'rgba(122, 156, 222, 0.18)',
-      }}
-    >
-      <Group gap="xs" align="center" mb={8}>
-        <ThemeIcon size={28} radius="md" variant="light" color="blue">
-          {icon}
-        </ThemeIcon>
-        <Text size="xs" fw={700} c="blue.1" tt="uppercase" style={{ letterSpacing: 0.8 }}>
-          {label}
-        </Text>
-      </Group>
-      <Text size="sm" fw={700} c="white" className={classes.signalValue}>
-        {value}
-      </Text>
-      {description ? (
-        <Text size="xs" c="dimmed" mt={8} className={classes.signalDescription}>
-          {description}
-        </Text>
-      ) : null}
-    </Card>
-  )
-}
-
 function DetailRow({ label, value }: { label: string; value: ReactNode }) {
   return (
     <Box className={classes.detailRow}>
@@ -305,63 +258,6 @@ function DetailRow({ label, value }: { label: string; value: ReactNode }) {
       </Text>
       <Box className={classes.detailValue}>{value}</Box>
     </Box>
-  )
-}
-
-function InsightList({ title, items, empty, color = 'blue' }: InsightListProps) {
-  return (
-    <Stack gap="xs">
-      <Text size="xs" fw={700} c={`${color}.1`} tt="uppercase" style={{ letterSpacing: 0.8 }}>
-        {title}
-      </Text>
-      {items.length > 0 ? (
-        <Stack gap="xs">
-          {items.map((item, index) => (
-            <Group
-              key={`${title}-${index}`}
-              gap="sm"
-              align="flex-start"
-              wrap="nowrap"
-              className={classes.insightItem}
-            >
-              <ThemeIcon size={20} radius="xl" variant="light" color={color}>
-                <Text size="xs" fw={800}>
-                  {index + 1}
-                </Text>
-              </ThemeIcon>
-              <Text size="sm" c="gray.2" className={classes.insightText}>
-                {item}
-              </Text>
-            </Group>
-          ))}
-        </Stack>
-      ) : (
-        <Text size="sm" c="dimmed">
-          {empty}
-        </Text>
-      )}
-    </Stack>
-  )
-}
-
-function SkillFocusCard({ skill }: { skill: SkillFocus }) {
-  return (
-    <Card
-      withBorder
-      radius="lg"
-      padding="md"
-      style={{
-        background: 'rgba(12, 18, 33, 0.84)',
-        borderColor: 'rgba(101, 140, 212, 0.16)',
-      }}
-    >
-      <Text size="sm" fw={700} c="white" mb={6}>
-        {skill.label}
-      </Text>
-      <Text size="sm" c="dimmed" style={{ lineHeight: 1.55 }}>
-        {skill.reason}
-      </Text>
-    </Card>
   )
 }
 
@@ -435,7 +331,6 @@ export default function SessionDetailPage() {
     : {}
   const llmConfig = isRecord(rawConfig.llm) ? rawConfig.llm : {}
   const voiceConfig = isRecord(rawConfig.voice) ? rawConfig.voice : {}
-  const videoConfig = isRecord(rawConfig.video) ? rawConfig.video : {}
   const crmConfig = isRecord(rawConfig.crm) ? rawConfig.crm : {}
   const personaTraits = (
     isRecord(session.persona?.traits) ? session.persona?.traits : {}
@@ -463,7 +358,7 @@ export default function SessionDetailPage() {
     toText(rawConfig.description) ??
     toText(session.scenario?.description) ??
     toText(embeddedScenario.description) ??
-    'This session is configured and ready to launch.'
+    null
 
   const scenarioName =
     session.scenario?.name?.trim() ??
@@ -543,11 +438,6 @@ export default function SessionDetailPage() {
     ...toTextArray(personaTraits.objections),
     ...toTextArray(personaTraits.triggers),
     ...toTextArray(personaTraits.hotButtons),
-  ])
-  const signatureTraits = uniqueText([
-    ...toTextArray(counterpartProfile.signatureTraits),
-    ...toTextArray(personaTraits.signatureTraits),
-    ...toTextArray(personaTraits.highlights),
   ])
   const counterpartMetrics = normalizePersonaMetrics(
     Object.keys(personaTraits).length > 0 ? personaTraits : counterpartProfile
@@ -695,40 +585,14 @@ export default function SessionDetailPage() {
 
   const canModify = Boolean(user?.id && session.userId === user.id)
 
-  const heroHighlights = [
-    {
-      label: 'Scenario',
-      value: scenarioName,
-      description: scenarioDescription,
-      icon: <IconTag size={14} />,
-    },
-    {
-      label: 'Counterpart',
-      value: personaName,
-      description:
-        uniqueText([counterpartRole, counterpartPersonality])[0] ?? 'Configured AI persona',
-      icon: <IconUser size={14} />,
-    },
-    {
-      label: 'Goal',
-      value: objective,
-      description:
-        successCriteria[0] ?? 'Focus on advancing the conversation to a credible next step.',
-      icon: <IconInfoCircle size={14} />,
-    },
-    {
-      label: 'Format',
-      value: formatSessionType(session.type),
-      description:
-        durationMinutes != null
-          ? `${durationMinutes} min • ${styleDifficulty} difficulty`
-          : `${styleDifficulty} difficulty`,
-      icon: <IconRobot size={14} />,
-    },
-  ]
+  const topTraits = uniqueText([
+    ...toTextArray(personaTraits.signatureTraits),
+    ...toTextArray(counterpartProfile.signatureTraits),
+  ]).slice(0, 5)
 
   return (
     <Stack gap="xl" className={classes.pageRoot}>
+      {/* ═══ HERO ══════════════════════════════════════════════════════ */}
       <Card
         withBorder
         radius="xl"
@@ -736,12 +600,13 @@ export default function SessionDetailPage() {
         className={classes.heroCard}
         style={{
           background:
-            'radial-gradient(circle at top right, rgba(57, 109, 241, 0.2), transparent 34%), linear-gradient(135deg, rgba(12, 18, 35, 0.98) 0%, rgba(8, 13, 26, 0.98) 100%)',
-          borderColor: 'rgba(116, 151, 222, 0.2)',
+            'radial-gradient(ellipse at top right, rgba(57, 109, 241, 0.18), transparent 45%), linear-gradient(160deg, rgba(14, 20, 38, 0.99) 0%, rgba(8, 12, 26, 0.99) 100%)',
+          borderColor: 'rgba(116, 151, 222, 0.18)',
           overflow: 'hidden',
         }}
       >
         <Stack gap="lg">
+          {/* Nav + Actions */}
           <Group
             justify="space-between"
             align="center"
@@ -758,33 +623,29 @@ export default function SessionDetailPage() {
             >
               Sessions
             </Button>
-
             <Group gap="xs" wrap="wrap" className={classes.headerActions}>
+              {canModify && (
+                <Button
+                  size="sm"
+                  variant="subtle"
+                  color="gray"
+                  leftSection={<IconEdit size={15} />}
+                  onClick={() => router.push(`/studio/sessions/${session.id}/edit`)}
+                >
+                  Edit
+                </Button>
+              )}
               <Button
                 size="sm"
-                variant="light"
-                color="blue"
-                leftSection={<IconEdit size={15} />}
-                disabled={!canModify}
-                title={!canModify ? 'Only the session owner can edit this session.' : undefined}
-                onClick={() => {
-                  if (!canModify) return
-                  router.push(`/studio/sessions/${session.id}/edit`)
-                }}
-              >
-                Edit
-              </Button>
-              <Button
-                size="sm"
-                variant="light"
+                variant="subtle"
                 color="gray"
                 leftSection={<IconLink size={15} />}
                 visibleFrom="sm"
                 onClick={() => setLtiEmbedOpen(true)}
               >
-                Embed in LMS
+                Embed
               </Button>
-              <Stack gap={2} align="center">
+              <Stack gap={3} align="center">
                 <Button
                   size="sm"
                   variant="filled"
@@ -794,9 +655,9 @@ export default function SessionDetailPage() {
                 >
                   Launch
                 </Button>
-                {coinEstimate && !coinEstimateLoading && (
+                {!coinEstimateLoading && coinEstimate && (
                   <Group gap={3}>
-                    <IconCoin size={11} color="var(--mantine-color-dimmed)" />
+                    <IconCoin size={10} color="var(--mantine-color-dimmed)" />
                     <Text size="xs" c="dimmed">
                       ~{coinEstimate.estimatedCoins} coins
                     </Text>
@@ -806,19 +667,22 @@ export default function SessionDetailPage() {
             </Group>
           </Group>
 
+          {/* Title + meta */}
           <Stack gap="sm">
             <Group gap="xs" wrap="wrap">
-              <Badge color={badgeColor} radius="md" variant="light">
+              <Badge color={badgeColor} radius="md" variant="light" size="sm">
                 {displayStatus}
               </Badge>
-              <Badge color="blue" radius="md" variant="light">
+              <Badge color="blue" radius="md" variant="light" size="sm">
                 {formatSessionType(session.type)}
               </Badge>
-              <Badge color="grape" radius="md" variant="light">
+              {durationMinutes != null && (
+                <Badge color="gray" radius="md" variant="light" size="sm">
+                  {durationMinutes} min
+                </Badge>
+              )}
+              <Badge color="grape" radius="md" variant="light" size="sm">
                 {styleDifficulty}
-              </Badge>
-              <Badge color="teal" radius="md" variant="light">
-                {language}
               </Badge>
             </Group>
 
@@ -826,460 +690,174 @@ export default function SessionDetailPage() {
               {displayName}
             </Title>
 
-            <Text size="md" c="gray.3" className={classes.heroSummary}>
-              {sessionSummary}
-            </Text>
-          </Stack>
+            {sessionSummary && (
+              <Text
+                size="sm"
+                c="gray.4"
+                style={{ lineHeight: 1.7, maxWidth: 680 }}
+                className={classes.heroSummary}
+              >
+                {sessionSummary}
+              </Text>
+            )}
 
-          <SimpleGrid cols={{ base: 1, sm: 2, xl: 4 }} spacing="md">
-            {heroHighlights.map((item) => (
-              <SignalCard
-                key={item.label}
-                label={item.label}
-                value={item.value}
-                description={item.description}
-                icon={item.icon}
-              />
-            ))}
-          </SimpleGrid>
+            <Group gap={6} wrap="wrap" align="center">
+              <ThemeIcon size={18} color="gray" variant="transparent" radius="sm">
+                <IconUser size={13} />
+              </ThemeIcon>
+              <Text size="sm" c="dimmed">
+                You play{' '}
+                <Text span fw={600} c="gray.2">
+                  {userRole}
+                </Text>
+                {' · '}AI plays{' '}
+                <Text span fw={600} c="gray.2">
+                  {personaName}
+                </Text>{' '}
+                as{' '}
+                <Text span fw={600} c="gray.2">
+                  {aiRole}
+                </Text>
+              </Text>
+            </Group>
+          </Stack>
         </Stack>
       </Card>
 
-      <Grid gutter="lg" align="flex-start">
+      {/* ═══ MAIN GRID ════════════════════════════════════════════════ */}
+      <Grid gutter="xl" align="flex-start">
+        {/* ── Left column ─────────────────────────────────────────── */}
         <Grid.Col span={{ base: 12, md: 8 }}>
-          <Stack gap="lg">
+          <Stack gap="xl">
+            {/* The Scenario */}
             <SurfaceCard
-              title="Scenario Brief"
-              subtitle="The situation you are stepping into"
+              title="The Scenario"
+              subtitle={scenarioName}
               icon={
                 <ThemeIcon size={30} color="blue" variant="light" radius="md">
                   <IconTag size={16} />
                 </ThemeIcon>
               }
-              aside={
-                <Group gap="xs" wrap="wrap">
-                  {durationMinutes != null ? (
-                    <Badge color="blue" variant="light" radius="md">
-                      {durationMinutes} min
-                    </Badge>
-                  ) : null}
-                  <Badge color="grape" variant="light" radius="md">
-                    {styleDifficulty}
-                  </Badge>
-                </Group>
-              }
             >
-              <Stack gap="lg">
-                <Stack gap="xs">
-                  <Text size="xs" fw={700} c="blue.1" tt="uppercase" style={{ letterSpacing: 0.8 }}>
-                    Scenario
+              <Stack gap="xl">
+                {contextNarrative && (
+                  <Text size="sm" c="gray.2" style={{ lineHeight: 1.8 }}>
+                    {contextNarrative}
                   </Text>
-                  <Title order={3} c="white">
-                    {scenarioName}
-                  </Title>
-                  <Text size="sm" c="gray.2" style={{ lineHeight: 1.7 }}>
-                    {scenarioDescription}
-                  </Text>
-                </Stack>
+                )}
 
-                <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md" verticalSpacing="md">
-                  <Box>
-                    <Text
-                      size="xs"
-                      fw={700}
-                      c="blue.1"
-                      tt="uppercase"
-                      style={{ letterSpacing: 0.8 }}
-                      mb={8}
-                    >
-                      Objective
-                    </Text>
-                    <Text size="sm" c="white" style={{ lineHeight: 1.65 }}>
-                      {objective}
-                    </Text>
-                  </Box>
-                  <Box>
-                    <Text
-                      size="xs"
-                      fw={700}
-                      c="blue.1"
-                      tt="uppercase"
-                      style={{ letterSpacing: 0.8 }}
-                      mb={8}
-                    >
-                      Context
-                    </Text>
-                    <Text size="sm" c="gray.2" style={{ lineHeight: 1.65 }}>
-                      {contextNarrative ??
-                        'No extra situational context was provided for this session.'}
-                    </Text>
-                  </Box>
-                </SimpleGrid>
-
-                <SimpleGrid cols={{ base: 1, lg: 3 }} spacing="lg" verticalSpacing="lg">
-                  <InsightList
-                    title="Success Criteria"
-                    items={successCriteria}
-                    empty="No explicit success criteria were attached to this session."
-                    color="teal"
-                  />
-                  <InsightList
-                    title="Stakes"
-                    items={stakes}
-                    empty="No explicit pressure points were defined."
-                    color="orange"
-                  />
-                  <InsightList
-                    title="Constraints"
-                    items={constraints}
-                    empty="No hard constraints were supplied."
-                    color="gray"
-                  />
-                </SimpleGrid>
-              </Stack>
-            </SurfaceCard>
-
-            <SurfaceCard
-              title="Counterpart Snapshot"
-              subtitle="Who you are about to deal with"
-              icon={
-                <ThemeIcon size={30} color="violet" variant="light" radius="md">
-                  <IconUser size={16} />
-                </ThemeIcon>
-              }
-              aside={
-                <Group gap="xs" wrap="wrap">
-                  {counterpartLevel ? (
-                    <Badge color="violet" variant="light" radius="md">
-                      {counterpartLevel}
-                    </Badge>
-                  ) : null}
-                  {counterpartVoice ? (
-                    <Badge color="gray" variant="light" radius="md">
-                      {counterpartVoice}
-                    </Badge>
-                  ) : null}
-                </Group>
-              }
-            >
-              <Stack gap="lg">
-                <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md" verticalSpacing="md">
-                  <Card
-                    withBorder
-                    radius="lg"
-                    padding="md"
-                    style={{
-                      background: 'rgba(14, 21, 39, 0.82)',
-                      borderColor: 'rgba(119, 95, 216, 0.16)',
-                    }}
-                  >
-                    <Text
-                      size="xs"
-                      fw={700}
-                      c="violet.1"
-                      tt="uppercase"
-                      style={{ letterSpacing: 0.8 }}
-                    >
-                      Counterpart
-                    </Text>
-                    <Title order={4} c="white" mt={8}>
-                      {personaName}
-                    </Title>
-                    <Text size="sm" c="dimmed" mt={6}>
-                      {counterpartRole}
-                    </Text>
-                    <Text size="sm" c="gray.2" mt="sm" style={{ lineHeight: 1.65 }}>
-                      {counterpartPersonality ??
-                        counterpartBackground ??
-                        'This AI persona is configured to behave like a realistic counterpart for the scenario.'}
-                    </Text>
-                  </Card>
-
-                  <Card
-                    withBorder
-                    radius="lg"
-                    padding="md"
-                    style={{
-                      background: 'rgba(14, 21, 39, 0.82)',
-                      borderColor: 'rgba(87, 166, 209, 0.16)',
-                    }}
-                  >
-                    <Text
-                      size="xs"
-                      fw={700}
-                      c="blue.1"
-                      tt="uppercase"
-                      style={{ letterSpacing: 0.8 }}
-                    >
-                      Working Style
-                    </Text>
-                    <Stack gap="sm" mt="sm">
-                      <DetailRow
-                        label="Personality"
-                        value={
-                          <Text size="sm" c="white">
-                            {counterpartPersonality ?? 'Adaptive'}
-                          </Text>
-                        }
-                      />
-                      <DetailRow
-                        label="Background"
-                        value={
-                          <Text size="sm" c="gray.2">
-                            {counterpartBackground ?? 'Not specified'}
-                          </Text>
-                        }
-                      />
-                      <DetailRow
-                        label="Tone"
-                        value={
-                          <Text size="sm" c="gray.2">
-                            {counterpartTone ?? 'Not specified'}
-                          </Text>
-                        }
-                      />
-                    </Stack>
-                  </Card>
-                </SimpleGrid>
-
-                <SimpleGrid cols={{ base: 1, xl: 2 }} spacing="lg" verticalSpacing="lg">
-                  <InsightList
-                    title="Likely Objections"
-                    items={likelyObjections}
-                    empty="No explicit objection set was attached to this persona."
-                    color="orange"
-                  />
-                  <InsightList
-                    title="Signature Traits"
-                    items={signatureTraits}
-                    empty="No signature trait list is attached to this persona."
-                    color="violet"
-                  />
-                </SimpleGrid>
-
-                {counterpartMetrics.length > 0 ? (
-                  <Stack gap="sm">
-                    <Text
-                      size="xs"
-                      fw={700}
-                      c="blue.1"
-                      tt="uppercase"
-                      style={{ letterSpacing: 0.8 }}
-                    >
-                      Counterpart Tendencies
-                    </Text>
-                    <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md" verticalSpacing="md">
-                      {counterpartMetrics.map((metric) => (
-                        <Card
-                          key={metric.label}
-                          withBorder
-                          radius="lg"
-                          padding="sm"
-                          style={{
-                            background: 'rgba(11, 18, 34, 0.84)',
-                            borderColor: 'rgba(90, 124, 190, 0.14)',
-                          }}
-                        >
-                          <Group justify="space-between" mb={8}>
-                            <Text size="sm" c="white" fw={600}>
-                              {metric.label}
-                            </Text>
-                            <Text size="xs" c="dimmed">
-                              {metric.value}%
-                            </Text>
-                          </Group>
-                          <Progress value={metric.value} color="blue" radius="xl" size="sm" />
-                        </Card>
-                      ))}
-                    </SimpleGrid>
-                  </Stack>
-                ) : null}
-              </Stack>
-            </SurfaceCard>
-
-            <SurfaceCard
-              title="Goal and Skill Focus"
-              subtitle="What good performance looks like in this session"
-              icon={
-                <ThemeIcon size={30} color="teal" variant="light" radius="md">
-                  <IconInfoCircle size={16} />
-                </ThemeIcon>
-              }
-            >
-              <Stack gap="lg">
+                {/* Objective */}
                 <Card
                   withBorder
                   radius="lg"
                   padding="lg"
                   style={{
-                    background: 'rgba(12, 20, 37, 0.84)',
-                    borderColor: 'rgba(72, 178, 136, 0.16)',
+                    background: 'rgba(18, 42, 78, 0.45)',
+                    borderColor: 'rgba(72, 130, 240, 0.22)',
                   }}
                 >
-                  <Text size="xs" fw={700} c="teal.1" tt="uppercase" style={{ letterSpacing: 0.8 }}>
-                    Primary Goal
-                  </Text>
-                  <Text size="lg" fw={700} c="white" mt={8}>
-                    {objective}
-                  </Text>
-                  <Text size="sm" c="dimmed" mt="sm" style={{ lineHeight: 1.65 }}>
-                    You are playing <strong>{userRole}</strong> and the AI is playing{' '}
-                    <strong>{aiRole}</strong>. Use the session to make measurable progress toward
-                    the objective, not just to keep the conversation going.
-                  </Text>
-                </Card>
-
-                <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md" verticalSpacing="md">
-                  {skillFocus.map((skill) => (
-                    <SkillFocusCard key={skill.label} skill={skill} />
-                  ))}
-                </SimpleGrid>
-              </Stack>
-            </SurfaceCard>
-
-            <SurfaceCard
-              title="Conversation Map"
-              subtitle="The likely rhythm of the simulation"
-              icon={
-                <ThemeIcon size={30} color="orange" variant="light" radius="md">
-                  <IconCalendarEvent size={16} />
-                </ThemeIcon>
-              }
-            >
-              <Stack gap="lg">
-                {normalizedScenario.stages.length > 0 ? (
-                  <SimpleGrid cols={{ base: 1, lg: 2 }} spacing="md" verticalSpacing="md">
-                    {normalizedScenario.stages.map((stage, index) => (
-                      <Card
-                        key={`${stage.title}-${index}`}
-                        withBorder
-                        radius="lg"
-                        padding="md"
-                        style={{
-                          background: 'rgba(13, 20, 36, 0.82)',
-                          borderColor: 'rgba(212, 142, 77, 0.18)',
-                        }}
-                      >
-                        <Group gap="sm" align="center" mb={8}>
-                          <ThemeIcon size={24} radius="xl" color="orange" variant="light">
-                            <Text size="xs" fw={800}>
-                              {index + 1}
-                            </Text>
-                          </ThemeIcon>
-                          <Text size="sm" fw={700} c="white">
-                            {stage.title}
-                          </Text>
-                        </Group>
-                        <Text size="sm" c="dimmed" style={{ lineHeight: 1.6 }}>
-                          {stage.goal}
-                        </Text>
-                      </Card>
-                    ))}
-                  </SimpleGrid>
-                ) : null}
-
-                <SimpleGrid cols={{ base: 1, md: 2 }} spacing="lg" verticalSpacing="lg">
-                  <InsightList
-                    title="What To Expect"
-                    items={expectationPoints}
-                    empty="No extra expectation notes are available for this session."
-                    color="blue"
-                  />
-                  <InsightList
-                    title="Supporting Context"
-                    items={supportAttachments}
-                    empty="No supporting documents are attached to this session."
-                    color="gray"
-                  />
-                </SimpleGrid>
-              </Stack>
-            </SurfaceCard>
-          </Stack>
-        </Grid.Col>
-
-        <Grid.Col span={{ base: 12, md: 4 }}>
-          <Stack gap="lg">
-            {/* ── Session Setup ─────────────────────────────── */}
-            <SurfaceCard
-              title="Session Setup"
-              subtitle="How the AI and delivery are configured"
-              icon={
-                <ThemeIcon size={30} color="brand" variant="light" radius="md">
-                  <IconRobot size={16} />
-                </ThemeIcon>
-              }
-            >
-              <Stack gap="xl">
-                {/* Format chips */}
-                <Box>
                   <Text
                     size="xs"
                     fw={700}
                     c="blue.3"
                     tt="uppercase"
                     style={{ letterSpacing: 0.9 }}
-                    mb={10}
+                    mb={8}
                   >
-                    Format
+                    Your Objective
                   </Text>
-                  <Group gap="xs" wrap="wrap">
-                    <Badge size="md" variant="light" color="blue" radius="md">
-                      {formatSessionType(session.type)}
-                    </Badge>
-                    {durationMinutes != null && (
-                      <Badge size="md" variant="light" color="gray" radius="md">
-                        {durationMinutes} min
-                      </Badge>
-                    )}
-                    <Badge size="md" variant="light" color="grape" radius="md">
-                      {styleDifficulty}
-                    </Badge>
-                    <Badge size="md" variant="light" color="teal" radius="md">
-                      {language}
-                    </Badge>
-                  </Group>
-                </Box>
+                  <Text size="md" fw={600} c="white" style={{ lineHeight: 1.65 }}>
+                    {objective}
+                  </Text>
+                </Card>
 
-                {/* Session cost */}
-                {(coinEstimateLoading || coinEstimate) && (
-                  <>
-                    <Divider color="rgba(111, 140, 205, 0.1)" />
-                    <Box>
-                      <Text
-                        size="xs"
-                        fw={700}
-                        c="blue.3"
-                        tt="uppercase"
-                        style={{ letterSpacing: 0.9 }}
-                        mb={10}
-                      >
-                        Session Cost
-                      </Text>
-                      {coinEstimateLoading ? (
-                        <Skeleton height={18} width={100} radius="sm" />
-                      ) : coinEstimate ? (
-                        <Group gap={6} align="center">
-                          <IconCoin size={16} color="var(--mantine-color-yellow-5)" />
-                          <Text size="sm" fw={700} c="yellow.4">
-                            ~{coinEstimate.estimatedCoins} coins
-                          </Text>
-                          <Text size="xs" c="dimmed">
-                            (~${coinEstimate.estimatedCostUsd.toFixed(3)})
-                          </Text>
-                        </Group>
-                      ) : null}
-                    </Box>
-                  </>
+                {/* Success criteria */}
+                {successCriteria.length > 0 && (
+                  <Stack gap="xs">
+                    <Text
+                      size="xs"
+                      fw={700}
+                      c="teal.3"
+                      tt="uppercase"
+                      style={{ letterSpacing: 0.9 }}
+                      mb={4}
+                    >
+                      What success looks like
+                    </Text>
+                    {successCriteria.slice(0, 3).map((item) => (
+                      <Group key={item} gap="xs" align="flex-start" wrap="nowrap">
+                        <ThemeIcon size={20} color="teal" variant="light" radius="xl" mt={1}>
+                          <IconCheck size={11} />
+                        </ThemeIcon>
+                        <Text size="sm" c="gray.2" style={{ lineHeight: 1.6 }}>
+                          {item}
+                        </Text>
+                      </Group>
+                    ))}
+                  </Stack>
                 )}
 
-                <Divider color="rgba(111, 140, 205, 0.1)" />
+                {/* Stakes */}
+                {stakes.length > 0 && (
+                  <Stack gap="xs">
+                    <Text
+                      size="xs"
+                      fw={700}
+                      c="orange.3"
+                      tt="uppercase"
+                      style={{ letterSpacing: 0.9 }}
+                      mb={4}
+                    >
+                      What&apos;s at stake
+                    </Text>
+                    {stakes.slice(0, 2).map((item) => (
+                      <Group key={item} gap="xs" align="flex-start" wrap="nowrap">
+                        <ThemeIcon size={20} color="orange" variant="light" radius="xl" mt={1}>
+                          <IconAlertCircle size={11} />
+                        </ThemeIcon>
+                        <Text size="sm" c="gray.2" style={{ lineHeight: 1.6 }}>
+                          {item}
+                        </Text>
+                      </Group>
+                    ))}
+                  </Stack>
+                )}
+              </Stack>
+            </SurfaceCard>
 
-                {/* AI Behavior */}
-                <Box>
-                  <Group gap="xs" mb={12}>
-                    <ThemeIcon size={18} color="violet" variant="light" radius="sm">
-                      <IconBrain size={11} />
-                    </ThemeIcon>
+            {/* Your Counterpart */}
+            <SurfaceCard
+              title="Your Counterpart"
+              subtitle={`${personaName}${counterpartLevel ? ` · ${counterpartLevel}` : ''}`}
+              icon={
+                <ThemeIcon size={30} color="violet" variant="light" radius="md">
+                  <IconUser size={16} />
+                </ThemeIcon>
+              }
+              aside={
+                counterpartTone ? (
+                  <Badge color="violet" variant="light" radius="md" size="sm">
+                    {counterpartTone}
+                  </Badge>
+                ) : null
+              }
+            >
+              <Stack gap="xl">
+                {/* Role + personality */}
+                <Stack gap="xs">
+                  <Text size="sm" fw={600} c="gray.3">
+                    {counterpartRole}
+                  </Text>
+                  <Text size="sm" c="gray.2" style={{ lineHeight: 1.75 }}>
+                    {counterpartPersonality ??
+                      counterpartBackground ??
+                      'A realistic AI persona configured for this scenario.'}
+                  </Text>
+                </Stack>
+
+                {/* Signature traits */}
+                {topTraits.length > 0 && (
+                  <Stack gap={10}>
                     <Text
                       size="xs"
                       fw={700}
@@ -1287,195 +865,316 @@ export default function SessionDetailPage() {
                       tt="uppercase"
                       style={{ letterSpacing: 0.9 }}
                     >
-                      AI Behavior
+                      Expect them to
                     </Text>
-                  </Group>
-                  <Stack gap={10}>
-                    <DetailRow
-                      label="Model"
-                      value={
-                        <Text size="sm" c="white">
-                          {toText(llmConfig.model) ?? toText(llmConfig.provider) ?? 'Default'}
-                        </Text>
-                      }
-                    />
-                    <DetailRow
-                      label="Style"
-                      value={
-                        <Text size="sm" c="white">
-                          {multiTurnLabel}
-                        </Text>
-                      }
-                    />
-                    <DetailRow
-                      label="Tone"
-                      value={
-                        <Text size="sm" c="white">
-                          {toText(config.tone) ?? 'Adaptive'}
-                        </Text>
-                      }
-                    />
-                    <DetailRow
-                      label="Patience"
-                      value={
-                        <Text size="sm" c="white">
-                          {toText(config.patienceLevel) ?? 'Balanced'}
-                        </Text>
-                      }
-                    />
-                    <DetailRow
-                      label="Initiative"
-                      value={
-                        <Text size="sm" c="white">
-                          {toText(config.initiativeLevel) ?? 'Balanced'}
-                        </Text>
-                      }
-                    />
-                    <DetailRow
-                      label="Speech pace"
-                      value={
-                        <Text size="sm" c="white">
-                          {toText(config.speechRate) ?? 'Balanced'}
-                        </Text>
-                      }
-                    />
+                    <Group gap="xs" wrap="wrap">
+                      {topTraits.map((trait) => (
+                        <Badge key={trait} variant="light" color="violet" radius="md" size="md">
+                          {trait}
+                        </Badge>
+                      ))}
+                    </Group>
                   </Stack>
-                </Box>
+                )}
 
-                {/* Delivery — voice / video */}
-                {(toText(voiceConfig.voice) ||
-                  toText(voiceConfig.provider) ||
-                  counterpartVoice ||
-                  session.type === 'video') && (
-                  <>
-                    <Divider color="rgba(111, 140, 205, 0.1)" />
-                    <Box>
-                      <Group gap="xs" mb={12}>
-                        <ThemeIcon size={18} color="cyan" variant="light" radius="sm">
-                          <IconMicrophone size={11} />
+                {/* Likely objections */}
+                {likelyObjections.length > 0 && (
+                  <Stack gap="xs">
+                    <Text
+                      size="xs"
+                      fw={700}
+                      c="orange.3"
+                      tt="uppercase"
+                      style={{ letterSpacing: 0.9 }}
+                      mb={4}
+                    >
+                      Likely objections
+                    </Text>
+                    {likelyObjections.slice(0, 3).map((obj) => (
+                      <Group key={obj} gap="xs" align="flex-start" wrap="nowrap">
+                        <ThemeIcon size={20} color="orange" variant="light" radius="xl" mt={1}>
+                          <IconAlertCircle size={11} />
                         </ThemeIcon>
-                        <Text
-                          size="xs"
-                          fw={700}
-                          c="cyan.3"
-                          tt="uppercase"
-                          style={{ letterSpacing: 0.9 }}
-                        >
-                          Delivery
+                        <Text size="sm" c="gray.2" style={{ lineHeight: 1.6 }}>
+                          {obj}
                         </Text>
                       </Group>
-                      <Stack gap={10}>
-                        {(toText(voiceConfig.voice) ||
-                          toText(voiceConfig.provider) ||
-                          counterpartVoice) && (
-                          <DetailRow
-                            label="Voice"
-                            value={
-                              <Text size="sm" c="white">
-                                {toText(voiceConfig.voice) ??
-                                  toText(voiceConfig.provider) ??
-                                  counterpartVoice}
-                              </Text>
-                            }
-                          />
-                        )}
-                        {session.type === 'video' && (
-                          <DetailRow
-                            label="Video"
-                            value={
-                              <Text size="sm" c="white">
-                                {toText(videoConfig.mode) ??
-                                  toText(videoConfig.provider) ??
-                                  'Configured'}
-                              </Text>
-                            }
-                          />
-                        )}
-                      </Stack>
-                    </Box>
-                  </>
+                    ))}
+                  </Stack>
+                )}
+
+                {/* Persona metrics */}
+                {counterpartMetrics.slice(0, 3).length > 0 && (
+                  <Stack gap={12}>
+                    <Text
+                      size="xs"
+                      fw={700}
+                      c="violet.3"
+                      tt="uppercase"
+                      style={{ letterSpacing: 0.9 }}
+                    >
+                      Behavioral profile
+                    </Text>
+                    {counterpartMetrics.slice(0, 3).map((metric) => (
+                      <Box key={metric.label}>
+                        <Group justify="space-between" mb={5}>
+                          <Text size="xs" c="dimmed">
+                            {metric.label}
+                          </Text>
+                          <Text size="xs" c="dimmed" fw={500}>
+                            {metric.value}%
+                          </Text>
+                        </Group>
+                        <Progress value={metric.value} color="violet" radius="xl" size="sm" />
+                      </Box>
+                    ))}
+                  </Stack>
                 )}
               </Stack>
             </SurfaceCard>
 
-            {/* ── Context Sources ───────────────────────────── */}
+            {/* What to Expect — preparation notes */}
+            {expectationPoints.length > 0 && (
+              <SurfaceCard
+                title="What to Expect"
+                subtitle="Preparation notes for this session"
+                icon={
+                  <ThemeIcon size={30} color="cyan" variant="light" radius="md">
+                    <IconInfoCircle size={16} />
+                  </ThemeIcon>
+                }
+              >
+                <Stack gap="sm">
+                  {expectationPoints.map((point, i) => (
+                    <Group key={point} gap="sm" align="flex-start" wrap="nowrap">
+                      <ThemeIcon
+                        size={22}
+                        color="cyan"
+                        variant="light"
+                        radius="xl"
+                        mt={1}
+                        style={{ flexShrink: 0 }}
+                      >
+                        <Text size="xs" fw={800} c="cyan.3">
+                          {i + 1}
+                        </Text>
+                      </ThemeIcon>
+                      <Text size="sm" c="gray.2" style={{ lineHeight: 1.65 }}>
+                        {point}
+                      </Text>
+                    </Group>
+                  ))}
+                </Stack>
+              </SurfaceCard>
+            )}
+          </Stack>
+        </Grid.Col>
+
+        {/* ── Right column ────────────────────────────────────────── */}
+        <Grid.Col span={{ base: 12, md: 4 }}>
+          <Stack gap="lg">
+            {/* Session Details */}
             <SurfaceCard
-              title="Context & Attachments"
-              subtitle="Extra signals and documents attached to this session"
+              title="Session Details"
               icon={
-                <ThemeIcon size={30} color="blue" variant="light" radius="md">
-                  <IconCalendarEvent size={16} />
+                <ThemeIcon size={30} color="brand" variant="light" radius="md">
+                  <IconRobot size={16} />
                 </ThemeIcon>
               }
             >
-              <Stack gap="xl">
-                {/* Calendar */}
-                {(calendarProvider || calendarEventStart || calendarAttendees.length > 0) && (
-                  <Box>
-                    <Group gap="xs" mb={10}>
-                      <ThemeIcon size={18} color="blue" variant="light" radius="sm">
-                        <IconCalendar size={11} />
-                      </ThemeIcon>
-                      <Text
-                        size="xs"
-                        fw={700}
-                        c="blue.3"
-                        tt="uppercase"
-                        style={{ letterSpacing: 0.9 }}
-                      >
-                        Calendar Event
-                      </Text>
-                    </Group>
-                    <Stack gap={8}>
-                      {calendarProvider && (
-                        <DetailRow
-                          label="Provider"
-                          value={
-                            <Text size="sm" c="gray.2">
-                              {calendarProvider}
-                            </Text>
-                          }
-                        />
-                      )}
-                      {calendarEventStart && (
-                        <DetailRow
-                          label="Starts"
-                          value={
-                            <Text size="sm" c="gray.2">
-                              {calendarEventStart}
-                            </Text>
-                          }
-                        />
-                      )}
-                      {calendarAttendees.length > 0 && (
-                        <DetailRow
-                          label="Attendees"
-                          value={
-                            <Text size="sm" c="gray.2">
-                              {calendarAttendees.join(', ')}
-                            </Text>
-                          }
-                        />
-                      )}
-                    </Stack>
-                    <Divider color="rgba(111, 140, 205, 0.1)" mt="lg" />
-                  </Box>
+              <Stack gap="lg">
+                {/* Format badges */}
+                <Group gap="xs" wrap="wrap">
+                  <Badge size="md" variant="light" color="blue" radius="md">
+                    {formatSessionType(session.type)}
+                  </Badge>
+                  {durationMinutes != null && (
+                    <Badge size="md" variant="light" color="gray" radius="md">
+                      {durationMinutes} min
+                    </Badge>
+                  )}
+                  <Badge size="md" variant="light" color="grape" radius="md">
+                    {styleDifficulty}
+                  </Badge>
+                  <Badge size="md" variant="light" color="teal" radius="md">
+                    {language}
+                  </Badge>
+                </Group>
+
+                {/* Session cost */}
+                {(coinEstimateLoading || coinEstimate) && (
+                  <>
+                    <Divider color="rgba(111, 140, 205, 0.1)" />
+                    {coinEstimateLoading ? (
+                      <Skeleton height={18} width={100} radius="sm" />
+                    ) : coinEstimate ? (
+                      <Group gap={6} align="center">
+                        <IconCoin size={15} color="var(--mantine-color-yellow-5)" />
+                        <Text size="sm" fw={600} c="yellow.4">
+                          ~{coinEstimate.estimatedCoins} coins
+                        </Text>
+                        <Text size="xs" c="dimmed">
+                          per session
+                        </Text>
+                      </Group>
+                    ) : null}
+                  </>
                 )}
 
-                {/* Attached documents */}
-                {supportAttachments.length > 0 && (
-                  <Box>
-                    <Text
-                      size="xs"
-                      fw={700}
-                      c="blue.3"
-                      tt="uppercase"
-                      style={{ letterSpacing: 0.9 }}
-                      mb={10}
+                <Divider color="rgba(111, 140, 205, 0.1)" />
+
+                {/* AI settings */}
+                <Stack gap={10}>
+                  <DetailRow
+                    label="Tone"
+                    value={
+                      <Text size="sm" c="white">
+                        {toText(config.tone) ?? 'Adaptive'}
+                      </Text>
+                    }
+                  />
+                  <DetailRow
+                    label="Patience"
+                    value={
+                      <Text size="sm" c="white">
+                        {toText(config.patienceLevel) ?? 'Balanced'}
+                      </Text>
+                    }
+                  />
+                  <DetailRow
+                    label="Initiative"
+                    value={
+                      <Text size="sm" c="white">
+                        {toText(config.initiativeLevel) ?? 'Balanced'}
+                      </Text>
+                    }
+                  />
+                  <DetailRow
+                    label="Style"
+                    value={
+                      <Text size="sm" c="white">
+                        {multiTurnLabel}
+                      </Text>
+                    }
+                  />
+                  {(toText(voiceConfig.voice) ||
+                    toText(voiceConfig.provider) ||
+                    counterpartVoice) && (
+                    <DetailRow
+                      label="Voice"
+                      value={
+                        <Text size="sm" c="white">
+                          {toText(voiceConfig.voice) ??
+                            toText(voiceConfig.provider) ??
+                            counterpartVoice}
+                        </Text>
+                      }
+                    />
+                  )}
+                  {(toText(llmConfig.model) || toText(llmConfig.provider)) && (
+                    <DetailRow
+                      label="Model"
+                      value={
+                        <Text size="sm" c="white">
+                          {toText(llmConfig.model) ?? toText(llmConfig.provider)}
+                        </Text>
+                      }
+                    />
+                  )}
+                </Stack>
+              </Stack>
+            </SurfaceCard>
+
+            {/* Skill Focus */}
+            {skillFocus.length > 0 && (
+              <SurfaceCard
+                title="Skill Focus"
+                subtitle="Key areas to work on"
+                icon={
+                  <ThemeIcon size={30} color="indigo" variant="light" radius="md">
+                    <IconBrain size={16} />
+                  </ThemeIcon>
+                }
+              >
+                <Stack gap="md">
+                  {skillFocus.slice(0, 3).map((skill) => (
+                    <Box
+                      key={skill.label}
+                      style={{
+                        borderLeft: '2px solid rgba(129, 140, 248, 0.35)',
+                        paddingLeft: 14,
+                      }}
                     >
-                      Documents
-                    </Text>
-                    <Stack gap={8}>
+                      <Text size="sm" fw={600} c="indigo.3" mb={4}>
+                        {skill.label}
+                      </Text>
+                      <Text size="xs" c="dimmed" style={{ lineHeight: 1.6 }}>
+                        {skill.reason}
+                      </Text>
+                    </Box>
+                  ))}
+                </Stack>
+              </SurfaceCard>
+            )}
+
+            {/* Context — only shown when there's something to display */}
+            {(calendarEventStart ||
+              calendarProvider ||
+              supportAttachments.length > 0 ||
+              tags.length > 0 ||
+              session.crmContextId ||
+              (toText(crmConfig.provider) && crmConfig.connected !== false)) && (
+              <SurfaceCard
+                title="Context"
+                icon={
+                  <ThemeIcon size={30} color="blue" variant="light" radius="md">
+                    <IconCalendar size={16} />
+                  </ThemeIcon>
+                }
+              >
+                <Stack gap="lg">
+                  {/* Calendar event */}
+                  {(calendarEventStart || calendarProvider) && (
+                    <Group gap="xs" align="flex-start" wrap="nowrap">
+                      <ThemeIcon size={22} color="blue" variant="light" radius="md" mt={2}>
+                        <IconCalendar size={12} />
+                      </ThemeIcon>
+                      <Stack gap={2}>
+                        {calendarProvider && (
+                          <Text size="xs" fw={600} c="blue.3">
+                            {calendarProvider}
+                          </Text>
+                        )}
+                        {calendarEventStart && (
+                          <Text size="sm" c="gray.2">
+                            {calendarEventStart}
+                          </Text>
+                        )}
+                        {calendarAttendees.length > 0 && (
+                          <Text size="xs" c="dimmed">
+                            {calendarAttendees.join(', ')}
+                          </Text>
+                        )}
+                      </Stack>
+                    </Group>
+                  )}
+
+                  {/* CRM */}
+                  {(session.crmContextId ||
+                    (toText(crmConfig.provider) && crmConfig.connected !== false)) && (
+                    <DetailRow
+                      label="CRM"
+                      value={
+                        <Text size="sm" c="white">
+                          {toText(crmConfig.provider) ?? toText(crmConfig.source) ?? 'Connected'}
+                        </Text>
+                      }
+                    />
+                  )}
+
+                  {/* Documents */}
+                  {supportAttachments.length > 0 && (
+                    <Stack gap={6}>
                       {supportAttachments.map((filename) => (
                         <Group key={filename} gap="xs" align="center" wrap="nowrap">
                           <ThemeIcon size={22} color="gray" variant="light" radius="md">
@@ -1487,62 +1186,21 @@ export default function SessionDetailPage() {
                         </Group>
                       ))}
                     </Stack>
-                  </Box>
-                )}
+                  )}
 
-                {/* CRM — only show if connected or has a context ID */}
-                {(session.crmContextId ||
-                  (toText(crmConfig.provider) && crmConfig.connected !== false)) && (
-                  <Box>
-                    <Text
-                      size="xs"
-                      fw={700}
-                      c="blue.3"
-                      tt="uppercase"
-                      style={{ letterSpacing: 0.9 }}
-                      mb={10}
-                    >
-                      CRM
-                    </Text>
-                    <DetailRow
-                      label="Source"
-                      value={
-                        <Text size="sm" c="white">
-                          {toText(crmConfig.provider) ?? toText(crmConfig.source) ?? 'Connected'}
-                        </Text>
-                      }
-                    />
-                  </Box>
-                )}
-
-                {/* Tags */}
-                <Box>
-                  <Text
-                    size="xs"
-                    fw={700}
-                    c="blue.3"
-                    tt="uppercase"
-                    style={{ letterSpacing: 0.9 }}
-                    mb={10}
-                  >
-                    Tags
-                  </Text>
-                  {tags.length > 0 ? (
+                  {/* Tags */}
+                  {tags.length > 0 && (
                     <Group gap="xs" wrap="wrap">
                       {tags.map((tag) => (
-                        <Badge key={tag} variant="outline" color="gray" radius="md">
+                        <Badge key={tag} variant="outline" color="gray" radius="md" size="sm">
                           {tag}
                         </Badge>
                       ))}
                     </Group>
-                  ) : (
-                    <Text size="sm" c="dimmed">
-                      No tags attached.
-                    </Text>
                   )}
-                </Box>
-              </Stack>
-            </SurfaceCard>
+                </Stack>
+              </SurfaceCard>
+            )}
           </Stack>
         </Grid.Col>
       </Grid>
