@@ -20,12 +20,15 @@ import {
 } from '@mantine/core'
 import {
   IconArrowLeft,
+  IconBrain,
   IconCalendar,
   IconCalendarEvent,
   IconCoin,
   IconEdit,
+  IconFile,
   IconInfoCircle,
   IconLink,
+  IconMicrophone,
   IconPlayerPlay,
   IconRobot,
   IconTag,
@@ -33,7 +36,6 @@ import {
 } from '@tabler/icons-react'
 import { useEffect, useState, type ReactNode } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { JsonViewer } from '@/components/ui/JsonViewer'
 import { LtiEmbedModal } from '@/components/ui/LtiEmbedModal'
 import { useAuth } from '@/features/auth'
 import type { Session, SessionConfigData } from '@/features/sessions'
@@ -691,32 +693,6 @@ export default function SessionDetailPage() {
     )
   }
 
-  const advancedEntries = Object.entries(rawConfig).filter(([key]) => {
-    const hiddenKeys = new Set([
-      'description',
-      'aiRole',
-      'userRole',
-      'llm',
-      'voice',
-      'video',
-      'scenario',
-      'crm',
-      'objective',
-      'language',
-      'context',
-      'background',
-      'difficulty',
-      'durationMinutes',
-      'calendarEventId',
-      'calendarProvider',
-      'eventStartTime',
-      'attendees',
-      'isSuggestion',
-      'calendarGeneratedDescription',
-    ])
-    return !hiddenKeys.has(key)
-  })
-
   const canModify = Boolean(user?.id && session.userId === user.id)
 
   const heroHighlights = [
@@ -852,10 +828,6 @@ export default function SessionDetailPage() {
 
             <Text size="md" c="gray.3" className={classes.heroSummary}>
               {sessionSummary}
-            </Text>
-
-            <Text size="xs" c="dimmed" className={classes.heroSessionId}>
-              {session.id}
             </Text>
           </Stack>
 
@@ -1227,6 +1199,7 @@ export default function SessionDetailPage() {
 
         <Grid.Col span={{ base: 12, md: 4 }}>
           <Stack gap="lg">
+            {/* ── Session Setup ─────────────────────────────── */}
             <SurfaceCard
               title="Session Setup"
               subtitle="How the AI and delivery are configured"
@@ -1236,157 +1209,225 @@ export default function SessionDetailPage() {
                 </ThemeIcon>
               }
             >
-              <Stack gap="sm">
-                <DetailRow
-                  label="Session type"
-                  value={
-                    <Text size="sm" c="white">
+              <Stack gap="xl">
+                {/* Format chips */}
+                <Box>
+                  <Text
+                    size="xs"
+                    fw={700}
+                    c="blue.3"
+                    tt="uppercase"
+                    style={{ letterSpacing: 0.9 }}
+                    mb={10}
+                  >
+                    Format
+                  </Text>
+                  <Group gap="xs" wrap="wrap">
+                    <Badge size="md" variant="light" color="blue" radius="md">
                       {formatSessionType(session.type)}
-                    </Text>
-                  }
-                />
-                <DetailRow
-                  label="Language"
-                  value={
-                    <Text size="sm" c="white">
+                    </Badge>
+                    {durationMinutes != null && (
+                      <Badge size="md" variant="light" color="gray" radius="md">
+                        {durationMinutes} min
+                      </Badge>
+                    )}
+                    <Badge size="md" variant="light" color="grape" radius="md">
+                      {styleDifficulty}
+                    </Badge>
+                    <Badge size="md" variant="light" color="teal" radius="md">
                       {language}
+                    </Badge>
+                  </Group>
+                </Box>
+
+                {/* Session cost */}
+                {(coinEstimateLoading || coinEstimate) && (
+                  <>
+                    <Divider color="rgba(111, 140, 205, 0.1)" />
+                    <Box>
+                      <Text
+                        size="xs"
+                        fw={700}
+                        c="blue.3"
+                        tt="uppercase"
+                        style={{ letterSpacing: 0.9 }}
+                        mb={10}
+                      >
+                        Session Cost
+                      </Text>
+                      {coinEstimateLoading ? (
+                        <Skeleton height={18} width={100} radius="sm" />
+                      ) : coinEstimate ? (
+                        <Group gap={6} align="center">
+                          <IconCoin size={16} color="var(--mantine-color-yellow-5)" />
+                          <Text size="sm" fw={700} c="yellow.4">
+                            ~{coinEstimate.estimatedCoins} coins
+                          </Text>
+                          <Text size="xs" c="dimmed">
+                            (~${coinEstimate.estimatedCostUsd.toFixed(3)})
+                          </Text>
+                        </Group>
+                      ) : null}
+                    </Box>
+                  </>
+                )}
+
+                <Divider color="rgba(111, 140, 205, 0.1)" />
+
+                {/* AI Behavior */}
+                <Box>
+                  <Group gap="xs" mb={12}>
+                    <ThemeIcon size={18} color="violet" variant="light" radius="sm">
+                      <IconBrain size={11} />
+                    </ThemeIcon>
+                    <Text
+                      size="xs"
+                      fw={700}
+                      c="violet.3"
+                      tt="uppercase"
+                      style={{ letterSpacing: 0.9 }}
+                    >
+                      AI Behavior
                     </Text>
-                  }
-                />
-                <DetailRow
-                  label="Multi-turn"
-                  value={
-                    <Text size="sm" c="white">
-                      {multiTurnLabel}
-                    </Text>
-                  }
-                />
-                <DetailRow
-                  label="AI model"
-                  value={
-                    <Text size="sm" c="white">
-                      {toText(llmConfig.model) ??
-                        toText(llmConfig.provider) ??
-                        'Default configuration'}
-                    </Text>
-                  }
-                />
-                <DetailRow
-                  label="Session cost"
-                  value={
-                    coinEstimateLoading ? (
-                      <Skeleton height={14} width={72} radius="sm" />
-                    ) : coinEstimate ? (
-                      <Group gap={4}>
-                        <IconCoin size={13} color="var(--mantine-color-yellow-5)" />
-                        <Text size="sm" c="yellow.5" fw={700}>
-                          ~{coinEstimate.estimatedCoins} coins
+                  </Group>
+                  <Stack gap={10}>
+                    <DetailRow
+                      label="Model"
+                      value={
+                        <Text size="sm" c="white">
+                          {toText(llmConfig.model) ?? toText(llmConfig.provider) ?? 'Default'}
                         </Text>
-                        <Text size="xs" c="dimmed">
-                          (~${coinEstimate.estimatedCostUsd.toFixed(3)})
+                      }
+                    />
+                    <DetailRow
+                      label="Style"
+                      value={
+                        <Text size="sm" c="white">
+                          {multiTurnLabel}
+                        </Text>
+                      }
+                    />
+                    <DetailRow
+                      label="Tone"
+                      value={
+                        <Text size="sm" c="white">
+                          {toText(config.tone) ?? 'Adaptive'}
+                        </Text>
+                      }
+                    />
+                    <DetailRow
+                      label="Patience"
+                      value={
+                        <Text size="sm" c="white">
+                          {toText(config.patienceLevel) ?? 'Balanced'}
+                        </Text>
+                      }
+                    />
+                    <DetailRow
+                      label="Initiative"
+                      value={
+                        <Text size="sm" c="white">
+                          {toText(config.initiativeLevel) ?? 'Balanced'}
+                        </Text>
+                      }
+                    />
+                    <DetailRow
+                      label="Speech pace"
+                      value={
+                        <Text size="sm" c="white">
+                          {toText(config.speechRate) ?? 'Balanced'}
+                        </Text>
+                      }
+                    />
+                  </Stack>
+                </Box>
+
+                {/* Delivery — voice / video */}
+                {(toText(voiceConfig.voice) ||
+                  toText(voiceConfig.provider) ||
+                  counterpartVoice ||
+                  session.type === 'video') && (
+                  <>
+                    <Divider color="rgba(111, 140, 205, 0.1)" />
+                    <Box>
+                      <Group gap="xs" mb={12}>
+                        <ThemeIcon size={18} color="cyan" variant="light" radius="sm">
+                          <IconMicrophone size={11} />
+                        </ThemeIcon>
+                        <Text
+                          size="xs"
+                          fw={700}
+                          c="cyan.3"
+                          tt="uppercase"
+                          style={{ letterSpacing: 0.9 }}
+                        >
+                          Delivery
                         </Text>
                       </Group>
-                    ) : (
-                      <Text size="sm" c="dimmed">
-                        —
-                      </Text>
-                    )
-                  }
-                />
-                <DetailRow
-                  label="Tone"
-                  value={
-                    <Text size="sm" c="white">
-                      {toText(config.tone) ?? 'Adaptive'}
-                    </Text>
-                  }
-                />
-                <DetailRow
-                  label="Speech pace"
-                  value={
-                    <Text size="sm" c="white">
-                      {toText(config.speechRate) ?? 'Balanced'}
-                    </Text>
-                  }
-                />
-                <DetailRow
-                  label="Response length"
-                  value={
-                    <Text size="sm" c="white">
-                      {toText(config.responseLength) ?? 'Balanced'}
-                    </Text>
-                  }
-                />
-                <DetailRow
-                  label="Patience"
-                  value={
-                    <Text size="sm" c="white">
-                      {toText(config.patienceLevel) ?? 'Balanced'}
-                    </Text>
-                  }
-                />
-                <DetailRow
-                  label="Initiative"
-                  value={
-                    <Text size="sm" c="white">
-                      {toText(config.initiativeLevel) ?? 'Balanced'}
-                    </Text>
-                  }
-                />
-                <DetailRow
-                  label="Voice"
-                  value={
-                    <Text size="sm" c="white">
-                      {toText(voiceConfig.voice) ??
-                        toText(voiceConfig.provider) ??
-                        counterpartVoice ??
-                        'Not configured'}
-                    </Text>
-                  }
-                />
-                <DetailRow
-                  label="Video"
-                  value={
-                    <Text size="sm" c="white">
-                      {toText(videoConfig.mode) ??
-                        toText(videoConfig.provider) ??
-                        (session.type === 'video' ? 'Configured' : 'Not used')}
-                    </Text>
-                  }
-                />
+                      <Stack gap={10}>
+                        {(toText(voiceConfig.voice) ||
+                          toText(voiceConfig.provider) ||
+                          counterpartVoice) && (
+                          <DetailRow
+                            label="Voice"
+                            value={
+                              <Text size="sm" c="white">
+                                {toText(voiceConfig.voice) ??
+                                  toText(voiceConfig.provider) ??
+                                  counterpartVoice}
+                              </Text>
+                            }
+                          />
+                        )}
+                        {session.type === 'video' && (
+                          <DetailRow
+                            label="Video"
+                            value={
+                              <Text size="sm" c="white">
+                                {toText(videoConfig.mode) ??
+                                  toText(videoConfig.provider) ??
+                                  'Configured'}
+                              </Text>
+                            }
+                          />
+                        )}
+                      </Stack>
+                    </Box>
+                  </>
+                )}
               </Stack>
             </SurfaceCard>
 
+            {/* ── Context Sources ───────────────────────────── */}
             <SurfaceCard
-              title="Context Sources"
-              subtitle="Extra signals attached to the session"
+              title="Context & Attachments"
+              subtitle="Extra signals and documents attached to this session"
               icon={
                 <ThemeIcon size={30} color="blue" variant="light" radius="md">
                   <IconCalendarEvent size={16} />
                 </ThemeIcon>
               }
             >
-              <Stack gap="lg">
-                {calendarProvider || calendarEventStart || calendarAttendees.length > 0 ? (
-                  <Card
-                    withBorder
-                    radius="lg"
-                    padding="md"
-                    style={{
-                      background: 'rgba(12, 19, 37, 0.84)',
-                      borderColor: 'rgba(86, 137, 215, 0.18)',
-                    }}
-                  >
-                    <Group gap="xs" mb="sm">
-                      <ThemeIcon size={24} color="blue" variant="light" radius="md">
-                        <IconCalendar size={14} />
+              <Stack gap="xl">
+                {/* Calendar */}
+                {(calendarProvider || calendarEventStart || calendarAttendees.length > 0) && (
+                  <Box>
+                    <Group gap="xs" mb={10}>
+                      <ThemeIcon size={18} color="blue" variant="light" radius="sm">
+                        <IconCalendar size={11} />
                       </ThemeIcon>
-                      <Text size="sm" fw={700} c="white">
-                        Calendar context
+                      <Text
+                        size="xs"
+                        fw={700}
+                        c="blue.3"
+                        tt="uppercase"
+                        style={{ letterSpacing: 0.9 }}
+                      >
+                        Calendar Event
                       </Text>
                     </Group>
-                    <Stack gap="sm">
-                      {calendarProvider ? (
+                    <Stack gap={8}>
+                      {calendarProvider && (
                         <DetailRow
                           label="Provider"
                           value={
@@ -1395,18 +1436,18 @@ export default function SessionDetailPage() {
                             </Text>
                           }
                         />
-                      ) : null}
-                      {calendarEventStart ? (
+                      )}
+                      {calendarEventStart && (
                         <DetailRow
-                          label="Event start"
+                          label="Starts"
                           value={
                             <Text size="sm" c="gray.2">
                               {calendarEventStart}
                             </Text>
                           }
                         />
-                      ) : null}
-                      {calendarAttendees.length > 0 ? (
+                      )}
+                      {calendarAttendees.length > 0 && (
                         <DetailRow
                           label="Attendees"
                           value={
@@ -1415,49 +1456,74 @@ export default function SessionDetailPage() {
                             </Text>
                           }
                         />
-                      ) : null}
+                      )}
                     </Stack>
-                  </Card>
-                ) : null}
+                    <Divider color="rgba(111, 140, 205, 0.1)" mt="lg" />
+                  </Box>
+                )}
 
-                <Stack gap="sm">
-                  <DetailRow
-                    label="CRM source"
-                    value={
-                      <Text size="sm" c="white">
-                        {toText(crmConfig.provider) ??
-                          toText(crmConfig.source) ??
-                          session.crmContextId ??
-                          'None'}
-                      </Text>
-                    }
-                  />
-                  <DetailRow
-                    label="Owner"
-                    value={
-                      <Text size="sm" c="white">
-                        {session.userId}
-                      </Text>
-                    }
-                  />
-                  <DetailRow
-                    label="Workspace"
-                    value={
-                      <Text size="sm" c="white">
-                        {session.orgId}
-                      </Text>
-                    }
-                  />
-                </Stack>
+                {/* Attached documents */}
+                {supportAttachments.length > 0 && (
+                  <Box>
+                    <Text
+                      size="xs"
+                      fw={700}
+                      c="blue.3"
+                      tt="uppercase"
+                      style={{ letterSpacing: 0.9 }}
+                      mb={10}
+                    >
+                      Documents
+                    </Text>
+                    <Stack gap={8}>
+                      {supportAttachments.map((filename) => (
+                        <Group key={filename} gap="xs" align="center" wrap="nowrap">
+                          <ThemeIcon size={22} color="gray" variant="light" radius="md">
+                            <IconFile size={12} />
+                          </ThemeIcon>
+                          <Text size="sm" c="gray.2" style={{ wordBreak: 'break-word', flex: 1 }}>
+                            {filename}
+                          </Text>
+                        </Group>
+                      ))}
+                    </Stack>
+                  </Box>
+                )}
 
+                {/* CRM — only show if connected or has a context ID */}
+                {(session.crmContextId ||
+                  (toText(crmConfig.provider) && crmConfig.connected !== false)) && (
+                  <Box>
+                    <Text
+                      size="xs"
+                      fw={700}
+                      c="blue.3"
+                      tt="uppercase"
+                      style={{ letterSpacing: 0.9 }}
+                      mb={10}
+                    >
+                      CRM
+                    </Text>
+                    <DetailRow
+                      label="Source"
+                      value={
+                        <Text size="sm" c="white">
+                          {toText(crmConfig.provider) ?? toText(crmConfig.source) ?? 'Connected'}
+                        </Text>
+                      }
+                    />
+                  </Box>
+                )}
+
+                {/* Tags */}
                 <Box>
                   <Text
                     size="xs"
                     fw={700}
-                    c="blue.1"
+                    c="blue.3"
                     tt="uppercase"
-                    style={{ letterSpacing: 0.8 }}
-                    mb={8}
+                    style={{ letterSpacing: 0.9 }}
+                    mb={10}
                   >
                     Tags
                   </Text>
@@ -1471,89 +1537,12 @@ export default function SessionDetailPage() {
                     </Group>
                   ) : (
                     <Text size="sm" c="dimmed">
-                      No tags were attached to this session.
+                      No tags attached.
                     </Text>
                   )}
                 </Box>
               </Stack>
             </SurfaceCard>
-
-            {(advancedEntries.length > 0 ||
-              isRecord(session.userSnapshot) ||
-              isRecord(session.orgSnapshot)) && (
-              <SurfaceCard
-                title="Technical Details"
-                subtitle="Reference data for power users"
-                icon={
-                  <ThemeIcon size={30} color="gray" variant="light" radius="md">
-                    <IconInfoCircle size={16} />
-                  </ThemeIcon>
-                }
-              >
-                <Stack gap="md">
-                  {advancedEntries.length > 0 ? (
-                    <Stack gap="sm">
-                      {advancedEntries.map(([key, value]) => (
-                        <DetailRow
-                          key={key}
-                          label={toLabel(key)}
-                          value={
-                            typeof value === 'object' && value !== null ? (
-                              <Box className={classes.jsonViewer}>
-                                <JsonViewer data={value as Record<string, unknown>} />
-                              </Box>
-                            ) : (
-                              <Text size="sm" c="gray.2">
-                                {String(value)}
-                              </Text>
-                            )
-                          }
-                        />
-                      ))}
-                    </Stack>
-                  ) : null}
-
-                  {(isRecord(session.userSnapshot) || isRecord(session.orgSnapshot)) &&
-                  advancedEntries.length > 0 ? (
-                    <Divider color="rgba(111, 140, 205, 0.14)" />
-                  ) : null}
-
-                  {isRecord(session.userSnapshot) ? (
-                    <Stack gap="sm">
-                      <Text
-                        size="xs"
-                        fw={700}
-                        c="gray.3"
-                        tt="uppercase"
-                        style={{ letterSpacing: 0.8 }}
-                      >
-                        User snapshot
-                      </Text>
-                      <Box className={classes.jsonViewer}>
-                        <JsonViewer data={session.userSnapshot} />
-                      </Box>
-                    </Stack>
-                  ) : null}
-
-                  {isRecord(session.orgSnapshot) ? (
-                    <Stack gap="sm">
-                      <Text
-                        size="xs"
-                        fw={700}
-                        c="gray.3"
-                        tt="uppercase"
-                        style={{ letterSpacing: 0.8 }}
-                      >
-                        Org snapshot
-                      </Text>
-                      <Box className={classes.jsonViewer}>
-                        <JsonViewer data={session.orgSnapshot} />
-                      </Box>
-                    </Stack>
-                  ) : null}
-                </Stack>
-              </SurfaceCard>
-            )}
           </Stack>
         </Grid.Col>
       </Grid>

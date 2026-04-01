@@ -9,6 +9,7 @@ import {
   Group,
   Loader,
   NumberInput,
+  Pagination,
   Progress,
   SimpleGrid,
   Stack,
@@ -100,6 +101,8 @@ const LEDGER_COLOR: Record<string, string> = {
   UPGRADE: 'violet',
 }
 
+const HISTORY_PAGE_SIZE = 12
+
 // ── helpers ───────────────────────────────────────────────────────────────────
 function periodPacingLabel(
   usedPct: number,
@@ -146,6 +149,7 @@ export default function SubscriptionPage() {
   const [switchingPlan, setSwitchingPlan] = useState<string | null>(null)
   const [submittingRefill, setSubmittingRefill] = useState(false)
   const [topupOpen, setTopupOpen] = useState(false)
+  const [historyPage, setHistoryPage] = useState(1)
   const [mounted, setMounted] = useState(false)
   const previousRefillStatusRef = useRef<RefillStatus | null>(null)
 
@@ -195,6 +199,9 @@ export default function SubscriptionPage() {
     : null
 
   const barColor = usedPct >= 90 ? 'red' : usedPct >= 70 ? 'orange' : 'teal'
+  const historyTotalPages = Math.max(1, Math.ceil(ledger.length / HISTORY_PAGE_SIZE))
+  const historyStartIndex = (historyPage - 1) * HISTORY_PAGE_SIZE
+  const historyEntries = ledger.slice(historyStartIndex, historyStartIndex + HISTORY_PAGE_SIZE)
 
   const syncWorkspaceContext = useCallback(
     async (teamId: string) => {
@@ -300,6 +307,10 @@ export default function SubscriptionPage() {
     }
     previousRefillStatusRef.current = nextStatus
   }, [refillRequest?.status])
+
+  useEffect(() => {
+    setHistoryPage((current) => Math.min(current, historyTotalPages))
+  }, [historyTotalPages])
 
   const handleSwitchPlan = async (plan: Plan) => {
     setSwitchingPlan(plan.id)
@@ -408,7 +419,7 @@ export default function SubscriptionPage() {
 
   // ── render ──────────────────────────────────────────────────────────────────
   return (
-    <Box style={{ position: 'relative', minHeight: '100%' }}>
+    <Box style={{ position: 'relative', minHeight: '100%', width: '100%' }}>
       {/* ── Page background blobs (scoped to subscription page) ────────────
           Sits behind everything via zIndex 0. Complements the global
           app-layout orbs with credit/coin-themed accent gradients.      */}
@@ -459,13 +470,51 @@ export default function SubscriptionPage() {
           zIndex: 1,
           display: 'flex',
           justifyContent: 'center',
-          padding: 'var(--mantine-spacing-xl)',
+          padding: 'clamp(12px, 2vw, 28px)',
         }}
       >
         <style>{`
         @keyframes sub-rise {
           from { opacity: 0; transform: translateY(14px); }
           to   { opacity: 1; transform: translateY(0); }
+        }
+        .subscription-shell {
+          position: relative;
+          width: min(100%, 1020px);
+          min-height: calc(100dvh - 136px);
+          padding: clamp(16px, 2.4vw, 32px);
+          border-radius: 28px;
+          border: 1px solid color-mix(in srgb, var(--pitch-card-border, var(--mantine-color-default-border)) 78%, transparent);
+          background:
+            linear-gradient(145deg,
+              color-mix(in srgb, var(--pitch-card-bg, var(--mantine-color-body)) 84%, transparent) 0%,
+              color-mix(in srgb, var(--pitch-card-bg-strong, var(--pitch-card-bg, var(--mantine-color-body))) 86%, transparent) 54%,
+              color-mix(in srgb, var(--pitch-card-bg, var(--mantine-color-body)) 92%, transparent) 100%);
+          box-shadow:
+            0 24px 60px color-mix(in srgb, #020816 38%, transparent),
+            inset 0 1px 0 color-mix(in srgb, #fff 10%, transparent);
+          backdrop-filter: blur(10px);
+          overflow: hidden;
+        }
+        .subscription-shell::before {
+          content: '';
+          position: absolute;
+          inset: -40% -28% auto auto;
+          width: 520px;
+          height: 300px;
+          background: radial-gradient(circle, color-mix(in srgb, var(--pitch-accent-strong) 22%, transparent) 0%, transparent 70%);
+          pointer-events: none;
+          opacity: 0.78;
+        }
+        .subscription-shell::after {
+          content: '';
+          position: absolute;
+          inset: auto auto -42% -20%;
+          width: 520px;
+          height: 260px;
+          background: radial-gradient(circle, color-mix(in srgb, var(--pitch-selected, var(--pitch-accent)) 18%, transparent) 0%, transparent 74%);
+          pointer-events: none;
+          opacity: 0.64;
         }
         .s1 { animation: sub-rise 0.38s cubic-bezier(.22,1,.36,1) 0.00s both; }
         .s2 { animation: sub-rise 0.38s cubic-bezier(.22,1,.36,1) 0.07s both; }
@@ -478,607 +527,634 @@ export default function SubscriptionPage() {
           transform: translateY(-1px);
           box-shadow: 0 8px 20px color-mix(in srgb, #000 14%, transparent);
         }
+        @media (max-width: 48em) {
+          .subscription-shell {
+            min-height: auto;
+            border-radius: 20px;
+          }
+        }
       `}</style>
 
-        <Stack
-          gap="xl"
-          w="100%"
-          maw={760}
+        <Box
+          className="subscription-shell"
           style={{ opacity: mounted ? 1 : 0, transition: 'opacity 0.12s' }}
         >
-          {/* ── 1. CREDIT BALANCE HERO ─────────────────────────────────────────
+          <Stack gap="lg" w="100%" style={{ position: 'relative', zIndex: 1 }}>
+            {/* ── 1. CREDIT BALANCE HERO ─────────────────────────────────────────
             The dominant element. Inspired by OpenAI's credit balance card and
             Vercel's usage page — one big number, meaningful context, pacing. */}
-          <Box
-            className="s1"
-            p="xl"
-            style={{
-              borderRadius: 20,
-              border: '1px solid var(--pitch-card-border, var(--mantine-color-default-border))',
-              background: `linear-gradient(160deg,
+            <Box
+              className="s1"
+              p={{ base: 'lg', sm: 'xl' }}
+              style={{
+                borderRadius: 20,
+                border: '1px solid var(--pitch-card-border, var(--mantine-color-default-border))',
+                background: `linear-gradient(160deg,
               color-mix(in srgb, var(--pitch-card-bg, var(--mantine-color-body)) 100%, transparent) 0%,
               color-mix(in srgb, var(--pitch-card-bg-strong, var(--pitch-card-bg, var(--mantine-color-body))) 88%, transparent) 100%)`,
-            }}
-          >
-            {/* Plan row */}
-            <Group justify="space-between" align="center" mb="lg">
-              <Group gap="sm">
-                {currentPlan ? (
-                  <Badge
-                    color={LEVEL_COLOR[currentPlan.planLevel] ?? 'gray'}
-                    variant="filled"
-                    size="sm"
-                    radius="sm"
-                    style={{ letterSpacing: '0.05em', fontWeight: 700 }}
-                  >
-                    {currentPlan.planLevel}
-                  </Badge>
-                ) : null}
-                <Badge variant="light" color={isPersonal ? 'gray' : 'blue'} size="sm" radius="sm">
-                  {isPersonal ? 'Personal' : (teamDisplayName ?? 'Team')}
-                </Badge>
-                <Text size="sm" fw={600} style={{ color: 'var(--pitch-surface-text)' }}>
-                  {currentPlan?.name ?? 'No active plan'}
-                </Text>
-              </Group>
-              {subscription && (
-                <Text size="xs" c="dimmed">
-                  Resets{' '}
-                  {new Date(subscription.currentPeriodEnd).toLocaleDateString('en-US', {
-                    month: 'short',
-                    day: 'numeric',
-                    year: 'numeric',
-                  })}
-                </Text>
-              )}
-            </Group>
-
-            {/* The big number */}
-            {teamBalance.isLoading ? (
-              <Loader size="sm" my="xl" />
-            ) : balance ? (
-              <>
-                <Stack gap={6} mb="xl">
-                  <Group gap="md" align="flex-end" wrap="nowrap">
-                    <Text
-                      fz={{ base: 52, sm: 68 }}
-                      fw={900}
-                      lh={1}
-                      style={{
-                        color: 'var(--pitch-surface-text)',
-                        fontVariantNumeric: 'tabular-nums',
-                        letterSpacing: '-0.03em',
-                      }}
+              }}
+            >
+              {/* Plan row */}
+              <Group justify="space-between" align="center" mb="lg" wrap="wrap">
+                <Group gap="sm">
+                  {currentPlan ? (
+                    <Badge
+                      color={LEVEL_COLOR[currentPlan.planLevel] ?? 'gray'}
+                      variant="filled"
+                      size="sm"
+                      radius="sm"
+                      style={{ letterSpacing: '0.05em', fontWeight: 700 }}
                     >
-                      {balance.remaining.toLocaleString()}
-                    </Text>
-                    {usedPct >= 70 && (
-                      <Badge color={barColor} variant="light" size="md" mb={8}>
-                        {usedPct >= 90 ? '⚠ Low' : 'High usage'}
-                      </Badge>
-                    )}
-                  </Group>
+                      {currentPlan.planLevel}
+                    </Badge>
+                  ) : null}
+                  <Badge variant="light" color={isPersonal ? 'gray' : 'blue'} size="sm" radius="sm">
+                    {isPersonal ? 'Personal' : (teamDisplayName ?? 'Team')}
+                  </Badge>
+                  <Text size="sm" fw={600} style={{ color: 'var(--pitch-surface-text)' }}>
+                    {currentPlan?.name ?? 'No active plan'}
+                  </Text>
+                </Group>
+                {subscription && (
+                  <Text size="xs" c="dimmed">
+                    Resets{' '}
+                    {new Date(subscription.currentPeriodEnd).toLocaleDateString('en-US', {
+                      month: 'short',
+                      day: 'numeric',
+                      year: 'numeric',
+                    })}
+                  </Text>
+                )}
+              </Group>
 
-                  <Group gap="xs" align="center">
-                    <Text size="sm" c="dimmed">
-                      {isPersonal ? 'personal' : (teamDisplayName ?? 'team')} credits remaining
-                    </Text>
-                    {sessionsLeft !== null && (
-                      <>
-                        <Text c="dimmed" size="sm">
-                          ·
-                        </Text>
-                        <Text size="sm" c="dimmed">
-                          <Text span fw={600} style={{ color: 'var(--pitch-surface-text)' }}>
-                            ≈{sessionsLeft.toLocaleString()}
-                          </Text>{' '}
-                          sessions left
-                        </Text>
-                      </>
-                    )}
-                    {currentPlan && (
-                      <Tooltip
-                        label={`${currentPlan.coinCostPerSession} credits/session · $${currentPlan.coinPriceUsd.toFixed(3)}/credit`}
-                        withArrow
-                        fz="xs"
-                      >
-                        <Box style={{ cursor: 'help', display: 'flex', alignItems: 'center' }}>
-                          <IconInfoCircle
-                            size={13}
-                            style={{ color: 'var(--mantine-color-dimmed)' }}
-                          />
-                        </Box>
-                      </Tooltip>
-                    )}
-                  </Group>
-                </Stack>
-
-                {/* Progress bar */}
-                <Progress
-                  value={usedPct}
-                  size={10}
-                  radius="xl"
-                  color={barColor}
-                  mb={10}
-                  style={{
-                    background:
-                      'color-mix(in srgb, var(--pitch-card-border, var(--mantine-color-default-border)) 90%, transparent)',
-                  }}
-                />
-
-                {/* Below bar: stats + pacing + CTA */}
-                <Group justify="space-between" align="center" wrap="nowrap">
-                  <Group gap="lg" wrap="wrap">
-                    <Stack gap={0}>
-                      <Text size="xs" c="dimmed">
-                        Used
-                      </Text>
+              {/* The big number */}
+              {teamBalance.isLoading ? (
+                <Loader size="sm" my="xl" />
+              ) : balance ? (
+                <>
+                  <Stack gap={6} mb="xl">
+                    <Group gap="md" align="flex-end" wrap="nowrap">
                       <Text
-                        size="xs"
-                        fw={600}
+                        fz={{ base: 52, sm: 68 }}
+                        fw={900}
+                        lh={1}
                         style={{
                           color: 'var(--pitch-surface-text)',
                           fontVariantNumeric: 'tabular-nums',
+                          letterSpacing: '-0.03em',
                         }}
                       >
-                        {usedCoins.toLocaleString()} of {balance.allowance.toLocaleString()}
+                        {balance.remaining.toLocaleString()}
                       </Text>
-                    </Stack>
+                      {usedPct >= 70 && (
+                        <Badge color={barColor} variant="light" size="md" mb={8}>
+                          {usedPct >= 90 ? '⚠ Low' : 'High usage'}
+                        </Badge>
+                      )}
+                    </Group>
 
-                    {daysLeft !== null && (
+                    <Group gap="xs" align="center">
+                      <Text size="sm" c="dimmed">
+                        {isPersonal ? 'personal' : (teamDisplayName ?? 'team')} credits remaining
+                      </Text>
+                      {sessionsLeft !== null && (
+                        <>
+                          <Text c="dimmed" size="sm">
+                            ·
+                          </Text>
+                          <Text size="sm" c="dimmed">
+                            <Text span fw={600} style={{ color: 'var(--pitch-surface-text)' }}>
+                              ≈{sessionsLeft.toLocaleString()}
+                            </Text>{' '}
+                            sessions left
+                          </Text>
+                        </>
+                      )}
+                      {currentPlan && (
+                        <Tooltip
+                          label={`${currentPlan.coinCostPerSession} credits/session · $${currentPlan.coinPriceUsd.toFixed(3)}/credit`}
+                          withArrow
+                          fz="xs"
+                        >
+                          <Box style={{ cursor: 'help', display: 'flex', alignItems: 'center' }}>
+                            <IconInfoCircle
+                              size={13}
+                              style={{ color: 'var(--mantine-color-dimmed)' }}
+                            />
+                          </Box>
+                        </Tooltip>
+                      )}
+                    </Group>
+                  </Stack>
+
+                  {/* Progress bar */}
+                  <Progress
+                    value={usedPct}
+                    size={10}
+                    radius="xl"
+                    color={barColor}
+                    mb={10}
+                    style={{
+                      background:
+                        'color-mix(in srgb, var(--pitch-card-border, var(--mantine-color-default-border)) 90%, transparent)',
+                    }}
+                  />
+
+                  {/* Below bar: stats + pacing + CTA */}
+                  <Group justify="space-between" align="center" wrap="nowrap">
+                    <Group gap="lg" wrap="wrap">
                       <Stack gap={0}>
                         <Text size="xs" c="dimmed">
-                          Days left
+                          Used
                         </Text>
-                        <Text size="xs" fw={600} style={{ color: 'var(--pitch-surface-text)' }}>
-                          {daysLeft}
-                        </Text>
-                      </Stack>
-                    )}
-
-                    {pacing && (
-                      <Group gap={4}>
-                        <IconTrendingUp
-                          size={12}
-                          style={{ color: `var(--mantine-color-${pacing.color}-5)` }}
-                        />
                         <Text
                           size="xs"
-                          style={{ color: `var(--mantine-color-${pacing.color}-5)` }}
-                          fw={500}
-                        >
-                          {pacing.label}
-                        </Text>
-                      </Group>
-                    )}
-                  </Group>
-
-                  {/* Primary CTA */}
-                  {refillRequest?.status === 'pending' ? (
-                    <Button
-                      size="xs"
-                      variant="default"
-                      leftSection={<IconClock size={13} />}
-                      style={{ cursor: 'default' }}
-                      disabled
-                    >
-                      Top-up pending
-                    </Button>
-                  ) : (
-                    <Button
-                      size="xs"
-                      variant="default"
-                      leftSection={<IconRefresh size={13} />}
-                      onClick={() => setTopupOpen((v) => !v)}
-                    >
-                      {topupOpen ? 'Cancel' : 'Request top-up'}
-                    </Button>
-                  )}
-                </Group>
-              </>
-            ) : (
-              <Text size="sm" c="dimmed" my="md">
-                No balance data available.
-              </Text>
-            )}
-          </Box>
-
-          {/* ── 2. TOP-UP FORM (inline, progressive disclosure) ──────────────── */}
-          {topupOpen && refillRequest?.status !== 'pending' && (
-            <Box
-              className="s1"
-              px="lg"
-              py="md"
-              style={{
-                borderRadius: 14,
-                border: '1px solid var(--pitch-card-border, var(--mantine-color-default-border))',
-                background:
-                  'color-mix(in srgb, var(--pitch-card-bg, var(--mantine-color-body)) 70%, transparent)',
-              }}
-            >
-              <Text size="sm" fw={600} mb={2} style={{ color: 'var(--pitch-surface-text)' }}>
-                Request additional credits
-              </Text>
-              <Text size="xs" c="dimmed" mb="sm">
-                {adminTopupsApplyImmediately
-                  ? 'Admin requests are applied immediately to your personal credits.'
-                  : 'An admin will review and may approve a different amount.'}
-              </Text>
-              <Group align="flex-end" gap="sm">
-                <NumberInput
-                  label="Credits requested"
-                  placeholder="500"
-                  min={1}
-                  step={100}
-                  value={requestedCoins}
-                  onChange={(v) => setRequestedCoins(typeof v === 'number' ? v : Number(v) || 0)}
-                  size="sm"
-                  style={{ flex: 1, maxWidth: 200 }}
-                  styles={{
-                    input: {
-                      background: 'var(--pitch-input-bg, var(--pitch-card-bg))',
-                      border:
-                        '1px solid var(--pitch-card-border, var(--mantine-color-default-border))',
-                    },
-                  }}
-                />
-                <Button
-                  size="sm"
-                  loading={submittingRefill}
-                  disabled={requestedCoins <= 0}
-                  onClick={handleRefillRequest}
-                  style={{ background: 'var(--pitch-accent-strong)' }}
-                >
-                  Submit
-                </Button>
-              </Group>
-            </Box>
-          )}
-
-          {/* ── 3. TOP-UP STATUS BANNER ──────────────────────────────────────── */}
-          {refillRequest && (
-            <Box
-              className="s2"
-              px="md"
-              py="sm"
-              style={{
-                borderRadius: 12,
-                border: `1px solid var(--mantine-color-${
-                  refillRequest.status === 'pending'
-                    ? 'yellow'
-                    : refillRequest.status === 'approved'
-                      ? 'teal'
-                      : 'red'
-                }-light-hover)`,
-                background: `color-mix(in srgb, var(--mantine-color-${
-                  refillRequest.status === 'pending'
-                    ? 'yellow'
-                    : refillRequest.status === 'approved'
-                      ? 'teal'
-                      : 'red'
-                }-light) 35%, transparent)`,
-              }}
-            >
-              <Group justify="space-between" align="center" wrap="nowrap">
-                <Group gap="sm" align="center">
-                  <ThemeIcon
-                    size={26}
-                    radius="md"
-                    color={
-                      refillRequest.status === 'pending'
-                        ? 'yellow'
-                        : refillRequest.status === 'approved'
-                          ? 'teal'
-                          : 'red'
-                    }
-                    variant="light"
-                  >
-                    {refillRequest.status === 'pending' ? (
-                      <IconClock size={13} />
-                    ) : refillRequest.status === 'approved' ? (
-                      <IconCheck size={13} />
-                    ) : (
-                      <IconX size={13} />
-                    )}
-                  </ThemeIcon>
-                  <Stack gap={1}>
-                    <Text size="sm" fw={600} style={{ color: 'var(--pitch-surface-text)' }}>
-                      {refillRequest.status === 'pending'
-                        ? `${refillRequest.requestedCoins.toLocaleString()} credits under review`
-                        : refillRequest.status === 'approved'
-                          ? `${refillRequest.approvedCoins?.toLocaleString()} credits approved`
-                          : 'Request not approved'}
-                    </Text>
-                    <Text size="xs" c="dimmed">
-                      {new Date(refillRequest.requestedAt).toLocaleDateString('en-US', {
-                        month: 'short',
-                        day: 'numeric',
-                      })}
-                      {refillRequest.reviewedBy ? ` · ${refillRequest.reviewedBy}` : ''}
-                    </Text>
-                  </Stack>
-                </Group>
-
-                {refillRequest.status === 'denied' && (
-                  <Button
-                    size="xs"
-                    variant="subtle"
-                    onClick={() => {
-                      setTopupOpen(true)
-                    }}
-                  >
-                    Request again
-                  </Button>
-                )}
-              </Group>
-            </Box>
-          )}
-
-          {/* ── 4. PLANS ─────────────────────────────────────────────────────────
-            Inspired by Linear: highlight current plan clearly, show the one
-            key differentiator (credits), reduce repetition across cards. */}
-          <Box className="s3">
-            <Group justify="space-between" align="center" mb="md">
-              <Text
-                size="xs"
-                fw={700}
-                tt="uppercase"
-                c="dimmed"
-                style={{ letterSpacing: '0.08em' }}
-              >
-                Plan
-              </Text>
-              <Text size="xs" c="dimmed">
-                Looking for team subscription?{' '}
-                <Link
-                  href="/studio/team-config"
-                  style={{ color: 'var(--pitch-accent-strong)', textDecoration: 'none' }}
-                >
-                  Manage it here →
-                </Link>
-              </Text>
-            </Group>
-
-            <SimpleGrid cols={{ base: 2, sm: 4 }} spacing="sm">
-              {plans.map((plan) => {
-                const isCurrent = plan.id === currentPlan?.id
-                const pendingChange = subscription?.metadata?.pendingPlanChange
-                const isPending = pendingChange?.requestedPlanId === plan.id
-                const hasPendingChange = !!pendingChange
-                return (
-                  <Box
-                    key={plan.id}
-                    className={isCurrent ? undefined : 'plan-tile'}
-                    p="md"
-                    style={{
-                      borderRadius: 14,
-                      border: isCurrent
-                        ? '1.5px solid var(--pitch-accent-strong)'
-                        : isPending
-                          ? '1.5px solid var(--mantine-color-yellow-6)'
-                          : '1px solid var(--pitch-card-border, var(--mantine-color-default-border))',
-                      background: isCurrent
-                        ? 'color-mix(in srgb, var(--pitch-accent-strong) 7%, var(--pitch-card-bg, var(--mantine-color-body)))'
-                        : isPending
-                          ? 'color-mix(in srgb, var(--mantine-color-yellow-light) 30%, var(--pitch-card-bg, var(--mantine-color-body)))'
-                          : 'color-mix(in srgb, var(--pitch-card-bg, var(--mantine-color-body)) 75%, transparent)',
-                      boxShadow: isCurrent
-                        ? '0 0 0 3px color-mix(in srgb, var(--pitch-accent-strong) 10%, transparent)'
-                        : undefined,
-                    }}
-                  >
-                    <Stack gap="sm" h="100%">
-                      <Group justify="space-between" align="flex-start">
-                        <Badge
-                          color={LEVEL_COLOR[plan.planLevel] ?? 'gray'}
-                          variant={isCurrent ? 'filled' : 'light'}
-                          size="xs"
-                          radius="sm"
-                        >
-                          {plan.planLevel}
-                        </Badge>
-                        {isCurrent && (
-                          <ThemeIcon size={16} radius="xl" color="teal" variant="light">
-                            <IconCheck size={9} />
-                          </ThemeIcon>
-                        )}
-                        {isPending && (
-                          <ThemeIcon size={16} radius="xl" color="yellow" variant="light">
-                            <IconClock size={9} />
-                          </ThemeIcon>
-                        )}
-                      </Group>
-
-                      {/* Key differentiator: credits per period */}
-                      <Stack gap={1}>
-                        <Text
-                          fw={800}
-                          fz={22}
-                          lh={1}
+                          fw={600}
                           style={{
                             color: 'var(--pitch-surface-text)',
                             fontVariantNumeric: 'tabular-nums',
                           }}
                         >
-                          {plan.maxCoins >= 1_000_000
-                            ? '∞'
-                            : plan.maxCoins >= 1000
-                              ? `${(plan.maxCoins / 1000).toFixed(0)}k`
-                              : plan.maxCoins.toLocaleString()}
-                        </Text>
-                        <Text size="xs" c="dimmed">
-                          credits / period
+                          {usedCoins.toLocaleString()} of {balance.allowance.toLocaleString()}
                         </Text>
                       </Stack>
 
-                      {/* Session count as context */}
-                      {plan.coinCostPerSession > 0 ? (
-                        <Text size="xs" c="dimmed">
-                          ≈{Math.floor(plan.maxCoins / plan.coinCostPerSession).toLocaleString()}{' '}
-                          sessions
-                        </Text>
-                      ) : (
-                        <Text size="xs" c="dimmed">
-                          Unlimited sessions
-                        </Text>
+                      {daysLeft !== null && (
+                        <Stack gap={0}>
+                          <Text size="xs" c="dimmed">
+                            Days left
+                          </Text>
+                          <Text size="xs" fw={600} style={{ color: 'var(--pitch-surface-text)' }}>
+                            {daysLeft}
+                          </Text>
+                        </Stack>
                       )}
 
-                      {isCurrent ? (
-                        <Text size="xs" c="dimmed" mt="auto" pt="xs">
-                          Current plan
-                        </Text>
-                      ) : isPending ? (
-                        <Text size="xs" c="yellow.7" fw={600} mt="auto" pt="xs">
-                          Pending review
-                        </Text>
-                      ) : (
-                        <Button
-                          size="xs"
-                          variant="default"
-                          fullWidth
-                          mt="auto"
-                          loading={switchingPlan === plan.id}
-                          disabled={hasPendingChange || !user?.id}
-                          rightSection={<IconBolt size={11} />}
-                          onClick={() => handleSwitchPlan(plan)}
-                          style={{ marginTop: 8 }}
-                        >
-                          Switch
-                        </Button>
+                      {pacing && (
+                        <Group gap={4}>
+                          <IconTrendingUp
+                            size={12}
+                            style={{ color: `var(--mantine-color-${pacing.color}-5)` }}
+                          />
+                          <Text
+                            size="xs"
+                            style={{ color: `var(--mantine-color-${pacing.color}-5)` }}
+                            fw={500}
+                          >
+                            {pacing.label}
+                          </Text>
+                        </Group>
                       )}
-                    </Stack>
-                  </Box>
-                )
-              })}
-            </SimpleGrid>
-          </Box>
+                    </Group>
 
-          {/* ── 5. CREDIT HISTORY ────────────────────────────────────────────────
-            Clean table — color-coded amounts, no card nesting, scannable.
-            Green = credits added, red = credits spent. */}
-          {ledger.length > 0 && (
-            <Box className="s4">
-              <Divider
-                mb="lg"
-                style={{
-                  borderColor: 'var(--pitch-card-border, var(--mantine-color-default-border))',
-                }}
-              />
+                    {/* Primary CTA */}
+                    {refillRequest?.status === 'pending' ? (
+                      <Button
+                        size="xs"
+                        variant="default"
+                        leftSection={<IconClock size={13} />}
+                        style={{ cursor: 'default' }}
+                        disabled
+                      >
+                        Top-up pending
+                      </Button>
+                    ) : (
+                      <Button
+                        size="xs"
+                        variant="default"
+                        leftSection={<IconRefresh size={13} />}
+                        onClick={() => setTopupOpen((v) => !v)}
+                      >
+                        {topupOpen ? 'Cancel' : 'Request top-up'}
+                      </Button>
+                    )}
+                  </Group>
+                </>
+              ) : (
+                <Text size="sm" c="dimmed" my="md">
+                  No balance data available.
+                </Text>
+              )}
+            </Box>
 
-              <Text
-                size="xs"
-                fw={700}
-                tt="uppercase"
-                c="dimmed"
-                mb="md"
-                style={{ letterSpacing: '0.08em' }}
-              >
-                Credit history
-              </Text>
-
+            {/* ── 2. TOP-UP FORM (inline, progressive disclosure) ──────────────── */}
+            {topupOpen && refillRequest?.status !== 'pending' && (
               <Box
+                className="s1"
+                px="lg"
+                py="md"
+                style={{
+                  borderRadius: 14,
+                  border: '1px solid var(--pitch-card-border, var(--mantine-color-default-border))',
+                  background:
+                    'color-mix(in srgb, var(--pitch-card-bg, var(--mantine-color-body)) 70%, transparent)',
+                }}
+              >
+                <Text size="sm" fw={600} mb={2} style={{ color: 'var(--pitch-surface-text)' }}>
+                  Request additional credits
+                </Text>
+                <Text size="xs" c="dimmed" mb="sm">
+                  {adminTopupsApplyImmediately
+                    ? 'Admin requests are applied immediately to your personal credits.'
+                    : 'An admin will review and may approve a different amount.'}
+                </Text>
+                <Group align="flex-end" gap="sm">
+                  <NumberInput
+                    label="Credits requested"
+                    placeholder="500"
+                    min={1}
+                    step={100}
+                    value={requestedCoins}
+                    onChange={(v) => setRequestedCoins(typeof v === 'number' ? v : Number(v) || 0)}
+                    size="sm"
+                    style={{ flex: 1, maxWidth: 200 }}
+                    styles={{
+                      input: {
+                        background: 'var(--pitch-input-bg, var(--pitch-card-bg))',
+                        border:
+                          '1px solid var(--pitch-card-border, var(--mantine-color-default-border))',
+                      },
+                    }}
+                  />
+                  <Button
+                    size="sm"
+                    loading={submittingRefill}
+                    disabled={requestedCoins <= 0}
+                    onClick={handleRefillRequest}
+                    style={{ background: 'var(--pitch-accent-strong)' }}
+                  >
+                    Submit
+                  </Button>
+                </Group>
+              </Box>
+            )}
+
+            {/* ── 3. TOP-UP STATUS BANNER ──────────────────────────────────────── */}
+            {refillRequest && (
+              <Box
+                className="s2"
+                px="md"
+                py="sm"
                 style={{
                   borderRadius: 12,
-                  border: '1px solid var(--pitch-card-border, var(--mantine-color-default-border))',
-                  overflow: 'hidden',
+                  border: `1px solid var(--mantine-color-${
+                    refillRequest.status === 'pending'
+                      ? 'yellow'
+                      : refillRequest.status === 'approved'
+                        ? 'teal'
+                        : 'red'
+                  }-light-hover)`,
+                  background: `color-mix(in srgb, var(--mantine-color-${
+                    refillRequest.status === 'pending'
+                      ? 'yellow'
+                      : refillRequest.status === 'approved'
+                        ? 'teal'
+                        : 'red'
+                  }-light) 35%, transparent)`,
                 }}
               >
-                <Table verticalSpacing={10} horizontalSpacing="md">
-                  <Table.Thead
-                    style={{
-                      background:
-                        'color-mix(in srgb, var(--pitch-card-bg, var(--mantine-color-body)) 50%, transparent)',
-                    }}
-                  >
-                    <Table.Tr>
-                      {['Event', 'Credits', 'Balance', 'Date'].map((h) => (
-                        <Table.Th key={h}>
-                          <Text size="xs" c="dimmed" fw={600}>
-                            {h}
-                          </Text>
-                        </Table.Th>
-                      ))}
-                    </Table.Tr>
-                  </Table.Thead>
-                  <Table.Tbody>
-                    {ledger.slice(0, 20).map((entry, idx) => {
-                      const raw =
-                        entry.type === 'RESERVE' && entry.estimatedCoins != null
-                          ? -entry.estimatedCoins
-                          : (entry.type === 'ADJUST' || entry.type === 'UPGRADE') &&
-                              entry.deltaCoins != null
-                            ? entry.deltaCoins
-                            : entry.type === 'REFILL' && entry.deltaCoins != null
-                              ? entry.deltaCoins
-                              : entry.type === 'REFILL' && entry.allowance != null
-                                ? entry.allowance
-                                : null
+                <Group justify="space-between" align="center" wrap="nowrap">
+                  <Group gap="sm" align="center">
+                    <ThemeIcon
+                      size={26}
+                      radius="md"
+                      color={
+                        refillRequest.status === 'pending'
+                          ? 'yellow'
+                          : refillRequest.status === 'approved'
+                            ? 'teal'
+                            : 'red'
+                      }
+                      variant="light"
+                    >
+                      {refillRequest.status === 'pending' ? (
+                        <IconClock size={13} />
+                      ) : refillRequest.status === 'approved' ? (
+                        <IconCheck size={13} />
+                      ) : (
+                        <IconX size={13} />
+                      )}
+                    </ThemeIcon>
+                    <Stack gap={1}>
+                      <Text size="sm" fw={600} style={{ color: 'var(--pitch-surface-text)' }}>
+                        {refillRequest.status === 'pending'
+                          ? `${refillRequest.requestedCoins.toLocaleString()} credits under review`
+                          : refillRequest.status === 'approved'
+                            ? `${refillRequest.approvedCoins?.toLocaleString()} credits approved`
+                            : 'Request not approved'}
+                      </Text>
+                      <Text size="xs" c="dimmed">
+                        {new Date(refillRequest.requestedAt).toLocaleDateString('en-US', {
+                          month: 'short',
+                          day: 'numeric',
+                        })}
+                        {refillRequest.reviewedBy ? ` · ${refillRequest.reviewedBy}` : ''}
+                      </Text>
+                    </Stack>
+                  </Group>
 
-                      const amountStr =
-                        raw === null ? '—' : `${raw > 0 ? '+' : ''}${raw.toLocaleString()}`
-                      const amountColor =
-                        raw === null
-                          ? undefined
-                          : raw > 0
-                            ? 'var(--mantine-color-teal-5)'
-                            : 'var(--mantine-color-red-4)'
-
-                      return (
-                        <Table.Tr
-                          key={idx}
-                          style={{
-                            borderTop:
-                              '1px solid var(--pitch-card-border, var(--mantine-color-default-border))',
-                          }}
-                        >
-                          <Table.Td>
-                            <Badge
-                              size="xs"
-                              color={LEDGER_COLOR[entry.type] ?? 'gray'}
-                              variant="light"
-                              radius="sm"
-                            >
-                              {entry.type}
-                            </Badge>
-                          </Table.Td>
-                          <Table.Td>
-                            <Text
-                              size="sm"
-                              fw={600}
-                              style={{ color: amountColor, fontVariantNumeric: 'tabular-nums' }}
-                            >
-                              {amountStr}
-                            </Text>
-                          </Table.Td>
-                          <Table.Td>
-                            <Text
-                              size="xs"
-                              c="dimmed"
-                              style={{ fontVariantNumeric: 'tabular-nums' }}
-                            >
-                              {entry.remainingAfter?.toLocaleString() ?? '—'}
-                            </Text>
-                          </Table.Td>
-                          <Table.Td>
-                            <Text size="xs" c="dimmed">
-                              {entry.createdAt
-                                ? new Date(entry.createdAt).toLocaleDateString('en-US', {
-                                    month: 'short',
-                                    day: 'numeric',
-                                    year: 'numeric',
-                                  })
-                                : '—'}
-                            </Text>
-                          </Table.Td>
-                        </Table.Tr>
-                      )
-                    })}
-                  </Table.Tbody>
-                </Table>
+                  {refillRequest.status === 'denied' && (
+                    <Button
+                      size="xs"
+                      variant="subtle"
+                      onClick={() => {
+                        setTopupOpen(true)
+                      }}
+                    >
+                      Request again
+                    </Button>
+                  )}
+                </Group>
               </Box>
+            )}
+
+            {/* ── 4. PLANS ─────────────────────────────────────────────────────────
+            Inspired by Linear: highlight current plan clearly, show the one
+            key differentiator (credits), reduce repetition across cards. */}
+            <Box className="s3">
+              <Group justify="space-between" align="center" mb="md">
+                <Text
+                  size="xs"
+                  fw={700}
+                  tt="uppercase"
+                  c="dimmed"
+                  style={{ letterSpacing: '0.08em' }}
+                >
+                  Plan
+                </Text>
+                <Text size="xs" c="dimmed">
+                  Looking for team subscription?{' '}
+                  <Link
+                    href="/studio/team-config"
+                    style={{ color: 'var(--pitch-accent-strong)', textDecoration: 'none' }}
+                  >
+                    Manage it here →
+                  </Link>
+                </Text>
+              </Group>
+
+              <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} spacing="sm">
+                {plans.map((plan) => {
+                  const isCurrent = plan.id === currentPlan?.id
+                  const pendingChange = subscription?.metadata?.pendingPlanChange
+                  const isPending = pendingChange?.requestedPlanId === plan.id
+                  const hasPendingChange = !!pendingChange
+                  return (
+                    <Box
+                      key={plan.id}
+                      className={isCurrent ? undefined : 'plan-tile'}
+                      p="md"
+                      style={{
+                        borderRadius: 14,
+                        border: isCurrent
+                          ? '1.5px solid var(--pitch-accent-strong)'
+                          : isPending
+                            ? '1.5px solid var(--mantine-color-yellow-6)'
+                            : '1px solid var(--pitch-card-border, var(--mantine-color-default-border))',
+                        background: isCurrent
+                          ? 'color-mix(in srgb, var(--pitch-accent-strong) 7%, var(--pitch-card-bg, var(--mantine-color-body)))'
+                          : isPending
+                            ? 'color-mix(in srgb, var(--mantine-color-yellow-light) 30%, var(--pitch-card-bg, var(--mantine-color-body)))'
+                            : 'color-mix(in srgb, var(--pitch-card-bg, var(--mantine-color-body)) 75%, transparent)',
+                        boxShadow: isCurrent
+                          ? '0 0 0 3px color-mix(in srgb, var(--pitch-accent-strong) 10%, transparent)'
+                          : undefined,
+                      }}
+                    >
+                      <Stack gap="sm" h="100%">
+                        <Group justify="space-between" align="flex-start">
+                          <Badge
+                            color={LEVEL_COLOR[plan.planLevel] ?? 'gray'}
+                            variant={isCurrent ? 'filled' : 'light'}
+                            size="xs"
+                            radius="sm"
+                          >
+                            {plan.planLevel}
+                          </Badge>
+                          {isCurrent && (
+                            <ThemeIcon size={16} radius="xl" color="teal" variant="light">
+                              <IconCheck size={9} />
+                            </ThemeIcon>
+                          )}
+                          {isPending && (
+                            <ThemeIcon size={16} radius="xl" color="yellow" variant="light">
+                              <IconClock size={9} />
+                            </ThemeIcon>
+                          )}
+                        </Group>
+
+                        {/* Key differentiator: credits per period */}
+                        <Stack gap={1}>
+                          <Text
+                            fw={800}
+                            fz={22}
+                            lh={1}
+                            style={{
+                              color: 'var(--pitch-surface-text)',
+                              fontVariantNumeric: 'tabular-nums',
+                            }}
+                          >
+                            {plan.maxCoins >= 1_000_000
+                              ? '∞'
+                              : plan.maxCoins >= 1000
+                                ? `${(plan.maxCoins / 1000).toFixed(0)}k`
+                                : plan.maxCoins.toLocaleString()}
+                          </Text>
+                          <Text size="xs" c="dimmed">
+                            credits / period
+                          </Text>
+                        </Stack>
+
+                        {/* Session count as context */}
+                        {plan.coinCostPerSession > 0 ? (
+                          <Text size="xs" c="dimmed">
+                            ≈{Math.floor(plan.maxCoins / plan.coinCostPerSession).toLocaleString()}{' '}
+                            sessions
+                          </Text>
+                        ) : (
+                          <Text size="xs" c="dimmed">
+                            Unlimited sessions
+                          </Text>
+                        )}
+
+                        {isCurrent ? (
+                          <Text size="xs" c="dimmed" mt="auto" pt="xs">
+                            Current plan
+                          </Text>
+                        ) : isPending ? (
+                          <Text size="xs" c="yellow.7" fw={600} mt="auto" pt="xs">
+                            Pending review
+                          </Text>
+                        ) : (
+                          <Button
+                            size="xs"
+                            variant="default"
+                            fullWidth
+                            mt="auto"
+                            loading={switchingPlan === plan.id}
+                            disabled={hasPendingChange || !user?.id}
+                            rightSection={<IconBolt size={11} />}
+                            onClick={() => handleSwitchPlan(plan)}
+                            style={{ marginTop: 8 }}
+                          >
+                            Switch
+                          </Button>
+                        )}
+                      </Stack>
+                    </Box>
+                  )
+                })}
+              </SimpleGrid>
             </Box>
-          )}
-        </Stack>
+
+            {/* ── 5. CREDIT HISTORY ────────────────────────────────────────────────
+            Clean table — color-coded amounts, no card nesting, scannable.
+            Green = credits added, red = credits spent. */}
+            {ledger.length > 0 && (
+              <Box className="s4">
+                <Divider
+                  mb="lg"
+                  style={{
+                    borderColor: 'var(--pitch-card-border, var(--mantine-color-default-border))',
+                  }}
+                />
+
+                <Text
+                  size="xs"
+                  fw={700}
+                  tt="uppercase"
+                  c="dimmed"
+                  mb="md"
+                  style={{ letterSpacing: '0.08em' }}
+                >
+                  Credit history
+                </Text>
+
+                <Box
+                  style={{
+                    borderRadius: 12,
+                    border:
+                      '1px solid var(--pitch-card-border, var(--mantine-color-default-border))',
+                    overflow: 'hidden',
+                  }}
+                >
+                  <Table verticalSpacing={10} horizontalSpacing="md">
+                    <Table.Thead
+                      style={{
+                        background:
+                          'color-mix(in srgb, var(--pitch-card-bg, var(--mantine-color-body)) 50%, transparent)',
+                      }}
+                    >
+                      <Table.Tr>
+                        {['Event', 'Credits', 'Balance', 'Date'].map((h) => (
+                          <Table.Th key={h}>
+                            <Text size="xs" c="dimmed" fw={600}>
+                              {h}
+                            </Text>
+                          </Table.Th>
+                        ))}
+                      </Table.Tr>
+                    </Table.Thead>
+                    <Table.Tbody>
+                      {historyEntries.map((entry, idx) => {
+                        const raw =
+                          entry.type === 'RESERVE' && entry.estimatedCoins != null
+                            ? -entry.estimatedCoins
+                            : (entry.type === 'ADJUST' || entry.type === 'UPGRADE') &&
+                                entry.deltaCoins != null
+                              ? entry.deltaCoins
+                              : entry.type === 'REFILL' && entry.deltaCoins != null
+                                ? entry.deltaCoins
+                                : entry.type === 'REFILL' && entry.allowance != null
+                                  ? entry.allowance
+                                  : null
+
+                        const amountStr =
+                          raw === null ? '—' : `${raw > 0 ? '+' : ''}${raw.toLocaleString()}`
+                        const amountColor =
+                          raw === null
+                            ? undefined
+                            : raw > 0
+                              ? 'var(--mantine-color-teal-5)'
+                              : 'var(--mantine-color-red-4)'
+
+                        return (
+                          <Table.Tr
+                            key={`${entry.createdAt ?? 'unknown'}-${entry.type}-${idx}`}
+                            style={{
+                              borderTop:
+                                '1px solid var(--pitch-card-border, var(--mantine-color-default-border))',
+                            }}
+                          >
+                            <Table.Td>
+                              <Badge
+                                size="xs"
+                                color={LEDGER_COLOR[entry.type] ?? 'gray'}
+                                variant="light"
+                                radius="sm"
+                              >
+                                {entry.type}
+                              </Badge>
+                            </Table.Td>
+                            <Table.Td>
+                              <Text
+                                size="sm"
+                                fw={600}
+                                style={{ color: amountColor, fontVariantNumeric: 'tabular-nums' }}
+                              >
+                                {amountStr}
+                              </Text>
+                            </Table.Td>
+                            <Table.Td>
+                              <Text
+                                size="xs"
+                                c="dimmed"
+                                style={{ fontVariantNumeric: 'tabular-nums' }}
+                              >
+                                {entry.remainingAfter?.toLocaleString() ?? '—'}
+                              </Text>
+                            </Table.Td>
+                            <Table.Td>
+                              <Text size="xs" c="dimmed">
+                                {entry.createdAt
+                                  ? new Date(entry.createdAt).toLocaleDateString('en-US', {
+                                      month: 'short',
+                                      day: 'numeric',
+                                      year: 'numeric',
+                                    })
+                                  : '—'}
+                              </Text>
+                            </Table.Td>
+                          </Table.Tr>
+                        )
+                      })}
+                    </Table.Tbody>
+                  </Table>
+                </Box>
+
+                <Group justify="space-between" align="center" mt="sm">
+                  <Text size="xs" c="dimmed" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                    Showing {ledger.length === 0 ? 0 : historyStartIndex + 1}-
+                    {Math.min(historyStartIndex + HISTORY_PAGE_SIZE, ledger.length)} of{' '}
+                    {ledger.length.toLocaleString()}
+                  </Text>
+
+                  <Pagination
+                    value={historyPage}
+                    onChange={setHistoryPage}
+                    total={historyTotalPages}
+                    size="sm"
+                    radius="md"
+                    withEdges
+                    siblings={0}
+                    boundaries={1}
+                    color="blue"
+                  />
+                </Group>
+              </Box>
+            )}
+          </Stack>
+        </Box>
       </Box>
     </Box>
   )
