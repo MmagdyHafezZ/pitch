@@ -124,6 +124,7 @@ export function useWebSpeechSTT(options: UseSTTOptions = {}): UseSTTReturn {
   const recognitionRef = useRef<SpeechRecognition | null>(null)
   const isListeningRef = useRef(false)
   const shouldAutoRestartRef = useRef(true)
+  const processedFinalResultsRef = useRef<Map<number, string>>(new Map())
   const onResultRef = useRef(onResult)
   const onErrorRef = useRef(onError)
   const onSpeechEndRef = useRef(onSpeechEnd)
@@ -186,27 +187,41 @@ export function useWebSpeechSTT(options: UseSTTOptions = {}): UseSTTReturn {
     recognition.lang = lang
     recognition.maxAlternatives = maxAlternatives
 
+    recognition.onstart = () => {
+      // Some mobile engines restart frequently and re-use result indexes from 0.
+      // Reset per-run final tracking to avoid stale dedupe state.
+      processedFinalResultsRef.current.clear()
+    }
+
     recognition.onresult = (event: SpeechRecognitionEvent) => {
-      let interimText = ''
-      let finalText = ''
+      const interimParts: string[] = []
+      const finalParts: string[] = []
 
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const result = event.results[i]
-        const transcriptText = result[0].transcript
+        const transcriptText = result[0]?.transcript?.trim()
+        if (!transcriptText) continue
 
         if (result.isFinal) {
-          finalText += transcriptText + ' '
+          const priorFinal = processedFinalResultsRef.current.get(i)
+          if (priorFinal) {
+            // Ignore duplicate/replayed finals for this result slot.
+            continue
+          }
+          processedFinalResultsRef.current.set(i, transcriptText)
+          finalParts.push(transcriptText)
         } else {
-          interimText += transcriptText
+          interimParts.push(transcriptText)
         }
       }
 
+      const finalText = finalParts.join(' ').trim()
+      const interimText = interimParts.join(' ').trim()
+
       if (finalText) {
-        setTranscript((prev) => prev + finalText)
-        const trimmedFinal = finalText.trim()
-        if (trimmedFinal) {
-          onResultRef.current?.(trimmedFinal, true)
-        }
+        setTranscript((prev) => (prev ? `${prev}${finalText} ` : `${finalText} `))
+        setInterimTranscript('')
+        onResultRef.current?.(finalText, true)
       }
 
       if (interimText) {
@@ -374,12 +389,14 @@ export function useWebSpeechSTT(options: UseSTTOptions = {}): UseSTTReturn {
     try {
       setIsListening(false)
       shouldAutoRestartRef.current = false
+      processedFinalResultsRef.current.clear()
       recognitionRef.current.stop()
       setInterimTranscript('')
     } catch (err) {}
   }, [])
 
   const resetTranscript = useCallback(() => {
+    processedFinalResultsRef.current.clear()
     setTranscript('')
     setInterimTranscript('')
   }, [])
