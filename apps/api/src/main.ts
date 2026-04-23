@@ -35,6 +35,7 @@ import {
   normalizeError,
   safeStringify,
 } from '@pitch/shared-backend/utils/error-logging';
+import { initializeObservability } from './observability/otel';
 
 @Catch()
 export class LogAllHttpExceptionsFilter implements ExceptionFilter {
@@ -139,6 +140,10 @@ export class LogAllHttpExceptionsFilter implements ExceptionFilter {
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
+  const observability = initializeObservability(
+    process.env.OTEL_SERVICE_NAME || 'pitch-api',
+    process.env.npm_package_version || '0.0.1',
+  );
 
   try {
     const rabbitmqUrls = getRabbitMQUrls();
@@ -173,14 +178,20 @@ async function bootstrap() {
     bufferLogs: true,
     bodyParser: false,
   });
+  app.useLogger(observability.logger);
 
+  app.use(observability.requestMiddleware);
   // Increase body-parser limits: images can be a few MB inline; PDFs go via multipart.
   app.use(json({ limit: '5mb' }));
   app.use(urlencoded({ extended: true, limit: '5mb' }));
 
   app.use(helmet());
   app.use(compression());
-  app.use(morgan(process.env.MORGAN_FORMAT ?? 'combined'));
+  app.use(
+    morgan(process.env.MORGAN_FORMAT ?? 'combined', {
+      stream: observability.morganStream,
+    }),
+  );
   app.use(cookieParser());
 
   app.enableCors({
@@ -284,6 +295,24 @@ async function bootstrap() {
   }
 
   app.enableShutdownHooks();
+  let telemetryShutdownStarted = false;
+  const flushObservability = async () => {
+    if (telemetryShutdownStarted) {
+      return;
+    }
+    telemetryShutdownStarted = true;
+    await observability.shutdown();
+  };
+  process.once('SIGTERM', () => {
+    void flushObservability();
+  });
+  process.once('SIGINT', () => {
+    void flushObservability();
+  });
+  process.once('beforeExit', () => {
+    void flushObservability();
+  });
+
   const port = parseInt(process.env.PORT ?? '8000', 10);
   await app.listen(port, '0.0.0.0');
 
@@ -300,6 +329,13 @@ async function bootstrap() {
     ` Frontend URL: ${process.env.FRONTEND_URL || 'http://localhost:3000'}`,
   );
   logger.log(`📊 Connected microservices: ${app.getMicroservices().length}`);
+  if (observability.enabled) {
+    logger.log('📈 Grafana Cloud OTLP observability enabled');
+  } else {
+    logger.log(
+      '📈 Grafana Cloud OTLP observability disabled (OTEL_EXPORTER_OTLP_* env vars not set)',
+    );
+  }
 }
 
 bootstrap().catch((error) => {
