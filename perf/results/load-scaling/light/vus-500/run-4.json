@@ -1,0 +1,136 @@
+{
+  "metrics": {
+    "http_req_sending": {
+      "p(90)": 0,
+      "p(95)": 0,
+      "p(99)": 0,
+      "count": 1,
+      "avg": 0,
+      "min": 0,
+      "med": 0,
+      "max": 0
+    },
+    "checks": {
+      "passes": 0,
+      "fails": 1,
+      "value": 0
+    },
+    "http_req_tls_handshaking": {
+      "med": 0,
+      "max": 0,
+      "p(90)": 0,
+      "p(95)": 0,
+      "p(99)": 0,
+      "count": 1,
+      "avg": 0,
+      "min": 0
+    },
+    "http_reqs": {
+      "count": 1,
+      "rate": 490.9582670744239
+    },
+    "http_req_waiting": {
+      "count": 1,
+      "avg": 0,
+      "min": 0,
+      "med": 0,
+      "max": 0,
+      "p(90)": 0,
+      "p(95)": 0,
+      "p(99)": 0
+    },
+    "http_req_failed": {
+      "passes": 1,
+      "fails": 0,
+      "thresholds": {
+        "rate<0.05": true
+      },
+      "value": 1
+    },
+    "data_sent": {
+      "count": 0,
+      "rate": 0
+    },
+    "data_received": {
+      "count": 0,
+      "rate": 0
+    },
+    "http_req_duration": {
+      "count": 1,
+      "avg": 0,
+      "min": 0,
+      "med": 0,
+      "max": 0,
+      "p(90)": 0,
+      "p(95)": 0,
+      "p(99)": 0,
+      "thresholds": {
+        "p(95)<2000": false,
+        "p(99)<5000": false
+      }
+    },
+    "http_req_connecting": {
+      "count": 1,
+      "avg": 0,
+      "min": 0,
+      "med": 0,
+      "max": 0,
+      "p(90)": 0,
+      "p(95)": 0,
+      "p(99)": 0
+    },
+    "http_req_blocked": {
+      "p(95)": 0,
+      "p(99)": 0,
+      "count": 1,
+      "avg": 0,
+      "min": 0,
+      "med": 0,
+      "max": 0,
+      "p(90)": 0
+    },
+    "iteration_duration": {
+      "min": 1.773334,
+      "med": 1.773334,
+      "max": 1.773334,
+      "p(90)": 1.773334,
+      "p(95)": 1.773334,
+      "p(99)": 1.773334,
+      "count": 1,
+      "avg": 1.773334
+    },
+    "http_req_receiving": {
+      "avg": 0,
+      "min": 0,
+      "med": 0,
+      "max": 0,
+      "p(90)": 0,
+      "p(95)": 0,
+      "p(99)": 0,
+      "count": 1
+    }
+  },
+  "root_group": {
+    "name": "",
+    "path": "",
+    "id": "d41d8cd98f00b204e9800998ecf8427e",
+    "groups": {
+      "setup": {
+        "name": "setup",
+        "path": "::setup",
+        "id": "5c0f8025f7e0b6654089e5b00e950f1a",
+        "groups": {},
+        "checks": {
+          "light endpoint returned success": {
+            "id": "3ac160a8cada50dcaa1440b9ea445ec1",
+            "passes": 0,
+            "fails": 1,
+            "name": "light endpoint returned success",
+            "path": "::setup::light endpoint returned success"
+          }
+        }
+      }
+    },
+    "checks": {}
+  }
+}
