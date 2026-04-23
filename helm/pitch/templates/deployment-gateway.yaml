@@ -45,6 +45,26 @@ spec:
           value: {{ .Values.gateway.env.PORT | quote }}
         - name: CORS_ORIGIN
           value: {{ .Values.gateway.env.CORS_ORIGIN | quote }}
+        {{- if .Values.gateway.env.DEV_BYPASS_ENABLED }}
+        - name: DEV_BYPASS_ENABLED
+          value: {{ .Values.gateway.env.DEV_BYPASS_ENABLED | quote }}
+        {{- end }}
+        {{- if .Values.gateway.env.DEV_BYPASS_TOKEN }}
+        - name: DEV_BYPASS_TOKEN
+          value: {{ .Values.gateway.env.DEV_BYPASS_TOKEN | quote }}
+        {{- end }}
+        {{- if .Values.gateway.env.DEV_BYPASS_EMAIL }}
+        - name: DEV_BYPASS_EMAIL
+          value: {{ .Values.gateway.env.DEV_BYPASS_EMAIL | quote }}
+        {{- end }}
+        {{- if .Values.gateway.env.DEV_BYPASS_NAME }}
+        - name: DEV_BYPASS_NAME
+          value: {{ .Values.gateway.env.DEV_BYPASS_NAME | quote }}
+        {{- end }}
+        {{- if .Values.gateway.env.DEV_BYPASS_USER_ID }}
+        - name: DEV_BYPASS_USER_ID
+          value: {{ .Values.gateway.env.DEV_BYPASS_USER_ID | quote }}
+        {{- end }}
         - name: REDIS_URL
           value: {{ include "pitch.redis.connectionString" . | quote }}
         - name: RABBITMQ_URL

@@ -45,7 +45,7 @@ spec:
               key: rabbitmq-url
         resources:
           {{- toYaml .Values.support.resources | nindent 12 }}
-{{- end }}
+{{ end }}
 
 {{- if .Values.analytics.enabled -}}
 ---
@@ -94,7 +94,7 @@ spec:
               key: rabbitmq-url
         resources:
           {{- toYaml .Values.analytics.resources | nindent 12 }}
-{{- end }}
+{{ end }}
 
 {{- if .Values.lti.enabled -}}
 ---
@@ -155,7 +155,7 @@ spec:
               optional: true
         resources:
           {{- toYaml .Values.lti.resources | nindent 12 }}
-{{- end }}
+{{ end }}
 
 {{- if .Values.s3.enabled -}}
 ---
@@ -224,4 +224,4 @@ spec:
               optional: true
         resources:
           {{- toYaml .Values.s3.resources | nindent 12 }}
-{{- end }}
+{{ end }}
