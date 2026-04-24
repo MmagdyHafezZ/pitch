@@ -6,7 +6,7 @@ delivery. It is designed around the experiment plan in the original proposal:
 - run load generation from a separate host when possible
 - keep a warm-up, steady-state, and cool-down structure
 - preserve JSON summaries under `perf/results`
-- cover light, AI, mixed, spike, stress, scaling, and cache-validation workloads
+- cover light, AI, mixed, spike, stress, and scaling workloads
 
 ## Scenarios
 
@@ -47,6 +47,43 @@ aggregates.
 Run these from a machine that is separate from the system under test whenever
 possible. That directly addresses the TA feedback about same-host interference.
 
+### Full matrix runner
+
+For the IBM Code Engine final campaign, you can run the whole planned matrix
+with:
+
+```bash
+SCENARIO_ORG_ID=org_123 \
+BASE_URL=https://api.pitchapp.ca \
+perf/k6/run_code_engine_matrix.sh all
+```
+
+Important:
+
+- Use `BASE_URL=https://api.pitchapp.ca`, not `/api/v1`, because the workload
+  scripts append `/api/v1/...` internally.
+- The `scaling` and `cache` groups may require deployment-state changes between
+  runs. The script supports either:
+  - interactive checkpoints, or
+  - command templates via `CODE_ENGINE_SCALE_CMD_TEMPLATE` and
+    `CACHE_STATE_CMD_TEMPLATE`
+- For authenticated Code Engine runs, prefer a real JWT in `ACCESS_TOKEN` or
+  `PERF_ACCESS_TOKEN`. Keep `PERF_STATIC_AUTH_TOKEN` for a dedicated perf
+  deployment that explicitly enables the bypass token.
+- `SCENARIO_ORG_ID` can be your own user id for a personal-workspace run.
+- If you want a team-scoped run instead, use a team id from
+  `GET /api/v1/teams/user-teams`.
+- If `SCENARIO_ORG_ID` is omitted and `ACCESS_TOKEN` is set, the matrix runner
+  now falls back to the JWT `sub` claim automatically.
+
+Examples:
+
+```bash
+perf/k6/run_code_engine_matrix.sh smoke
+perf/k6/run_code_engine_matrix.sh light ai mixed
+NON_INTERACTIVE=1 DRY_RUN=1 SCENARIO_ORG_ID=org_123 perf/k6/run_code_engine_matrix.sh all
+```
+
 ### Light workload
 
 ```bash
@@ -62,8 +99,9 @@ k6 run \
 ```bash
 k6 run \
   --summary-export perf/results/external/ai/vus-10/run-1.json \
-  -e BASE_URL=http://your-gateway-host:8000 \
-  -e SCENARIO_ORG_ID=org_123 \
+  -e BASE_URL=https://api.pitchapp.ca \
+  -e ACCESS_TOKEN="$ACCESS_TOKEN" \
+  -e SCENARIO_ORG_ID="$USER_ID_FROM_AUTH_ME" \
   -e VUS=10 \
   -e REQUEST_TIMEOUT=45s \
   perf/k6/scenarios/ai-scenario-generate.js
@@ -74,8 +112,9 @@ k6 run \
 ```bash
 k6 run \
   --summary-export perf/results/external/mixed/vus-50/run-1.json \
-  -e BASE_URL=http://your-gateway-host:8000 \
-  -e SCENARIO_ORG_ID=org_123 \
+  -e BASE_URL=https://api.pitchapp.ca \
+  -e ACCESS_TOKEN="$ACCESS_TOKEN" \
+  -e SCENARIO_ORG_ID="$USER_ID_FROM_AUTH_ME" \
   -e VUS=50 \
   -e LIGHT_WEIGHT=0.7 \
   -e AI_WEIGHT=0.3 \
@@ -134,6 +173,12 @@ k6 run \
   perf/k6/scenarios/cache-comparison-light-public-stats.js
 ```
 
+This comparison is still experimental in the current repo. The workload script
+only tags requests with `CACHE_STATE`, and the application does not currently
+expose a verified cache-off deployment toggle. Do not report cache-comparison
+results in the final paper unless the runtime behavior actually changed between
+the enabled and disabled runs.
+
 ## Supported Environment Variables
 
 - `VUS`
@@ -156,6 +201,10 @@ Light scenario:
 
 Static auth:
 
+- `ACCESS_TOKEN`
+  - Preferred for a real-user Code Engine run
+- `PERF_ACCESS_TOKEN`
+  - Alias for `ACCESS_TOKEN`
 - `PERF_STATIC_AUTH_TOKEN`
   - Static bearer token used by all authenticated k6 scripts
   - Default `pitch-perf-static-token`
@@ -165,6 +214,9 @@ AI scenario generation:
 
 - `SCENARIO_ORG_ID`
   - Required org/workspace ID for `POST /api/v1/simulation/scenarios/generate`
+  - For real-user benchmarking, this can be the caller's own user id from
+    `GET /api/v1/auth/me`
+  - For a team-scoped run, use a team id from `GET /api/v1/teams/user-teams`
 - `SCENARIO_TYPE`
   - Default `text`
 - `SCENARIO_LANGUAGE`
@@ -255,8 +307,8 @@ Cache comparison:
 - Stress testing: at least `3` repeated runs with `stress-light-public-stats.js`
 - Replica scaling: repeat `replica-scaling-light-public-stats.js` at replica
   counts `1, 2, 4`
-- Cache comparison: repeat `cache-comparison-light-public-stats.js` with cache
-  `enabled` and `disabled`
+- Cache comparison: only include this if you have a real cache-on and cache-off
+  deployment/runtime toggle
 - Repeat each configuration 5 times
 - Store each run under a stable subtree, for example:
   - `perf/results/external/light/vus-50/run-1.json`
@@ -274,12 +326,21 @@ other foreground work off the machine, and state the limitation explicitly in
 the final report. Use those runs for trend and bottleneck ranking rather than
 claiming fully isolated hardware measurements.
 
-## Static Token Setup
+## Auth Options
 
-The k6 suite now assumes a static perf bypass token instead of interactive
-login.
+Preferred Code Engine path:
 
-The gateway must be deployed with matching env vars:
+- use a real JWT in `ACCESS_TOKEN`
+- use your own user id from `GET /api/v1/auth/me` as `SCENARIO_ORG_ID` for a
+  personal-workspace run
+
+Optional perf-deployment path:
+
+- use the static bypass token in `PERF_STATIC_AUTH_TOKEN`
+- use `DEV_BYPASS_USER_ID` as `SCENARIO_ORG_ID`
+
+If you deploy a dedicated perf environment with the bypass token, the gateway
+must be deployed with matching env vars:
 
 ```env
 DEV_BYPASS_ENABLED=true

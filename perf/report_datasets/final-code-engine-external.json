@@ -2,8 +2,8 @@
   "dataset_id": "final-code-engine-external",
   "report_title": "P.I.T.C.H. Final Report Performance Scaffold (IBM Code Engine)",
   "report_date": "2026-04-23",
-  "purpose": "This dataset captures the final performance-evaluation campaign against the IBM Code Engine deployment of P.I.T.C.H. using an external k6 load generator. It is intended to replace the earlier development-host measurements as the primary final-report dataset while preserving the same experiment families promised in the proposal.",
-  "dataset_summary": "The final dataset targets the public IBM Code Engine deployment at https://api.pitchapp.ca. Load is generated from a separate client machine, and the results are organized by workload family so the final report can quantify steady-state latency, throughput, error rate, overload behavior, and scaling effects without mixing them with the older co-located midterm dataset.",
+  "purpose": "This dataset captures the final performance-evaluation campaign against the IBM Code Engine deployment of P.I.T.C.H. using an external k6 load generator. It is intended to replace the earlier development-host measurements as the primary final-report dataset while preserving the experiment families that are executable in the current deployment.",
+  "dataset_summary": "The final dataset targets the public IBM Code Engine deployment at https://api.pitchapp.ca. Load is generated from a separate client machine, and the results are organized by workload family so the final report can quantify steady-state latency, throughput, error rate, overload behavior, and application-instance scaling without mixing them with the older co-located midterm dataset.",
   "results_root": "perf/results/external",
   "output_markdown": "output/doc/pitch_final_report_perf_code_engine_scaffold_2026-04-23.md",
   "output_json": "output/doc/pitch_final_report_perf_code_engine_scaffold_2026-04-23.json",
@@ -21,7 +21,7 @@
     "threats_to_validity": [
       "IBM Code Engine is a managed platform, so public-network variability, platform scheduling behavior, and instance lifecycle events can influence end-to-end latency in addition to application logic.",
       "If the deployment is a single Code Engine application rather than independently deployed backend services, scaling results should be interpreted as application-instance scaling rather than isolated per-service bottleneck scaling.",
-      "Cache-comparison results are only valid if the cache state was changed by a real deployment or runtime configuration change instead of only by tagging the workload."
+      "The current application does not expose a verified cache-off toggle, so cache-comparison results are out of scope for this final dataset unless that runtime gate is implemented later."
     ],
     "limitation_handling": [
       "Keep this external Code Engine dataset analytically separate from the older co-located development-host dataset.",
@@ -192,27 +192,6 @@
           "path": "scaling/app-instances-4",
           "expected_runs": 5,
           "x_value": 4
-        }
-      ]
-    },
-    {
-      "id": "cache-validation",
-      "label": "Cache validation",
-      "x_axis_label": "Cache state",
-      "scenarios": [
-        {
-          "id": "cache-enabled",
-          "label": "cache comparison / enabled",
-          "path": "cache-comparison/enabled",
-          "expected_runs": 5,
-          "notes": ["Only treat this as measured if cache behavior was changed by a real deployment or runtime configuration change."]
-        },
-        {
-          "id": "cache-disabled",
-          "label": "cache comparison / disabled",
-          "path": "cache-comparison/disabled",
-          "expected_runs": 5,
-          "notes": ["Do not report this scenario as complete unless the cache-disabled state is real and reproducible."]
         }
       ]
     }

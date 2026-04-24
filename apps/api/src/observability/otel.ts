@@ -66,6 +66,14 @@ function parseHeaders(raw: string | undefined): Record<string, string> {
     return {};
   }
 
+  const decodeHeaderValue = (value: string): string => {
+    try {
+      return decodeURIComponent(value);
+    } catch {
+      return value;
+    }
+  };
+
   return raw
     .split(',')
     .map((entry) => entry.trim())
@@ -76,8 +84,8 @@ function parseHeaders(raw: string | undefined): Record<string, string> {
         return headers;
       }
 
-      const key = entry.slice(0, separator).trim();
-      const value = entry.slice(separator + 1).trim();
+      const key = decodeHeaderValue(entry.slice(0, separator).trim());
+      const value = decodeHeaderValue(entry.slice(separator + 1).trim());
 
       if (key && value) {
         headers[key] = value;

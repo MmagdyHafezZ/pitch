@@ -6,6 +6,7 @@ import {
   ArgumentsHost,
   BadRequestException,
   Catch,
+  ConsoleLogger,
   ExceptionFilter,
   HttpException,
   Logger,
@@ -178,7 +179,10 @@ async function bootstrap() {
     bufferLogs: true,
     bodyParser: false,
   });
-  app.useLogger(observability.logger);
+  const bootstrapLogger = new ConsoleLogger('PITCH', {
+    timestamp: true,
+  });
+  app.useLogger(bootstrapLogger);
 
   app.use(observability.requestMiddleware);
   // Increase body-parser limits: images can be a few MB inline; PDFs go via multipart.
@@ -315,6 +319,9 @@ async function bootstrap() {
 
   const port = parseInt(process.env.PORT ?? '8000', 10);
   await app.listen(port, '0.0.0.0');
+  if (observability.enabled) {
+    app.useLogger(observability.logger);
+  }
 
   const baseUrl = await app.getUrl();
   logger.log(`🚀 Server running at ${baseUrl}`);

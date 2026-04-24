@@ -33,6 +33,14 @@ OTEL_EXPORTER_OTLP_HEADERS=Authorization=Basic <base64-credentials>
 
 Set these on the IBM Code Engine application.
 
+Grafana Cloud sometimes provides `OTEL_EXPORTER_OTLP_HEADERS` in URL-encoded
+shell form. This app accepts both:
+
+```env
+OTEL_EXPORTER_OTLP_HEADERS=Authorization=Basic <base64-credentials>
+OTEL_EXPORTER_OTLP_HEADERS=Authorization=Basic%20<base64-credentials>
+```
+
 Also set:
 
 ```env
