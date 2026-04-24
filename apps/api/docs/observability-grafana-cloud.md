@@ -1,9 +1,9 @@
-# Grafana Cloud OTLP for IBM Code Engine
+# Grafana Cloud OTLP for Kubernetes
 
 This API now supports sending traces, metrics, and logs directly to Grafana
 Cloud over OTLP/HTTP from the application process.
 
-This is the right fit for the current IBM Code Engine deployment because the app
+This is the right fit for the current Kubernetes deployment because the app
 pushes telemetry directly instead of relying on Prometheus scraping.
 
 ## What Was Added
@@ -31,7 +31,7 @@ OTEL_EXPORTER_OTLP_ENDPOINT=https://otlp-gateway-<region>.grafana.net/otlp
 OTEL_EXPORTER_OTLP_HEADERS=Authorization=Basic <base64-credentials>
 ```
 
-Set these on the IBM Code Engine application.
+Set these in your Kubernetes deployment.
 
 Grafana Cloud sometimes provides `OTEL_EXPORTER_OTLP_HEADERS` in URL-encoded
 shell form. This app accepts both:
@@ -108,7 +108,7 @@ Logs:
 ## Deployment Notes
 
 - The current implementation is wired into `apps/api/src/main.ts`, which is the
-  entrypoint used by the single-app Code Engine deployment.
+  entrypoint used by the Kubernetes deployment.
 - If you later deploy standalone microservice entrypoints separately, they are
   not yet instrumented by this change.
 - If OTLP env vars are missing, the app falls back to normal console logging and

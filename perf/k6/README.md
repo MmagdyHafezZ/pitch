@@ -49,13 +49,12 @@ possible. That directly addresses the TA feedback about same-host interference.
 
 ### Full matrix runner
 
-For the IBM Code Engine final campaign, you can run the whole planned matrix
-with:
+For the Kubernetes final campaign, you can run the whole planned matrix with:
 
 ```bash
 SCENARIO_ORG_ID=org_123 \
 BASE_URL=https://api.pitchapp.ca \
-perf/k6/run_code_engine_matrix.sh all
+perf/k6/run_k8s_matrix.sh all
 ```
 
 Important:
@@ -65,9 +64,9 @@ Important:
 - The `scaling` and `cache` groups may require deployment-state changes between
   runs. The script supports either:
   - interactive checkpoints, or
-  - command templates via `CODE_ENGINE_SCALE_CMD_TEMPLATE` and
+  - command templates via `K8S_SCALE_CMD_TEMPLATE` and
     `CACHE_STATE_CMD_TEMPLATE`
-- For authenticated Code Engine runs, prefer a real JWT in `ACCESS_TOKEN` or
+- For authenticated Kubernetes runs, prefer a real JWT in `ACCESS_TOKEN` or
   `PERF_ACCESS_TOKEN`. Keep `PERF_STATIC_AUTH_TOKEN` for a dedicated perf
   deployment that explicitly enables the bypass token.
 - `SCENARIO_ORG_ID` can be your own user id for a personal-workspace run.
@@ -79,9 +78,9 @@ Important:
 Examples:
 
 ```bash
-perf/k6/run_code_engine_matrix.sh smoke
-perf/k6/run_code_engine_matrix.sh light ai mixed
-NON_INTERACTIVE=1 DRY_RUN=1 SCENARIO_ORG_ID=org_123 perf/k6/run_code_engine_matrix.sh all
+perf/k6/run_k8s_matrix.sh smoke
+perf/k6/run_k8s_matrix.sh light ai mixed
+NON_INTERACTIVE=1 DRY_RUN=1 SCENARIO_ORG_ID=org_123 perf/k6/run_k8s_matrix.sh all
 ```
 
 ### Light workload
@@ -202,7 +201,7 @@ Light scenario:
 Static auth:
 
 - `ACCESS_TOKEN`
-  - Preferred for a real-user Code Engine run
+  - Preferred for a real-user Kubernetes run
 - `PERF_ACCESS_TOKEN`
   - Alias for `ACCESS_TOKEN`
 - `PERF_STATIC_AUTH_TOKEN`
@@ -328,7 +327,7 @@ claiming fully isolated hardware measurements.
 
 ## Auth Options
 
-Preferred Code Engine path:
+Preferred Kubernetes path:
 
 - use a real JWT in `ACCESS_TOKEN`
 - use your own user id from `GET /api/v1/auth/me` as `SCENARIO_ORG_ID` for a
