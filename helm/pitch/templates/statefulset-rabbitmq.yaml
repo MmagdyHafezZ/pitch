@@ -63,17 +63,14 @@ spec:
         - containerPort: {{ .Values.rabbitmq.service.ports.metrics }}
           name: metrics
         livenessProbe:
-          exec:
-            command:
-            - rabbitmq-diagnostics
-            - check_port_connectivity
+          tcpSocket:
+            port: 5672
           initialDelaySeconds: 60
-          periodSeconds: 30
+          periodSeconds: 15
+          failureThreshold: 6
         readinessProbe:
-          exec:
-            command:
-            - rabbitmq-diagnostics
-            - check_port_connectivity
+          tcpSocket:
+            port: 5672
           initialDelaySeconds: 20
           periodSeconds: 10
         volumeMounts:
@@ -81,6 +78,11 @@ spec:
           mountPath: /var/lib/rabbitmq
         resources:
           {{- toYaml .Values.rabbitmq.resources | nindent 12 }}
+      {{- if not .Values.rabbitmq.persistence.enabled }}
+      volumes:
+      - name: data
+        emptyDir: {}
+      {{- end }}
   {{- if .Values.rabbitmq.persistence.enabled }}
   volumeClaimTemplates:
   - metadata:
@@ -93,9 +95,5 @@ spec:
       resources:
         requests:
           storage: {{ .Values.rabbitmq.persistence.size }}
-  {{- else }}
-  volumes:
-  - name: data
-    emptyDir: {}
   {{- end }}
 {{- end }}

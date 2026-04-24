@@ -1,0 +1,2 @@
+# Helm chart templates use Go-template syntax that Prettier can't parse as plain YAML.
+helm/**/templates/**

@@ -324,8 +324,8 @@ postgresql:
   # Shared PostgreSQL credentials
   auth:
     username: pitch_user
-    password: ""  # Set via --set or secret
-    existingSecret: ""  # Name of existing secret
+    password: "" # Set via --set or secret
+    existingSecret: "" # Name of existing secret
 
 # =============================================================================
 # MongoDB (for Simulation service chat/session data)
@@ -340,7 +340,7 @@ mongodb:
   auth:
     enabled: true
     rootUser: admin
-    rootPassword: ""  # Set via --set or secret
+    rootPassword: "" # Set via --set or secret
     database: pitch_simulation
     existingSecret: ""
 
@@ -403,7 +403,7 @@ rabbitmq:
 
   auth:
     username: admin
-    password: ""  # Set via --set or secret
+    password: "" # Set via --set or secret
     vhost: pitch
     existingSecret: ""
 

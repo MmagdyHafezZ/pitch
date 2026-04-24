@@ -1,8 +1,8 @@
-import fs from 'node:fs';
-import path from 'node:path';
+import fs from 'node:fs'
+import path from 'node:path'
 
-const TEST_FILE_SUFFIXES = ['.spec.ts', '.spec.tsx', '.test.ts', '.test.tsx'];
-const TEST_DIRECTORIES = ['__tests__', '__test__', 'tests'];
+const TEST_FILE_SUFFIXES = ['.spec.ts', '.spec.tsx', '.test.ts', '.test.tsx']
+const TEST_DIRECTORIES = ['__tests__', '__test__', 'tests']
 const DEFAULT_IGNORES = [
   '**/*.d.ts',
   '**/*.dto.ts',
@@ -23,231 +23,247 @@ const DEFAULT_IGNORES = [
   '**/__generated__/**',
   '**/__mocks__/**',
   '**/__fixtures__/**',
-];
+]
 
 const DEFAULT_OPTIONS = {
   requireEnv: 'PITCH_ENFORCE_TESTS',
   envValue: 'true',
   ignore: [],
   includeDefaults: true,
-};
+}
 
-const SPECIAL_REGEX_CHARS = new Set(['.', '*', '+', '?', '^', '$', '{', '}', '(', ')', '|', '[', ']', '\\']);
-const ALLOWLIST_FILE = 'tests.allowlist.json';
-const allowlistCache = new Map();
-const packageNameCache = new Map();
+const SPECIAL_REGEX_CHARS = new Set([
+  '.',
+  '*',
+  '+',
+  '?',
+  '^',
+  '$',
+  '{',
+  '}',
+  '(',
+  ')',
+  '|',
+  '[',
+  ']',
+  '\\',
+])
+const ALLOWLIST_FILE = 'tests.allowlist.json'
+const allowlistCache = new Map()
+const packageNameCache = new Map()
 
 function normalizePath(targetPath) {
-  return targetPath.replace(/\\/gu, '/');
+  return targetPath.replace(/\\/gu, '/')
 }
 
 function shouldEnforce(options) {
   if (!options.requireEnv) {
-    return true;
+    return true
   }
 
-  const current = process.env[options.requireEnv];
-  return current === (options.envValue ?? 'true');
+  const current = process.env[options.requireEnv]
+  return current === (options.envValue ?? 'true')
 }
 
 function buildIgnoreList(options, cwd) {
-  const userIgnores = Array.isArray(options.ignore) ? options.ignore : [];
-  const patterns = options.includeDefaults === false ? userIgnores : [...DEFAULT_IGNORES, ...userIgnores];
-  const allowlist = loadAllowlist(cwd);
-  return [...patterns.map(normalizePath), ...allowlist];
+  const userIgnores = Array.isArray(options.ignore) ? options.ignore : []
+  const patterns =
+    options.includeDefaults === false ? userIgnores : [...DEFAULT_IGNORES, ...userIgnores]
+  const allowlist = loadAllowlist(cwd)
+  return [...patterns.map(normalizePath), ...allowlist]
 }
 
 function segmentToRegExp(segment) {
-  let pattern = '';
+  let pattern = ''
 
   for (const char of segment) {
     if (char === '*') {
-      pattern += '[^/]*';
-      continue;
+      pattern += '[^/]*'
+      continue
     }
 
     if (char === '?') {
-      pattern += '.';
-      continue;
+      pattern += '.'
+      continue
     }
 
-    pattern += escapeRegexChar(char);
+    pattern += escapeRegexChar(char)
   }
 
-  return new RegExp(`^${pattern}$`, 'u');
+  return new RegExp(`^${pattern}$`, 'u')
 }
 
 function escapeRegexChar(char) {
-  return SPECIAL_REGEX_CHARS.has(char) ? `\\${char}` : char;
+  return SPECIAL_REGEX_CHARS.has(char) ? `\\${char}` : char
 }
 
 function matchSegments(patternSegments, candidateSegments) {
   if (patternSegments.length === 0) {
-    return candidateSegments.length === 0;
+    return candidateSegments.length === 0
   }
 
-  const [currentPattern, ...restPattern] = patternSegments;
+  const [currentPattern, ...restPattern] = patternSegments
 
   if (currentPattern === '**') {
     if (matchSegments(restPattern, candidateSegments)) {
-      return true;
+      return true
     }
 
     if (candidateSegments.length === 0) {
-      return false;
+      return false
     }
 
-    return matchSegments(patternSegments, candidateSegments.slice(1));
+    return matchSegments(patternSegments, candidateSegments.slice(1))
   }
 
   if (candidateSegments.length === 0) {
-    return false;
+    return false
   }
 
-  const [currentCandidate, ...restCandidate] = candidateSegments;
+  const [currentCandidate, ...restCandidate] = candidateSegments
   return segmentToRegExp(currentPattern).test(currentCandidate)
     ? matchSegments(restPattern, restCandidate)
-    : false;
+    : false
 }
 
 function matchesGlob(pattern, candidate) {
-  const patternSegments = normalizePath(pattern).split('/');
-  const candidateSegments = normalizePath(candidate).split('/');
-  return matchSegments(patternSegments, candidateSegments);
+  const patternSegments = normalizePath(pattern).split('/')
+  const candidateSegments = normalizePath(candidate).split('/')
+  return matchSegments(patternSegments, candidateSegments)
 }
 
 function isIgnored(relativePath, ignorePatterns) {
-  return ignorePatterns.some((pattern) => matchesGlob(pattern, normalizePath(relativePath)));
+  return ignorePatterns.some((pattern) => matchesGlob(pattern, normalizePath(relativePath)))
 }
 
 function loadAllowlist(cwd) {
-  const cacheKey = normalizePath(cwd);
+  const cacheKey = normalizePath(cwd)
   if (allowlistCache.has(cacheKey)) {
-    return allowlistCache.get(cacheKey);
+    return allowlistCache.get(cacheKey)
   }
 
-  const candidate = findAllowlistFile(cwd);
+  const candidate = findAllowlistFile(cwd)
   if (!candidate) {
-    allowlistCache.set(cacheKey, []);
-    return [];
+    allowlistCache.set(cacheKey, [])
+    return []
   }
 
   try {
-    const raw = fs.readFileSync(candidate, 'utf8');
-    const data = JSON.parse(raw);
-    const repoRoot = path.dirname(candidate);
-    const workspaceKey = normalizePath(path.relative(repoRoot, cwd)) || '.';
-    const workspaceName = readPackageName(cwd) ?? null;
-    const allowPatterns = extractAllowPatterns(data, workspaceKey, workspaceName);
-    const normalized = allowPatterns.map(normalizePath);
-    allowlistCache.set(cacheKey, normalized);
-    return normalized;
+    const raw = fs.readFileSync(candidate, 'utf8')
+    const data = JSON.parse(raw)
+    const repoRoot = path.dirname(candidate)
+    const workspaceKey = normalizePath(path.relative(repoRoot, cwd)) || '.'
+    const workspaceName = readPackageName(cwd) ?? null
+    const allowPatterns = extractAllowPatterns(data, workspaceKey, workspaceName)
+    const normalized = allowPatterns.map(normalizePath)
+    allowlistCache.set(cacheKey, normalized)
+    return normalized
   } catch (error) {
-    allowlistCache.set(cacheKey, []);
-    return [];
+    allowlistCache.set(cacheKey, [])
+    return []
   }
 }
 
 function findAllowlistFile(startDir) {
-  let current = startDir;
+  let current = startDir
   while (current && current !== path.dirname(current)) {
-    const candidate = path.join(current, ALLOWLIST_FILE);
+    const candidate = path.join(current, ALLOWLIST_FILE)
     if (fs.existsSync(candidate)) {
-      return candidate;
+      return candidate
     }
-    const parent = path.dirname(current);
+    const parent = path.dirname(current)
     if (parent === current) {
-      break;
+      break
     }
-    current = parent;
+    current = parent
   }
-  return null;
+  return null
 }
 
 function extractAllowPatterns(data, workspaceKey, workspaceName) {
   if (Array.isArray(data)) {
-    return data;
+    return data
   }
 
   if (!data || typeof data !== 'object') {
-    return [];
+    return []
   }
 
-  const patterns = [];
+  const patterns = []
 
   if (Array.isArray(data.global)) {
-    patterns.push(...data.global);
+    patterns.push(...data.global)
   }
 
   if (Array.isArray(data[workspaceKey])) {
-    patterns.push(...data[workspaceKey]);
+    patterns.push(...data[workspaceKey])
   }
 
   if (workspaceName && Array.isArray(data[workspaceName])) {
-    patterns.push(...data[workspaceName]);
+    patterns.push(...data[workspaceName])
   }
 
-  const workspaces = data.workspaces;
+  const workspaces = data.workspaces
   if (workspaces && typeof workspaces === 'object') {
     if (Array.isArray(workspaces[workspaceKey])) {
-      patterns.push(...workspaces[workspaceKey]);
+      patterns.push(...workspaces[workspaceKey])
     }
 
     if (workspaceName && Array.isArray(workspaces[workspaceName])) {
-      patterns.push(...workspaces[workspaceName]);
+      patterns.push(...workspaces[workspaceName])
     }
   }
 
-  return patterns;
+  return patterns
 }
 
 function readPackageName(dir) {
   if (packageNameCache.has(dir)) {
-    return packageNameCache.get(dir);
+    return packageNameCache.get(dir)
   }
 
-  const pkgPath = path.join(dir, 'package.json');
+  const pkgPath = path.join(dir, 'package.json')
   if (!fs.existsSync(pkgPath)) {
-    packageNameCache.set(dir, null);
-    return null;
+    packageNameCache.set(dir, null)
+    return null
   }
 
   try {
-    const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
-    const name = typeof pkg.name === 'string' ? pkg.name : null;
-    packageNameCache.set(dir, name);
-    return name;
+    const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'))
+    const name = typeof pkg.name === 'string' ? pkg.name : null
+    packageNameCache.set(dir, name)
+    return name
   } catch (error) {
-    packageNameCache.set(dir, null);
-    return null;
+    packageNameCache.set(dir, null)
+    return null
   }
 }
 
 function resolveCandidates(filename) {
-  const dir = path.dirname(filename);
-  const base = path.basename(filename).replace(/\.(ts|tsx)$/u, '');
-  const candidates = new Set();
+  const dir = path.dirname(filename)
+  const base = path.basename(filename).replace(/\.(ts|tsx)$/u, '')
+  const candidates = new Set()
 
   for (const suffix of TEST_FILE_SUFFIXES) {
-    candidates.add(path.join(dir, `${base}${suffix}`));
+    candidates.add(path.join(dir, `${base}${suffix}`))
   }
 
   for (const testDir of TEST_DIRECTORIES) {
     for (const suffix of TEST_FILE_SUFFIXES) {
-      candidates.add(path.join(dir, testDir, `${base}${suffix}`));
-      const parent = path.dirname(dir);
+      candidates.add(path.join(dir, testDir, `${base}${suffix}`))
+      const parent = path.dirname(dir)
       if (parent && parent !== dir) {
-        candidates.add(path.join(parent, testDir, `${base}${suffix}`));
+        candidates.add(path.join(parent, testDir, `${base}${suffix}`))
       }
     }
   }
 
-  return Array.from(candidates);
+  return Array.from(candidates)
 }
 
 function hasCompanionTest(filename) {
-  const candidates = resolveCandidates(filename);
-  return candidates.some((candidate) => fs.existsSync(candidate));
+  const candidates = resolveCandidates(filename)
+  return candidates.some((candidate) => fs.existsSync(candidate))
 }
 
 const requireTestsRule = {
@@ -284,49 +300,49 @@ const requireTestsRule = {
     },
   },
   create(context) {
-    const [optionsFromConfig = {}] = context.options;
-    const options = { ...DEFAULT_OPTIONS, ...optionsFromConfig };
+    const [optionsFromConfig = {}] = context.options
+    const options = { ...DEFAULT_OPTIONS, ...optionsFromConfig }
 
     if (!shouldEnforce(options)) {
-      return {};
+      return {}
     }
 
     return {
       Program(node) {
-        const filename = context.getFilename();
+        const filename = context.getFilename()
 
         if (!filename || filename === '<text>') {
-          return;
+          return
         }
 
         if (!/\.(ts|tsx)$/u.test(filename)) {
-          return;
+          return
         }
 
         if (/\.(spec|test)\.(ts|tsx)$/u.test(filename)) {
-          return;
+          return
         }
 
-        const cwd = typeof context.getCwd === 'function' ? context.getCwd() : process.cwd();
-        const relativePath = path.relative(cwd, filename);
+        const cwd = typeof context.getCwd === 'function' ? context.getCwd() : process.cwd()
+        const relativePath = path.relative(cwd, filename)
 
         if (relativePath.startsWith('..')) {
-          return;
+          return
         }
 
-        const ignorePatterns = buildIgnoreList(options, cwd);
+        const ignorePatterns = buildIgnoreList(options, cwd)
         if (isIgnored(relativePath, ignorePatterns)) {
-          return;
+          return
         }
 
         if (hasCompanionTest(filename)) {
-          return;
+          return
         }
 
         const expected = resolveCandidates(filename)
           .map((candidate) => path.relative(cwd, candidate))
           .filter((candidate) => !candidate.startsWith('..'))
-          .map(normalizePath);
+          .map(normalizePath)
 
         context.report({
           node,
@@ -335,16 +351,16 @@ const requireTestsRule = {
             file: normalizePath(relativePath),
             expected: Array.from(new Set(expected)).join(', '),
           },
-        });
+        })
       },
-    };
+    }
   },
-};
+}
 
 const plugin = {
   rules: {
     'require-tests': requireTestsRule,
   },
-};
+}
 
-export default plugin;
+export default plugin

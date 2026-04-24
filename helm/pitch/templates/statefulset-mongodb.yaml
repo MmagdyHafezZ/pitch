@@ -55,26 +55,26 @@ spec:
         - containerPort: {{ .Values.mongodb.service.port }}
           name: mongodb
         livenessProbe:
-          exec:
-            command:
-            - mongosh
-            - --eval
-            - "db.adminCommand('ping')"
-          initialDelaySeconds: 30
-          periodSeconds: 10
+          tcpSocket:
+            port: 27017
+          initialDelaySeconds: 60
+          periodSeconds: 15
+          failureThreshold: 6
         readinessProbe:
-          exec:
-            command:
-            - mongosh
-            - --eval
-            - "db.adminCommand('ping')"
-          initialDelaySeconds: 5
-          periodSeconds: 5
+          tcpSocket:
+            port: 27017
+          initialDelaySeconds: 20
+          periodSeconds: 10
         volumeMounts:
         - name: data
           mountPath: /data/db
         resources:
           {{- toYaml .Values.mongodb.resources | nindent 12 }}
+      {{- if not .Values.mongodb.persistence.enabled }}
+      volumes:
+      - name: data
+        emptyDir: {}
+      {{- end }}
   {{- if .Values.mongodb.persistence.enabled }}
   volumeClaimTemplates:
   - metadata:
@@ -87,9 +87,5 @@ spec:
       resources:
         requests:
           storage: {{ .Values.mongodb.persistence.size }}
-  {{- else }}
-  volumes:
-  - name: data
-    emptyDir: {}
   {{- end }}
 {{- end }}

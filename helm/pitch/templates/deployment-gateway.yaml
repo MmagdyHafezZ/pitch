@@ -65,6 +65,92 @@ spec:
         - name: DEV_BYPASS_USER_ID
           value: {{ .Values.gateway.env.DEV_BYPASS_USER_ID | quote }}
         {{- end }}
+        - name: USER_DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.secrets.existingSecret | default (printf "%s-secrets" (include "pitch.fullname" .)) }}
+              key: user-database-url
+        - name: SIMULATION_DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.secrets.existingSecret | default (printf "%s-secrets" (include "pitch.fullname" .)) }}
+              key: simulation-database-url
+        - name: SUPPORT_DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.secrets.existingSecret | default (printf "%s-secrets" (include "pitch.fullname" .)) }}
+              key: support-database-url
+        - name: ANALYTICS_DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.secrets.existingSecret | default (printf "%s-secrets" (include "pitch.fullname" .)) }}
+              key: analytics-database-url
+        - name: LTI_DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.secrets.existingSecret | default (printf "%s-secrets" (include "pitch.fullname" .)) }}
+              key: lti-database-url
+        - name: S3_DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.secrets.existingSecret | default (printf "%s-secrets" (include "pitch.fullname" .)) }}
+              key: s3-database-url
+        - name: MONGODB_URL
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.secrets.existingSecret | default (printf "%s-secrets" (include "pitch.fullname" .)) }}
+              key: mongodb-url
+        - name: USER_MANAGEMENT_MONGODB_URL
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.secrets.existingSecret | default (printf "%s-secrets" (include "pitch.fullname" .)) }}
+              key: mongodb-url
+        - name: STORAGE_REGION
+          value: {{ .Values.secrets.awsRegion | default "us-east-1" | quote }}
+        - name: AWS_REGION
+          value: {{ .Values.secrets.awsRegion | default "us-east-1" | quote }}
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.secrets.existingSecret | default (printf "%s-secrets" (include "pitch.fullname" .)) }}
+              key: aws-access-key-id
+              optional: true
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.secrets.existingSecret | default (printf "%s-secrets" (include "pitch.fullname" .)) }}
+              key: aws-secret-access-key
+              optional: true
+        - name: AWS_S3_BUCKET
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.secrets.existingSecret | default (printf "%s-secrets" (include "pitch.fullname" .)) }}
+              key: aws-s3-bucket
+              optional: true
+        - name: OPENAI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.secrets.existingSecret | default (printf "%s-secrets" (include "pitch.fullname" .)) }}
+              key: openai-api-key
+              optional: true
+        - name: ANTHROPIC_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.secrets.existingSecret | default (printf "%s-secrets" (include "pitch.fullname" .)) }}
+              key: anthropic-api-key
+              optional: true
+        - name: DEEPGRAM_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.secrets.existingSecret | default (printf "%s-secrets" (include "pitch.fullname" .)) }}
+              key: deepgram-api-key
+              optional: true
+        - name: ELEVENLABS_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.secrets.existingSecret | default (printf "%s-secrets" (include "pitch.fullname" .)) }}
+              key: elevenlabs-api-key
+              optional: true
         - name: REDIS_URL
           value: {{ include "pitch.redis.connectionString" . | quote }}
         - name: RABBITMQ_URL

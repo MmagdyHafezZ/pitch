@@ -279,8 +279,10 @@ helm install pitch-perf ./helm/pitch \
 
 This profile makes two deliberate changes for performance testing:
 
-- it disables ingress and exposes the gateway as a `NodePort` so an external k6 runner can target the gateway directly
-- it disables autoscaling so replica-count experiments stay under explicit operator control
+- it disables ingress and exposes the gateway as a `NodePort` so an external k6
+  runner can target the gateway directly
+- it disables autoscaling so replica-count experiments stay under explicit
+  operator control
 
 Retrieve the externally reachable gateway port with:
 
@@ -288,9 +290,14 @@ Retrieve the externally reachable gateway port with:
 kubectl get svc pitch-perf-gateway -n pitch-perf
 ```
 
-For the final report, run the load generator on a separate machine or node when possible. If the load generator and system under test share the same machine, explicitly document that shared-resource contention can affect latency, throughput, and bottleneck attribution.
+For the final report, run the load generator on a separate machine or node when
+possible. If the load generator and system under test share the same machine,
+explicitly document that shared-resource contention can affect latency,
+throughput, and bottleneck attribution.
 
-The chart currently includes a `ServiceMonitor` for RabbitMQ when `monitoring.enabled=true` and `monitoring.serviceMonitor.enabled=true`, because RabbitMQ is the metrics endpoint already exposed by the chart.
+The chart currently includes a `ServiceMonitor` for RabbitMQ when
+`monitoring.enabled=true` and `monitoring.serviceMonitor.enabled=true`, because
+RabbitMQ is the metrics endpoint already exposed by the chart.
 
 ## Upgrading
 

@@ -5,18 +5,18 @@ module.exports = {
       2,
       'always',
       [
-        'feat',     // A new feature
-        'fix',      // A bug fix
-        'docs',     // Documentation only changes
-        'style',    // Changes that do not affect the meaning of the code (white-space, formatting, missing semi-colons, etc)
+        'feat', // A new feature
+        'fix', // A bug fix
+        'docs', // Documentation only changes
+        'style', // Changes that do not affect the meaning of the code (white-space, formatting, missing semi-colons, etc)
         'refactor', // A code change that neither fixes a bug nor adds a feature
-        'perf',     // A code change that improves performance
-        'test',     // Adding missing tests or correcting existing tests
-        'build',    // Changes that affect the build system or external dependencies (example scopes: gulp, broccoli, npm)
-        'ci',       // Changes to our CI configuration files and scripts (example scopes: Travis, Circle, BrowserStack, SauceLabs)
-        'chore',    // Other changes that don't modify src or test files
-        'revert'    // Reverts a previous commit
-      ]
+        'perf', // A code change that improves performance
+        'test', // Adding missing tests or correcting existing tests
+        'build', // Changes that affect the build system or external dependencies (example scopes: gulp, broccoli, npm)
+        'ci', // Changes to our CI configuration files and scripts (example scopes: Travis, Circle, BrowserStack, SauceLabs)
+        'chore', // Other changes that don't modify src or test files
+        'revert', // Reverts a previous commit
+      ],
     ],
     'type-case': [2, 'always', 'lower-case'],
     'type-empty': [2, 'never'],
@@ -24,16 +24,16 @@ module.exports = {
       2,
       'always',
       [
-        'web',        // Frontend/web app changes
-        'api',        // Backend API changes  
-        'shared',     // Shared package changes
-        'config',     // Configuration changes
-        'deps',       // Dependency updates
-        'docker',     // Docker related changes
-        'docs',       // Documentation changes
-        'ci',         // CI/CD changes
-        'release'     // Release related changes
-      ]
+        'web', // Frontend/web app changes
+        'api', // Backend API changes
+        'shared', // Shared package changes
+        'config', // Configuration changes
+        'deps', // Dependency updates
+        'docker', // Docker related changes
+        'docs', // Documentation changes
+        'ci', // CI/CD changes
+        'release', // Release related changes
+      ],
     ],
     'scope-case': [2, 'always', 'lower-case'],
     'subject-case': [2, 'never', ['sentence-case', 'start-case', 'pascal-case', 'upper-case']],
@@ -44,6 +44,6 @@ module.exports = {
     'body-leading-blank': [1, 'always'],
     'body-max-line-length': [2, 'always', 100],
     'footer-leading-blank': [1, 'always'],
-    'footer-max-line-length': [2, 'always', 100]
-  }
+    'footer-max-line-length': [2, 'always', 100],
+  },
 }

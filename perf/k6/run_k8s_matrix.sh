@@ -27,7 +27,7 @@ CACHE_STATES="${CACHE_STATES:-enabled disabled}"
 SCALING_VUS="${SCALING_VUS:-50}"
 CACHE_VUS="${CACHE_VUS:-50}"
 CACHE_LAYER="${CACHE_LAYER:-redis}"
-SCALING_TARGET_SERVICE="${SCALING_TARGET_SERVICE:-code-engine-app}"
+SCALING_TARGET_SERVICE="${SCALING_TARGET_SERVICE:-pitch-api}"
 LIGHT_WEIGHT="${LIGHT_WEIGHT:-0.7}"
 AI_WEIGHT="${AI_WEIGHT:-0.3}"
 AI_REQUEST_TIMEOUT="${AI_REQUEST_TIMEOUT:-45s}"
@@ -38,7 +38,7 @@ DRY_RUN="${DRY_RUN:-0}"
 NON_INTERACTIVE="${NON_INTERACTIVE:-0}"
 
 SCENARIO_ORG_ID="${SCENARIO_ORG_ID:-}"
-CODE_ENGINE_SCALE_CMD_TEMPLATE="${CODE_ENGINE_SCALE_CMD_TEMPLATE:-}"
+K8S_SCALE_CMD_TEMPLATE="${K8S_SCALE_CMD_TEMPLATE:-}"
 CACHE_STATE_CMD_TEMPLATE="${CACHE_STATE_CMD_TEMPLATE:-}"
 
 SCRIPT_LIGHT="${ROOT_DIR}/perf/k6/scenarios/light-public-stats.js"
@@ -61,7 +61,7 @@ die() {
 usage() {
   cat <<'EOF'
 Usage:
-  perf/k6/run_code_engine_matrix.sh [all|smoke|baseline|light|ai|mixed|spike|stress|scaling|cache ...]
+  perf/k6/run_k8s_matrix.sh [all|smoke|baseline|light|ai|mixed|spike|stress|scaling|cache ...]
 
 Defaults:
   - BASE_URL defaults to https://api.pitchapp.ca
@@ -74,12 +74,12 @@ Required for AI and mixed workloads:
     GET /api/v1/auth/me.
 
 Optional automation hooks:
-  - CODE_ENGINE_SCALE_CMD_TEMPLATE
+  - K8S_SCALE_CMD_TEMPLATE
     Example:
-      CODE_ENGINE_SCALE_CMD_TEMPLATE='ibmcloud ce app update --name pitch-api --min-scale {{value}} --max-scale {{value}}'
+      K8S_SCALE_CMD_TEMPLATE='kubectl scale deployment/pitch-api --replicas={{value}}'
   - CACHE_STATE_CMD_TEMPLATE
     Example:
-      CACHE_STATE_CMD_TEMPLATE='ibmcloud ce app update --name pitch-api --env CACHE_ENABLED={{value}}'
+      CACHE_STATE_CMD_TEMPLATE='kubectl set env deployment/pitch-api CACHE_ENABLED={{value}}'
 
 Useful environment variables:
   - ACCESS_TOKEN
@@ -231,7 +231,8 @@ run_k6() {
   cmd+=("$scenario_file")
 
   log "Running $(basename "$scenario_file") -> ${output_file#$ROOT_DIR/}"
-  run_command "${cmd[@]}"
+  # Allow non-zero exit so threshold failures at high load don't abort the campaign.
+  run_command "${cmd[@]}" || log "WARNING: k6 exited non-zero for $(basename "$output_file") — thresholds may have been breached; continuing."
   pause_between_runs
 }
 
@@ -362,7 +363,7 @@ run_scaling() {
 
   local count run
   for count in "${instance_values[@]}"; do
-    apply_template_or_confirm "Code Engine app instances" "$count" "$CODE_ENGINE_SCALE_CMD_TEMPLATE"
+    apply_template_or_confirm "Kubernetes pod replicas" "$count" "$K8S_SCALE_CMD_TEMPLATE"
     for run in $(seq 1 "$SCALING_RUNS"); do
       run_k6 \
         "${RESULT_ROOT}/scaling/app-instances-${count}/run-${run}.json" \

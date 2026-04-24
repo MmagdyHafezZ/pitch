@@ -1,6 +1,6 @@
 {
-  "dataset_id": "final-code-engine-external",
-  "report_title": "P.I.T.C.H. Final Report Performance Scaffold (IBM Code Engine)",
+  "dataset_id": "final-k8s-external",
+  "report_title": "P.I.T.C.H. Final Report Performance Scaffold (Kubernetes)",
   "report_date": "2026-04-23",
   "host_specs": {
     "model_name": "MacBook Pro",
@@ -12,11 +12,11 @@
     "kernel_version": "Darwin 25.4.0"
   },
   "environment": {
-    "sut_deployment": "IBM Cloud Code Engine deployment exposed at https://api.pitchapp.ca. For k6, use BASE_URL=https://api.pitchapp.ca because the workload scripts append /api/v1 paths internally.",
-    "observability": ["IBM Code Engine application metrics", "IBM Code Engine logs and revision events", "RabbitMQ or CloudAMQP dashboard", "Redis dashboard", "database metrics"],
+    "sut_deployment": "Kubernetes deployment exposed at https://api.pitchapp.ca. For k6, use BASE_URL=https://api.pitchapp.ca because the workload scripts append /api/v1 paths internally.",
+    "observability": ["Kubernetes application metrics", "Kubernetes logs and revision events", "RabbitMQ or CloudAMQP dashboard", "Redis dashboard", "database metrics"],
     "load_generator_topology": {
       "mode": "separate",
-      "summary": "The system under test runs on IBM Code Engine and the k6 load generator runs from a separate client machine. This reduces the same-host interference present in the earlier development-host dataset, although public-network variability and managed-platform behavior can still affect latency measurements.",
+      "summary": "The system under test runs on Kubernetes and the k6 load generator runs from a separate client machine. This reduces the same-host interference present in the earlier development-host dataset, although public-network variability and managed-platform behavior can still affect latency measurements.",
       "ta_feedback": "Good progress so far, and it\u2019s great to see clear experiments with meaningful results showing how the system behaves under increasing load. The current tests simulate virtual users sending requests through the system, but since both the load generator and all services are running on the same machine, they may interfere with each other and affect the accuracy of the results. This setup can make it harder to clearly identify real bottlenecks or reflect realistic system behavior. For the final report, try to separate the load generation from the system or clearly explain how this limitation may impact your findings."
     }
   },
@@ -78,7 +78,7 @@
     },
     {
       "experiment_id": "app-instance-scaling",
-      "label": "Code Engine application instance scaling",
+      "label": "Kubernetes application instance scaling",
       "scenario_count": 3,
       "measured_scenarios": 0,
       "expected_total_runs": 15,
@@ -109,7 +109,7 @@
       "error_rate": 0.0,
       "error_rate_ci95": null,
       "x_value": null,
-      "notes": ["Collect low-load baseline runs against the public Code Engine endpoint before the scaling campaigns begin."]
+      "notes": ["Collect low-load baseline runs against the public Kubernetes endpoint before the scaling campaigns begin."]
     },
     {
       "experiment_id": "light-load-scaling",

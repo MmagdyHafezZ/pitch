@@ -1,6 +1,7 @@
 # Frontend Testing Guide
 
-Comprehensive testing strategy for the PITCH web application using modern testing tools.
+Comprehensive testing strategy for the PITCH web application using modern
+testing tools.
 
 ## Testing Stack
 
@@ -13,6 +14,7 @@ Comprehensive testing strategy for the PITCH web application using modern testin
 ## Setup
 
 ### Install Testing Dependencies
+
 ```bash
 # Core testing libraries
 pnpm add -D jest @testing-library/react @testing-library/jest-dom @testing-library/user-event
@@ -28,6 +30,7 @@ pnpm add -D msw
 ```
 
 ### Jest Configuration
+
 ```javascript
 // jest.config.js
 const nextJest = require('next/jest')
@@ -62,6 +65,7 @@ module.exports = createJestConfig(customJestConfig)
 ```
 
 ### Jest Setup
+
 ```javascript
 // jest.setup.js
 import '@testing-library/jest-dom'
@@ -88,6 +92,7 @@ afterAll(() => server.close())
 ## Unit Testing
 
 ### Component Testing
+
 ```typescript
 // src/components/ui/__tests__/button.test.tsx
 import { render, screen } from '@testing-library/react'
@@ -103,7 +108,7 @@ describe('Button', () => {
   it('handles click events', async () => {
     const handleClick = jest.fn()
     render(<Button onClick={handleClick}>Click me</Button>)
-    
+
     await userEvent.click(screen.getByRole('button'))
     expect(handleClick).toHaveBeenCalledTimes(1)
   })
@@ -120,7 +125,7 @@ describe('Button', () => {
         <a href="/test">Link Button</a>
       </Button>
     )
-    
+
     const link = screen.getByRole('link')
     expect(link).toHaveAttribute('href', '/test')
     expect(link).toHaveAttribute('data-slot', 'button')
@@ -129,6 +134,7 @@ describe('Button', () => {
 ```
 
 ### Hook Testing
+
 ```typescript
 // src/hooks/__tests__/use-api.test.tsx
 import { renderHook, waitFor } from '@testing-library/react'
@@ -142,7 +148,7 @@ const createWrapper = () => {
       mutations: { retry: false },
     },
   })
-  
+
   return ({ children }) => (
     <QueryClientProvider client={queryClient}>
       {children}
@@ -173,6 +179,7 @@ describe('useApi', () => {
 ```
 
 ### Page Testing
+
 ```typescript
 // src/app/__tests__/page.test.tsx
 import { render, screen } from '@testing-library/react'
@@ -183,7 +190,7 @@ const Providers = ({ children }) => {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   })
-  
+
   return (
     <QueryClientProvider client={queryClient}>
       {children}
@@ -207,6 +214,7 @@ describe('HomePage', () => {
 ## API Mocking
 
 ### MSW Setup
+
 ```typescript
 // src/mocks/handlers.ts
 import { http, HttpResponse } from 'msw'
@@ -251,6 +259,7 @@ export const server = setupServer(...handlers)
 ## Integration Testing
 
 ### Form Testing
+
 ```typescript
 // src/components/__tests__/contact-form.test.tsx
 import { render, screen } from '@testing-library/react'
@@ -289,6 +298,7 @@ describe('ContactForm', () => {
 ## E2E Testing with Playwright
 
 ### Playwright Configuration
+
 ```typescript
 // playwright.config.ts
 import { defineConfig } from '@playwright/test'
@@ -328,6 +338,7 @@ export default defineConfig({
 ```
 
 ### E2E Test Examples
+
 ```typescript
 // e2e/auth.spec.ts
 import { test, expect } from '@playwright/test'
@@ -335,22 +346,22 @@ import { test, expect } from '@playwright/test'
 test.describe('Authentication', () => {
   test('user can sign in', async ({ page }) => {
     await page.goto('/signin')
-    
+
     await page.fill('[data-testid="email"]', 'test@example.com')
     await page.fill('[data-testid="password"]', 'password123')
     await page.click('[data-testid="signin-button"]')
-    
+
     await expect(page).toHaveURL('/dashboard')
     await expect(page.getByText('Welcome back!')).toBeVisible()
   })
 
   test('shows error for invalid credentials', async ({ page }) => {
     await page.goto('/signin')
-    
+
     await page.fill('[data-testid="email"]', 'invalid@example.com')
     await page.fill('[data-testid="password"]', 'wrongpassword')
     await page.click('[data-testid="signin-button"]')
-    
+
     await expect(page.getByText('Invalid credentials')).toBeVisible()
   })
 })
@@ -359,6 +370,7 @@ test.describe('Authentication', () => {
 ## Visual Testing
 
 ### Storybook Setup
+
 ```javascript
 // .storybook/main.js
 module.exports = {
@@ -373,6 +385,7 @@ module.exports = {
 ```
 
 ### Component Stories
+
 ```typescript
 // src/components/ui/button.stories.tsx
 import type { Meta, StoryObj } from '@storybook/react'
@@ -422,6 +435,7 @@ export const WithIcon: Story = {
 ## Performance Testing
 
 ### Bundle Analysis
+
 ```json
 // package.json
 {
@@ -433,6 +447,7 @@ export const WithIcon: Story = {
 ```
 
 ### Web Vitals Testing
+
 ```typescript
 // src/lib/__tests__/web-vitals.test.ts
 import { getCLS, getFID, getFCP, getLCP, getTTFB } from 'web-vitals'
@@ -446,11 +461,11 @@ describe('Web Vitals', () => {
     const onPerfEntry = (name: string) => (metric: any) => {
       vitals[name] = metric.value
       count++
-      
+
       if (count === expected) {
         expect(vitals.LCP).toBeLessThan(2500) // Large Contentful Paint
-        expect(vitals.FID).toBeLessThan(100)  // First Input Delay
-        expect(vitals.CLS).toBeLessThan(0.1)  // Cumulative Layout Shift
+        expect(vitals.FID).toBeLessThan(100) // First Input Delay
+        expect(vitals.CLS).toBeLessThan(0.1) // Cumulative Layout Shift
         done()
       }
     }
@@ -467,6 +482,7 @@ describe('Web Vitals', () => {
 ## Test Scripts
 
 ### Package.json Scripts
+
 ```json
 {
   "scripts": {
@@ -484,6 +500,7 @@ describe('Web Vitals', () => {
 ## CI/CD Integration
 
 ### GitHub Actions
+
 ```yaml
 # .github/workflows/test.yml
 name: Tests
@@ -499,7 +516,7 @@ jobs:
         with:
           node-version: '20'
           cache: 'pnpm'
-      
+
       - run: pnpm install
       - run: pnpm --filter web test --coverage
       - uses: codecov/codecov-action@v3
@@ -512,7 +529,7 @@ jobs:
         with:
           node-version: '20'
           cache: 'pnpm'
-      
+
       - run: pnpm install
       - run: pnpm --filter web build
       - uses: microsoft/playwright-github-action@v1
