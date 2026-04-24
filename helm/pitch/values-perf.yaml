@@ -1,0 +1,156 @@
+# =============================================================================
+# PITCH Helm Chart - Performance Evaluation Overlay
+# =============================================================================
+#
+# This overlay is intended for the final performance-evaluation deployment.
+# Prefer running the load generator from a separate machine or Kubernetes node
+# and target the gateway NodePort directly to avoid ingress/proxy interference.
+#
+# If the load generator and the system under test must share the same machine,
+# document the limitation in the report: shared CPU, memory, storage, and
+# network contention can distort latency, throughput, and bottleneck findings.
+
+# Keep service names stable and expose the gateway directly for external k6 runs.
+gateway:
+  replicaCount: 1
+  service:
+    type: NodePort
+  env:
+    DEV_BYPASS_ENABLED: "true"
+    DEV_BYPASS_TOKEN: "pitch-perf-static-token"
+    DEV_BYPASS_EMAIL: "dev@local"
+    DEV_BYPASS_NAME: "Performance Runner"
+    DEV_BYPASS_USER_ID: "perf-runner"
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+  autoscaling:
+    enabled: false
+
+user:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 300m
+      memory: 384Mi
+    limits:
+      cpu: 750m
+      memory: 768Mi
+  autoscaling:
+    enabled: false
+
+simulation:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 750m
+      memory: 1Gi
+    limits:
+      cpu: 1500m
+      memory: 2Gi
+  autoscaling:
+    enabled: false
+
+support:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  autoscaling:
+    enabled: false
+
+analytics:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 300m
+      memory: 384Mi
+    limits:
+      cpu: 750m
+      memory: 768Mi
+  autoscaling:
+    enabled: false
+
+lti:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: 400m
+      memory: 512Mi
+  autoscaling:
+    enabled: false
+
+s3:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: 400m
+      memory: 512Mi
+  autoscaling:
+    enabled: false
+
+mongodb:
+  persistence:
+    enabled: true
+    size: 25Gi
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+
+redis:
+  persistence:
+    enabled: true
+    size: 5Gi
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  configuration:
+    maxmemory: "512mb"
+    maxmemory-policy: "allkeys-lru"
+    appendonly: "yes"
+
+rabbitmq:
+  persistence:
+    enabled: true
+    size: 10Gi
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+
+# Avoid an extra reverse proxy in the measurement path.
+ingress:
+  enabled: false
+
+# Enable the metrics resource the chart can support today.
+monitoring:
+  enabled: true
+  serviceMonitor:
+    enabled: true
+    interval: 15s
+    labels: {}

@@ -143,7 +143,7 @@ export const DOCUMENT_GENERATION_TOOL = {
         title: {
           type: 'string',
           description:
-            'Document title — used as the filename (no extension). E.g. "IBM Code Engine Sales Coaching Plan"',
+            'Document title — used as the filename (no extension). E.g. "Kubernetes Sales Coaching Plan"',
         },
         content: {
           type: 'string',

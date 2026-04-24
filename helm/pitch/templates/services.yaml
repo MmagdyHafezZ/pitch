@@ -16,7 +16,7 @@ spec:
   selector:
     {{- include "pitch.selectorLabels" . | nindent 4 }}
     app.kubernetes.io/component: gateway
-{{- end }}
+{{ end }}
 
 {{- if .Values.user.enabled -}}
 ---
@@ -37,7 +37,7 @@ spec:
   selector:
     {{- include "pitch.selectorLabels" . | nindent 4 }}
     app.kubernetes.io/component: user
-{{- end }}
+{{ end }}
 
 {{- if .Values.simulation.enabled -}}
 ---
@@ -58,7 +58,7 @@ spec:
   selector:
     {{- include "pitch.selectorLabels" . | nindent 4 }}
     app.kubernetes.io/component: simulation
-{{- end }}
+{{ end }}
 
 {{- if .Values.support.enabled -}}
 ---
@@ -79,7 +79,7 @@ spec:
   selector:
     {{- include "pitch.selectorLabels" . | nindent 4 }}
     app.kubernetes.io/component: support
-{{- end }}
+{{ end }}
 
 {{- if .Values.analytics.enabled -}}
 ---
@@ -100,7 +100,7 @@ spec:
   selector:
     {{- include "pitch.selectorLabels" . | nindent 4 }}
     app.kubernetes.io/component: analytics
-{{- end }}
+{{ end }}
 
 {{- if .Values.lti.enabled -}}
 ---
@@ -121,7 +121,7 @@ spec:
   selector:
     {{- include "pitch.selectorLabels" . | nindent 4 }}
     app.kubernetes.io/component: lti
-{{- end }}
+{{ end }}
 
 {{- if .Values.s3.enabled -}}
 ---
@@ -142,4 +142,4 @@ spec:
   selector:
     {{- include "pitch.selectorLabels" . | nindent 4 }}
     app.kubernetes.io/component: s3
-{{- end }}
+{{ end }}

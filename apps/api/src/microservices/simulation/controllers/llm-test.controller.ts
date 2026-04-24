@@ -7,10 +7,12 @@ import {
   Get,
   HttpException,
   HttpStatus,
+  UseGuards,
 } from '@nestjs/common';
 import {
   ApiBadRequestResponse,
   ApiBadGatewayResponse,
+  ApiBearerAuth,
   ApiGatewayTimeoutResponse,
   ApiOkResponse,
   ApiOperation,
@@ -34,6 +36,7 @@ import { HttpErrorResponseDto } from '../dto/http-error.dto';
 import { LLMProvidersResponseDto } from '../dto/llm-providers.dto';
 import { ProviderError } from '../providers/llm/llm-provider.interface';
 import { SystemAdminOnly } from '../../../gateway/decorators/system-admin.decorator';
+import { GlobalJwtAuthGuard } from '../../../gateway/guards/global-jwt-auth.guard';
 
 /**
  * LLM Test Controller
@@ -45,6 +48,8 @@ import { SystemAdminOnly } from '../../../gateway/decorators/system-admin.decora
  */
 @ApiTags('Simulation LLM')
 @Controller('simulation/llm')
+@UseGuards(GlobalJwtAuthGuard)
+@ApiBearerAuth('bearer')
 export class LLMTestController {
   private readonly logger = new Logger(LLMTestController.name);
 

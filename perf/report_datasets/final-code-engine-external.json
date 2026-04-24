@@ -1,0 +1,199 @@
+{
+  "dataset_id": "final-code-engine-external",
+  "report_title": "P.I.T.C.H. Final Report Performance Scaffold (IBM Code Engine)",
+  "report_date": "2026-04-23",
+  "purpose": "This dataset captures the final performance-evaluation campaign against the IBM Code Engine deployment of P.I.T.C.H. using an external k6 load generator. It is intended to replace the earlier development-host measurements as the primary final-report dataset while preserving the experiment families that are executable in the current deployment.",
+  "dataset_summary": "The final dataset targets the public IBM Code Engine deployment at https://api.pitchapp.ca. Load is generated from a separate client machine, and the results are organized by workload family so the final report can quantify steady-state latency, throughput, error rate, overload behavior, and application-instance scaling without mixing them with the older co-located midterm dataset.",
+  "results_root": "perf/results/external",
+  "output_markdown": "output/doc/pitch_final_report_perf_code_engine_scaffold_2026-04-23.md",
+  "output_json": "output/doc/pitch_final_report_perf_code_engine_scaffold_2026-04-23.json",
+  "assets_dir": "output/doc/assets/final-code-engine-external",
+  "environment": {
+    "sut_deployment": "IBM Cloud Code Engine deployment exposed at https://api.pitchapp.ca. For k6, use BASE_URL=https://api.pitchapp.ca because the workload scripts append /api/v1 paths internally.",
+    "observability": ["IBM Code Engine application metrics", "IBM Code Engine logs and revision events", "RabbitMQ or CloudAMQP dashboard", "Redis dashboard", "database metrics"],
+    "load_generator_topology": {
+      "mode": "separate",
+      "summary": "The system under test runs on IBM Code Engine and the k6 load generator runs from a separate client machine. This reduces the same-host interference present in the earlier development-host dataset, although public-network variability and managed-platform behavior can still affect latency measurements.",
+      "ta_feedback": "Good progress so far, and it’s great to see clear experiments with meaningful results showing how the system behaves under increasing load. The current tests simulate virtual users sending requests through the system, but since both the load generator and all services are running on the same machine, they may interfere with each other and affect the accuracy of the results. This setup can make it harder to clearly identify real bottlenecks or reflect realistic system behavior. For the final report, try to separate the load generation from the system or clearly explain how this limitation may impact your findings."
+    }
+  },
+  "notes": {
+    "threats_to_validity": [
+      "IBM Code Engine is a managed platform, so public-network variability, platform scheduling behavior, and instance lifecycle events can influence end-to-end latency in addition to application logic.",
+      "If the deployment is a single Code Engine application rather than independently deployed backend services, scaling results should be interpreted as application-instance scaling rather than isolated per-service bottleneck scaling.",
+      "The current application does not expose a verified cache-off toggle, so cache-comparison results are out of scope for this final dataset unless that runtime gate is implemented later."
+    ],
+    "limitation_handling": [
+      "Keep this external Code Engine dataset analytically separate from the older co-located development-host dataset.",
+      "If autoscaling or instance-count changes are part of the experiment, report the exact Code Engine scaling settings used for each run.",
+      "Avoid claiming service-level causality unless the deployment shape and observability evidence actually support that level of attribution."
+    ],
+    "final_delivery_focus": [
+      "Collect the full experiment matrix from the public Code Engine deployment using the external runner.",
+      "Record the exact Code Engine deployment shape, scaling settings, and runtime configuration used for every campaign.",
+      "Correlate latency cliffs and failure behavior with Code Engine metrics, RabbitMQ activity, Redis behavior, and database observations before drawing bottleneck conclusions.",
+      "Use this scaffold output as the primary performance-results source for the final report."
+    ]
+  },
+  "experiments": [
+    {
+      "id": "baseline",
+      "label": "Baseline characterization",
+      "x_axis_label": "Scenario",
+      "scenarios": [
+        {
+          "id": "baseline",
+          "label": "baseline",
+          "path": "baseline",
+          "expected_runs": 2,
+          "notes": ["Collect low-load baseline runs against the public Code Engine endpoint before the scaling campaigns begin."]
+        }
+      ]
+    },
+    {
+      "id": "light-load-scaling",
+      "label": "Light API load scaling",
+      "x_axis_label": "Concurrent virtual users (VUs)",
+      "scenarios": [
+        {
+          "id": "light-10",
+          "label": "light / 10 VUs",
+          "path": "light/vus-10",
+          "expected_runs": 5,
+          "x_value": 10
+        },
+        {
+          "id": "light-50",
+          "label": "light / 50 VUs",
+          "path": "light/vus-50",
+          "expected_runs": 5,
+          "x_value": 50
+        },
+        {
+          "id": "light-100",
+          "label": "light / 100 VUs",
+          "path": "light/vus-100",
+          "expected_runs": 5,
+          "x_value": 100
+        },
+        {
+          "id": "light-200",
+          "label": "light / 200 VUs",
+          "path": "light/vus-200",
+          "expected_runs": 5,
+          "x_value": 200
+        },
+        {
+          "id": "light-500",
+          "label": "light / 500 VUs",
+          "path": "light/vus-500",
+          "expected_runs": 5,
+          "x_value": 500
+        }
+      ]
+    },
+    {
+      "id": "ai-load-scaling",
+      "label": "AI-intensive load scaling",
+      "x_axis_label": "Concurrent virtual users (VUs)",
+      "scenarios": [
+        {
+          "id": "ai-10",
+          "label": "AI-intensive / 10 VUs",
+          "path": "ai/vus-10",
+          "expected_runs": 5,
+          "x_value": 10
+        },
+        {
+          "id": "ai-50",
+          "label": "AI-intensive / 50 VUs",
+          "path": "ai/vus-50",
+          "expected_runs": 5,
+          "x_value": 50
+        },
+        {
+          "id": "ai-100",
+          "label": "AI-intensive / 100 VUs",
+          "path": "ai/vus-100",
+          "expected_runs": 5,
+          "x_value": 100
+        }
+      ]
+    },
+    {
+      "id": "mixed-load-scaling",
+      "label": "Mixed workload scaling",
+      "x_axis_label": "Concurrent virtual users (VUs)",
+      "scenarios": [
+        {
+          "id": "mixed-10",
+          "label": "mixed / 10 VUs",
+          "path": "mixed/vus-10",
+          "expected_runs": 5,
+          "x_value": 10
+        },
+        {
+          "id": "mixed-50",
+          "label": "mixed / 50 VUs",
+          "path": "mixed/vus-50",
+          "expected_runs": 5,
+          "x_value": 50
+        },
+        {
+          "id": "mixed-100",
+          "label": "mixed / 100 VUs",
+          "path": "mixed/vus-100",
+          "expected_runs": 5,
+          "x_value": 100
+        }
+      ]
+    },
+    {
+      "id": "spike-and-stress",
+      "label": "Spike and stress testing",
+      "x_axis_label": "Scenario",
+      "scenarios": [
+        {
+          "id": "spike-light",
+          "label": "spike / light",
+          "path": "spike/light",
+          "expected_runs": 3
+        },
+        {
+          "id": "stress-light",
+          "label": "stress / light",
+          "path": "stress/light",
+          "expected_runs": 3
+        }
+      ]
+    },
+    {
+      "id": "app-instance-scaling",
+      "label": "Code Engine application instance scaling",
+      "x_axis_label": "Code Engine instances",
+      "scenarios": [
+        {
+          "id": "app-scale-1",
+          "label": "app scaling / 1 instance",
+          "path": "scaling/app-instances-1",
+          "expected_runs": 5,
+          "x_value": 1
+        },
+        {
+          "id": "app-scale-2",
+          "label": "app scaling / 2 instances",
+          "path": "scaling/app-instances-2",
+          "expected_runs": 5,
+          "x_value": 2
+        },
+        {
+          "id": "app-scale-4",
+          "label": "app scaling / 4 instances",
+          "path": "scaling/app-instances-4",
+          "expected_runs": 5,
+          "x_value": 4
+        }
+      ]
+    }
+  ]
+}
