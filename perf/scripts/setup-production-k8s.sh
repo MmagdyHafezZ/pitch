@@ -1,26 +1,26 @@
 #!/usr/bin/env bash
 # =============================================================================
-# setup-local-k8s.sh
+# setup-production-k8s.sh
 #
 # One-shot setup: install tools → create k3d cluster → build image →
 # load image → deploy Helm chart → wait for readiness.
 #
 # Usage:
-#   perf/scripts/setup-local-k8s.sh
+#   perf/scripts/setup-production-k8s.sh
 #
 # Optional environment variables:
 #   ANTHROPIC_API_KEY   — required only for AI/mixed k6 workloads
 #   OPENAI_API_KEY      — alternative LLM key
 #   REBUILD_IMAGE=1     — force a Docker rebuild even if the image exists
-#   CLUSTER_NAME        — default: pitch-local
+#   CLUSTER_NAME        — default: pitch-production
 #   NAMESPACE           — default: pitch
 # =============================================================================
 
 set -euo pipefail
 
-CLUSTER_NAME="${CLUSTER_NAME:-pitch-local}"
+CLUSTER_NAME="${CLUSTER_NAME:-pitch-production}"
 NAMESPACE="${NAMESPACE:-pitch}"
-IMAGE_NAME="pitch-api:local"
+IMAGE_NAME="pitch-api:production"
 CHART_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../helm/pitch" && pwd)"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 REBUILD_IMAGE="${REBUILD_IMAGE:-0}"
@@ -90,7 +90,7 @@ else
   ok "Cluster created."
 fi
 
-# Point kubectl at the local cluster.
+# Point kubectl at the Kubernetes cluster.
 k3d kubeconfig merge "${CLUSTER_NAME}" --kubeconfig-merge-default >/dev/null
 kubectl config use-context "k3d-${CLUSTER_NAME}" >/dev/null
 ok "kubectl context → k3d-${CLUSTER_NAME}"
@@ -146,7 +146,7 @@ fi
 
 helm upgrade --install pitch "${CHART_DIR}" \
   --namespace "${NAMESPACE}" \
-  --values "${CHART_DIR}/values-local.yaml" \
+  --values "${CHART_DIR}/values.yaml" \
   "${HELM_SET_ARGS[@]}" \
   --timeout 5m \
   --wait=false
@@ -200,7 +200,7 @@ kubectl port-forward "svc/pitch-gateway" 18999:8000 -n "${NAMESPACE}" >/dev/null
 PF_PID=$!
 sleep 3
 
-if curl -sf http://localhost:18999/health >/dev/null 2>&1; then
+if curl -sf http://127.0.0.1:18999/api/v1/health >/dev/null 2>&1; then
   ok "Gateway health check passed."
 else
   log "WARNING: Gateway health check did not return 200. The gateway may still be starting."
@@ -222,9 +222,9 @@ cat <<EOF
 [setup]  Image   : ${IMAGE_NAME}
 [setup]
 [setup]  Next step — run the performance campaign:
-[setup]    perf/scripts/run-local-campaign.sh
+[setup]    perf/scripts/run-production-k8s-campaign.sh
 [setup]
 [setup]  Or run a quick smoke test first:
-[setup]    perf/scripts/run-local-campaign.sh smoke
+[setup]    perf/scripts/run-production-k8s-campaign.sh smoke
 [setup] ================================================================
 EOF

@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # =============================================================================
-# run-local-campaign.sh
+# run-production-k8s-campaign.sh
 #
-# Runs the full k6 experiment matrix against the local k3d deployment and
-# writes results to perf/results/external/ (the final-k8s-external scaffold).
+# Runs the full k6 experiment matrix against the production k8s deployment and
+# writes results to perf/results/production-k8s/ (the final-production-k8s scaffold).
 #
 # Usage:
-#   perf/scripts/run-local-campaign.sh [groups...]
+#   perf/scripts/run-production-k8s-campaign.sh [groups...]
 #
 #   Groups match run_k8s_matrix.sh: all | smoke | baseline | light | ai |
 #   mixed | spike | stress | scaling | cache
@@ -14,18 +14,21 @@
 #   Default (no args): all
 #
 # Examples:
-#   perf/scripts/run-local-campaign.sh smoke
-#   perf/scripts/run-local-campaign.sh baseline light
-#   perf/scripts/run-local-campaign.sh            # full matrix
+#   perf/scripts/run-production-k8s-campaign.sh smoke
+#   perf/scripts/run-production-k8s-campaign.sh baseline light
+#   perf/scripts/run-production-k8s-campaign.sh            # full matrix
 #
 # Optional environment variables:
 #   ANTHROPIC_API_KEY  — enables AI and mixed workloads
 #   OPENAI_API_KEY     — alternative to Anthropic
 #   NAMESPACE          — k8s namespace (default: pitch)
-#   CLUSTER_NAME       — k3d cluster name (default: pitch-local)
+#   CLUSTER_NAME       — k3d cluster name (default: pitch-production)
 #   DRY_RUN=1          — print commands without executing
 #   NON_INTERACTIVE=1  — skip manual checkpoints (required for scaling group)
-#   GATEWAY_PORT       — local port for port-forward (default: 8000)
+#   GATEWAY_PORT       — gateway port for port-forward (default: 8000)
+#   RESULT_ROOT        — k6 JSON output directory (default: perf/results/production-k8s)
+#   KUBE_CONTEXT       — existing production Kubernetes context to use
+#   REQUIRE_K3D=1      — require the k3d cluster named by CLUSTER_NAME
 # =============================================================================
 
 set -euo pipefail
@@ -33,7 +36,9 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 MATRIX_SCRIPT="${ROOT_DIR}/perf/k6/run_k8s_matrix.sh"
 NAMESPACE="${NAMESPACE:-pitch}"
-CLUSTER_NAME="${CLUSTER_NAME:-pitch-local}"
+CLUSTER_NAME="${CLUSTER_NAME:-pitch-production}"
+KUBE_CONTEXT="${KUBE_CONTEXT:-}"
+REQUIRE_K3D="${REQUIRE_K3D:-0}"
 GATEWAY_PORT="${GATEWAY_PORT:-8000}"
 PF_PID_FILE="/tmp/pitch-k8s-pf.pid"
 
@@ -44,21 +49,37 @@ ok()  { printf '[campaign] ✓ %s\n' "$1"; }
 # -----------------------------------------------------------------------------
 # Dependency checks
 # -----------------------------------------------------------------------------
-command -v k6      >/dev/null 2>&1 || die "k6 not found. Run perf/scripts/setup-local-k8s.sh first."
+command -v k6      >/dev/null 2>&1 || die "k6 not found. Run perf/scripts/setup-production-k8s.sh first."
 command -v kubectl >/dev/null 2>&1 || die "kubectl not found."
-command -v k3d     >/dev/null 2>&1 || die "k3d not found. Run perf/scripts/setup-local-k8s.sh first."
 [[ -x "$MATRIX_SCRIPT" ]] || chmod +x "$MATRIX_SCRIPT"
 
 # -----------------------------------------------------------------------------
-# Cluster check
+# Cluster/context check
 # -----------------------------------------------------------------------------
-if ! k3d cluster list 2>/dev/null | grep -q "^${CLUSTER_NAME}"; then
-  die "k3d cluster '${CLUSTER_NAME}' not found. Run perf/scripts/setup-local-k8s.sh first."
+if [[ -n "$KUBE_CONTEXT" ]]; then
+  kubectl config use-context "$KUBE_CONTEXT" >/dev/null 2>&1 \
+    || die "Cannot switch to KUBE_CONTEXT='${KUBE_CONTEXT}'."
+elif command -v k3d >/dev/null 2>&1 && k3d cluster list 2>/dev/null | grep -q "^${CLUSTER_NAME}"; then
+  kubectl config use-context "k3d-${CLUSTER_NAME}" >/dev/null 2>&1 \
+    || die "Cannot switch to k3d context. Run: k3d kubeconfig merge ${CLUSTER_NAME} --kubeconfig-merge-default"
+elif [[ "$REQUIRE_K3D" == "1" ]]; then
+  die "k3d cluster '${CLUSTER_NAME}' not found. Run perf/scripts/setup-production-k8s.sh first."
+else
+  CURRENT_CONTEXT="$(kubectl config current-context 2>/dev/null || true)"
+  case "$CURRENT_CONTEXT" in
+    docker-desktop|rancher-desktop|minikube|kind-*|k3d-*)
+      log "Using current Kubernetes context: ${CURRENT_CONTEXT}"
+      ;;
+    "")
+      die "No kubectl context is selected. Set KUBE_CONTEXT to your production Kubernetes context."
+      ;;
+    *)
+      die "Current kubectl context '${CURRENT_CONTEXT}' was not explicitly selected. Set KUBE_CONTEXT to your production Kubernetes context or use CLUSTER_NAME with k3d."
+      ;;
+  esac
 fi
 
-# Make sure kubectl points at the local cluster.
-kubectl config use-context "k3d-${CLUSTER_NAME}" >/dev/null 2>&1 \
-  || die "Cannot switch to k3d context. Run: k3d kubeconfig merge ${CLUSTER_NAME} --kubeconfig-merge-default"
+ACTIVE_CONTEXT="$(kubectl config current-context)"
 
 # Quick readiness check.
 NOT_RUNNING=$(kubectl get pods -n "${NAMESPACE}" --no-headers 2>/dev/null \
@@ -89,19 +110,19 @@ start_port_forward() {
   echo $! >"$PF_PID_FILE"
   # Wait until the port is accepting connections.
   local attempts=0
-  while ! curl -sf "http://localhost:${GATEWAY_PORT}/health" >/dev/null 2>&1; do
-    (( attempts++ ))
+  while ! curl -sf "http://127.0.0.1:${GATEWAY_PORT}/api/v1/health" >/dev/null 2>&1; do
+    (( attempts += 1 ))
     if [[ $attempts -ge 20 ]]; then
-      die "Gateway did not respond on localhost:${GATEWAY_PORT} after 20 attempts. Check pod logs:\n  kubectl logs deployment/pitch-gateway -n ${NAMESPACE}"
+      die "Gateway did not respond on 127.0.0.1:${GATEWAY_PORT} after 20 attempts. Check pod logs:\n  kubectl logs deployment/pitch-gateway -n ${NAMESPACE}"
     fi
     sleep 3
   done
-  ok "Gateway reachable at http://localhost:${GATEWAY_PORT}"
+  ok "Gateway reachable at http://127.0.0.1:${GATEWAY_PORT}"
 }
 
 # Reuse an existing forward if the port is already open.
-if curl -sf "http://localhost:${GATEWAY_PORT}/health" >/dev/null 2>&1; then
-  ok "Gateway already reachable at http://localhost:${GATEWAY_PORT}"
+if curl -sf "http://127.0.0.1:${GATEWAY_PORT}/api/v1/health" >/dev/null 2>&1; then
+  ok "Gateway already reachable at http://127.0.0.1:${GATEWAY_PORT}"
 else
   start_port_forward
 fi
@@ -109,14 +130,14 @@ fi
 # -----------------------------------------------------------------------------
 # Determine which groups to run
 # -----------------------------------------------------------------------------
-GROUPS=("${@}")
-if [[ ${#GROUPS[@]} -eq 0 ]]; then
-  GROUPS=("all")
+REQUESTED_GROUPS=("${@}")
+if [[ ${#REQUESTED_GROUPS[@]} -eq 0 ]]; then
+  REQUESTED_GROUPS=("all")
 fi
 
 # Check if any AI/mixed work is requested.
 NEEDS_AI=0
-for g in "${GROUPS[@]}"; do
+for g in "${REQUESTED_GROUPS[@]}"; do
   [[ "$g" == "all" || "$g" == "ai" || "$g" == "mixed" ]] && NEEDS_AI=1
 done
 
@@ -127,10 +148,10 @@ if [[ "$NEEDS_AI" -eq 1 && -z "${ANTHROPIC_API_KEY:-}" && -z "${OPENAI_API_KEY:-
 fi
 
 # -----------------------------------------------------------------------------
-# Environment — local k8s campaign settings
+# Environment — production k8s campaign settings
 # -----------------------------------------------------------------------------
 
-# Test durations: compressed for local use.
+# Test durations: compressed for campaign use.
 #   Full run: 2m warmup + 5m steady + 1m cooldown = 8 min/run  → ~10 h full matrix
 #   Local:    30s warmup + 2m steady + 30s cooldown = 3 min/run → ~3.5 h full matrix
 export WARMUP_DURATION="${WARMUP_DURATION:-30s}"
@@ -153,16 +174,16 @@ export STATE_SETTLE_SEC="${STATE_SETTLE_SEC:-30}"
 export SCALING_TARGET_SERVICE="${SCALING_TARGET_SERVICE:-pitch-gateway}"
 export INSTANCE_COUNTS="${INSTANCE_COUNTS:-1 2 4}"
 
-# Auth — static bypass token matches DEV_BYPASS_TOKEN in values-local.yaml.
+# Auth — static bypass token matches DEV_BYPASS_TOKEN in the Helm values.
 export PERF_STATIC_AUTH_TOKEN="${PERF_STATIC_AUTH_TOKEN:-pitch-perf-static-token}"
 # SCENARIO_ORG_ID must match DEV_BYPASS_USER_ID so the gateway accepts it.
 export SCENARIO_ORG_ID="${SCENARIO_ORG_ID:-perf-runner}"
 
-# Target the local gateway through the port-forward.
-export BASE_URL="http://localhost:${GATEWAY_PORT}"
+# Target the Kubernetes gateway through the port-forward.
+export BASE_URL="http://127.0.0.1:${GATEWAY_PORT}"
 
-# Write results into the k8s scaffold directory so the report scaffold is filled.
-export RESULT_ROOT="${RESULT_ROOT:-${ROOT_DIR}/perf/results/external}"
+# Write results into the production k8s scaffold directory so the report scaffold is filled.
+export RESULT_ROOT="${RESULT_ROOT:-${ROOT_DIR}/perf/results/production-k8s}"
 
 # Run counts (match the scaffold expectations).
 export BASELINE_RUNS="${BASELINE_RUNS:-2}"
@@ -195,9 +216,9 @@ fi
 # -----------------------------------------------------------------------------
 cat <<EOF
 [campaign] ================================================================
-[campaign]  Local k8s campaign — $(date)
+[campaign]  Production k8s campaign — $(date)
 [campaign]
-[campaign]  Cluster     : k3d-${CLUSTER_NAME}
+[campaign]  Kube ctx    : ${ACTIVE_CONTEXT}
 [campaign]  Namespace   : ${NAMESPACE}
 [campaign]  Gateway     : ${BASE_URL}
 [campaign]  Results dir : ${RESULT_ROOT}
@@ -209,7 +230,7 @@ cat <<EOF
 [campaign]               ai=[${AI_VUS_LIST}]  mixed=[${MIXED_VUS_LIST}]
 [campaign]
 [campaign]  Durations   : warmup=${WARMUP_DURATION}  steady=${STEADY_DURATION}  cooldown=${COOLDOWN_DURATION}
-[campaign]  Groups      : ${GROUPS[*]}
+[campaign]  Groups      : ${REQUESTED_GROUPS[*]}
 [campaign]  AI key set  : $( [[ -n "${ANTHROPIC_API_KEY:-}${OPENAI_API_KEY:-}" ]] && echo yes || echo no )
 [campaign] ================================================================
 EOF
@@ -227,7 +248,7 @@ fi
 # Run
 # -----------------------------------------------------------------------------
 log "Starting matrix runner…"
-"$MATRIX_SCRIPT" "${GROUPS[@]}"
+"$MATRIX_SCRIPT" "${REQUESTED_GROUPS[@]}"
 
 # -----------------------------------------------------------------------------
 # Done
@@ -244,7 +265,7 @@ cat <<EOF
 [campaign]        find ${RESULT_ROOT} -name '*.json' | sort
 [campaign]   2. After collecting all data, restore gateway replicas:
 [campaign]        kubectl scale deployment/pitch-gateway -n ${NAMESPACE} --replicas=1
-[campaign]   3. Generate report plots from the scaffold:
-[campaign]        perf/report_datasets/final-k8s-external.json
+[campaign]   3. Generate report plots and tables:
+[campaign]        python3 scripts/generate_perf_report.py --config perf/report_datasets/final-production-k8s.json
 [campaign] ================================================================
 EOF

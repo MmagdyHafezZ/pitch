@@ -1,0 +1,182 @@
+{
+  "metrics": {
+    "iterations": {
+      "count": 1992,
+      "rate": 39.5472412642586
+    },
+    "steady_http_reqs": {
+      "count": 1468,
+      "rate": 29.144252096351217
+    },
+    "http_req_sending": {
+      "med": 0.011,
+      "max": 0.555,
+      "p(90)": 0.017,
+      "p(95)": 0.022,
+      "p(99)": 0.06708999999999998,
+      "avg": 0.013735943775100415,
+      "min": 0.003
+    },
+    "http_req_receiving": {
+      "avg": 0.04323945783132564,
+      "min": 0.01,
+      "med": 0.0365,
+      "max": 1.024,
+      "p(90)": 0.061,
+      "p(95)": 0.07,
+      "p(99)": 0.11708999999999999
+    },
+    "checks": {
+      "passes": 5976,
+      "fails": 0,
+      "value": 1
+    },
+    "http_req_blocked": {
+      "p(90)": 0.005,
+      "p(95)": 0.007,
+      "p(99)": 0.36926999999999993,
+      "avg": 0.013484437751003971,
+      "min": 0.001,
+      "med": 0.004,
+      "max": 1.15
+    },
+    "steady_http_req_duration": {
+      "p(90)": 19.212,
+      "p(95)": 31.70609999999997,
+      "p(99)": 303.89025999999996,
+      "avg": 16.560200272479555,
+      "min": 2.982,
+      "med": 7.034000000000001,
+      "max": 503.418,
+      "thresholds": {
+        "p(95)<2000": false,
+        "p(99)<5000": false
+      }
+    },
+    "http_req_connecting": {
+      "med": 0,
+      "max": 0.516,
+      "p(90)": 0,
+      "p(95)": 0,
+      "p(99)": 0.30809,
+      "avg": 0.007819779116465865,
+      "min": 0
+    },
+    "vus_max": {
+      "value": 50,
+      "min": 50,
+      "max": 50
+    },
+    "vus": {
+      "value": 4,
+      "min": 4,
+      "max": 50
+    },
+    "iteration_duration": {
+      "p(95)": 1035.75130625,
+      "p(99)": 1295.40940947,
+      "avg": 1017.2940025336344,
+      "min": 1003.312167,
+      "med": 1007.9368334999999,
+      "max": 1505.151709,
+      "p(90)": 1019.7944125
+    },
+    "steady_http_req_failed": {
+      "passes": 0,
+      "fails": 1468,
+      "thresholds": {
+        "rate<0.05": false
+      },
+      "value": 0
+    },
+    "http_reqs": {
+      "count": 1992,
+      "rate": 39.5472412642586
+    },
+    "data_sent": {
+      "rate": 4587.479986653998,
+      "count": 231072
+    },
+    "http_req_tls_handshaking": {
+      "med": 0,
+      "max": 0,
+      "p(90)": 0,
+      "p(95)": 0,
+      "p(99)": 0,
+      "avg": 0,
+      "min": 0
+    },
+    "http_req_duration": {
+      "avg": 16.32345030120479,
+      "min": 2.925,
+      "med": 6.8095,
+      "max": 503.418,
+      "p(90)": 18.8733,
+      "p(95)": 34.425249999999934,
+      "p(99)": 293.11708999999985,
+      "thresholds": {
+        "p(95)<2000": false,
+        "p(99)<5000": false
+      }
+    },
+    "http_req_duration{expected_response:true}": {
+      "avg": 16.32345030120479,
+      "min": 2.925,
+      "med": 6.8095,
+      "max": 503.418,
+      "p(90)": 18.8733,
+      "p(95)": 34.425249999999934,
+      "p(99)": 293.11708999999985
+    },
+    "data_received": {
+      "count": 2099568,
+      "rate": 41682.79229252856
+    },
+    "http_req_failed": {
+      "passes": 0,
+      "fails": 1992,
+      "thresholds": {
+        "rate<0.05": false
+      },
+      "value": 0
+    },
+    "http_req_waiting": {
+      "p(99)": 293.06498999999985,
+      "avg": 16.266474899598407,
+      "min": 2.881,
+      "med": 6.768000000000001,
+      "max": 503.338,
+      "p(90)": 18.813100000000002,
+      "p(95)": 34.35904999999995
+    }
+  },
+  "root_group": {
+    "groups": {},
+    "checks": {
+      "light endpoint returned success": {
+        "path": "::light endpoint returned success",
+        "id": "4a2b0cb58197f3ff355c8af5b13a4001",
+        "passes": 1992,
+        "fails": 0,
+        "name": "light endpoint returned success"
+      },
+      "light endpoint returned activeUsers": {
+        "name": "light endpoint returned activeUsers",
+        "path": "::light endpoint returned activeUsers",
+        "id": "32d26813399f4f4b82d207bf85de92fb",
+        "passes": 1992,
+        "fails": 0
+      },
+      "light endpoint returned activeSessions": {
+        "passes": 1992,
+        "fails": 0,
+        "name": "light endpoint returned activeSessions",
+        "path": "::light endpoint returned activeSessions",
+        "id": "0311b12bd8af3742d8438047f967e873"
+      }
+    },
+    "name": "",
+    "path": "",
+    "id": "d41d8cd98f00b204e9800998ecf8427e"
+  }
+}

@@ -1,0 +1,179 @@
+{
+  "root_group": {
+    "name": "",
+    "path": "",
+    "id": "d41d8cd98f00b204e9800998ecf8427e",
+    "groups": {},
+    "checks": {
+      "ai scenario endpoint returned success": {
+        "name": "ai scenario endpoint returned success",
+        "path": "::ai scenario endpoint returned success",
+        "id": "208fefd28f319b663954803b61dde21e",
+        "passes": 181,
+        "fails": 0
+      },
+      "ai scenario draft returned content": {
+        "passes": 181,
+        "fails": 0,
+        "name": "ai scenario draft returned content",
+        "path": "::ai scenario draft returned content",
+        "id": "db444052bf037a3307df88da3788f3aa"
+      }
+    }
+  },
+  "metrics": {
+    "http_req_receiving": {
+      "p(90)": 0.14,
+      "p(95)": 0.162,
+      "p(99)": 0.21999999999999997,
+      "avg": 0.08292817679558016,
+      "min": 0.024,
+      "med": 0.076,
+      "max": 0.269
+    },
+    "checks": {
+      "passes": 362,
+      "fails": 0,
+      "value": 1
+    },
+    "http_reqs": {
+      "count": 181,
+      "rate": 4.243775102896892
+    },
+    "http_req_duration{expected_response:true}": {
+      "med": 7515.372,
+      "max": 9463.62,
+      "p(90)": 8668.91,
+      "p(95)": 9000.768,
+      "p(99)": 9438.6088,
+      "avg": 7568.946651933703,
+      "min": 4718.384
+    },
+    "vus": {
+      "value": 1,
+      "min": 1,
+      "max": 50
+    },
+    "http_req_sending": {
+      "p(99)": 0.1845999999999999,
+      "avg": 0.0454309392265193,
+      "min": 0.008,
+      "med": 0.032,
+      "max": 0.234,
+      "p(90)": 0.104,
+      "p(95)": 0.119
+    },
+    "iterations": {
+      "rate": 4.243775102896892,
+      "count": 181
+    },
+    "vus_max": {
+      "value": 50,
+      "min": 50,
+      "max": 50
+    },
+    "steady_http_reqs": {
+      "count": 131,
+      "rate": 3.071461538560734
+    },
+    "steady_http_req_duration": {
+      "max": 9460.996,
+      "p(90)": 8511.112,
+      "p(95)": 8914.383,
+      "p(99)": 9410.2144,
+      "avg": 7450.586488549618,
+      "min": 4718.384,
+      "med": 7433.38,
+      "thresholds": {
+        "p(95)<30000": false,
+        "p(99)<60000": false
+      }
+    },
+    "data_received": {
+      "count": 764409,
+      "rate": 17922.540788012764
+    },
+    "http_req_connecting": {
+      "min": 0,
+      "med": 0,
+      "max": 2.646,
+      "p(90)": 0.544,
+      "p(95)": 0.621,
+      "p(99)": 0.7951999999999998,
+      "avg": 0.14077348066298345
+    },
+    "steady_http_req_failed": {
+      "passes": 0,
+      "fails": 131,
+      "thresholds": {
+        "rate<0.05": false
+      },
+      "value": 0
+    },
+    "data_sent": {
+      "count": 101720,
+      "rate": 2384.95471528548
+    },
+    "http_req_duration": {
+      "avg": 7568.946651933703,
+      "min": 4718.384,
+      "med": 7515.372,
+      "max": 9463.62,
+      "p(90)": 8668.91,
+      "p(95)": 9000.768,
+      "p(99)": 9438.6088,
+      "thresholds": {
+        "p(95)<30000": false,
+        "p(99)<60000": false
+      }
+    },
+    "http_req_waiting": {
+      "p(95)": 9000.458,
+      "p(99)": 9438.4868,
+      "avg": 7568.818292817682,
+      "min": 4718.313,
+      "med": 7515.276,
+      "max": 9463.524,
+      "p(90)": 8668.846
+    },
+    "iteration_duration": {
+      "med": 9516.912792,
+      "max": 11465.114458,
+      "p(90)": 10670.316292,
+      "p(95)": 11002.073958,
+      "p(99)": 11439.2440084,
+      "avg": 9570.443067734806,
+      "min": 6719.212166
+    },
+    "http_req_tls_handshaking": {
+      "avg": 0,
+      "min": 0,
+      "med": 0,
+      "max": 0,
+      "p(90)": 0,
+      "p(95)": 0,
+      "p(99)": 0
+    },
+    "http_req_failed": {
+      "passes": 0,
+      "fails": 181,
+      "thresholds": {
+        "rate<0.05": false
+      },
+      "value": 0
+    },
+    "http_req_blocked": {
+      "med": 0.007,
+      "max": 2.744,
+      "p(90)": 0.632,
+      "p(95)": 0.741,
+      "p(99)": 0.9253999999999998,
+      "avg": 0.16809944751381226,
+      "min": 0.002
+    }
+  },
+  "setup_data": {
+    "accessToken": "pitch-perf-static-token",
+    "source": "static-dev-bypass-token"
+  }
+}
