@@ -1,0 +1,179 @@
+{
+  "root_group": {
+    "name": "",
+    "path": "",
+    "id": "d41d8cd98f00b204e9800998ecf8427e",
+    "groups": {},
+    "checks": {
+      "ai scenario endpoint returned success": {
+        "fails": 0,
+        "name": "ai scenario endpoint returned success",
+        "path": "::ai scenario endpoint returned success",
+        "id": "208fefd28f319b663954803b61dde21e",
+        "passes": 353
+      },
+      "ai scenario draft returned content": {
+        "id": "db444052bf037a3307df88da3788f3aa",
+        "passes": 353,
+        "fails": 0,
+        "name": "ai scenario draft returned content",
+        "path": "::ai scenario draft returned content"
+      }
+    }
+  },
+  "metrics": {
+    "http_req_tls_handshaking": {
+      "p(95)": 0,
+      "p(99)": 0,
+      "avg": 0,
+      "min": 0,
+      "med": 0,
+      "max": 0,
+      "p(90)": 0
+    },
+    "checks": {
+      "passes": 706,
+      "fails": 0,
+      "value": 1
+    },
+    "vus": {
+      "value": 1,
+      "min": 1,
+      "max": 100
+    },
+    "http_req_duration{expected_response:true}": {
+      "max": 21155.1,
+      "p(90)": 9292.1928,
+      "p(95)": 9761.987799999999,
+      "p(99)": 11600.504839999996,
+      "avg": 7920.006487252118,
+      "min": 4997.881,
+      "med": 7739.297
+    },
+    "http_req_connecting": {
+      "avg": 0.10250708215297447,
+      "min": 0,
+      "med": 0,
+      "max": 2.271,
+      "p(90)": 0.3504,
+      "p(95)": 0.41419999999999996,
+      "p(99)": 0.5637599999999999
+    },
+    "http_req_failed": {
+      "passes": 0,
+      "fails": 353,
+      "thresholds": {
+        "rate<0.05": false
+      },
+      "value": 0
+    },
+    "http_req_blocked": {
+      "min": 0.001,
+      "med": 0.006,
+      "max": 2.376,
+      "p(90)": 0.3866,
+      "p(95)": 0.4592,
+      "p(99)": 0.6988399999999999,
+      "avg": 0.11933711048158664
+    },
+    "data_sent": {
+      "rate": 4332.489599587189,
+      "count": 198517
+    },
+    "vus_max": {
+      "value": 100,
+      "min": 100,
+      "max": 100
+    },
+    "http_req_sending": {
+      "avg": 0.030504249291784673,
+      "min": 0.005,
+      "med": 0.024,
+      "max": 0.155,
+      "p(90)": 0.05380000000000001,
+      "p(95)": 0.06619999999999995,
+      "p(99)": 0.11444
+    },
+    "iterations": {
+      "count": 353,
+      "rate": 7.703969073954764
+    },
+    "http_req_receiving": {
+      "p(90)": 0.10360000000000001,
+      "p(95)": 0.12879999999999997,
+      "p(99)": 0.19955999999999993,
+      "avg": 0.07528611898017003,
+      "min": 0.017,
+      "med": 0.052,
+      "max": 4.088
+    },
+    "steady_http_req_failed": {
+      "passes": 0,
+      "fails": 251,
+      "thresholds": {
+        "rate<0.05": false
+      },
+      "value": 0
+    },
+    "iteration_duration": {
+      "p(90)": 11293.535492,
+      "p(95)": 11762.946875,
+      "p(99)": 13601.804324999996,
+      "avg": 9921.271534603398,
+      "min": 6999.597542,
+      "med": 9740.555042,
+      "max": 23156.058167
+    },
+    "http_req_waiting": {
+      "p(90)": 9292.125,
+      "p(95)": 9761.8966,
+      "p(99)": 11600.428599999996,
+      "avg": 7919.900696883856,
+      "min": 4997.81,
+      "med": 7739.164,
+      "max": 21154.957
+    },
+    "data_received": {
+      "count": 1483318,
+      "rate": 32372.339940057882
+    },
+    "steady_http_reqs": {
+      "count": 251,
+      "rate": 5.477893024256787
+    },
+    "http_req_duration": {
+      "p(95)": 9761.987799999999,
+      "p(99)": 11600.504839999996,
+      "avg": 7920.006487252118,
+      "min": 4997.881,
+      "med": 7739.297,
+      "max": 21155.1,
+      "p(90)": 9292.1928,
+      "thresholds": {
+        "p(95)<30000": false,
+        "p(99)<60000": false
+      }
+    },
+    "http_reqs": {
+      "count": 353,
+      "rate": 7.703969073954764
+    },
+    "steady_http_req_duration": {
+      "avg": 7727.359940239045,
+      "min": 4997.881,
+      "med": 7632.209,
+      "max": 10937.453,
+      "p(90)": 9051.96,
+      "p(95)": 9514.2205,
+      "p(99)": 10188.570999999998,
+      "thresholds": {
+        "p(95)<30000": false,
+        "p(99)<60000": false
+      }
+    }
+  },
+  "setup_data": {
+    "accessToken": "pitch-perf-static-token",
+    "source": "static-dev-bypass-token"
+  }
+}

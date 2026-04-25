@@ -401,6 +401,62 @@ describe('sendMessage', () => {
 
     expect(result.current.error).toBeNull()
   })
+
+  it('waits for interrupt cancellation before sending the next message', async () => {
+    let resolveCancel!: () => void
+    svc.cancelConversation.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveCancel = resolve
+        })
+    )
+    svc.sendConversation.mockReturnValueOnce(REQ_ID).mockReturnValueOnce('req-2')
+
+    const { result } = await setup()
+
+    act(() => {
+      result.current.sendMessage('first question')
+    })
+
+    act(() => {
+      result.current.sendMessage('updated answer')
+    })
+
+    expect(svc.cancelConversation).toHaveBeenCalledWith(SESSION_ID, REQ_ID)
+    expect(svc.sendConversation).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      resolveCancel()
+    })
+
+    await waitFor(() => expect(svc.sendConversation).toHaveBeenCalledTimes(2))
+    expect(svc.sendConversation.mock.calls[1][1]).toEqual(
+      expect.objectContaining({ text: 'updated answer' })
+    )
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 2b. START ASSISTANT TURN
+// ─────────────────────────────────────────────────────────────────────────────
+describe('startAssistantTurn', () => {
+  it('passes starterPrompt through to the conversation service', async () => {
+    const { result } = await setup()
+
+    act(() => {
+      result.current.startAssistantTurn({ starterPrompt: 'Introduce yourself first.' })
+    })
+
+    expect(result.current.isProcessing).toBe(true)
+    expect(svc.sendConversation).toHaveBeenCalledWith(
+      SESSION_ID,
+      expect.objectContaining({
+        text: '',
+        startAsAssistant: true,
+        starterPrompt: 'Introduce yourself first.',
+      })
+    )
+  })
 })
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -2,39 +2,46 @@
 
 ## Overview
 
-The **Support Microservice** is part of the **P.I.T.C.H. (Performance Intelligence Training & Coaching Hub)** ecosystem.  
-It provides centralized access to FAQs, tutorials, documentation, AI-powered chat support, release notes, and direct communication tools for users and internal teams.
+The **Support Microservice** is part of the **P.I.T.C.H. (Performance
+Intelligence Training & Coaching Hub)** ecosystem.  
+It provides centralized access to FAQs, tutorials, documentation, AI-powered
+chat support, release notes, and direct communication tools for users and
+internal teams.
 
-This service ensures users have 24/7 access to learning materials, help resources, and intelligent AI assistance, while also allowing automated meeting requests and support escalation when needed.
+This service ensures users have 24/7 access to learning materials, help
+resources, and intelligent AI assistance, while also allowing automated meeting
+requests and support escalation when needed.
 
 ---
 
 ## 🎯 Core Responsibilities
 
-| Feature | Description |
-|----------|-------------|
-| **FAQ** | Curated, searchable knowledge base of common questions. |
-| **Documentation** | Technical and user-facing documentation. |
-| **Contact Support** | Submit issues, feature requests, or escalation tickets. |
-| **AI Support ChatBot** | Real-time AI assistant for instant user help. |
-| **Release Notes** | Display product updates and version changes. |
-| **Email Request** | Send emails to internal team members to request meetings. |
+| Feature                | Description                                               |
+| ---------------------- | --------------------------------------------------------- |
+| **FAQ**                | Curated, searchable knowledge base of common questions.   |
+| **Documentation**      | Technical and user-facing documentation.                  |
+| **Contact Support**    | Submit issues, feature requests, or escalation tickets.   |
+| **AI Support ChatBot** | Real-time AI assistant for instant user help.             |
+| **Release Notes**      | Display product updates and version changes.              |
+| **Email Request**      | Send emails to internal team members to request meetings. |
 
 ---
 
 ## 🧱 Architecture Overview
 
-The Support Microservice follows a **layered microservice architecture**, adhering to IBM’s modular design patterns:
+The Support Microservice follows a **layered microservice architecture**,
+adhering to IBM’s modular design patterns:
 
 - **API Gateways** – Entry points for client applications.
 - **Controllers** – Handle request/response cycles and validation.
 - **Services** – Contain core business logic.
 - **Repositories** – Data persistence layer.
 - **Tables** – Underlying database schema representations.
-- **Shared Infrastructure** – Redis cache, RabbitMQ event bus, centralized logging.
-
+- **Shared Infrastructure** – Redis cache, RabbitMQ event bus, centralized
+  logging.
 
 ### Sequence Diagrams:
+
 - AI CHAT
 - Email Notifications
 - FAQ Management
@@ -68,4 +75,3 @@ Async message bus for high availability (RabbitMQ).
 Centralized monitoring and logging.
 
 Graceful fallbacks when AI endpoints fail.
-

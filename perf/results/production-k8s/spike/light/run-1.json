@@ -1,0 +1,175 @@
+{
+  "metrics": {
+    "http_req_sending": {
+      "med": 0.008,
+      "max": 2.349,
+      "p(90)": 0.015,
+      "p(95)": 0.019,
+      "p(99)": 0.071,
+      "avg": 0.010621229505161643,
+      "min": 0.001
+    },
+    "http_req_waiting": {
+      "min": 2.358,
+      "med": 47.077,
+      "max": 1103.582,
+      "p(90)": 589.9872,
+      "p(95)": 687.8436999999998,
+      "p(99)": 805.29304,
+      "avg": 200.65423365039373
+    },
+    "data_sent": {
+      "count": 3134204,
+      "rate": 16487.034564590926
+    },
+    "iterations": {
+      "count": 27019,
+      "rate": 142.12960831543901
+    },
+    "http_reqs": {
+      "count": 27019,
+      "rate": 142.12960831543901
+    },
+    "http_req_receiving": {
+      "p(90)": 0.051,
+      "p(95)": 0.06,
+      "p(99)": 0.097,
+      "avg": 0.03224490173581484,
+      "min": 0.006,
+      "med": 0.027,
+      "max": 4.507
+    },
+    "vus_max": {
+      "value": 200,
+      "min": 200,
+      "max": 200
+    },
+    "vus": {
+      "max": 200,
+      "value": 1,
+      "min": 1
+    },
+    "http_req_tls_handshaking": {
+      "max": 0,
+      "p(90)": 0,
+      "p(95)": 0,
+      "p(99)": 0,
+      "avg": 0,
+      "min": 0,
+      "med": 0
+    },
+    "steady_http_reqs": {
+      "count": 2838,
+      "rate": 14.928895532744212
+    },
+    "http_req_connecting": {
+      "p(90)": 0,
+      "p(95)": 0,
+      "p(99)": 0,
+      "avg": 0.00229301602575965,
+      "min": 0,
+      "med": 0,
+      "max": 3.507
+    },
+    "checks": {
+      "fails": 0,
+      "passes": 81057,
+      "value": 1
+    },
+    "http_req_failed": {
+      "passes": 0,
+      "fails": 27019,
+      "thresholds": {
+        "rate<0.1": false
+      },
+      "value": 0
+    },
+    "steady_http_req_failed": {
+      "passes": 0,
+      "fails": 2838,
+      "value": 0
+    },
+    "steady_http_req_duration": {
+      "max": 244.563,
+      "p(90)": 15.481100000000001,
+      "p(95)": 24.044549999999997,
+      "p(99)": 99.51135999999974,
+      "avg": 11.066466878083153,
+      "min": 2.474,
+      "med": 7.662
+    },
+    "http_req_duration": {
+      "p(95)": 687.8724999999997,
+      "p(99)": 805.31488,
+      "avg": 200.69709978163502,
+      "min": 2.395,
+      "med": 47.104,
+      "max": 1103.615,
+      "p(90)": 590.0422,
+      "thresholds": {
+        "p(95)<4000": false,
+        "p(99)<12000": false
+      }
+    },
+    "http_req_duration{expected_response:true}": {
+      "min": 2.395,
+      "med": 47.104,
+      "max": 1103.615,
+      "p(90)": 590.0422,
+      "p(95)": 687.8724999999997,
+      "p(99)": 805.31488,
+      "avg": 200.69709978163502
+    },
+    "data_received": {
+      "count": 28478026,
+      "rate": 149804.60716447272
+    },
+    "iteration_duration": {
+      "min": 202.653375,
+      "med": 247.672292,
+      "max": 1304.3605,
+      "p(90)": 790.2370338000001,
+      "p(95)": 888.0484832999998,
+      "p(99)": 1005.67571244,
+      "avg": 401.2395933417594
+    },
+    "http_req_blocked": {
+      "med": 0.003,
+      "max": 3.562,
+      "p(90)": 0.005,
+      "p(95)": 0.006,
+      "p(99)": 0.034,
+      "avg": 0.005873681483398837,
+      "min": 0
+    }
+  },
+  "root_group": {
+    "id": "d41d8cd98f00b204e9800998ecf8427e",
+    "groups": {},
+    "checks": {
+      "light endpoint returned success": {
+        "name": "light endpoint returned success",
+        "path": "::light endpoint returned success",
+        "id": "4a2b0cb58197f3ff355c8af5b13a4001",
+        "passes": 27019,
+        "fails": 0
+      },
+      "light endpoint returned activeUsers": {
+        "passes": 27019,
+        "fails": 0,
+        "name": "light endpoint returned activeUsers",
+        "path": "::light endpoint returned activeUsers",
+        "id": "32d26813399f4f4b82d207bf85de92fb"
+      },
+      "light endpoint returned activeSessions": {
+        "name": "light endpoint returned activeSessions",
+        "path": "::light endpoint returned activeSessions",
+        "id": "0311b12bd8af3742d8438047f967e873",
+        "passes": 27019,
+        "fails": 0
+      }
+    },
+    "name": "",
+    "path": ""
+  }
+}

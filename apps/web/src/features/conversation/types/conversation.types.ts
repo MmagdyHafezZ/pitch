@@ -46,6 +46,7 @@ export interface WsEnvelope<T = any> {
 export interface ConversationStartPayload {
   text: string
   startAsAssistant?: boolean
+  starterPrompt?: string
   personaId?: string
   messages?: Array<{
     role: 'system' | 'user' | 'assistant'

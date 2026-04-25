@@ -1,0 +1,250 @@
+# =============================================================================
+# PITCH Helm Chart - Local k3d / WSL2 Overlay
+# =============================================================================
+# Helm generates the secret from inline credentials (secret.yaml renders when
+# secrets.existingSecret is empty).  Each top-level key appears exactly once
+# to avoid YAML duplicate-key merging issues.
+#
+# Deploy:
+#   helm upgrade --install pitch ./helm/pitch -n pitch \
+#     -f helm/pitch/values-local.yaml \
+#     [--set secrets.anthropicApiKey=$ANTHROPIC_API_KEY]
+
+image:
+  repository: pitch-api
+  tag: local
+  pullPolicy: Never
+
+secrets:
+  existingSecret: ""
+  jwtSecret: "local-dev-jwt-secret-minimum-32-chars!!"
+  jwtAccessExpiration: "15m"
+  jwtRefreshExpiration: "7d"
+  anthropicApiKey: "sk-ant-placeholder-not-used-locally"
+  openaiApiKey: "sk-placeholder-not-used-locally"
+  awsRegion: "us-east-1"
+
+# =============================================================================
+# Microservices — single replica, reduced resources, bypass auth wired in
+# =============================================================================
+gateway:
+  replicaCount: 1
+  service:
+    type: ClusterIP
+    port: 8000
+    targetPort: 8000
+  env:
+    NODE_ENV: production
+    PORT: "8000"
+    CORS_ORIGIN: "http://localhost:3000"
+    DEV_BYPASS_ENABLED: "true"
+    DEV_BYPASS_TOKEN: "pitch-perf-static-token"
+    DEV_BYPASS_EMAIL: "dev@local"
+    DEV_BYPASS_NAME: "Perf Runner"
+    DEV_BYPASS_USER_ID: "perf-runner"
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  autoscaling:
+    enabled: false
+
+user:
+  replicaCount: 1
+  serviceName: userManagement
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 300m
+      memory: 256Mi
+  autoscaling:
+    enabled: false
+
+simulation:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  autoscaling:
+    enabled: false
+
+support:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 300m
+      memory: 256Mi
+  autoscaling:
+    enabled: false
+
+analytics:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 300m
+      memory: 256Mi
+  autoscaling:
+    enabled: false
+
+lti:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 300m
+      memory: 256Mi
+  autoscaling:
+    enabled: false
+
+s3:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 300m
+      memory: 256Mi
+  autoscaling:
+    enabled: false
+
+# =============================================================================
+# PostgreSQL — single block merging auth + per-service config
+# =============================================================================
+postgresql:
+  auth:
+    username: pitch_user
+    password: "localdev123"
+  user:
+    persistence:
+      enabled: false
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+      limits:
+        cpu: 250m
+        memory: 256Mi
+  simulation:
+    persistence:
+      enabled: false
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+      limits:
+        cpu: 250m
+        memory: 256Mi
+  support:
+    persistence:
+      enabled: false
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 100m
+        memory: 128Mi
+  analytics:
+    persistence:
+      enabled: false
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 100m
+        memory: 128Mi
+  lti:
+    persistence:
+      enabled: false
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 100m
+        memory: 128Mi
+  s3:
+    persistence:
+      enabled: false
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 100m
+        memory: 128Mi
+
+# =============================================================================
+# MongoDB
+# =============================================================================
+mongodb:
+  auth:
+    rootUser: admin
+    rootPassword: "localdev123"
+    database: pitch_simulation
+  persistence:
+    enabled: false
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+
+# =============================================================================
+# Redis
+# =============================================================================
+redis:
+  persistence:
+    enabled: false
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 100m
+      memory: 128Mi
+
+# =============================================================================
+# RabbitMQ
+# =============================================================================
+rabbitmq:
+  auth:
+    username: admin
+    password: "localdev123"
+    vhost: pitch
+  persistence:
+    enabled: false
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+
+ingress:
+  enabled: false
+
+podDisruptionBudget:
+  enabled: false

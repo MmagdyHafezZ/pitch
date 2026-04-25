@@ -58,13 +58,36 @@ const getVisibilityOptions = (allowTeamVisibility: boolean) => {
   return base
 }
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+
+const pickDraftString = (value: unknown): string | undefined =>
+  typeof value === 'string' ? value : undefined
+
 export function ScenarioEditorFields({
   value,
   onChange,
   readOnly = false,
   allowTeamVisibility = false,
 }: ScenarioEditorFieldsProps) {
-  const config = normalizeScenarioConfig(value.config)
+  const rawConfig = isRecord(value.config) ? (value.config as ScenarioConfig) : {}
+  const rawRoles = isRecord(rawConfig.roles) ? rawConfig.roles : {}
+  const config = normalizeScenarioConfig(rawConfig)
+  const stages = (
+    Array.isArray(rawConfig.stages) && rawConfig.stages.length > 0
+      ? rawConfig.stages
+      : config.stages
+  ).map((stage, index) => {
+    if (isRecord(stage)) {
+      const fallback = config.stages[index] ?? { title: `Stage ${index + 1}`, goal: '' }
+      return {
+        title: pickDraftString(stage.title) ?? fallback.title,
+        goal: pickDraftString(stage.goal) ?? fallback.goal,
+      }
+    }
+
+    return config.stages[index] ?? { title: `Stage ${index + 1}`, goal: '' }
+  })
 
   const stopFieldKeyPropagation = (
     event: KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>
@@ -82,7 +105,7 @@ export function ScenarioEditorFields({
   const updateConfig = (patch: Partial<ScenarioConfig>) => {
     updateDraft({
       config: {
-        ...config,
+        ...rawConfig,
         ...patch,
       },
     })
@@ -91,14 +114,14 @@ export function ScenarioEditorFields({
   const updateRoles = (patch: Record<string, unknown>) => {
     updateConfig({
       roles: {
-        ...(config.roles ?? {}),
+        ...rawRoles,
         ...patch,
       },
     })
   }
 
   const updateStage = (index: number, patch: { title?: string; goal?: string }) => {
-    const nextStages = config.stages.map((stage, stageIndex) =>
+    const nextStages = stages.map((stage, stageIndex) =>
       stageIndex === index ? { ...stage, ...patch } : stage
     )
     updateConfig({ stages: nextStages })
@@ -106,12 +129,12 @@ export function ScenarioEditorFields({
 
   const addStage = () => {
     updateConfig({
-      stages: [...config.stages, { title: `Stage ${config.stages.length + 1}`, goal: '' }],
+      stages: [...stages, { title: `Stage ${stages.length + 1}`, goal: '' }],
     })
   }
 
   const removeStage = (index: number) => {
-    const nextStages = config.stages.filter((_, stageIndex) => stageIndex !== index)
+    const nextStages = stages.filter((_, stageIndex) => stageIndex !== index)
     updateConfig({
       stages: nextStages.length > 0 ? nextStages : [{ title: 'Stage 1', goal: '' }],
     })
@@ -154,7 +177,7 @@ export function ScenarioEditorFields({
 
             <Textarea
               label="Objective"
-              value={config.objective ?? ''}
+              value={pickDraftString(rawConfig.objective) ?? config.objective ?? ''}
               onChange={(event) => updateConfig({ objective: event.currentTarget.value })}
               onKeyDown={stopFieldKeyPropagation}
               placeholder="What should the learner accomplish?"
@@ -164,7 +187,13 @@ export function ScenarioEditorFields({
 
             <Textarea
               label="Background"
-              value={config.background ?? config.context ?? ''}
+              value={
+                pickDraftString(rawConfig.background) ??
+                pickDraftString(rawConfig.context) ??
+                config.background ??
+                config.context ??
+                ''
+              }
               onChange={(event) =>
                 updateConfig({
                   background: event.currentTarget.value,
@@ -187,7 +216,7 @@ export function ScenarioEditorFields({
             <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
               <TextInput
                 label="Your role"
-                value={config.roles?.user ?? ''}
+                value={pickDraftString(rawRoles.user) ?? config.roles?.user ?? ''}
                 onChange={(event) => updateRoles({ user: event.currentTarget.value })}
                 onKeyDown={stopFieldKeyPropagation}
                 placeholder="Account executive"
@@ -195,7 +224,7 @@ export function ScenarioEditorFields({
               />
               <TextInput
                 label="Counterpart role"
-                value={config.roles?.assistant ?? ''}
+                value={pickDraftString(rawRoles.assistant) ?? config.roles?.assistant ?? ''}
                 onChange={(event) => updateRoles({ assistant: event.currentTarget.value })}
                 onKeyDown={stopFieldKeyPropagation}
                 placeholder="VP of Finance"
@@ -288,14 +317,14 @@ export function ScenarioEditorFields({
                 )}
               </Group>
               <Stack gap="sm">
-                {config.stages.map((stage, index) => (
+                {stages.map((stage, index) => (
                   <Paper key={`${stage.title}-${index}`} withBorder radius="md" p="sm">
                     <Stack gap="sm">
                       <Group justify="space-between" align="center">
                         <Text size="sm" fw={600}>
                           Stage {index + 1}
                         </Text>
-                        {!readOnly && config.stages.length > 1 && (
+                        {!readOnly && stages.length > 1 && (
                           <ActionIcon
                             color="red"
                             variant="light"

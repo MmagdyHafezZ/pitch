@@ -752,7 +752,9 @@ export function useConversation(options: UseConversationOptions) {
 
         setIsProcessing(true)
         setError(null)
+        setHangupRequest(null)
         stopAudio()
+        clearAudioQueue()
 
         const payload: ConversationStartPayload = {
           text: '',
@@ -764,7 +766,7 @@ export function useConversation(options: UseConversationOptions) {
         currentRequestIdRef.current = requestId
       })()
     },
-    [sessionId, stopAudio, interrupt]
+    [sessionId, stopAudio, interrupt, clearAudioQueue]
   )
 
   const clearMessages = useCallback(() => {

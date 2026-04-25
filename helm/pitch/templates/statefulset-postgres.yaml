@@ -60,19 +60,14 @@ spec:
         - containerPort: 5432
           name: postgres
         livenessProbe:
-          exec:
-            command:
-            - /bin/sh
-            - -c
-            - pg_isready -U $(POSTGRES_USER) -d $(POSTGRES_DB)
+          tcpSocket:
+            port: 5432
           initialDelaySeconds: 30
           periodSeconds: 10
+          failureThreshold: 6
         readinessProbe:
-          exec:
-            command:
-            - /bin/sh
-            - -c
-            - pg_isready -U $(POSTGRES_USER) -d $(POSTGRES_DB)
+          tcpSocket:
+            port: 5432
           initialDelaySeconds: 5
           periodSeconds: 5
         volumeMounts:
@@ -80,6 +75,11 @@ spec:
           mountPath: /var/lib/postgresql/data
         resources:
           {{- toYaml $config.resources | nindent 12 }}
+      {{- if not $config.persistence.enabled }}
+      volumes:
+      - name: data
+        emptyDir: {}
+      {{- end }}
   {{- if $config.persistence.enabled }}
   volumeClaimTemplates:
   - metadata:
@@ -92,10 +92,6 @@ spec:
       resources:
         requests:
           storage: {{ $config.persistence.size }}
-  {{- else }}
-  volumes:
-  - name: data
-    emptyDir: {}
   {{- end }}
 {{- end }}
 {{- end }}

@@ -1,6 +1,7 @@
 # Component Architecture Guide
 
-This guide covers the component architecture and design patterns used in the PITCH web application with Mantine UI.
+This guide covers the component architecture and design patterns used in the
+PITCH web application with Mantine UI.
 
 ## Component Organization
 
@@ -37,6 +38,7 @@ src/components/
 ## Design Principles
 
 ### 1. Composition over Inheritance
+
 Use Mantine component composition to build complex UIs:
 
 ```tsx
@@ -62,6 +64,7 @@ import { Card, Text, Stack, Button } from '@mantine/core'
 ```
 
 ### 2. Single Responsibility
+
 Each component should have one clear purpose:
 
 ```tsx
@@ -75,12 +78,7 @@ interface UserAvatarProps {
 
 function UserAvatar({ user, size = 40 }: UserAvatarProps) {
   return (
-    <Avatar
-      src={user.avatar}
-      alt={user.name}
-      size={size}
-      radius="xl"
-    >
+    <Avatar src={user.avatar} alt={user.name} size={size} radius="xl">
       {user.name.charAt(0)}
     </Avatar>
   )
@@ -93,6 +91,7 @@ function UserAvatarAndStatus({ user, showStatus, onStatusChange }) {
 ```
 
 ### 3. Props Interface Design
+
 Use clear, descriptive prop types with Mantine integration:
 
 ```tsx
@@ -108,6 +107,7 @@ interface CustomButtonProps extends ButtonProps {
 ## Mantine UI Components
 
 ### Button Component
+
 ```tsx
 import { Button } from '@mantine/core'
 import { IconPlus } from '@tabler/icons-react'
@@ -133,23 +133,27 @@ import { IconPlus } from '@tabler/icons-react'
 ```
 
 ### Card Component
+
 ```tsx
 import { Card, Text, Stack } from '@mantine/core'
-
-<Card shadow="sm" padding="lg" radius="md" withBorder>
+;<Card shadow="sm" padding="lg" radius="md" withBorder>
   <Stack>
-    <Text size="xl" weight={500}>Analytics</Text>
-    <Text size="sm" color="dimmed">View your application metrics</Text>
+    <Text size="xl" weight={500}>
+      Analytics
+    </Text>
+    <Text size="sm" color="dimmed">
+      View your application metrics
+    </Text>
     <MetricsChart />
   </Stack>
 </Card>
 ```
 
 ### Input Component
+
 ```tsx
 import { TextInput, Stack } from '@mantine/core'
-
-<Stack>
+;<Stack>
   <TextInput
     label="Email"
     placeholder="Enter your email"
@@ -162,6 +166,7 @@ import { TextInput, Stack } from '@mantine/core'
 ## Form Components
 
 ### Form Architecture with Mantine
+
 ```tsx
 // forms/ContactForm.tsx
 import { useForm } from '@mantine/form'
@@ -174,7 +179,11 @@ interface ContactFormData {
   message: string
 }
 
-export function ContactForm({ onSubmit }: { onSubmit: (data: ContactFormData) => void }) {
+export function ContactForm({
+  onSubmit,
+}: {
+  onSubmit: (data: ContactFormData) => void
+}) {
   const form = useForm<ContactFormData>({
     initialValues: {
       name: '',
@@ -182,9 +191,11 @@ export function ContactForm({ onSubmit }: { onSubmit: (data: ContactFormData) =>
       message: '',
     },
     validate: {
-      name: (value) => value.length < 2 ? 'Name must have at least 2 letters' : null,
-      email: (value) => /^\S+@\S+$/.test(value) ? null : 'Invalid email',
-      message: (value) => value.length < 10 ? 'Message must be at least 10 characters' : null,
+      name: (value) =>
+        value.length < 2 ? 'Name must have at least 2 letters' : null,
+      email: (value) => (/^\S+@\S+$/.test(value) ? null : 'Invalid email'),
+      message: (value) =>
+        value.length < 10 ? 'Message must be at least 10 characters' : null,
     },
   })
 
@@ -193,7 +204,7 @@ export function ContactForm({ onSubmit }: { onSubmit: (data: ContactFormData) =>
     notifications.show({
       title: 'Success',
       message: 'Message sent successfully!',
-      color: 'green'
+      color: 'green',
     })
   }
 
@@ -219,9 +230,7 @@ export function ContactForm({ onSubmit }: { onSubmit: (data: ContactFormData) =>
           {...form.getInputProps('message')}
         />
 
-        <Button type="submit">
-          Send Message
-        </Button>
+        <Button type="submit">Send Message</Button>
       </Stack>
     </form>
   )
@@ -229,6 +238,7 @@ export function ContactForm({ onSubmit }: { onSubmit: (data: ContactFormData) =>
 ```
 
 ### Reusable Form Fields with Mantine
+
 ```tsx
 // components/common/FormField.tsx
 import { Box, Text } from '@mantine/core'
@@ -240,16 +250,28 @@ interface FormFieldProps {
   children: React.ReactNode
 }
 
-export function FormField({ label, error, required, children }: FormFieldProps) {
+export function FormField({
+  label,
+  error,
+  required,
+  children,
+}: FormFieldProps) {
   return (
     <Box>
       <Text size="sm" weight={500} mb={5}>
         {label}
-        {required && <Text component="span" c="red"> *</Text>}
+        {required && (
+          <Text component="span" c="red">
+            {' '}
+            *
+          </Text>
+        )}
       </Text>
       {children}
       {error && (
-        <Text size="xs" c="red" mt={5}>{error}</Text>
+        <Text size="xs" c="red" mt={5}>
+          {error}
+        </Text>
       )}
     </Box>
   )
@@ -257,8 +279,7 @@ export function FormField({ label, error, required, children }: FormFieldProps) 
 
 // Usage with Mantine form
 import { TextInput } from '@mantine/core'
-
-<FormField label="Email" error={form.errors.email} required>
+;<FormField label="Email" error={form.errors.email} required>
   <TextInput {...form.getInputProps('email')} />
 </FormField>
 ```
@@ -266,9 +287,16 @@ import { TextInput } from '@mantine/core'
 ## Layout Components
 
 ### Header Component with Mantine
+
 ```tsx
 // components/layout/Header.tsx
-import { Header as MantineHeader, Group, Text, Menu, Avatar } from '@mantine/core'
+import {
+  Header as MantineHeader,
+  Group,
+  Text,
+  Menu,
+  Avatar,
+} from '@mantine/core'
 import { IconChevronDown } from '@tabler/icons-react'
 import Link from 'next/link'
 
@@ -331,6 +359,7 @@ function UserMenu() {
 ```
 
 ### Layout Provider with Mantine
+
 ```tsx
 // components/layout/LayoutProvider.tsx
 import { AppShell, Burger } from '@mantine/core'
@@ -343,17 +372,25 @@ interface LayoutProviderProps {
   sidebarContent?: React.ReactNode
 }
 
-export function LayoutProvider({ children, showSidebar, sidebarContent }: LayoutProviderProps) {
+export function LayoutProvider({
+  children,
+  showSidebar,
+  sidebarContent,
+}: LayoutProviderProps) {
   const [opened, { toggle }] = useDisclosure()
 
   return (
     <AppShell
       header={{ height: 60 }}
-      navbar={showSidebar ? {
-        width: 300,
-        breakpoint: 'sm',
-        collapsed: { mobile: !opened }
-      } : undefined}
+      navbar={
+        showSidebar
+          ? {
+              width: 300,
+              breakpoint: 'sm',
+              collapsed: { mobile: !opened },
+            }
+          : undefined
+      }
       padding="md"
     >
       <AppShell.Header>
@@ -371,14 +408,10 @@ export function LayoutProvider({ children, showSidebar, sidebarContent }: Layout
       </AppShell.Header>
 
       {showSidebar && (
-        <AppShell.Navbar p="md">
-          {sidebarContent}
-        </AppShell.Navbar>
+        <AppShell.Navbar p="md">{sidebarContent}</AppShell.Navbar>
       )}
 
-      <AppShell.Main>
-        {children}
-      </AppShell.Main>
+      <AppShell.Main>{children}</AppShell.Main>
     </AppShell>
   )
 }
@@ -387,6 +420,7 @@ export function LayoutProvider({ children, showSidebar, sidebarContent }: Layout
 ## Feature Components
 
 ### Dashboard Components with Mantine
+
 ```tsx
 // components/features/dashboard/MetricsCard.tsx
 import { Card, Text, Group, Stack, ThemeIcon } from '@mantine/core'
@@ -402,11 +436,18 @@ interface MetricsCardProps {
   icon?: React.ComponentType<{ size?: number }>
 }
 
-export function MetricsCard({ title, value, change, icon: Icon }: MetricsCardProps) {
+export function MetricsCard({
+  title,
+  value,
+  change,
+  icon: Icon,
+}: MetricsCardProps) {
   return (
     <Card shadow="sm" padding="lg" radius="md" withBorder>
       <Group justify="space-between" mb="xs">
-        <Text size="sm" c="dimmed">{title}</Text>
+        <Text size="sm" c="dimmed">
+          {title}
+        </Text>
         {Icon && (
           <ThemeIcon size="sm" variant="light">
             <Icon size={16} />
@@ -414,7 +455,9 @@ export function MetricsCard({ title, value, change, icon: Icon }: MetricsCardPro
         )}
       </Group>
 
-      <Text size="xl" weight={700}>{value}</Text>
+      <Text size="xl" weight={700}>
+        {value}
+      </Text>
 
       {change && (
         <Group mt="xs">
@@ -429,10 +472,7 @@ export function MetricsCard({ title, value, change, icon: Icon }: MetricsCardPro
               <IconTrendingDown size={12} />
             )}
           </ThemeIcon>
-          <Text
-            size="xs"
-            c={change.type === 'increase' ? 'green' : 'red'}
-          >
+          <Text size="xs" c={change.type === 'increase' ? 'green' : 'red'}>
             {Math.abs(change.value)}%
           </Text>
         </Group>
@@ -445,6 +485,7 @@ export function MetricsCard({ title, value, change, icon: Icon }: MetricsCardPro
 ## Provider Components
 
 ### Query Provider
+
 ```tsx
 // components/providers/query-provider.tsx
 'use client'
@@ -455,14 +496,15 @@ import { useState } from 'react'
 
 export function QueryProvider({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
-    () => new QueryClient({
-      defaultOptions: {
-        queries: {
-          staleTime: 60 * 1000, // 1 minute
-          retry: 1,
+    () =>
+      new QueryClient({
+        defaultOptions: {
+          queries: {
+            staleTime: 60 * 1000, // 1 minute
+            retry: 1,
+          },
         },
-      },
-    })
+      })
   )
 
   return (
@@ -475,6 +517,7 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
 ```
 
 ### Theme Provider
+
 ```tsx
 // components/providers/theme-provider.tsx
 'use client'
@@ -498,7 +541,8 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     root.classList.remove('light', 'dark')
 
     if (theme === 'system') {
-      const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches
+      const systemTheme = window.matchMedia('(prefers-color-scheme: dark)')
+        .matches
         ? 'dark'
         : 'light'
       root.classList.add(systemTheme)
@@ -526,6 +570,7 @@ export function useTheme() {
 ## Component Patterns
 
 ### Compound Components
+
 ```tsx
 // components/ui/tabs.tsx
 interface TabsContextType {
@@ -554,14 +599,22 @@ function TabsList({ children }: { children: React.ReactNode }) {
   return <div className="flex space-x-1 border-b">{children}</div>
 }
 
-function TabsTrigger({ value, children }: { value: string; children: React.ReactNode }) {
+function TabsTrigger({
+  value,
+  children,
+}: {
+  value: string
+  children: React.ReactNode
+}) {
   const { activeTab, setActiveTab } = useContext(TabsContext)!
-  
+
   return (
     <button
       className={cn(
-        "px-3 py-2 text-sm",
-        activeTab === value ? "border-b-2 border-primary" : "text-muted-foreground"
+        'px-3 py-2 text-sm',
+        activeTab === value
+          ? 'border-b-2 border-primary'
+          : 'text-muted-foreground'
       )}
       onClick={() => setActiveTab(value)}
     >
@@ -570,11 +623,17 @@ function TabsTrigger({ value, children }: { value: string; children: React.React
   )
 }
 
-function TabsContent({ value, children }: { value: string; children: React.ReactNode }) {
+function TabsContent({
+  value,
+  children,
+}: {
+  value: string
+  children: React.ReactNode
+}) {
   const { activeTab } = useContext(TabsContext)!
-  
+
   if (activeTab !== value) return null
-  
+
   return <div className="mt-4">{children}</div>
 }
 
@@ -587,6 +646,7 @@ export { Tabs }
 ```
 
 ### Render Props Pattern
+
 ```tsx
 // components/ui/async-wrapper.tsx
 interface AsyncWrapperProps<T> {
@@ -604,20 +664,20 @@ export function AsyncWrapper<T>({
   error,
   children,
   fallback = <div>Loading...</div>,
-  errorFallback = (err) => <div>Error: {err.message}</div>
+  errorFallback = (err) => <div>Error: {err.message}</div>,
 }: AsyncWrapperProps<T>) {
   if (loading) return <>{fallback}</>
   if (error) return <>{errorFallback(error)}</>
   if (!data) return null
-  
+
   return <>{children(data)}</>
 }
 
 // Usage
-<AsyncWrapper data={users} loading={isLoading} error={error}>
+;<AsyncWrapper data={users} loading={isLoading} error={error}>
   {(users) => (
     <div>
-      {users.map(user => (
+      {users.map((user) => (
         <UserCard key={user.id} user={user} />
       ))}
     </div>
@@ -628,6 +688,7 @@ export function AsyncWrapper<T>({
 ## Testing Components
 
 ### Component Testing Strategy
+
 ```tsx
 // __tests__/components/ui/button.test.tsx
 import { render, screen } from '@testing-library/react'
@@ -652,7 +713,7 @@ describe('Button Component', () => {
         <a href="/test">Link</a>
       </Button>
     )
-    
+
     const link = screen.getByRole('link')
     expect(link).toHaveAttribute('href', '/test')
   })
@@ -668,9 +729,14 @@ describe('Button Component', () => {
 ## Performance Optimization
 
 ### Memoization
+
 ```tsx
 // Memoize expensive computations
-const ExpensiveComponent = memo(function ExpensiveComponent({ data }: { data: ComplexData }) {
+const ExpensiveComponent = memo(function ExpensiveComponent({
+  data,
+}: {
+  data: ComplexData
+}) {
   const processedData = useMemo(() => {
     return expensiveProcessing(data)
   }, [data])
@@ -686,12 +752,8 @@ function ParentComponent({ items }: { items: Item[] }) {
 
   return (
     <div>
-      {items.map(item => (
-        <ItemComponent 
-          key={item.id} 
-          item={item} 
-          onClick={handleItemClick}
-        />
+      {items.map((item) => (
+        <ItemComponent key={item.id} item={item} onClick={handleItemClick} />
       ))}
     </div>
   )
@@ -699,6 +761,7 @@ function ParentComponent({ items }: { items: Item[] }) {
 ```
 
 ### Code Splitting
+
 ```tsx
 // Lazy load components
 const AdminPanel = lazy(() => import('./admin-panel'))

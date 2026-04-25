@@ -1,6 +1,7 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ClientsModule, Transport } from '@nestjs/microservices';
+import { JwtModule } from '@nestjs/jwt';
 import { ChatController } from './controllers/chat.controller';
 import { LLMRoutingController } from './controllers/llm-routing.controller';
 import { LLMTestController } from './controllers/llm-test.controller';
@@ -58,6 +59,7 @@ import { TtsModule } from './tts/tts.module';
 import { AssessmentModule } from './assessment/assessment.module';
 import { PhoneModule } from './phone/phone.module';
 import { RagModule } from './rag/rag.module';
+import { getJwtSecret } from '@pitch/shared-backend/config/jwt.config';
 import {
   getRabbitMQUrls,
   getQueueOptions,
@@ -66,6 +68,9 @@ import {
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    JwtModule.register({
+      secret: getJwtSecret(),
+    }),
     RedisModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => ({

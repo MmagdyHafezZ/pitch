@@ -1,15 +1,26 @@
 import type { Persona, PersonaTraits } from './types'
 
+export interface PabloVideoPresenterVoiceConfig {
+  provider: string
+  voiceName: string
+  language: string
+  model?: string
+}
+
+export const PABLO_VIDEO_PRESENTER_VOICE: PabloVideoPresenterVoiceConfig = {
+  provider: 'elevenlabs',
+  voiceName: 'George - Warm, Captivating Storyteller',
+  language: 'en-US',
+}
+
 export const PABLO_VIDEO_PRESENTER_TRAITS: PersonaTraits = {
   role: 'Video Presenter',
   level: 'Locked',
   personality: 'Warm and animated presenter for guided video sessions.',
   tone: 'Encouraging and upbeat',
   communicationStyle: 'Guided and visual',
-  voiceProfile: 'Fixed Pablo presenter',
-  voice: {
-    language: 'en-US',
-  },
+  voiceProfile: `ElevenLabs / ${PABLO_VIDEO_PRESENTER_VOICE.voiceName}`,
+  voice: PABLO_VIDEO_PRESENTER_VOICE,
   avatar: {
     imageUrl: '/pablo_happy.png',
   },

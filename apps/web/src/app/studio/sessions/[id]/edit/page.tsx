@@ -52,7 +52,10 @@ import {
   deriveAccentFromPersonaTraits,
   normalizeAccentSelection,
 } from '../../create/lib/accent'
-import { buildPabloVideoPresenterConfig } from '../../create/lib/videoPresenter'
+import {
+  buildPabloVideoPresenterConfig,
+  PABLO_VIDEO_PRESENTER_VOICE,
+} from '../../create/lib/videoPresenter'
 import classes from '../../create/create-session.module.css'
 import { useI18n } from '@/features/i18n'
 import type {
@@ -658,6 +661,9 @@ export default function EditSessionPage() {
     if (previousSessionType && previousSessionType !== 'video' && sessionType === 'video') {
       setSelectedPersona(null)
       setPersonaSearch('')
+      setTtsProvider(PABLO_VIDEO_PRESENTER_VOICE.provider)
+      setTtsVoice(PABLO_VIDEO_PRESENTER_VOICE.voiceName)
+      setTtsModel(PABLO_VIDEO_PRESENTER_VOICE.model ?? null)
     }
     previousSessionTypeRef.current = sessionType
   }, [sessionType])
@@ -1344,6 +1350,11 @@ export default function EditSessionPage() {
           setSelectedPersona={setSelectedPersona}
           errors={errors}
           selectedPersonaData={selectedPersonaData}
+          ttsProvider={ttsProvider}
+          setTtsProvider={setTtsProvider}
+          ttsVoice={ttsVoice}
+          setTtsVoice={setTtsVoice}
+          ttsModel={ttsModel}
           ttsProviders={ttsProviders}
           onCreatePersona={handleCreatePersona}
           createDisabledReason={

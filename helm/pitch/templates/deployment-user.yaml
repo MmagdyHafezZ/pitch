@@ -53,6 +53,11 @@ spec:
             secretKeyRef:
               name: {{ .Values.secrets.existingSecret | default (printf "%s-secrets" (include "pitch.fullname" .)) }}
               key: user-database-url
+        - name: USER_MANAGEMENT_MONGODB_URL
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.secrets.existingSecret | default (printf "%s-secrets" (include "pitch.fullname" .)) }}
+              key: mongodb-url
         - name: REDIS_URL
           value: {{ include "pitch.redis.connectionString" . | quote }}
         - name: RABBITMQ_URL

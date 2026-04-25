@@ -2,7 +2,8 @@
 
 ## Overview
 
-Complete Helm chart for deploying the PITCH microservices platform on Kubernetes.
+Complete Helm chart for deploying the PITCH microservices platform on
+Kubernetes.
 
 ## Files Created
 
@@ -35,7 +36,8 @@ helm/pitch/
 
 ### Single-Image Pattern ✅
 
-All microservices use the same Docker image with different `SERVICE_NAME` environment variables:
+All microservices use the same Docker image with different `SERVICE_NAME`
+environment variables:
 
 ```yaml
 # Gateway
@@ -50,6 +52,7 @@ env:
 ### Components Deployed
 
 **Microservices (7)**:
+
 - API Gateway (Port 8000)
 - User Service (Port 3001)
 - Simulation Service (Port 3002)
@@ -59,6 +62,7 @@ env:
 - S3 Service (Port 3006)
 
 **Infrastructure**:
+
 - PostgreSQL × 6 (one per microservice)
 - MongoDB × 1 (for Simulation chat/session data)
 - Redis × 1 (shared cache)
@@ -131,11 +135,11 @@ helm get notes pitch -n pitch
 
 image:
   repository: registry.yourcompany.com/pitch-api
-  tag: "v1.0.0"
+  tag: 'v1.0.0'
   pullPolicy: Always
 
 global:
-  storageClass: "fast-ssd"
+  storageClass: 'fast-ssd'
 
 # Enable autoscaling for high-traffic services
 gateway:
@@ -173,9 +177,9 @@ ingress:
   enabled: true
   className: nginx
   annotations:
-    cert-manager.io/cluster-issuer: "letsencrypt-prod"
-    nginx.ingress.kubernetes.io/ssl-redirect: "true"
-    nginx.ingress.kubernetes.io/rate-limit: "100"
+    cert-manager.io/cluster-issuer: 'letsencrypt-prod'
+    nginx.ingress.kubernetes.io/ssl-redirect: 'true'
+    nginx.ingress.kubernetes.io/rate-limit: '100'
   hosts:
     - host: api.pitch.com
       paths:
@@ -209,7 +213,7 @@ mongodb:
 
 # Use existing secret
 secrets:
-  existingSecret: "pitch-production-secrets"
+  existingSecret: 'pitch-production-secrets'
 ```
 
 ### Development values.yaml
@@ -471,7 +475,7 @@ kubectl exec -it statefulset/pitch-rabbitmq -n pitch -- \
 ```yaml
 # Use external secret manager
 secrets:
-  existingSecret: "pitch-production-secrets"
+  existingSecret: 'pitch-production-secrets'
 
 # Enable pod security
 podSecurityContext:

@@ -71,8 +71,9 @@ ENV SERVICE_NAME=${SERVICE_NAME}
 RUN addgroup --system --gid 1001 nodejs \
     && adduser --system --uid 1001 nestjs
 
-COPY --from=prod_deps --chown=nestjs:nodejs /app/node_modules /app/node_modules
-COPY --from=builder --chown=nestjs:nodejs /app/apps/api/node_modules/@prisma /app/node_modules/@prisma
+COPY --from=builder --chown=nestjs:nodejs /app/node_modules /app/node_modules
+COPY --from=builder --chown=nestjs:nodejs /app/apps/node_modules /app/apps/node_modules
+COPY --from=builder --chown=nestjs:nodejs /app/apps/api/node_modules /app/apps/api/node_modules
 
 COPY --from=builder --chown=nestjs:nodejs /app/apps/api/dist /app/apps/api/dist
 COPY --from=builder --chown=nestjs:nodejs /app/apps/api/package.json /app/apps/api/package.json

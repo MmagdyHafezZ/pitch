@@ -1,5 +1,5 @@
 import { useRouter } from 'next/navigation'
-import { api } from '@/lib/client'
+import { api, queryClient } from '@/lib/client'
 import { useAuthStore } from '@/features/auth/stores/auth.store'
 import { useOnboardingStore } from '../stores/onboarding.store'
 import { OnboardingData } from '../types'
@@ -12,7 +12,7 @@ export function useOnboarding() {
 
   const saveSettings = async (data: OnboardingData, completed: boolean) => {
     const existing = user?.settings ?? {}
-    await api.users.updateMySettings({
+    const mergedSettings = {
       ...existing,
       onboarding: {
         ...existing.onboarding,
@@ -22,20 +22,17 @@ export function useOnboarding() {
         completed,
         tutorialCompleted: existing.onboarding?.tutorialCompleted ?? false,
       },
-    })
-    // Update local user state to reflect completed onboarding
+    }
+    const updatedSettings = await api.users.updateMySettings(mergedSettings)
+
+    // Keep auth store and auth/me query cache synchronized to avoid redirect loops.
     if (user) {
-      setUser({
+      const nextUser = {
         ...user,
-        settings: {
-          ...existing,
-          onboarding: {
-            ...existing.onboarding,
-            ...data,
-            completed,
-          },
-        },
-      })
+        settings: updatedSettings,
+      }
+      setUser(nextUser)
+      queryClient.setQueryData(['auth', 'me'], nextUser)
     }
   }
 

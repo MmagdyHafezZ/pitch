@@ -1,0 +1,179 @@
+{
+  "metrics": {
+    "data_received": {
+      "count": 134619,
+      "rate": 3063.6288951553183
+    },
+    "vus_max": {
+      "min": 10,
+      "max": 10,
+      "value": 10
+    },
+    "http_req_connecting": {
+      "med": 0,
+      "max": 0.633,
+      "p(90)": 0.4057,
+      "p(95)": 0.4893499999999999,
+      "p(99)": 0.60603,
+      "avg": 0.13103125000000002,
+      "min": 0
+    },
+    "steady_http_req_duration": {
+      "avg": 9299.34955,
+      "min": 6599.325,
+      "med": 9051.621,
+      "max": 12062.734,
+      "p(90)": 10918.182400000002,
+      "p(95)": 11089.077099999999,
+      "p(99)": 11868.00262,
+      "thresholds": {
+        "p(95)<30000": false,
+        "p(99)<60000": false
+      }
+    },
+    "checks": {
+      "passes": 64,
+      "fails": 0,
+      "value": 1
+    },
+    "http_reqs": {
+      "count": 32,
+      "rate": 0.7282487958235478
+    },
+    "http_req_blocked": {
+      "min": 0.002,
+      "med": 0.0075,
+      "max": 1.247,
+      "p(90)": 0.4794,
+      "p(95)": 0.6833999999999999,
+      "p(99)": 1.09138,
+      "avg": 0.18118750000000003
+    },
+    "iteration_duration": {
+      "min": 8601.047666,
+      "med": 10263.0485,
+      "max": 14067.789792,
+      "p(90)": 12357.546482700001,
+      "p(95)": 12967.23305815,
+      "p(99)": 13749.38699648,
+      "avg": 10661.981998718753
+    },
+    "iterations": {
+      "count": 32,
+      "rate": 0.7282487958235478
+    },
+    "http_req_duration{expected_response:true}": {
+      "max": 12062.734,
+      "p(90)": 10355.7771,
+      "p(95)": 10964.712800000001,
+      "p(99)": 11745.01438,
+      "avg": 8660.07653125,
+      "min": 6599.325,
+      "med": 8260.824499999999
+    },
+    "http_req_tls_handshaking": {
+      "med": 0,
+      "max": 0,
+      "p(90)": 0,
+      "p(95)": 0,
+      "p(99)": 0,
+      "avg": 0,
+      "min": 0
+    },
+    "data_sent": {
+      "count": 17937,
+      "rate": 408.20620783396805
+    },
+    "vus": {
+      "max": 10,
+      "value": 2,
+      "min": 1
+    },
+    "http_req_sending": {
+      "min": 0.013,
+      "med": 0.034,
+      "max": 0.266,
+      "p(90)": 0.12110000000000001,
+      "p(95)": 0.1686999999999999,
+      "p(99)": 0.24708999999999998,
+      "avg": 0.05578124999999999
+    },
+    "http_req_receiving": {
+      "avg": 0.10728125,
+      "min": 0.041,
+      "med": 0.09,
+      "max": 0.342,
+      "p(90)": 0.179,
+      "p(95)": 0.20514999999999994,
+      "p(99)": 0.30759
+    },
+    "steady_http_req_failed": {
+      "passes": 0,
+      "fails": 20,
+      "thresholds": {
+        "rate<0.05": false
+      },
+      "value": 0
+    },
+    "http_req_duration": {
+      "p(90)": 10355.7771,
+      "p(95)": 10964.712800000001,
+      "p(99)": 11745.01438,
+      "avg": 8660.07653125,
+      "min": 6599.325,
+      "med": 8260.824499999999,
+      "max": 12062.734,
+      "thresholds": {
+        "p(95)<30000": false,
+        "p(99)<60000": false
+      }
+    },
+    "http_req_failed": {
+      "passes": 0,
+      "fails": 32,
+      "thresholds": {
+        "rate<0.05": false
+      },
+      "value": 0
+    },
+    "http_req_waiting": {
+      "avg": 8659.913468749999,
+      "min": 6599.241,
+      "med": 8260.693,
+      "max": 12062.376,
+      "p(90)": 10355.5977,
+      "p(95)": 10964.401699999999,
+      "p(99)": 11744.66444
+    },
+    "steady_http_reqs": {
+      "count": 20,
+      "rate": 0.4551554973897174
+    }
+  },
+  "setup_data": {
+    "accessToken": "pitch-perf-static-token",
+    "source": "static-dev-bypass-token"
+  },
+  "root_group": {
+    "path": "",
+    "id": "d41d8cd98f00b204e9800998ecf8427e",
+    "groups": {},
+    "checks": {
+      "ai scenario endpoint returned success": {
+        "path": "::ai scenario endpoint returned success",
+        "id": "208fefd28f319b663954803b61dde21e",
+        "passes": 32,
+        "fails": 0,
+        "name": "ai scenario endpoint returned success"
+      },
+      "ai scenario draft returned content": {
+        "name": "ai scenario draft returned content",
+        "path": "::ai scenario draft returned content",
+        "id": "db444052bf037a3307df88da3788f3aa",
+        "passes": 32,
+        "fails": 0
+      }
+    },
+    "name": ""
+  }
+}

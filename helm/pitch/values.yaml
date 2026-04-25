@@ -47,6 +47,11 @@ gateway:
     PORT: "8000"
     NODE_ENV: "production"
     CORS_ORIGIN: "https://yourapp.com"
+    DEV_BYPASS_ENABLED: ""
+    DEV_BYPASS_TOKEN: ""
+    DEV_BYPASS_EMAIL: ""
+    DEV_BYPASS_NAME: ""
+    DEV_BYPASS_USER_ID: ""
 
 # =============================================================================
 # User Microservice
@@ -319,8 +324,8 @@ postgresql:
   # Shared PostgreSQL credentials
   auth:
     username: pitch_user
-    password: ""  # Set via --set or secret
-    existingSecret: ""  # Name of existing secret
+    password: "" # Set via --set or secret
+    existingSecret: "" # Name of existing secret
 
 # =============================================================================
 # MongoDB (for Simulation service chat/session data)
@@ -335,7 +340,7 @@ mongodb:
   auth:
     enabled: true
     rootUser: admin
-    rootPassword: ""  # Set via --set or secret
+    rootPassword: "" # Set via --set or secret
     database: pitch_simulation
     existingSecret: ""
 
@@ -398,7 +403,7 @@ rabbitmq:
 
   auth:
     username: admin
-    password: ""  # Set via --set or secret
+    password: "" # Set via --set or secret
     vhost: pitch
     existingSecret: ""
 
@@ -527,6 +532,7 @@ monitoring:
   serviceMonitor:
     enabled: false
     interval: 30s
+    labels: {}
 
   prometheusRule:
     enabled: false

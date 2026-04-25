@@ -263,6 +263,42 @@ kubectl port-forward svc/pitch-rabbitmq 15672:15672 -n pitch
 # Visit http://localhost:15672
 ```
 
+### Performance Evaluation Profile
+
+Use the dedicated overlay for the final performance-evaluation deployment:
+
+```bash
+helm install pitch-perf ./helm/pitch \
+  --namespace pitch-perf \
+  --create-namespace \
+  --values ./helm/pitch/values-perf.yaml \
+  --set image.repository=yourorg/pitch-api \
+  --set image.tag=latest \
+  --set secrets.existingSecret=pitch-secrets
+```
+
+This profile makes two deliberate changes for performance testing:
+
+- it disables ingress and exposes the gateway as a `NodePort` so an external k6
+  runner can target the gateway directly
+- it disables autoscaling so replica-count experiments stay under explicit
+  operator control
+
+Retrieve the externally reachable gateway port with:
+
+```bash
+kubectl get svc pitch-perf-gateway -n pitch-perf
+```
+
+For the final report, run the load generator on a separate machine or node when
+possible. If the load generator and system under test share the same machine,
+explicitly document that shared-resource contention can affect latency,
+throughput, and bottleneck attribution.
+
+The chart currently includes a `ServiceMonitor` for RabbitMQ when
+`monitoring.enabled=true` and `monitoring.serviceMonitor.enabled=true`, because
+RabbitMQ is the metrics endpoint already exposed by the chart.
+
 ## Upgrading
 
 ```bash

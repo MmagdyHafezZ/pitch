@@ -13,6 +13,7 @@ import {
   IconVideoOff,
 } from '@tabler/icons-react'
 import type { VisualState } from '@/features/conversation/types/visual-state.types'
+import type { VoiceTurnPhase } from '@/features/conversation/hooks/useVoiceTurnController'
 import { PabloPresenter } from './PabloPresenter'
 import { getPresenterPlaybackMode } from './presenter-playback'
 
@@ -36,6 +37,8 @@ interface VoiceOrbSessionProps {
   isSttPermissionBlocked: boolean
   transcript?: string
   interimTranscript: string
+  pendingTranscript?: string
+  voiceTurnPhase?: VoiceTurnPhase
   sttError: string | null
   sttCommitRemainingMs: number
   sttCommitProgress: number
@@ -231,22 +234,27 @@ const CSS = `
 .vos-status-bar.status-listening { --vos-status-bg: rgba(16,185,129,.10); --vos-status-color: #10b981; }
 .vos-status-bar.status-idle      { --vos-status-bg: rgba(107,114,128,.07); --vos-status-color: #9ca3af; }
 .vos-status-bar.vos-turn-timer {
-  border-color: rgba(52, 211, 153, 0.22);
-  box-shadow: 0 0 10px rgba(16, 185, 129, 0.16);
-  isolation: isolate;
+  border-color: rgba(16, 185, 129, 0.34);
+  background:
+    linear-gradient(180deg, rgba(16, 185, 129, 0.16) 0%, rgba(16, 185, 129, 0.08) 100%),
+    var(--vos-status-bg);
+  box-shadow:
+    0 0 0 1px rgba(52, 211, 153, 0.2) inset,
+    0 0 14px rgba(16, 185, 129, 0.2);
+  animation: vos-turn-timer-glow 1.25s ease-in-out infinite;
 }
 .vos-status-bar.vos-turn-timer::before {
   content: '';
   position: absolute;
-  inset: -1px;
-  border-radius: inherit;
-  padding: 1px;
+  inset: -3px;
+  border-radius: 100px;
+  padding: 3px;
   background: conic-gradient(
     from -90deg,
     rgba(52, 211, 153, 0.95) 0turn,
     rgba(52, 211, 153, 0.95) calc(var(--vos-turn-progress, 0) * 1turn),
-    rgba(52, 211, 153, 0.15) calc(var(--vos-turn-progress, 0) * 1turn),
-    rgba(52, 211, 153, 0.15) 1turn
+    transparent calc(var(--vos-turn-progress, 0) * 1turn),
+    transparent 1turn
   );
   -webkit-mask:
     linear-gradient(#000 0 0) content-box,
@@ -254,6 +262,21 @@ const CSS = `
   -webkit-mask-composite: xor;
   mask-composite: exclude;
   pointer-events: none;
+}
+.vos-status-bar.vos-turn-timer span {
+  text-shadow: 0 0 10px rgba(16, 185, 129, 0.38);
+}
+@keyframes vos-turn-timer-glow {
+  0%, 100% {
+    box-shadow:
+      0 0 0 1px rgba(52, 211, 153, 0.16) inset,
+      0 0 10px rgba(16, 185, 129, 0.18);
+  }
+  50% {
+    box-shadow:
+      0 0 0 1px rgba(52, 211, 153, 0.28) inset,
+      0 0 18px rgba(16, 185, 129, 0.28);
+  }
 }
 
 /* thinking dots */
@@ -1028,6 +1051,8 @@ export default function VoiceOrbSession({
   isSttSupported,
   isSttPermissionBlocked,
   interimTranscript,
+  pendingTranscript = '',
+  voiceTurnPhase,
   sttError,
   sttCommitRemainingMs,
   sttCommitProgress,
@@ -1224,19 +1249,21 @@ export default function VoiceOrbSession({
     ? '#10b981'
     : assistantSpeaking
       ? '#3b82f6'
-      : isProcessing
+      : isProcessing || voiceTurnPhase === 'user_committing'
         ? '#8b5cf6'
         : '#ff0002'
 
   const statusState: 'speaking' | 'thinking' | 'listening' | 'idle' = assistantSpeaking
     ? 'speaking'
-    : isProcessing
+    : isProcessing || voiceTurnPhase === 'user_committing'
       ? 'thinking'
       : isListening
         ? 'listening'
         : 'idle'
+  const isUserCommitting = voiceTurnPhase === 'user_committing'
 
   const isAwaitingUserTurn =
+    !isUserCommitting &&
     sessionStatus !== 'ended' &&
     isConnected &&
     !assistantSpeaking &&
@@ -1247,21 +1274,23 @@ export default function VoiceOrbSession({
     ? isListening
       ? 'Interrupted'
       : 'AI Speaking'
-    : isProcessing
-      ? 'Thinking…'
-      : isAwaitingUserTurn
-        ? 'Your Turn'
-        : sessionStatus === 'ended'
-          ? entryPromptMode === 'retake'
-            ? 'Session ended'
-            : 'Ended'
-          : isListening
-            ? 'Your Turn'
-            : isConnected
-              ? 'Ready'
-              : connectionError
-                ? 'Connection error'
-                : 'Connecting…'
+    : isUserCommitting
+      ? 'Sending…'
+      : isProcessing
+        ? 'Thinking…'
+        : isAwaitingUserTurn
+          ? 'Your Turn'
+          : sessionStatus === 'ended'
+            ? entryPromptMode === 'retake'
+              ? 'Session ended'
+              : 'Ended'
+            : isListening
+              ? 'Your Turn'
+              : isConnected
+                ? 'Ready'
+                : connectionError
+                  ? 'Connection error'
+                  : 'Connecting…'
   const presenterPlaybackMode = getPresenterPlaybackMode({
     assistantSpeaking,
     isListening,
@@ -1274,12 +1303,14 @@ export default function VoiceOrbSession({
   const panelStatusLabel =
     assistantSpeaking && !isListening
       ? 'AI Speaking — tap mic to interrupt'
-      : isAwaitingUserTurn
-        ? isListening
-          ? 'Your Turn — mic is on'
-          : 'Your Turn — enabling mic…'
-        : statusLabel
-  const showTurnCommitTimer = isAwaitingUserTurn && isListening && sttCommitRemainingMs > 0
+      : isUserCommitting
+        ? 'Sending to AI…'
+        : isAwaitingUserTurn
+          ? isListening
+            ? 'Your Turn — mic is on'
+            : 'Your Turn — enabling mic…'
+          : statusLabel
+  const showTurnCommitTimer = voiceTurnPhase === 'user_send_countdown' && sttCommitRemainingMs > 0
   const turnCommitProgress = Math.max(0, Math.min(1, sttCommitProgress))
 
   const canSend = !!textInput.trim() && isConnected && sessionStatus !== 'ended'
@@ -1398,7 +1429,7 @@ export default function VoiceOrbSession({
 
           {/* Transcript (middle) */}
           <div className="vos-zoom-transcript" ref={scrollRef}>
-            {messages.length === 0 && !interimTranscript ? (
+            {messages.length === 0 && !interimTranscript && !pendingTranscript ? (
               <span className="vos-zoom-transcript-empty">Conversation will appear here…</span>
             ) : (
               messages.map((msg) => {
@@ -1435,11 +1466,11 @@ export default function VoiceOrbSession({
                 )
               })
             )}
-            {interimTranscript && (
+            {(interimTranscript || pendingTranscript) && (
               <div className="chat-user" style={{ '--delay': -1000 } as React.CSSProperties}>
                 <p style={{ opacity: 0.4, fontStyle: 'italic' }}>
                   <span style={{ '--word': -1000 } as React.CSSProperties}>
-                    {interimTranscript}
+                    {interimTranscript || pendingTranscript}
                   </span>
                 </p>
               </div>
@@ -1621,11 +1652,11 @@ export default function VoiceOrbSession({
                     )
                   })}
 
-                  {interimTranscript && (
+                  {(interimTranscript || pendingTranscript) && (
                     <div className="chat-user" style={{ '--delay': -1000 } as React.CSSProperties}>
                       <p style={{ opacity: 0.4, fontStyle: 'italic' }}>
                         <span style={{ '--word': -1000 } as React.CSSProperties}>
-                          {interimTranscript}
+                          {interimTranscript || pendingTranscript}
                         </span>
                       </p>
                     </div>
